@@ -23,17 +23,23 @@ Bản lưu theo version và `SHA256SUMS` ở `dist/build-9.5.0/`, cùng alias hi
 ## Kiểm chứng
 
 - Hai typecheck (node/preload/shared, renderer) đạt. Smoke ảnh chụp runtime Desktop offline 12/12 đạt. `build:win`, `build:mac`, `build:mac:intel` đều exit 0; `verify-windows-installer-contract` và `verify-win-native-modules` (trong `build:win`) đạt.
-- Version 9.5.0 ở `package.json` trong ASAR cả ba bản; Windows PE FileVersion `9.5.0`, ProductVersion `9.5.0.0`, app x64 (machine `8664`), installer NSIS (`14c`); Mac `CFBundleShortVersionString` 9.5.0, identity `com.akabiz.auto`, entrypoint `./out/main/index.js`.
-- Kiến trúc: executable và `better_sqlite3.node` đúng x86-64 (Windows), arm64 (Mac ARM64), x86_64 (Mac Intel).
-- 115 file `out/` trong ASAR giống hệt nhau ở cả ba bản và có mã nhập file nhiều phần V485. Không thấy JWT `service_role`/anon, token `sb_secret_` hay resource Server trong Desktop.
+- Version 9.5.0 ở `resources/version.txt` (updater đọc file này) và `package.json` trong ASAR cả ba bản; Windows PE FileVersion `9.5.0`, ProductVersion `9.5.0.0`, app x64 (machine `8664`), installer NSIS (`14c`); Mac `CFBundleShortVersionString` 9.5.0, identity `com.akabiz.auto`, entrypoint `./out/main/index.js`.
+- Kiến trúc: executable và `better_sqlite3.node` đúng x86-64 (Windows), arm64 (Mac ARM64), x86_64 (Mac Intel); Mac có thêm `playwright/…/fsevents.node` (universal x86_64+arm64).
+- 115 file `out/` trong ASAR giống hệt nhau ở cả ba bản và có mã nhập file nhiều phần V485. Quét toàn bộ file đóng gói (Windows 12.446, mỗi bản Mac 12.453 file trong ASAR và `resources/`): không có JWT `service_role`/anon, token `sb_secret_` hay resource Server.
 - Giải nén installer Windows: `akaAgent.exe`, `app.asar`, `better_sqlite3.node` khớp checksum với `win-unpacked`.
 - Mac: `codesign --verify --deep --strict` đạt (ad-hoc); `hdiutil verify` hai DMG đạt; mount read-only, `app.asar` và executable khớp app đã đóng gói.
 - Electron 33.4.11 trong app đóng gói nạp better-sqlite3 và `SELECT 1` đạt (SQLite 3.53.1): arm64 trực tiếp, x64 qua Rosetta.
 - 140 installer cũ trong `dist/` và `dist-server/` giữ nguyên checksum (gồm App Server). DMG alias trước build trùng bản 9.4.0 đã lưu ở `dist/build-9.4.0/`; `latest.yml`/`latest-mac.yml` cũ sao lưu ở `dist/build-9.5.0-work/prebuild/`. Native SQLite của máy build khôi phục đúng checksum `ced697fc…` (arm64).
 - Giữ nguyên thay đổi local chưa commit `CLAUDE.md`.
 
+## Bổ sung sau build — 09:33 VN 10/11/2026
+
+Lần build này không đọc [AGENTS.md](../../../AGENTS.md) và [build-01](../../agents/reference/build-01.md) trước, nên receipt đầu thiếu một số mục so với chuẩn của biên nhận [9.4.0](../akaagent-9.4.0-20261106/README.md). Đã kiểm bù trên chính bộ cài đã build, **không build lại**: `resources/version.txt` cả ba bản, quét secret toàn bộ file đóng gói (receipt đầu chỉ quét 115 file `out/`), liệt kê mọi module `.node`, `git diff --check` của PR; tất cả đạt. Lệnh build và thứ tự giống hệt 9.4.0; script/cấu hình build giữa hai bản chỉ khác số phiên bản.
+
+**Không có manifest checksum đầu vào build trước/sau** như 9.4.0 (1.167 file): đầu vào là cây commit `cf29bc19`, lúc build cây làm việc chỉ đổi `CLAUDE.md` (không phải đầu vào build), nhưng không có bằng chứng ghi trong lúc build và không làm bù được.
+
 ## Giới hạn
 
-Windows chưa ký Authenticode và chưa cài/chạy trên Windows thật. Mac ký ad-hoc, chưa notarize; Intel chỉ thử qua Rosetta. Không chạy luồng đăng nhập, chiến dịch hoặc Zalo thật; quét secret chỉ trong `out/` của ASAR.
+Windows chưa ký Authenticode và chưa cài/chạy trên Windows thật. Mac ký ad-hoc, chưa notarize; Intel chỉ thử qua Rosetta. Không chạy luồng đăng nhập, chiến dịch hoặc Zalo thật. Không có manifest checksum đầu vào build.
 
 [Receipt](build-receipt.json). Log build và file kiểm chứng ở `dist/build-9.5.0-work/` (không trong Git).

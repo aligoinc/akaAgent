@@ -14,7 +14,6 @@
   "mac_intel": "09:19:35-09:20:46",
   "date": "2026-11-10"
  },
- "app_server_rebuilt": false,
  "app_server_reason": "Từ Server 9.3.0 (646ddd98) tới 6769f91c chỉ 3/166 file trong gói Server đổi (campaignScheduler snapshot Desktop, dataGroupRepository + dataGroupIngestChunks), không chạy trên đường Zalo Server",
  "checks": {
   "typecheck_node": "passed",
@@ -35,7 +34,8 @@
    "arch": "arm64",
    "unchanged": true
   },
-  "mac_intel_execution": "Electron x86_64 trong app đóng gói nạp better-sqlite3 qua Rosetta, SELECT 1 đạt (SQLite 3.53.1)"
+  "mac_intel_execution": "Electron x86_64 trong app đóng gói nạp better-sqlite3 qua Rosetta, SELECT 1 đạt (SQLite 3.53.1)",
+  "git_diff_check": "passed"
  },
  "artifacts": [
   {
@@ -68,9 +68,15 @@
     "service_role_jwt_absent": true,
     "anon_jwt_absent": true,
     "supabase_secret_token_absent": true,
-    "scope": "115 file out/ trong app.asar"
+    "scope": "toàn bộ file trong app.asar và resources/"
    },
-   "windows_execution_tested": false
+   "windows_execution_tested": false,
+   "resource_version": "9.5.0",
+   "credential_scan_files": 12446,
+   "native_modules_checked": 1,
+   "native_modules": [
+    "better-sqlite3 (PE32+ x86-64)"
+   ]
   },
   {
    "id": "mac_arm64",
@@ -98,8 +104,15 @@
     "service_role_jwt_absent": true,
     "anon_jwt_absent": true,
     "supabase_secret_token_absent": true,
-    "scope": "115 file out/ trong app.asar"
-   }
+    "scope": "toàn bộ file trong app.asar và resources/"
+   },
+   "resource_version": "9.5.0",
+   "credential_scan_files": 12453,
+   "native_modules_checked": 2,
+   "native_modules": [
+    "better-sqlite3 (arm64)",
+    "playwright/fsevents (universal x86_64+arm64)"
+   ]
   },
   {
    "id": "mac_intel",
@@ -128,8 +141,15 @@
     "service_role_jwt_absent": true,
     "anon_jwt_absent": true,
     "supabase_secret_token_absent": true,
-    "scope": "115 file out/ trong app.asar"
-   }
+    "scope": "toàn bộ file trong app.asar và resources/"
+   },
+   "resource_version": "9.5.0",
+   "credential_scan_files": 12453,
+   "native_modules_checked": 2,
+   "native_modules": [
+    "better-sqlite3 (x86_64)",
+    "playwright/fsevents (universal x86_64+arm64)"
+   ]
   }
  ],
  "not_done": [
@@ -139,5 +159,65 @@
   "luồng đăng nhập/chiến dịch/Zalo thật"
  ],
  "database_changed": false,
- "services_deployed": false
+ "services_deployed": false,
+ "uploaded": false,
+ "published": false,
+ "app_server_built": false,
+ "commands": [
+  {
+   "label": "typecheck-node",
+   "command": "npx tsc --noEmit -p tsconfig.node.json",
+   "time_vn": "trước 09:16:59",
+   "result": "exit 0"
+  },
+  {
+   "label": "typecheck-web",
+   "command": "npx tsc --noEmit -p tsconfig.web.json",
+   "time_vn": "trước 09:16:59",
+   "result": "exit 0"
+  },
+  {
+   "label": "build-win",
+   "command": "npm run build:win",
+   "time_vn": "09:16:59-09:18:21",
+   "result": "exit 0"
+  },
+  {
+   "label": "build-arm",
+   "command": "npm run build:mac",
+   "time_vn": "09:18:29-09:19:32",
+   "result": "exit 0"
+  },
+  {
+   "label": "build-intel",
+   "command": "npm run build:mac:intel",
+   "time_vn": "09:19:35-09:20:46",
+   "result": "exit 0"
+  },
+  {
+   "label": "snapshot-smoke",
+   "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+   "time_vn": "09:21-09:33 (sau build)",
+   "result": "12/12"
+  }
+ ],
+ "build_input_manifest_sha256": null,
+ "build_input_manifest_note": "Không ghi manifest checksum đầu vào trước/sau build. Đầu vào là cây commit cf29bc19; lúc build cây làm việc chỉ đổi CLAUDE.md (không phải đầu vào build). Không làm bù được sau khi đã build.",
+ "supplement": {
+  "verified_at_vn": "2026-11-10T09:33:40+07:00",
+  "reason": "Đối chiếu AGENTS.md, docs/agents/reference/build-01..03 và biên nhận Codex 9.4.0 sau khi build; kiểm bù trên chính bộ cài đã build",
+  "checks_added": [
+   "resources/version.txt cả ba bản = 9.5.0",
+   "quét secret mở rộng từ 115 file out/ sang toàn bộ file đóng gói",
+   "liệt kê mọi module .node",
+   "git diff --check của PR"
+  ],
+  "installers_rebuilt": false
+ },
+ "limitations": [
+  "Windows chưa ký Authenticode, chưa cài/chạy trên Windows thật.",
+  "Mac ký ad-hoc, chưa notarize; Intel chỉ thử qua Rosetta.",
+  "Không chạy luồng đăng nhập, chiến dịch hoặc Zalo thật.",
+  "Không có manifest checksum đầu vào build trước/sau."
+ ]
 }
