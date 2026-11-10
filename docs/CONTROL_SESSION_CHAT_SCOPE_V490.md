@@ -1,7 +1,11 @@
 # V490 — Phiên iOS chỉ dùng Chat (10/11/2026)
 
-Trạng thái: **viết xong, CHƯA apply** lên akachat. Caller: WebApp API nhánh `claude/ios-package-access`
-(xem `akaAgentWebApp/docs/IOS_PACKAGE_ACCESS.md`).
+Trạng thái: migration/tài liệu **đã merge `dev_3`** (PR #628, 18:17 VN). **V490 ĐÃ apply akachat lúc 18:21:17 VN 10/11/2026** (`20261110112117 /
+migration_v490_control_session_chat_scope`) theo yêu cầu của người dùng; **không apply lại** (preflight từ chối
+khi hàm đã có); md5 sổ migration = md5 tệp `def9660b54e21b590bd12f6206009eb7`. Biên nhận:
+[`migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json`](../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
+Sau khi apply không sửa tệp migration (sổ lưu nguyên văn). Caller: WebApp API (aligoinc/akaAgentWebApp#190,
+**chưa deploy**; xem `akaAgentWebApp/docs/IOS_PACKAGE_ACCESS.md`), app iOS chưa phát hành, nên chưa ai gọi hàm mới.
 
 ## Vì sao
 
@@ -39,14 +43,27 @@ WebApp API chỉ gọi hàm mới cho request iOS gửi `x-aka-chat-only: 1`, v�
 | Preflight | Hàm nguồn phải có và md5 `prosrc` đúng như trên; hàm mới chưa có; helper `aka_agent_app_access_*` có |
 | Postflight | ACL (anon/authenticated không có, service_role có), md5 thân hàm mới, owner/security/volatility/config |
 | Nơi apply | Chỉ akachat `cgjbsmqtfhqvttudyjzq` |
-| Trạng thái | **Production chưa thay đổi.** Lúc apply (cần người dùng đồng ý): chạy thử trong giao dịch kết thúc `ROLLBACK`, rồi apply, rồi đọc lại chữ ký/checksum/thuộc tính/ACL |
+| Trạng thái | **Đã apply 18:21:17 VN 10/11/2026.** Preflight chỉ đọc 18:19:10 VN; chạy thử cả tệp trong giao dịch kết thúc `ROLLBACK` (đạt, sạch); apply nguyên văn tệp; hậu kiểm và thử hành vi bên dưới |
+
+## Hậu kiểm sau apply (10/11/2026)
+
+- Hàm mới: `aka_agent_authenticate_control_session_chat_v2(text) returns jsonb`, md5 `prosrc` `5f88c1bf…`, md5
+  `pg_get_functiondef` `61e874b9b47b827d78e16c71bc9ef687`; owner/security/volatility/config/ACL đúng như hàm cũ;
+  anon/authenticated không EXECUTE, service_role có. Hàm cũ giữ nguyên hai checksum và ACL.
+- Thử hành vi rồi hủy (mỗi lời gọi trong giao dịch con bị hủy, cuối khối ném lỗi; không còn phiên tạm nào):
+  - 200 phiên đang hiệu lực dùng gần nhất (194 web, 5 pwa, 1 native): hàm mới trả **giống hệt** hàm cũ ngoài
+    `app_scope`, cả 200 ở phạm vi `full`.
+  - Nhân viên chỉ dùng Chat có thật (tổ chức không có gói chiến dịch nào): phiên native tạm → `authenticated`,
+    `app_scope = 'chat'`; hàm cũ với chính phiên đó → `invalid_staff`; phiên web tạm → `invalid_staff`.
+- PostgREST nạp lại schema lúc 11:21:17 UTC (4,5 s, không lỗi). Edge 11:15–11:24 UTC: 0 lỗi 503/5xx,
+  ~28–30 nghìn request/phút.
 
 ## Apply / rollback
 
-- Apply: `migrations/migration_v490_control_session_chat_scope.sql` (trước khi deploy API; vô hại khi chưa ai gọi).
+- Apply: `migrations/migration_v490_control_session_chat_scope.sql` — **đã apply** 10/11/2026 18:21:17 VN (trước khi deploy API; vô hại khi chưa ai gọi).
 - Rollback: `migrations/rollback_v490_control_session_chat_scope.sql` (API tự về hàm cũ khi thiếu hàm).
 - Smoke local: `migrations/tests/v490_control_session_chat_scope_smoke.sql` (Postgres trống + stub; 16 ca đạt
   10/11/2026, gồm ca đếm lượt gọi chứng minh phiên đầy đủ và Web/PWA không tính quyền Chat). Không chạy smoke
   này trên production.
-- Kiểm tra chỉ đọc trên akachat 10/11/2026: hàm cũ md5 `0ed750b83cb1188f8fd4ae2fd0898870`, chưa có hàm v2,
+- Kiểm tra chỉ đọc trên akachat 10/11/2026 (trước khi apply): hàm cũ md5 `0ed750b83cb1188f8fd4ae2fd0898870`, chưa có hàm v2,
   migration mới nhất `20261110065525 migration_v489_campaign_run_report_desktop`.
