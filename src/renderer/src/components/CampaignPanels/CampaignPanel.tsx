@@ -64,7 +64,10 @@ import CampaignAgentFormModal from './CampaignAgentFormModal'
 import { isAgentDraft } from '../../../../shared/campaignAgent'
 import CampaignDraftRow from './CampaignDraftRow'
 import CampaignAssistantMenu from './CampaignAssistantMenu'
-import type { CampaignAssistantMode } from '../../../../shared/campaignSupport'
+import type { CampaignAssistantMode, CampaignAssistantOpenRequest } from '../../../../shared/campaignSupport'
+import { AI_CHAT_CAMPAIGN_GROUP, aiChatProjectsForCampaign, type AiChatAgents, type AiChatProject, type AiChatSnapshot } from '../../../../shared/aiChat'
+import { AiChatStartModal } from '../AiChat/AiChatStartModal'
+import { aiChatAttention, useAiChatAttention } from '../AiChat/aiChatStore'
 import { useCampaignDrafts } from './useCampaignDrafts'
 import { CampaignContentMediaUpdateModal, CampaignLimitUpdateModal } from './CampaignQuickEditModals'
 import CampaignDataUploadModal from './CampaignDataUploadModal'
@@ -102,7 +105,9 @@ interface CampaignPanelProps {
   onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
   onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
-  onAskAssistant?: (campaignId: number, mode: CampaignAssistantMode) => void
+  onAskAssistant?: (campaignId: number, mode: CampaignAssistantMode, aiChat?: CampaignAssistantOpenRequest['aiChat']) => void
+  /** Agent hỏi đáp AI (V488); null = tắt hoặc DB chưa có, khi đó menu Trợ lý như cũ. */
+  aiChatAgents?: AiChatAgents | null
   dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null
   onDataGroupCampaignRequestHandled?: (requestId: number) => void
 }
@@ -2413,7 +2418,9 @@ function AddDataToCurrentCampaignModal({
   )
 }
 
-export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionRequest, onDiagnosticsChanged, isActive, filterAccountId, accountInfoOpenRequest, randomPlanRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
+export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionRequest, onDiagnosticsChanged, isActive, filterAccountId, accountInfoOpenRequest, randomPlanRequest, onClearFilter, onNavigateToBrowser, onOpenGeneralSettings, onOpenContentTemplates, onAskAssistant, aiChatAgents = null, dataGroupCampaignRequest, onDataGroupCampaignRequestHandled }: CampaignPanelProps) {
+  const [aiChatStart, setAiChatStart] = useState<{ campaign: CampaignListItem; project: AiChatProject } | null>(null)
+  const aiChatAttentionState = useAiChatAttention()
   const {
     accounts, campaigns, campaignActions, campaignPage, campaignPageError, campaignPageResultKey, campaignSourcesRevision, campaignCatalog, loadCampaignCatalog, configureCampaignPage, setCampaignPageActive,
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
@@ -5127,10 +5134,22 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     }
   }
 
-  const handleAskAssistant = (campaign: CampaignListItem, mode: CampaignAssistantMode) => {
+  const handleAskAssistant = (campaign: CampaignListItem, mode: CampaignAssistantMode, aiChat?: CampaignAssistantOpenRequest['aiChat']) => {
     setAccountInfoAccountId(campaign.accountId ?? null)
     setSelectedCampaignId(campaign.id)
-    onAskAssistant?.(campaign.id, mode)
+    onAskAssistant?.(campaign.id, mode, aiChat)
+  }
+
+  // Hỏi đáp AI: chiến dịch đang có hội thoại chờ/chưa xem với agent này thì mở lại, không tạo hội thoại thứ hai.
+  const handleAskAiAgent = (campaign: CampaignListItem, project: AiChatProject) => {
+    const existing = aiChatAttentionState.items.find(thread => thread.campaignId === campaign.id && thread.projectId === project.id)
+    if (existing) handleAskAssistant(campaign, 'agent', { threadId: existing.id })
+    else setAiChatStart({ campaign, project })
+  }
+  const handleAiChatOpened = (campaign: CampaignListItem, snapshot: AiChatSnapshot) => {
+    setAiChatStart(null)
+    handleAskAssistant(campaign, 'agent', { snapshot })
+    void aiChatAttention.refresh()
   }
 
   const openCampaignDetailTab = (campaign: CampaignListItem, tab: DetailTab) => {
@@ -5626,6 +5645,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
 
   return (
     <div className="campaign-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+      {aiChatStart && <AiChatStartModal key={`${aiChatStart.campaign.id}:${aiChatStart.project.id}`} project={aiChatStart.project}
+        campaign={{ id: aiChatStart.campaign.id, name: aiChatStart.campaign.name, accountName: aiChatStart.campaign.accountName }}
+        onClose={() => setAiChatStart(null)} onOpened={snapshot => handleAiChatOpened(aiChatStart.campaign, snapshot)} />}
       {viewingRelatedAutomation && createPortal(
         <div
           className="automation-modal-backdrop"
@@ -6265,7 +6287,11 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       </div>
                     </div>
                     <div className="campaign-col col-assistant" onClick={e => e.stopPropagation()}>
-                      <CampaignAssistantMenu canDiagnose={/^(facebook|zalo|email)_/.test(campaign.actionId)} onSelect={mode => handleAskAssistant(campaign, mode)} />
+                      <CampaignAssistantMenu canDiagnose={/^(facebook|zalo|email)_/.test(campaign.actionId)} onSelect={mode => handleAskAssistant(campaign, mode)}
+                        agents={aiChatAgents ? aiChatProjectsForCampaign(aiChatAgents, AI_CHAT_CAMPAIGN_GROUP, { platform: campaign.actionId.split('_')[0], actionId: campaign.actionId }) : []}
+                        agentState={aiChatAgents ? (aiChatAttentionState.items.find(thread => thread.campaignId === campaign.id)?.pending === true ? 'pending'
+                          : aiChatAttentionState.items.some(thread => thread.campaignId === campaign.id && thread.unread) ? 'unread' : null) : null}
+                        onSelectAgent={project => handleAskAiAgent(campaign, project)} />
                     </div>
                     <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
                       <div className="campaign-action-dropdown">

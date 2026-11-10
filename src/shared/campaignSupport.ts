@@ -1,9 +1,13 @@
-export type CampaignAssistantMode = 'diagnostics' | 'ask' | 'campaign_support' | 'campaign_support_dsh'
+import type { AiChatSnapshot } from './aiChat'
+
+export type CampaignAssistantMode = 'diagnostics' | 'ask' | 'campaign_support' | 'campaign_support_dsh' | 'agent'
 export type CampaignSupportVariant = 'standard' | 'dsh'
 export interface CampaignAssistantOpenRequest {
   campaignId: number
   mode: CampaignAssistantMode
   requestId: string
+  /** mode 'agent' (Hỏi đáp AI V488): ảnh chụp vừa nhận từ modal bắt đầu, hoặc hội thoại có sẵn cần mở lại. */
+  aiChat?: { snapshot?: AiChatSnapshot; threadId?: number }
 }
 
 export const CAMPAIGN_SUPPORT_QUESTION = 'Tại sao chiến dịch không chạy?'

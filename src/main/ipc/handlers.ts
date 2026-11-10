@@ -67,6 +67,7 @@ import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutC
 import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHandlers'
 import { registerCampaignTypeVisibilityHandlers } from './handlers/campaignTypeVisibilityHandlers'
 import { registerNotificationCenterHandlers } from './handlers/notificationCenterHandlers'
+import { registerAiChatHandlers } from './handlers/aiChatHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -182,6 +183,7 @@ export function registerIpcHandlers(
   registerBrowserRunLimitsHandlers(mainWindow)
   registerCampaignTypeVisibilityHandlers(mainWindow)
   registerNotificationCenterHandlers(mainWindow)
+  registerAiChatHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()

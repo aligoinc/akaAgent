@@ -1,0 +1,100 @@
+/* Hỏi đáp AI (V488): dùng lại khung .assistant-* của tab Trợ lý, chỉ thêm phần riêng. */
+.ai-chat-host { min-width: 0; min-height: 0; display: flex; flex: 1; flex-direction: column; }
+.ai-chat-host[hidden] { display: none; }
+.ai-chat-panel .assistant-chat-header { justify-content: flex-start; }
+.ai-chat-panel .assistant-campaign-name { flex: 1; justify-content: flex-end; }
+.ai-chat-turn { display: flex; flex-direction: column; gap: 8px; }
+.ai-chat-answer-content { max-width: 94%; white-space: normal; }
+.ai-chat-answer { display: flex; flex-direction: column; gap: 8px; }
+.ai-chat-answer p { margin: 0; white-space: pre-wrap; }
+.ai-chat-answer-summary { font-weight: 600; }
+.ai-chat-answer-block strong { display: block; margin-bottom: 3px; color: var(--text-secondary); font-size: 11px; text-transform: uppercase; letter-spacing: .02em; }
+.ai-chat-answer-block ul,
+.ai-chat-answer-block ol { display: flex; flex-direction: column; gap: 4px; margin: 0; padding-left: 18px; }
+.ai-chat-answer-block li small { display: block; color: var(--text-tertiary); font-size: 11px; }
+.ai-chat-answer-clarify { padding: 6px 8px; border-radius: 6px; background: rgba(99, 102, 241, .08); }
+.ai-chat-answer-escalate { display: flex; align-items: flex-start; gap: 6px; color: var(--accent-warning, #b45309); }
+.ai-chat-answer-escalate svg { flex-shrink: 0; margin-top: 2px; }
+.ai-chat-answer-note { color: var(--text-tertiary); font-size: 11px; }
+.ai-chat-rating { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+.ai-chat-rating button {
+  width: 24px; height: 22px; display: inline-flex; align-items: center; justify-content: center; color: var(--text-tertiary);
+  border: 1px solid transparent; border-radius: 5px; background: transparent; cursor: pointer;
+}
+.ai-chat-rating button:hover:not(:disabled) { color: var(--text-primary); border-color: var(--border-default); }
+.ai-chat-rating button.active { color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(99, 102, 241, .1); }
+.ai-chat-rating button.active.down { color: var(--accent-error); border-color: var(--accent-error); background: rgba(244, 63, 94, .08); }
+.ai-chat-status {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 6px; max-width: 94%; padding: 8px 10px; color: var(--text-secondary);
+  border: 1px dashed var(--border-default); border-radius: 8px; background: var(--bg-secondary); font-size: 12px; line-height: 1.45;
+}
+.ai-chat-status p { margin: 0; }
+.ai-chat-status-line { display: flex; align-items: center; gap: 6px; color: var(--text-primary); }
+.ai-chat-status-line svg { color: var(--accent-primary); flex-shrink: 0; }
+.ai-chat-elapsed { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.ai-chat-offline { display: flex; align-items: center; gap: 5px; color: var(--accent-warning, #b45309); }
+.ai-chat-result-error { align-items: center; flex-wrap: wrap; max-width: 94%; }
+.ai-chat-result-error span { flex: 1; min-width: 140px; }
+.ai-chat-cancelled { display: flex; align-items: center; gap: 8px; color: var(--text-tertiary); font-size: 12px; }
+.ai-chat-action-error { margin: 0 12px 8px; }
+.ai-chat-load-more { align-self: center; }
+/* Nút góp ý nổi nằm ở góc dưới phải của trang: chừa chỗ để không che nút Gửi. */
+.ai-chat-input { padding-right: 62px; }
+.ai-chat-input .assistant-chat-textarea:disabled { background: var(--bg-tertiary); }
+
+.ai-chat-thread-list { min-height: 0; display: flex; flex: 1; flex-direction: column; gap: 6px; overflow-y: auto; padding: 10px 12px; background: var(--bg-primary); }
+.ai-chat-thread-list-title { color: var(--text-secondary); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+.ai-chat-thread-item {
+  display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; color: var(--text-primary); text-align: left;
+  border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-secondary); cursor: pointer; font-family: inherit;
+}
+.ai-chat-thread-item:hover { border-color: var(--accent-primary); }
+.ai-chat-thread-item-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ai-chat-thread-item-top strong { min-width: 0; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.ai-chat-thread-item-question { display: -webkit-box; overflow: hidden; color: var(--text-secondary); font-size: 12px; line-height: 1.4; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.ai-chat-thread-item-meta { color: var(--text-tertiary); font-size: 11px; }
+.ai-chat-badge { display: inline-flex; flex-shrink: 0; align-items: center; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.ai-chat-badge.pending { color: var(--accent-primary); background: rgba(99, 102, 241, .12); }
+.ai-chat-badge.unread { color: #047857; background: rgba(16, 185, 129, .14); }
+.ai-chat-badge.error { color: var(--accent-error); background: rgba(244, 63, 94, .1); }
+
+/* Chấm báo trên tab Trợ lý và nút Trợ lý của chiến dịch. */
+.ai-chat-dot { width: 7px; height: 7px; flex-shrink: 0; border-radius: 50%; background: var(--accent-error); }
+.ai-chat-dot.pending { background: var(--accent-primary); animation: ai-chat-pulse 1.2s ease-in-out infinite; }
+@keyframes ai-chat-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .ai-chat-dot.pending { animation: none; } }
+.campaign-assistant-menu .campaign-assistant-menu-label {
+  padding: 6px 12px 2px; color: var(--text-tertiary); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  border-top: 1px solid var(--border-default); margin-top: 4px;
+}
+.campaign-assistant-menu .campaign-assistant-menu-label:first-child { border-top: 0; margin-top: 0; }
+
+/* Modal bắt đầu hỏi đáp. */
+.ai-chat-start-modal { width: min(520px, calc(100vw - 24px)); }
+.ai-chat-start-title { display: inline-flex; align-items: center; gap: 8px; }
+.ai-chat-start-title svg { color: var(--accent-primary); }
+.ai-chat-start-body { display: flex; flex-direction: column; gap: 12px; min-width: 0; margin: 0; padding: 16px 20px; border: 0; }
+.ai-chat-start-description { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.ai-chat-start-context { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 8px 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-tertiary); }
+.ai-chat-start-context div { display: flex; gap: 8px; min-width: 0; font-size: 12px; }
+.ai-chat-start-context dt { width: 76px; flex-shrink: 0; color: var(--text-tertiary); }
+.ai-chat-start-context dd { min-width: 0; margin: 0; overflow: hidden; color: var(--text-primary); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.ai-chat-field { display: flex; flex-direction: column; gap: 5px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.ai-chat-field textarea,
+.ai-chat-field input[type='text'],
+.ai-chat-field select {
+  width: 100%; padding: 8px 10px; color: var(--text-primary); border: 1px solid var(--border-default); border-radius: 6px; outline: none;
+  background: var(--bg-primary); font-family: var(--font-family); font-size: 13px; font-weight: 400; line-height: 1.45;
+}
+.ai-chat-field textarea { resize: vertical; min-height: 84px; }
+.ai-chat-field textarea:focus,
+.ai-chat-field input[type='text']:focus,
+.ai-chat-field select:focus { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(99, 102, 241, .16); }
+.ai-chat-field-checkbox { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; color: var(--text-primary); }
+.ai-chat-suggestions { display: flex; flex-wrap: wrap; gap: 6px; }
+.ai-chat-suggestions button {
+  padding: 4px 10px; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: 999px; background: var(--bg-secondary);
+  font-family: inherit; font-size: 12px; cursor: pointer;
+}
+.ai-chat-suggestions button:hover,
+.ai-chat-suggestions button.active { color: var(--accent-primary); border-color: var(--accent-primary); background: rgba(99, 102, 241, .08); }

@@ -8,17 +8,22 @@ import type { CampaignAssistantOpenRequest } from '../../../../shared/campaignSu
 import type { CampaignListItem } from '../../../../shared/types'
 import type { DiagnosticAction } from '../../../../shared/campaignDiagnostics'
 import { useUiStore } from '../../stores/uiStore'
+import { aiChatUnreadCount, type AiChatThread } from '../../../../shared/aiChat'
+import { AiChatTab } from '../AiChat/AiChatTab'
+import { useAiChatAttention } from '../AiChat/aiChatStore'
 
 interface LogPanelProps {
   assistantOpenRequest?: CampaignAssistantOpenRequest | null
   isActive?: boolean
   diagnosticsRevision?: number
+  /** Hỏi đáp AI (V488) đang bật cho tài khoản này: tab Trợ lý mặc định là danh sách hội thoại. */
+  aiChatEnabled?: boolean
   onDiagnosticAction?: (campaign: CampaignListItem, action: DiagnosticAction) => void
 }
 
 type LogPanelTab = 'progress' | 'assistant'
 
-export default function LogPanel({ assistantOpenRequest, isActive = true, diagnosticsRevision = 0, onDiagnosticAction }: LogPanelProps) {
+export default function LogPanel({ assistantOpenRequest, isActive = true, diagnosticsRevision = 0, aiChatEnabled = false, onDiagnosticAction }: LogPanelProps) {
   const { logs, addLog, clearLogs, campaigns, accounts } = useCampaignStore()
   const [activeTab, setActiveTab] = useState<LogPanelTab>('progress')
   const [filterAccountId, setFilterAccountId] = useState<number | null>(null)
@@ -27,6 +32,14 @@ export default function LogPanel({ assistantOpenRequest, isActive = true, diagno
   const assistantCampaignId = assistantSelection?.campaignId ?? null
   const assistantMode = assistantSelection?.mode ?? 'ask'
   const [screenshotPreview, setScreenshotPreview] = useState<{ dataUrl: string; title: string } | null>(null)
+  // Hỏi đáp AI: hiện khi vừa chọn một agent, hoặc khi chưa chọn gì trong menu Trợ lý (danh sách hội thoại của bạn).
+  const showAiChat = aiChatEnabled && (assistantSelection?.mode === 'agent' || !assistantSelection)
+  const aiChatAttention = useAiChatAttention()
+  const aiChatUnread = aiChatEnabled ? aiChatUnreadCount(aiChatAttention.items) : 0
+  const aiChatPending = aiChatEnabled && aiChatAttention.items.some(thread => thread.pending)
+  const [aiChatThread, setAiChatThread] = useState<AiChatThread | null>(null)
+  const aiChatRequest = useMemo(() => assistantSelection?.mode === 'agent' && assistantSelection.aiChat
+    ? { key: assistantSelection.requestId, ...assistantSelection.aiChat } : null, [assistantSelection])
   const [screenshotPreviewError, setScreenshotPreviewError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -179,11 +192,15 @@ export default function LogPanel({ assistantOpenRequest, isActive = true, diagno
         </div>
       )}
       <div className={`campaign-panel-header log-panel-header${activeTab === 'assistant' ? ' log-panel-header-assistant' : ''}`}>
-        <span className="campaign-panel-title">{activeTab === 'assistant' ? (assistantMode === 'diagnostics' ? 'Chẩn đoán' : assistantMode === 'ask' ? 'Hỏi AI' : 'Trợ lý AI') : 'Tiến trình'}</span>
+        <span className="campaign-panel-title">{activeTab === 'assistant' ? (showAiChat ? 'Hỏi đáp' : assistantMode === 'diagnostics' ? 'Chẩn đoán' : assistantMode === 'ask' ? 'Hỏi AI' : 'Trợ lý AI') : 'Tiến trình'}</span>
         {activeTab === 'progress' ? (
           <button className="btn btn-ghost btn-icon" onClick={clearLogs} title="Xoá log">
             <Trash2 size={14} />
           </button>
+        ) : showAiChat ? (
+          <span className="log-panel-header-context" title={aiChatThread?.campaignName || ''}>
+            <span className="log-panel-campaign-name">{aiChatThread ? aiChatThread.campaignName || aiChatThread.projectName : 'Hội thoại của bạn'}</span>
+          </span>
         ) : (
           <span className="log-panel-header-context" title={assistantCampaign?.name || ''}>
             <span className="log-panel-campaign-name">{assistantCampaign?.name || 'Chưa chọn chiến dịch'}</span>
@@ -207,6 +224,9 @@ export default function LogPanel({ assistantOpenRequest, isActive = true, diagno
         >
           <Sparkles size={14} />
           <span>Trợ lý</span>
+          {aiChatUnread > 0
+            ? <span className="ai-chat-dot" title={`${aiChatUnread} hội thoại có kết quả mới`} />
+            : aiChatPending && <span className="ai-chat-dot pending" title="Đang chờ trợ lý trả lời" />}
         </button>
       </div>
 
@@ -267,13 +287,16 @@ export default function LogPanel({ assistantOpenRequest, isActive = true, diagno
             })
           )}
         </div>
-      ) : assistantMode === 'diagnostics' ? null : (
+      ) : assistantMode === 'diagnostics' || showAiChat ? null : (
         assistantMode === 'campaign_support' || assistantMode === 'campaign_support_dsh'
           ? <CampaignSupportTab key={`${assistantMode}:${assistantCampaignId}`} campaign={assistantCampaign} startRequestId={assistantSelection?.requestId}
               variant={assistantMode === 'campaign_support_dsh' ? 'dsh' : 'standard'} />
           : <CampaignAssistantTab key={assistantCampaignId} campaign={assistantCampaign} />
       )}
-      {assistantMode === 'diagnostics' && <div className="campaign-diagnostics-panel" hidden={activeTab !== 'assistant'}>
+      {showAiChat && <div className="ai-chat-host" hidden={activeTab !== 'assistant'}>
+        <AiChatTab request={aiChatRequest} active={isActive && activeTab === 'assistant'} onThreadChange={setAiChatThread} />
+      </div>}
+      {assistantMode === 'diagnostics' && !showAiChat && <div className="campaign-diagnostics-panel" hidden={activeTab !== 'assistant'}>
         {assistantCampaign && /^(facebook|zalo|email)_/.test(assistantCampaign.actionId)
           ? <CampaignDiagnosticsTab key={assistantCampaign.id} campaignId={assistantCampaign.id} accountId={assistantCampaign.accountId}
               active={isActive && activeTab === 'assistant'} revision={diagnosticsRevision} openRequestId={assistantSelection?.requestId}
