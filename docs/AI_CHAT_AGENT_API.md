@@ -34,6 +34,8 @@ Mỗi lần chỉ xử lý một câu: xong câu này mới `/start` câu kế t
 | `limit` | Số câu tối đa, 1–50, mặc định 20 |
 | `projectCodes` | Chỉ lấy câu hỏi của các agent có mã này. Bỏ trống = tất cả |
 
+Mã agent hiện có (10/11/2026): `hoi-dap-chien-dich` (câu hỏi gửi từ Web và iOS; bản Desktop trên `dev_3` hiện cũng gửi vào đây) và `hoi-dap-chien-dich-desktop` (nhóm `akaagent-desktop`: nhận câu hỏi từ app akaAgent Desktop kể từ bản Desktop đọc nhóm này, chưa phát hành). Hai agent cùng cấu trúc `answerJson`; mỗi câu hỏi trả về kèm `project.code` để biết thuộc agent nào.
+
 **Phản hồi**:
 
 ```json
