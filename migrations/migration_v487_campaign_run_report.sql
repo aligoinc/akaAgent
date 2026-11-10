@@ -10,6 +10,8 @@
 --   inputs  = aka_agent_control_campaign_progress / Data ban đầu (campaign_id, is_delete = false)
 --   results = aka_agent_list_campaign_details_page_v2 / Kết quả chạy (campaign_id, is_delete = false)
 -- Engagement marks are read, never written; execution status is never changed.
+-- 60 s per call like the other report readers (V462, details page v2); PostgREST applies the function setting.
+-- Production 10/11/2026: cold heap reads cost ~0.75 ms per result row (19k results 14.6 s cold, 0.2 s warm).
 -- Rollback: migrations/rollback_v487_campaign_run_report.sql
 BEGIN;
 SET LOCAL lock_timeout = '5s';
@@ -49,7 +51,7 @@ CREATE FUNCTION public.aka_agent_read_campaign_run_report(
 ) RETURNS jsonb
 LANGUAGE plpgsql STABLE SECURITY DEFINER
 SET search_path = pg_catalog, public
-SET statement_timeout = '20s'
+SET statement_timeout = '60s'
 AS $function$
 DECLARE
   v_tz constant text := 'Asia/Ho_Chi_Minh';
@@ -229,7 +231,7 @@ ALTER FUNCTION public.aka_agent_read_campaign_run_report(bigint,bigint,text,text
 REVOKE ALL ON FUNCTION public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb) TO service_role;
 COMMENT ON FUNCTION public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb) IS
-  'V487 read-only aggregate of one campaign for the WebApp "Báo cáo" tab: inputs by status, per-input outcome, results by action/status/sub-status/group, timeline (hour/day/week, Vietnam time) and Zalo engagement. service_role only; 20s per call; never writes.';
+  'V487 read-only aggregate of one campaign for the WebApp "Báo cáo" tab: inputs by status, per-input outcome, results by action/status/sub-status/group, timeline (hour/day/week, Vietnam time) and Zalo engagement. service_role only; 60s per call; never writes.';
 
 DO $postflight$
 DECLARE v_acl text;
