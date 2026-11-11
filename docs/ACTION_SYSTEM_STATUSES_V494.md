@@ -1,11 +1,13 @@
 # Trạng thái hệ thống và danh sách trạng thái theo hành động — V494
 
-**Trạng thái: CHƯA apply production.** Migration, rollback và bộ kiểm thử đã có trong repo; chưa có code ứng dụng nào đọc
-phần mới. DDL làm PostgREST nạp lại schema nên phải apply ngoài giờ cao điểm.
+**Trạng thái: ĐÃ apply akachat lúc 17:23:05 VN ngày 11/11/2026** (`20261111102305 /
+migration_v494_action_system_statuses`; **không apply lại**, không sửa file migration). md5 sổ migration bằng md5 file
+`0bdaa78e190ef7376ab6d0a0a54b73a0`. [Biên nhận](../migrations/snapshots/action-system-statuses-v494/apply-receipt.json).
+Chưa có code ứng dụng nào đọc phần mới; 8 trạng thái mới chưa bật.
 
-Lịch hẹn apply 17:00 VN ngày 11/11/2026 đã dừng trước khi gửi lệnh: lúc 16:53 VN sổ migration có thêm V495 (engine kết
-quả chiến dịch v2), sửa đúng bảng `auto_status`. V494 đã được chỉnh và kiểm thử lại trên schema sau V495 (file md5
-`0bdaa78e190ef7376ab6d0a0a54b73a0`); xem mục [Quan hệ với V495](#quan-hệ-với-v495).
+Lịch hẹn 17:00 VN đã dừng trước khi gửi lệnh: lúc 16:53 VN sổ migration có thêm V495 (engine kết quả chiến dịch v2), sửa
+đúng bảng `auto_status`. V494 được chỉnh và kiểm thử lại trên schema sau V495 rồi mới apply, sau khi người dùng chọn apply
+bản đã chỉnh; xem mục [Quan hệ với V495](#quan-hệ-với-v495) và [Kết quả apply](#kết-quả-apply-production).
 
 Người dùng chốt ngày 11/11/2026 sau đợt rà soát log Zalo: mỗi trạng thái kết quả của hành động phải gắn với đúng một
 trạng thái hệ thống, danh sách trạng thái của Zalo phải đủ, và mỗi hành động phải có danh sách trạng thái khai báo trước.
@@ -186,7 +188,24 @@ này lúc 17:10 VN 11/11); phần trên rút từ nguyên văn migration trong s
   trỏ tới, đã bật, hoặc đã có trạng thái thêm sau V494; cả khi "đã phản hồi" đã được dùng làm trạng thái phụ, hoặc luật
   sự kiện, chính sách engine, trạng thái gốc của V495 đã trỏ tới trạng thái mới.
 
-Chưa chạy trên production, kể cả chạy thử rồi ROLLBACK.
+Không chạy thử kiểu BEGIN…ROLLBACK trên production trước khi apply.
+
+## Kết quả apply production
+
+- Kiểm trước (17:21 VN, chỉ đọc): sổ chưa có V494; ba vân tay preflight khớp; đủ 4 cột của V495, 22/22 trạng thái có
+  `report_group` trùng nhóm định gắn; không có khóa trên `auto_status`; REST p50 47–50 ms.
+- Sau apply: 6 trạng thái hệ thống; 30 trạng thái kết quả đều có trạng thái hệ thống (8 chưa bật, id 56–63); 19 trạng thái
+  component khác để trống; `report_group` trùng nhóm của trạng thái hệ thống 30/30; 62 cặp hành động–trạng thái (28 đang
+  ghi, 34 chưa bật, 10 hành động); 22 dòng cũ giữ vân tay và `updated_at`; policy mặc định, 3 luật sự kiện và 154 chính
+  sách engine không đổi; hai bảng mới bật RLS, chỉ `service_role` đọc được.
+- Bộ chạy: trong 2 phút 19 giây sau apply có 584 dòng kết quả (530 của Zalo: Server 348, QR 119, trình duyệt 63), nhịp
+  ~252 dòng/phút so với ~281 dòng/phút của 10 phút trước; không dòng nào dùng trạng thái mới.
+- PostgREST nạp lại schema 17:23:07.96 → 17:23:20.90 VN (câu đọc schema 9,05 giây). Trong 20 giây đó 812/11.817 request
+  REST chậm hơn 1 giây. 20 giây kế tiếp có **21 lỗi 500** do chạm trần 3 giây: 13 PATCH `contacts` từ gateway chat cũ
+  (`138.199.24.245`, không tự gửi lại), 7 GET `messages` từ `167.88.158.83`, 1 POST `contacts` từ luồng Pancake. Từ
+  17:23:40 hết lỗi, p50 46–52 ms. 0 lỗi 503.
+- Lỗi 500 của `rpc/aka_agent_claim_account_operation` (2 IP Desktop, mỗi lượt đúng 3 giây) đã có từ 17:21:50, trước khi
+  apply, và dừng lúc 17:23:33; không do V494.
 
 ## Apply và rollback
 

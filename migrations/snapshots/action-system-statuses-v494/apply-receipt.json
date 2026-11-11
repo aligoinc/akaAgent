@@ -1,0 +1,92 @@
+{
+  "migration": "migration_v494_action_system_statuses",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261111102305",
+  "applied_at_vn": "2026-11-11T17:23:05+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "ledger_created_by": "MCP account of the user (not NULL, unlike V495/V496/V497 which were applied from another session)",
+  "authorized_by": "user request 'apply lúc 17h' (11/11/2026); the 17:00 run was stopped before sending because V495 had entered the ledger at 16:53 VN; the file was aligned with the post-V495 schema, re-tested 65/65, and the user chose 'Apply bản đã chỉnh ngay' at ~17:20 VN",
+  "file_md5": "0bdaa78e190ef7376ab6d0a0a54b73a0",
+  "file_bytes": 33367,
+  "ledger_statements_md5": "0bdaa78e190ef7376ab6d0a0a54b73a0",
+  "ledger_statements_bytes": 33367,
+  "ledger_rows_named_v494": 1,
+  "source_commit": "657c4731",
+  "rollback_file": "migrations/rollback_v494_action_system_statuses.sql",
+  "rollback_md5": "9b38572de1f4c74afe005899d76fe10f",
+  "preflight_read_only_at_vn": "2026-11-11T17:21:03+07:00",
+  "preflight": {
+    "ledger_had_v494": false,
+    "ledger_after_v493": "20261111091027 V496, 20261111095339 V495 (campaign outcome engine, touches auto_status), 20261111100225 V497",
+    "objects_exist": "auto_system_statuses: no, auto_account_action_result_statuses: no, auto_status.system_status_code: no",
+    "detail_statuses_fingerprint": "22 rows 069950463f9b6c09cfec954a3449d09d",
+    "default_policies_fingerprint": "11 rows f9a1bc5c87a3f34d082093f3c6994a0c",
+    "zalo_actions_fingerprint": "11 rows cf942c3fa2a30892305dcac77900caa7",
+    "v495_columns_on_auto_status": 4,
+    "detail_statuses_without_report_group": 0,
+    "report_group_equals_planned_system_group": "22/22",
+    "auto_status_triggers": "auto_status_parent_guard_v495, auto_status_result_component_guard",
+    "engine_rows": "auto_status_event_rules 3, auto_outcome_policies 154",
+    "locks_on_auto_status": 0,
+    "active_client_backends": 2,
+    "rest_p50_ms_10_16_10_20_utc": "47-50 (41.6k-45.8k requests/minute)"
+  },
+  "postflight_at_vn": "2026-11-11T17:23:47+07:00",
+  "postflight": {
+    "auto_system_statuses": "success>success, failure>failure, skipped>skipped, stopped>pending, error>failure, pending>pending",
+    "detail_statuses": "30 rows, 30 with system_status_code, 8 inactive",
+    "other_components_without_system_status": "19/19",
+    "report_group_equals_system_group": "30/30",
+    "new_statuses": {
+      "56": "người nhận chặn tin | failure | report_group failure | delivered false | rank -",
+      "57": "tài khoản bị hạn chế | stopped | pending | false | -",
+      "58": "đạt giới hạn | stopped | pending | false | -",
+      "59": "hết phiên đăng nhập | stopped | pending | false | -",
+      "60": "lỗi kết nối | error | failure | false | -",
+      "61": "chưa rõ kết quả | error | failure | false | -",
+      "62": "đã thả cảm xúc | success | success | true | 40",
+      "63": "đã phản hồi | success | success | true | 50"
+    },
+    "old_22_detail_statuses_fingerprint_unchanged": "069950463f9b6c09cfec954a3449d09d",
+    "old_rows_max_updated_at_vn": "2026-10-10 02:10 (no old row touched in updated_at)",
+    "action_status_pairs": "62 rows: 28 active, 34 inactive, 10 Zalo actions",
+    "default_policies_fingerprint_unchanged": "f9a1bc5c87a3f34d082093f3c6994a0c",
+    "engine_rows_unchanged": "auto_status_event_rules 3, auto_outcome_policies 154",
+    "select_on_new_tables": { "anon": false, "authenticated": false, "aka_agent_desktop": false, "aka_agent_chat_api": false, "service_role": true },
+    "rls_on_new_tables": true,
+    "anon_authenticated_on_guard_function_and_sequence": false,
+    "desktop_and_chat_api_can_select_new_column": true
+  },
+  "postgrest_reload": {
+    "reload_message_utc": "2026-11-11T10:23:07.962Z",
+    "schema_cache_queried_ms": 9053,
+    "schema_cache_loaded_utc": "2026-11-11T10:23:20.900Z",
+    "loaded": "512 relations, 314 relationships, 791 functions"
+  },
+  "edge_logs_rest": {
+    "before_10_20_10_22_utc": "p50 47-50 ms, p95 138-207 ms; 2-16 HTTP 500 per minute, all 3 s statement timeouts that started before the apply (rpc/aka_agent_claim_account_operation from 2 Desktop IPs, rpc/aka_agent_list_contact_datasets, 2 x auto_account_contacts at 8 s)",
+    "reload_window_10_23_00_10_23_20_utc": "812 requests slower than 1 s out of 11,817 (p99 3.5 s then 1.8 s); p50 of the second 10 s bucket 277 ms",
+    "after_reload_10_23_20_10_23_40_utc": "21 HTTP 500 at the 3 s statement timeout attributable to the backlog after the reload: 13 PATCH /contacts from 138.199.24.245 (akabiz-zalo-gateway, does not retry), 7 GET /messages from 167.88.158.83, 1 POST /contacts from 138.199.24.231; plus 8 rpc/aka_agent_claim_account_operation from the same 2 Desktop IPs as before the apply",
+    "from_10_23_40_utc": "0 HTTP 5xx except 1 rpc/aka_agent_list_contact_datasets at 10:24:45; p50 46-52 ms, p99 114-354 ms",
+    "http_503": 0
+  },
+  "runtime_check": {
+    "window": "17:23:05-17:25:24 VN",
+    "auto_campaign_details_rows": 584,
+    "zalo_rows": "530: Zalo Server 348, QR 119, Zalo Web 63",
+    "statuses_seen_right_after_apply": "thành công, thất bại, không tồn tại, đã là bạn bè",
+    "rows_with_new_status_ids_56_63": 0,
+    "rows_status_loi": "1 (4 in the 10 minutes before)",
+    "rate": "about 252 rows/minute after vs 281 rows/minute in the 10 minutes before"
+  },
+  "local_test": "bash scripts/test-v494-action-system-statuses.sh: 65/65 on PostgreSQL 16 with a fixture that has the V495 columns, checks, trigger and engine tables; real ActionStatusCatalog class loads the catalog",
+  "compatibility": [
+    "Additive only: no existing row of auto_status changed in any column other than the new system_status_code; no change to auto_error, policies, auto_campaign_action_detail_statuses, auto_status_event_rules, auto_outcome_policies or any existing function/trigger.",
+    "8 new statuses are inactive, have no policy, no auto_error, no event rule and no engine policy: no runtime writes them.",
+    "Nothing reads the two new tables yet."
+  ],
+  "not_done": [
+    "No production BEGIN...ROLLBACK trial before the apply.",
+    "The design document of V495 (docs/CAMPAIGN_OUTCOME_ENGINE.md) was not available on any pushed branch; the alignment was derived from the V495 text in the ledger and the live schema."
+  ]
+}
