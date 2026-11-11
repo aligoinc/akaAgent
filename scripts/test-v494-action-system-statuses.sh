@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Thử V494 (trạng thái hệ thống + danh sách trạng thái theo hành động) trên PostgreSQL 16 cục bộ, không chạm production.
-# Fixture dựng lại các bảng danh mục như akachat ngày 11/11/2026 (41 dòng auto_status, 19 policy, hành động Zalo, quyền,
-# RLS, ACL mặc định của schema public). Chính preflight md5 của migration xác nhận fixture trùng dữ liệu production.
+# Fixture dựng lại các bảng danh mục như akachat ngày 11/11/2026 SAU V495 (41 dòng auto_status kèm 4 cột và trigger của
+# V495 với đúng giá trị đọc trên production lúc 17:10 VN, 19 policy, hành động Zalo, auto_status_event_rules,
+# auto_outcome_policies rút gọn, quyền, RLS, ACL mặc định của schema public). Chính preflight md5 của migration xác nhận fixture trùng dữ liệu production.
 # Kiểm: apply, dữ liệu cũ không đổi, ràng buộc/guard/quyền, lớp ActionStatusCatalog thật của bộ chạy nạp được danh mục
 # sau migration, chạy lại bị từ chối, lệch dữ liệu bị từ chối, rollback trả đúng trạng thái đầu, rollback từ chối khi
 # trạng thái mới đã được dùng.
@@ -106,6 +107,42 @@ INSERT INTO public.auto_status (id, code, name, status_key, status_value, compon
   (52, 'campaign_detail_post_pending', 'Chờ duyệt bài', 'post_pending', 'chờ duyệt bài', 'campaign_detail', 'all', false, false, 210),
   (55, 'campaign_detail_post_approved', 'Đã duyệt bài', 'post_approved', 'đã duyệt bài', 'campaign_detail', 'facebook', false, false, 220);
 SELECT setval('public.auto_status_id_seq', 55, true);
+-- V495 (apply akachat 11/11 16:53 VN): 4 cột, 2 CHECK, trigger guard trạng thái gốc; giá trị 22 dòng đọc từ production.
+ALTER TABLE public.auto_status
+  ADD COLUMN parent_status_id bigint REFERENCES public.auto_status(id) ON DELETE RESTRICT,
+  ADD COLUMN report_group text,
+  ADD COLUMN counts_as_delivered boolean,
+  ADD COLUMN progress_rank integer;
+ALTER TABLE public.auto_status
+  ADD CONSTRAINT auto_status_report_group_v495_check CHECK (report_group IS NULL OR report_group IN ('success','failure','skipped','pending')),
+  ADD CONSTRAINT auto_status_parent_not_self_v495_check CHECK (parent_status_id IS NULL OR parent_status_id <> id);
+CREATE FUNCTION public.aka_agent_engine_guard_status_parent_v495() RETURNS trigger
+LANGUAGE plpgsql SET search_path = '' AS $f$
+DECLARE v_cur bigint := NEW.parent_status_id; v_depth integer := 0; v_comp text;
+BEGIN
+  IF NEW.parent_status_id IS NULL THEN RETURN NEW; END IF;
+  SELECT s.component_type INTO v_comp FROM public.auto_status s WHERE s.id = NEW.parent_status_id;
+  IF v_comp IS DISTINCT FROM NEW.component_type THEN
+    RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'status_parent_component_mismatch';
+  END IF;
+  WHILE v_cur IS NOT NULL LOOP
+    IF v_cur = NEW.id THEN RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'status_parent_cycle'; END IF;
+    v_depth := v_depth + 1;
+    IF v_depth > 10 THEN RAISE EXCEPTION USING ERRCODE = '23514', MESSAGE = 'status_parent_too_deep'; END IF;
+    SELECT s.parent_status_id INTO v_cur FROM public.auto_status s WHERE s.id = v_cur;
+  END LOOP;
+  RETURN NEW;
+END $f$;
+CREATE TRIGGER auto_status_parent_guard_v495 BEFORE INSERT OR UPDATE OF parent_status_id ON public.auto_status
+FOR EACH ROW EXECUTE FUNCTION public.aka_agent_engine_guard_status_parent_v495();
+UPDATE public.auto_status s SET report_group = v.report_group, counts_as_delivered = v.delivered, progress_rank = v.rank
+  FROM (VALUES (20, 'success', true, 10), (21, 'failure', false, NULL), (22, 'failure', false, NULL), (23, 'success', true, 40),
+    (24, 'success', false, NULL), (25, 'success', false, NULL), (26, 'success', true, 10), (27, 'skipped', false, NULL),
+    (28, 'success', true, 10), (29, 'success', true, 10), (30, 'skipped', false, NULL), (31, 'skipped', false, NULL),
+    (32, 'success', true, 20), (33, 'skipped', false, NULL), (34, 'success', true, 30), (35, 'pending', false, NULL),
+    (36, 'failure', false, NULL), (37, 'failure', false, NULL), (38, 'failure', false, NULL), (51, 'skipped', false, NULL),
+    (52, 'pending', true, 15), (55, 'success', true, 20)) v(id, report_group, delivered, rank)
+ WHERE s.id = v.id;
 ALTER TABLE public.auto_status ENABLE ROW LEVEL SECURITY;
 CREATE POLICY v435_existing_role_access ON public.auto_status FOR ALL TO aka_agent_desktop USING (true) WITH CHECK (true);
 REVOKE ALL ON public.auto_status FROM anon, authenticated;
@@ -167,6 +204,14 @@ CREATE TABLE public.auto_automation_trigger_statuses (id bigint PRIMARY KEY, sub
 INSERT INTO public.auto_automation_trigger_statuses VALUES (1, NULL), (2, ARRAY[52]::bigint[]);
 CREATE TABLE public.auto_campaign_details (id bigserial PRIMARY KEY, status text, status_id bigint, sub_status_id bigint);
 INSERT INTO public.auto_campaign_details (status, status_id) VALUES ('thành công', 20), ('thất bại', 21), ('không tồn tại', 36);
+-- Bảng engine V495 mà postflight/rollback của V494 đọc (cột rút gọn, đúng tên; 3 luật sự kiện như production).
+CREATE TABLE public.auto_status_event_rules (id bigserial PRIMARY KEY, event_kind text NOT NULL, action_code text REFERENCES public.auto_account_actions(code) ON DELETE RESTRICT,
+  status_id bigint NOT NULL REFERENCES public.auto_status(id) ON DELETE RESTRICT, is_active boolean NOT NULL DEFAULT true);
+INSERT INTO public.auto_status_event_rules (event_kind, status_id) VALUES ('email.open', 34), ('email.click', 23), ('sms.received', 32);
+CREATE TABLE public.auto_outcome_policies (id bigserial PRIMARY KEY, status_id bigint REFERENCES public.auto_status(id) ON DELETE RESTRICT,
+  action_code text REFERENCES public.auto_account_actions(code) ON DELETE RESTRICT,
+  detail_status_id bigint REFERENCES public.auto_status(id) ON DELETE RESTRICT, sub_status_id bigint REFERENCES public.auto_status(id) ON DELETE RESTRICT);
+INSERT INTO public.auto_outcome_policies (status_id, action_code) VALUES (20, NULL), (21, NULL), (20, 'zalo_find_phone_user');
 SQL
 
 FP_ALL="SELECT md5(string_agg(to_jsonb(s)::text, '|' ORDER BY s.id)) FROM public.auto_status s"
@@ -175,7 +220,7 @@ FP_POLICY="SELECT md5(string_agg(to_jsonb(p)::text, '|' ORDER BY p.id)) FROM pub
 FP_ERROR="SELECT md5(string_agg(to_jsonb(e)::text, '|' ORDER BY e.id)) FROM public.auto_error e"
 DB=base
 before_all=$(q "$FP_ALL"); before_policy=$(q "$FP_POLICY"); before_error=$(q "$FP_ERROR")
-psql_db postgres -c "CREATE DATABASE t1 TEMPLATE base" -c "CREATE DATABASE t2 TEMPLATE base" -c "CREATE DATABASE t3 TEMPLATE base"
+psql_db postgres -c "CREATE DATABASE t1 TEMPLATE base" -c "CREATE DATABASE t2 TEMPLATE base" -c "CREATE DATABASE t3 TEMPLATE base" -c "CREATE DATABASE t4 TEMPLATE base"
 
 # ---- Apply ----
 DB=t1
@@ -195,6 +240,16 @@ expect "6 trạng thái Zalo mới, chưa bật" \
 expect "2 trạng thái tương tác mới, chưa bật, xếp ngay sau 'đã xem'" \
   "$(q "SELECT string_agg(status_value || '>' || system_status_code || '>' || flatform_type, ',' ORDER BY sort_order) FROM public.auto_status WHERE component_type = 'campaign_detail' AND sort_order BETWEEN 150 AND 159")" \
   "đã xem>success>all,đã thả cảm xúc>success>all,đã phản hồi>success>all"
+expect "8 trạng thái mới điền đủ cột của V495 (nhóm báo cáo, tính đã gửi, thứ hạng tiến trình)" \
+  "$(q "SELECT string_agg(status_key || ':' || report_group || ':' || counts_as_delivered::text || ':' || coalesce(progress_rank::text, '-'), ',' ORDER BY id) FROM public.auto_status WHERE id > 55")" \
+  "receiver_blocked:failure:false:-,account_restricted:pending:false:-,limit_reached:pending:false:-,session_expired:pending:false:-,connection_error:failure:false:-,result_unknown:failure:false:-,reacted:success:true:40,replied:success:true:50"
+expect "nhóm báo cáo của V495 trùng nhóm của trạng thái hệ thống ở cả 30 trạng thái kết quả" \
+  "$(q "SELECT count(*) FILTER (WHERE s.report_group = y.report_group) || '/' || count(*) FROM public.auto_status s JOIN public.auto_system_statuses y ON y.code = s.system_status_code")" "30/30"
+expect "thứ hạng tiến trình: đã gửi < đã nhận < đã xem < đã thả cảm xúc < đã phản hồi" \
+  "$(q "SELECT string_agg(status_key, '<' ORDER BY progress_rank) FROM public.auto_status WHERE code IN ('campaign_detail_message_sent', 'campaign_detail_received', 'campaign_detail_viewed', 'campaign_detail_reacted', 'campaign_detail_replied')")" \
+  "message_sent<received<viewed<reacted<replied"
+expect "luật sự kiện và chính sách engine V495 không đổi, không trỏ tới trạng thái mới" \
+  "$(q "SELECT (SELECT count(*) FROM public.auto_status_event_rules) || '/' || (SELECT count(*) FROM public.auto_outcome_policies) || '/' || (SELECT count(*) FROM public.auto_status_event_rules r WHERE r.status_id > 55) || '/' || (SELECT count(*) FROM public.auto_outcome_policies p WHERE greatest(p.status_id, p.detail_status_id, p.sub_status_id) > 55)")" "3/3/0/0"
 expect "trạng thái mới không có policy" "$(q "SELECT count(*) FROM public.auto_account_action_status_policies p JOIN public.auto_status s ON s.id = p.status_id WHERE s.id > 55")" "0"
 expect "28 cặp đang ghi, 34 cặp chưa bật" "$(q "SELECT count(*) FILTER (WHERE is_active) || '/' || count(*) FILTER (WHERE NOT is_active) FROM public.auto_account_action_result_statuses")" "28/34"
 expect "10 hành động Zalo có danh sách, zalo_join_group không có" \
@@ -301,6 +356,15 @@ q "UPDATE public.auto_account_action_status_policies SET report_group = 'failure
 refuse "hành động Zalo mới chưa khai báo bị từ chối" "danh sách hành động Zalo đã đổi" run_file t2 "$MIGRATION"
 expect "lần apply bị từ chối không để lại gì" "$(q "SELECT (to_regclass('public.auto_system_statuses') IS NULL)::text || (SELECT count(*) FROM public.auto_status)")" "true41"
 
+DB=t4
+q "ALTER TABLE public.auto_status DROP COLUMN progress_rank" >/dev/null
+refuse "schema chưa có cột V495 bị từ chối" "thiếu cột của V495" run_file t4 "$MIGRATION"
+q "ALTER TABLE public.auto_status ADD COLUMN progress_rank integer; UPDATE public.auto_status SET report_group = NULL WHERE id = 36" >/dev/null
+refuse "trạng thái kết quả thiếu report_group của V495 bị từ chối" "chưa có report_group của V495" run_file t4 "$MIGRATION"
+q "UPDATE public.auto_status SET report_group = 'skipped' WHERE id = 36" >/dev/null
+refuse "report_group của V495 lệch nhóm của trạng thái hệ thống bị từ chối" "lệch nhóm của trạng thái hệ thống" run_file t4 "$MIGRATION"
+expect "lần apply bị từ chối ở postflight không để lại gì" "$(q "SELECT (to_regclass('public.auto_system_statuses') IS NULL)::text || (SELECT count(*) FROM public.auto_status)")" "true41"
+
 # ---- Rollback ----
 DB=t1
 out=$(run_file t1 "$ROLLBACK") || fail "rollback V494: $out"
@@ -322,6 +386,13 @@ refuse "rollback từ chối khi auto_error đã trỏ tới trạng thái mới
 q "UPDATE public.auto_error SET detail_status = NULL WHERE id = 42; INSERT INTO public.auto_campaign_details (status, status_id, sub_status_id) SELECT 'thành công', 20, id FROM public.auto_status WHERE code = 'campaign_detail_replied'" >/dev/null
 refuse "rollback từ chối khi 'đã phản hồi' đã được dùng làm trạng thái phụ" "đã được dùng" run_file t3 "$ROLLBACK"
 q "DELETE FROM public.auto_campaign_details WHERE sub_status_id IS NOT NULL" >/dev/null
+q "INSERT INTO public.auto_status_event_rules (event_kind, action_code, status_id) SELECT 'zalo.replied', 'zalo_message_friend', id FROM public.auto_status WHERE code = 'campaign_detail_replied'" >/dev/null
+refuse "rollback từ chối khi luật sự kiện của engine đã trỏ tới trạng thái mới" "đã được dùng" run_file t3 "$ROLLBACK"
+q "DELETE FROM public.auto_status_event_rules WHERE event_kind = 'zalo.replied'; INSERT INTO public.auto_outcome_policies (detail_status_id) SELECT id FROM public.auto_status WHERE code = 'campaign_detail_limit_reached'" >/dev/null
+refuse "rollback từ chối khi chính sách engine đã trỏ tới trạng thái mới" "đã được dùng" run_file t3 "$ROLLBACK"
+q "DELETE FROM public.auto_outcome_policies WHERE detail_status_id IS NOT NULL; UPDATE public.auto_status SET parent_status_id = (SELECT id FROM public.auto_status WHERE code = 'campaign_detail_receiver_blocked') WHERE id = 38" >/dev/null
+refuse "rollback từ chối khi trạng thái mới đã là trạng thái gốc của trạng thái khác" "đã được dùng" run_file t3 "$ROLLBACK"
+q "UPDATE public.auto_status SET parent_status_id = NULL WHERE id = 38" >/dev/null
 q "UPDATE public.auto_error SET detail_status = NULL WHERE id = 42; UPDATE public.auto_status SET is_active = true WHERE code = 'campaign_detail_session_expired'" >/dev/null
 refuse "rollback từ chối khi trạng thái mới đã bật" "đã được bật" run_file t3 "$ROLLBACK"
 q "UPDATE public.auto_status SET is_active = false WHERE code = 'campaign_detail_session_expired'; INSERT INTO public.auto_status (code, name, status_key, status_value, component_type, system_status_code) VALUES ('campaign_detail_later', 'Sau', 'later', 'sau', 'campaign_detail', 'failure')" >/dev/null

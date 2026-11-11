@@ -4,7 +4,8 @@
 -- Chỉ gỡ đúng những gì V494 thêm: bảng auto_account_action_result_statuses và hàm guard của nó, 8 trạng thái chưa bật
 -- (6 lỗi/dừng của Zalo, 2 tương tác), ràng buộc + cột auto_status.system_status_code, bảng auto_system_statuses. Không sửa
 -- dòng nào khác của auto_status.
--- Từ chối nếu 8 trạng thái mới đã được dùng (policy, auto_error theo id hoặc theo chữ, automation, kết quả đã ghi) hoặc
+-- Từ chối nếu 8 trạng thái mới đã được dùng (policy, auto_error theo id hoặc theo chữ, automation, kết quả đã ghi, luật sự
+-- kiện / chính sách / trạng thái gốc của engine V495) hoặc
 -- đã có trạng thái kết quả khác được thêm sau V494: khi đó phải đối chiếu tay, không xóa cưỡng ép.
 -- Nếu sau V494 đã có trang quản trị ghi vào hai bảng mới, chép dữ liệu ra biên nhận trước:
 --   SELECT * FROM public.auto_system_statuses ORDER BY sort_order;
@@ -38,7 +39,12 @@ BEGIN
                 OR lower(e.detail_status) IN (SELECT lower(status_value) FROM public.auto_status WHERE id = ANY(v_new)))
      OR EXISTS (SELECT 1 FROM public.auto_campaign_action_detail_statuses WHERE status_id = ANY(v_new))
      OR EXISTS (SELECT 1 FROM public.auto_automation_trigger_statuses WHERE sub_status_ids && v_new)
-     OR EXISTS (SELECT 1 FROM public.auto_campaign_details WHERE status_id = ANY(v_new) OR sub_status_id = ANY(v_new)) THEN
+     OR EXISTS (SELECT 1 FROM public.auto_campaign_details WHERE status_id = ANY(v_new) OR sub_status_id = ANY(v_new))
+     -- Engine V495: luật sự kiện, chính sách và trạng thái "xử lý như" trỏ tới 8 dòng này.
+     OR EXISTS (SELECT 1 FROM public.auto_status_event_rules WHERE status_id = ANY(v_new))
+     OR EXISTS (SELECT 1 FROM public.auto_outcome_policies
+                 WHERE status_id = ANY(v_new) OR detail_status_id = ANY(v_new) OR sub_status_id = ANY(v_new))
+     OR EXISTS (SELECT 1 FROM public.auto_status WHERE parent_status_id = ANY(v_new)) THEN
     RAISE EXCEPTION 'rollback v494: 8 trạng thái mới đã được dùng, không xóa';
   END IF;
 END

@@ -3,6 +3,10 @@
 **Trạng thái: CHƯA apply production.** Migration, rollback và bộ kiểm thử đã có trong repo; chưa có code ứng dụng nào đọc
 phần mới. DDL làm PostgREST nạp lại schema nên phải apply ngoài giờ cao điểm.
 
+Lịch hẹn apply 17:00 VN ngày 11/11/2026 đã dừng trước khi gửi lệnh: lúc 16:53 VN sổ migration có thêm V495 (engine kết
+quả chiến dịch v2), sửa đúng bảng `auto_status`. V494 đã được chỉnh và kiểm thử lại trên schema sau V495 (file md5
+`0bdaa78e190ef7376ab6d0a0a54b73a0`); xem mục [Quan hệ với V495](#quan-hệ-với-v495).
+
 Người dùng chốt ngày 11/11/2026 sau đợt rà soát log Zalo: mỗi trạng thái kết quả của hành động phải gắn với đúng một
 trạng thái hệ thống, danh sách trạng thái của Zalo phải đủ, và mỗi hành động phải có danh sách trạng thái khai báo trước.
 Cùng ngày người dùng yêu cầu thêm cho các hành động gửi tin nhắn Zalo bốn trạng thái tương tác: đã nhận, đã xem, đã tim/like,
@@ -118,6 +122,36 @@ Mới khai báo Zalo. Facebook, Email, SMS chưa rà log nên chưa có dòng.
 - **Không tắt `zalo_join_group`**: chưa rà đủ nơi dùng.
 - **Không đổi cách ghi kết quả.** Xem bước tiếp theo.
 
+## Quan hệ với V495
+
+V495 (`20261111095339 / migration_v495_campaign_outcome_engine`, apply akachat 16:53 VN 11/11/2026, không thuộc nhánh
+này) thêm vào đúng các bảng V494 dùng:
+
+| V495 thêm | Liên quan tới V494 |
+|---|---|
+| `auto_status.report_group` (4 nhóm: success/failure/skipped/pending), đã điền cho 22 trạng thái kết quả | Cùng ý với "nhóm báo cáo" của trạng thái hệ thống. V495 không có Dừng và Lỗi; hai nhóm này chỉ có ở `system_status_code`. |
+| `auto_status.counts_as_delivered`, `progress_rank` (đã gửi 10 < đã nhận 20 < đã xem 30 < đã click 40) | Thứ hạng dùng để nâng trạng thái theo sự kiện. |
+| `auto_status.parent_status_id` + trigger `auto_status_parent_guard_v495` | Trạng thái "xử lý như" trạng thái gốc. V494 không dùng. |
+| `auto_status_event_rules` (sự kiện → trạng thái; đang có `email.open`, `email.click`, `sms.received`) | Đây là cơ chế sẵn có cho bốn trạng thái tương tác: hàm của engine chỉ nâng trạng thái khi thứ hạng mới cao hơn thứ hạng của `coalesce(sub_status_id, status_id)`. |
+| `auto_outcome_policies` (154 dòng, có `error_class` 13 nhóm: `account_restricted`, `quota`, `auth`, `transient`, `unknown_delivery`…), `auto_account_actions.operation_class` | Chính sách xử lý theo mã lỗi/nhóm lỗi của engine. Không phải danh sách trạng thái khai báo theo hành động. |
+
+V494 sau khi chỉnh:
+
+- Không sửa cột nào của V495 trên 22 dòng đang có, không thêm luật vào `auto_status_event_rules`, không thêm dòng
+  `auto_outcome_policies`.
+- 8 trạng thái mới điền đủ ba cột của V495: `report_group` bằng nhóm của trạng thái hệ thống (Dừng → `pending`, Lỗi →
+  `failure`), `counts_as_delivered` = false cho 6 trạng thái lỗi/dừng và true cho 2 trạng thái tương tác, `progress_rank`
+  đã thả cảm xúc 40, đã phản hồi 50 (sau đã xem 30).
+- Preflight từ chối nếu `auto_status` thiếu cột của V495 hoặc có trạng thái kết quả chưa có `report_group`. Postflight
+  kiểm cả 30 trạng thái kết quả có `auto_status.report_group` trùng nhóm của trạng thái hệ thống.
+- Rollback từ chối thêm khi luật sự kiện, chính sách engine hoặc `parent_status_id` đã trỏ tới 8 trạng thái mới.
+
+Hai cột `report_group` và `system_status_code` cùng nằm trên một dòng và phải khớp nhau; hiện mới có postflight của V494
+kiểm, chưa có ràng buộc ép lúc ghi. Ai sửa `report_group` của một trạng thái về sau phải sửa cả trạng thái hệ thống.
+
+Chưa đọc được tài liệu thiết kế của V495 (`docs/CAMPAIGN_OUTCOME_ENGINE.md` chưa có trên nhánh nào đã đẩy lên của repo
+này lúc 17:10 VN 11/11); phần trên rút từ nguyên văn migration trong sổ và trạng thái production.
+
 ## Tương thích
 
 - Desktop, App Server đọc `auto_status` bằng `select *`, chat worker bằng `to_jsonb(s)`; cả ba chỉ lấy trường đã biết và
@@ -132,9 +166,11 @@ Mới khai báo Zalo. Facebook, Email, SMS chưa rà log nên chưa có dòng.
 
 ## Kiểm thử
 
-`bash scripts/test-v494-action-system-statuses.sh` (PostgreSQL 16 cục bộ, Node ≥ 22.7): **54/54**.
+`bash scripts/test-v494-action-system-statuses.sh` (PostgreSQL 16 cục bộ, Node ≥ 22.7): **65/65**.
 
-- Fixture dựng 41 dòng `auto_status`, 19 policy, hành động Zalo, quyền, RLS và ACL mặc định như production. Preflight md5
+- Fixture dựng 41 dòng `auto_status` kèm 4 cột, 2 CHECK và trigger của V495 (giá trị đọc từ production 17:10 VN 11/11),
+  `auto_status_event_rules`, `auto_outcome_policies` rút gọn, 19 policy, hành động Zalo, quyền, RLS và ACL mặc định như
+  production. Preflight md5
   của chính migration xác nhận fixture trùng dữ liệu production ở các trường nó phụ thuộc.
 - Apply: 41 dòng cũ không đổi cột nào, policy và `auto_error` không đổi.
 - Ràng buộc, guard, quyền của từng role.
@@ -142,9 +178,13 @@ Mới khai báo Zalo. Facebook, Email, SMS chưa rà log nên chưa có dòng.
   được policy; 34 cặp chưa bật bị từ chối (`status_unavailable`, riêng "đã nhận"/"đã xem" là `policy_missing` vì trạng thái
   có sẵn nhưng chưa có policy kết quả).
 - Bốn trạng thái tương tác chỉ có ở nhắn bạn bè và nhắn người lạ, đúng thứ tự; "đã nhận"/"đã xem" dùng lại dòng 32/34.
-- Chạy lại bị từ chối; danh mục, policy mặc định hoặc danh sách hành động lệch bản chụp bị từ chối và không để lại gì.
+- 8 trạng thái mới điền đủ cột của V495; nhóm báo cáo trùng nhóm của trạng thái hệ thống ở cả 30 dòng; luật sự kiện và
+  chính sách engine không đổi.
+- Chạy lại bị từ chối; danh mục, policy mặc định hoặc danh sách hành động lệch bản chụp bị từ chối và không để lại gì;
+  schema thiếu cột V495, thiếu `report_group` hoặc `report_group` lệch nhóm cũng bị từ chối.
 - Rollback trả `auto_status` về đúng từng cột; rollback từ chối khi trạng thái mới đã có kết quả, đã được `auto_error`
-  trỏ tới, đã bật, hoặc đã có trạng thái thêm sau V494; cả khi "đã phản hồi" đã được dùng làm trạng thái phụ.
+  trỏ tới, đã bật, hoặc đã có trạng thái thêm sau V494; cả khi "đã phản hồi" đã được dùng làm trạng thái phụ, hoặc luật
+  sự kiện, chính sách engine, trạng thái gốc của V495 đã trỏ tới trạng thái mới.
 
 Chưa chạy trên production, kể cả chạy thử rồi ROLLBACK.
 
@@ -181,6 +221,9 @@ theo chữ đó, không làm bằng dữ liệu đơn thuần:
    - V339 lưu ba dấu độc lập `seen_at`, `responded_at`, `reacted_at` trong `auto_campaign_detail_zalo_engagement`, không đổi
      trạng thái của dòng kết quả. **Chưa có dấu "đã nhận"**: bộ chạy có nhận sự kiện `delivered_messages` của Zalo nhưng chỉ
      dùng nó khi kèm xác nhận đã xem. Cần thêm cột `delivered_at` và sửa cả ba bộ chạy.
+   - Engine V495 đã có sẵn đường đi cho việc này: thêm luật `auto_status_event_rules` (sự kiện Zalo → trạng thái) và
+     engine nâng trạng thái theo `progress_rank`. Tên sự kiện Zalo (`event_kind`) do engine quy định, V494 chưa thêm luật
+     nào. Phần (a)/(b) dưới đây chỉ còn áp dụng cho bộ chạy cũ.
    - Cần chốt cách đưa dấu thành trạng thái: (a) đổi trạng thái chính của dòng từ "thành công" lên mức cao nhất đạt được,
      như Email đang làm với "đã xem"/"đã click"; khi đó báo cáo và Automation đang chọn "thành công" phải quy theo trạng thái
      hệ thống trước; hoặc (b) giữ trạng thái chính là "thành công" và ghi tương tác vào trạng thái phụ (`sub_status_id`),

@@ -24,6 +24,13 @@
 -- scripts/test-v494-action-system-statuses.sh với đúng lớp đó). Hai bảng mới bật RLS, thu hồi anon/authenticated (ACL mặc
 -- định của schema public cấp sẵn cho hai role này); chỉ service_role đọc/ghi. Desktop chưa đọc hai bảng mới.
 --
+-- Đi sau V495 (engine kết quả chiến dịch v2, apply akachat 11/11 16:53 VN): V495 đã thêm vào auto_status các cột
+-- report_group (4 nhóm), counts_as_delivered, progress_rank, parent_status_id và bảng auto_status_event_rules (sự kiện →
+-- trạng thái, chỉ nâng khi progress_rank cao hơn). V494 không sửa cột nào của V495 trên 22 dòng đang có; 8 dòng mới điền
+-- đủ ba cột đó (report_group = nhóm của trạng thái hệ thống; tương tác xếp sau 'đã xem' 30: đã thả cảm xúc 40, đã phản
+-- hồi 50) và postflight kiểm mọi trạng thái kết quả có auto_status.report_group trùng nhóm của trạng thái hệ thống.
+-- V494 không thêm luật nào vào auto_status_event_rules và không thêm dòng auto_outcome_policies.
+--
 -- DDL (CREATE TABLE, ALTER TABLE) làm PostgREST nạp lại schema → apply ngoài giờ cao điểm. Bảng auto_status 41 dòng,
 -- lock_timeout 3 giây. Từ migration này: guard md5 cả dòng auto_status ở migration sau phải bỏ 'system_status_code'.
 BEGIN;
@@ -40,6 +47,14 @@ BEGIN
      OR EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid = 'public.auto_status'::regclass
                 AND attname = 'system_status_code' AND NOT attisdropped) THEN
     RAISE EXCEPTION 'v494: đã apply (auto_system_statuses / auto_account_action_result_statuses / auto_status.system_status_code đã có), không chạy lại';
+  END IF;
+  IF (SELECT count(*) FROM pg_attribute WHERE attrelid = 'public.auto_status'::regclass AND NOT attisdropped
+        AND attname IN ('report_group', 'counts_as_delivered', 'progress_rank', 'parent_status_id')) <> 4 THEN
+    RAISE EXCEPTION 'v494: auto_status thiếu cột của V495 (report_group, counts_as_delivered, progress_rank, parent_status_id); bản này viết cho schema sau V495';
+  END IF;
+  -- V495 đã điền report_group cho 22 trạng thái kết quả; trạng thái hệ thống gắn ở dưới phải quy về đúng nhóm đó.
+  IF EXISTS (SELECT 1 FROM public.auto_status s WHERE s.component_type = 'campaign_detail' AND s.report_group IS NULL) THEN
+    RAISE EXCEPTION 'v494: có trạng thái kết quả chưa có report_group của V495; đối chiếu lại trước khi gắn trạng thái hệ thống';
   END IF;
   IF NOT has_table_privilege('aka_agent_desktop', 'public.auto_status', 'SELECT')
      OR NOT has_table_privilege('aka_agent_chat_api', 'public.auto_status', 'SELECT') THEN
@@ -145,33 +160,34 @@ UPDATE public.auto_status s
 -- 2. Trạng thái cơ bản mới: khai báo, chưa bật ---------------------------------------------------------------------------
 INSERT INTO public.auto_status
   (code, name, description, status_key, status_value, flatform_type, component_type, is_default, is_terminal,
-   can_set_manually, is_active, is_delete, sort_order, system_status_code)
+   can_set_manually, is_active, is_delete, sort_order, system_status_code, report_group, counts_as_delivered, progress_rank)
 VALUES
   ('campaign_detail_receiver_blocked', 'Người nhận chặn tin',
    'Người nhận chặn hoặc không nhận: mã Zalo 122 (chặn tin người lạ), 119, 126 khi nhắn tin hoặc mời vào nhóm, 215/251 khi kết bạn. Hiện các lượt này ghi Thất bại. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'receiver_blocked', 'người nhận chặn tin', 'zalo', 'campaign_detail', false, true, false, false, false, 230, 'failure'),
+   'receiver_blocked', 'người nhận chặn tin', 'zalo', 'campaign_detail', false, true, false, false, false, 230, 'failure', 'failure', false, NULL),
   ('campaign_detail_account_restricted', 'Tài khoản bị hạn chế',
    'Zalo hạn chế tài khoản với hành động này: mã 120, 802, 123, 127. Hiện ghi Thất bại hoặc không ghi kết quả, chỉ khóa hành động. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'account_restricted', 'tài khoản bị hạn chế', 'zalo', 'campaign_detail', false, false, false, false, false, 240, 'stopped'),
+   'account_restricted', 'tài khoản bị hạn chế', 'zalo', 'campaign_detail', false, false, false, false, false, 240, 'stopped', 'pending', false, NULL),
   ('campaign_detail_limit_reached', 'Đạt giới hạn',
    'Đạt giới hạn của Zalo: mã 221, 312, 313, 304 (tìm SĐT, kết bạn, nhắn tin), 314 (mời người lạ vào nhóm), 223, 224 (danh sách lời mời hoặc danh bạ đầy). Hiện ghi Thất bại hoặc không ghi kết quả. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'limit_reached', 'đạt giới hạn', 'zalo', 'campaign_detail', false, false, false, false, false, 250, 'stopped'),
+   'limit_reached', 'đạt giới hạn', 'zalo', 'campaign_detail', false, false, false, false, false, 250, 'stopped', 'pending', false, NULL),
   ('campaign_detail_session_expired', 'Hết phiên đăng nhập',
    'Phiên đăng nhập Zalo không còn hợp lệ: mã 600. Hiện không ghi kết quả, chỉ đổi trạng thái đăng nhập của tài khoản. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'session_expired', 'hết phiên đăng nhập', 'zalo', 'campaign_detail', false, false, false, false, false, 260, 'stopped'),
+   'session_expired', 'hết phiên đăng nhập', 'zalo', 'campaign_detail', false, false, false, false, false, 260, 'stopped', 'pending', false, NULL),
   ('campaign_detail_connection_error', 'Lỗi kết nối',
    'Lỗi mạng hoặc máy chủ khi gọi Zalo: ECONNRESET, ETIMEDOUT, ENOTFOUND, HTTP 500/502, fetch failed. Hiện ghi Thất bại. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'connection_error', 'lỗi kết nối', 'zalo', 'campaign_detail', false, true, false, false, false, 270, 'error'),
+   'connection_error', 'lỗi kết nối', 'zalo', 'campaign_detail', false, true, false, false, false, 270, 'error', 'failure', false, NULL),
   ('campaign_detail_result_unknown', 'Chưa rõ kết quả',
    'Đã gửi lệnh nhưng không xác định được kết quả, ví dụ quá thời gian gửi media; không tự gửi lại. Hiện ghi Thất bại. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'result_unknown', 'chưa rõ kết quả', 'zalo', 'campaign_detail', false, true, false, false, false, 280, 'error'),
+   'result_unknown', 'chưa rõ kết quả', 'zalo', 'campaign_detail', false, true, false, false, false, 280, 'error', 'failure', false, NULL),
   -- Tương tác sau khi gửi tin. Dùng chung mọi kênh như 'đã nhận'/'đã xem'/'đã click'; xếp ngay sau 'đã xem' (150).
+  -- progress_rank của V495: đã nhận 20 < đã xem 30 < đã thả cảm xúc 40 < đã phản hồi 50 (đã click của Email cũng 40).
   ('campaign_detail_reacted', 'Đã thả cảm xúc',
    'Người nhận thả tim, like hoặc cảm xúc khác vào tin đã gửi; gỡ cảm xúc không đổi lại. Với Zalo là dấu reacted_at của bảng theo dõi tương tác (V339). Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'reacted', 'đã thả cảm xúc', 'all', 'campaign_detail', false, false, false, false, false, 152, 'success'),
+   'reacted', 'đã thả cảm xúc', 'all', 'campaign_detail', false, false, false, false, false, 152, 'success', 'success', true, 40),
   ('campaign_detail_replied', 'Đã phản hồi',
    'Người nhận nhắn lại sau lượt gửi; không cần trả lời đúng tin. Với Zalo là dấu responded_at của bảng theo dõi tương tác (V339). Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'replied', 'đã phản hồi', 'all', 'campaign_detail', false, false, false, false, false, 154, 'success');
+   'replied', 'đã phản hồi', 'all', 'campaign_detail', false, false, false, false, false, 154, 'success', 'success', true, 50);
 
 ALTER TABLE public.auto_status
   ADD CONSTRAINT auto_status_detail_system_status_check
@@ -314,6 +330,25 @@ BEGIN
              JOIN public.auto_system_statuses y ON y.code = s.system_status_code
              WHERE p.action_code IS NULL AND p.is_delete = false AND p.report_group <> y.report_group) THEN
     RAISE EXCEPTION 'v494: trạng thái hệ thống lệch nhóm báo cáo của policy mặc định';
+  END IF;
+  -- Hai cách phân nhóm trên cùng một dòng phải trùng nhau: report_group của V495 = nhóm của trạng thái hệ thống.
+  IF EXISTS (SELECT 1 FROM public.auto_status s JOIN public.auto_system_statuses y ON y.code = s.system_status_code
+             WHERE s.report_group IS DISTINCT FROM y.report_group) THEN
+    RAISE EXCEPTION 'v494: auto_status.report_group (V495) lệch nhóm của trạng thái hệ thống';
+  END IF;
+  -- 8 dòng mới điền đủ cột của V495; không dòng nào có trạng thái gốc, luật sự kiện hay chính sách engine.
+  IF (SELECT string_agg(s.status_key || ':' || s.report_group || ':' || s.counts_as_delivered::text || ':'
+                        || coalesce(s.progress_rank::text, '-'), ',' ORDER BY s.sort_order)
+        FROM public.auto_status s WHERE s.component_type = 'campaign_detail' AND s.is_active = false)
+       IS DISTINCT FROM 'reacted:success:true:40,replied:success:true:50,receiver_blocked:failure:false:-,'
+                        || 'account_restricted:pending:false:-,limit_reached:pending:false:-,session_expired:pending:false:-,'
+                        || 'connection_error:failure:false:-,result_unknown:failure:false:-'
+     OR EXISTS (SELECT 1 FROM public.auto_status s WHERE s.is_active = false AND s.component_type = 'campaign_detail'
+                  AND s.parent_status_id IS NOT NULL)
+     OR EXISTS (SELECT 1 FROM public.auto_status_event_rules r JOIN public.auto_status s ON s.id = r.status_id WHERE s.is_active = false)
+     OR EXISTS (SELECT 1 FROM public.auto_outcome_policies p JOIN public.auto_status s
+                  ON s.id IN (p.status_id, p.detail_status_id, p.sub_status_id) WHERE s.is_active = false) THEN
+    RAISE EXCEPTION 'v494: 8 trạng thái mới chưa khớp các cột của V495 hoặc đã bị engine dùng';
   END IF;
   -- 8 trạng thái mới: chưa bật, chưa có policy, chưa auto_error nào dùng (theo id lẫn theo chữ).
   IF (SELECT count(*) FROM public.auto_status s WHERE s.code LIKE 'campaign\_detail\_%' AND s.is_active = false
