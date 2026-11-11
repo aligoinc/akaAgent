@@ -733,6 +733,8 @@ export interface CampaignExtraSettings {
   findDataRerunAfterHours?: number
   multiDailyTimeSlotsEnabled?: boolean // Profile/page/Zalo friend/group: chạy nhiều khung giờ trong cùng ngày
   multiDailyTimeSlots?: string         // Danh sách HH:mm, cách nhau bởi dấu phẩy
+  zaloShareRepeatEnabled?: boolean     // Zalo friend/group gửi dạng chia sẻ: gửi xong thì gửi lặp lại sau x phút (src/shared/zaloShareRepeat.ts)
+  zaloShareRepeatAfterMinutes?: number // Số phút nghỉ, tính từ lúc hoàn thành lượt trước (5–1439)
   isFindPostByKeywords?: boolean
   postKeywords?: string
   isFindPostByContentAI?: boolean

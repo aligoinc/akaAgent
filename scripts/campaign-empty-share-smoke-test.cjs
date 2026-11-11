@@ -9,7 +9,8 @@ const declaration = source.statements.find(node => ts.isClassDeclaration(node) &
 const methods = [
   'executeZaloShareMessageBatchCampaign', 'handleCampaignCompletion', 'transitionCampaignToCompleted',
   'getDatabaseBusinessNow', 'getFutureInputSchedule', 'deferCampaignUntilFutureInput',
-  'handleMultiDailyTimeSlotAfterCompletion', 'updateRunningCampaignAndBroadcast'
+  'handleMultiDailyTimeSlotAfterCompletion', 'rescheduleCompletedCampaignPass',
+  'handleZaloShareRepeatAfterCompletion', 'updateRunningCampaignAndBroadcast'
 ].map(name => {
   const method = declaration.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name)
   assert.ok(method, name)
