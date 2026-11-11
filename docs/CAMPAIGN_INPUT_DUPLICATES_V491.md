@@ -1,6 +1,6 @@
 # Lọc trùng SĐT khi tải dữ liệu — V491
 
-**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates`: V491 đặt `admin_akabiz`, **đổi sang `all` lúc 22:28:25 VN 10/11/2026 theo yêu cầu, trước khi deploy API/Web** (bản API đang chạy chưa đọc khóa này nên chưa ai thấy; deploy xong mọi khách thấy ngay sau khi tải lại trang, không qua bước admin akaBiz thử trước). API/Web: akaAgentWebApp #196 đã merge `dev`, **chưa deploy**. SQL và tài liệu này đã merge `dev_3` (#633). **Desktop: code đã merge `dev_3` (#634, chưa phát hành), V493 (GRANT cho `aka_agent_desktop`) đã apply 23:40:04 VN 10/11** — xem [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md). [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
+**V491 đã apply akachat lúc 22:08:01 VN ngày 10/11/2026** (`20261110150801 / migration_v491_campaign_input_duplicates`; md5 sổ = md5 tệp `26f5b154…`; **không apply lại**). Công tắc `web.campaign_input_duplicates`: V491 đặt `admin_akabiz`, **đổi sang `all` lúc 22:28:25 VN 10/11/2026 theo yêu cầu, trước khi deploy API/Web** (bản API đang chạy chưa đọc khóa này nên chưa ai thấy; deploy xong mọi khách thấy ngay sau khi tải lại trang, không qua bước admin akaBiz thử trước). API/Web: akaAgentWebApp #196 đã merge `dev`, **đã lên production 07:18 VN 11/11/2026** (Fly v101, xác nhận ở biên nhận WebApp `docs/WEB_APP_DEPLOY_20261111.md`). SQL và tài liệu này đã merge `dev_3` (#633). **Desktop: code đã merge `dev_3` (#634, chưa phát hành), V493 (GRANT cho `aka_agent_desktop`) đã apply 23:40:04 VN 10/11** — xem [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md). [Biên nhận](../migrations/snapshots/campaign-input-duplicates-v491/apply-receipt.json).
 
 ## Tính năng
 
@@ -19,7 +19,7 @@ Khác "Kiểm tra trùng lặp" ở Cài đặt chạy (V424/V431): cái cũ xé
 `public.aka_agent_read_campaign_input_duplicates(p_staff_id, p_organization_id, p_auth_username, p_auth_password, p_query jsonb) → jsonb`
 — STABLE, SECURITY DEFINER, `statement_timeout 20s`, EXECUTE chỉ `service_role` (Web gọi qua backend singleton, thông tin đăng nhập NULL như V462/V487). Không ghi, không bảng/index/trigger mới.
 
-`p_query`: `actionId` (chỉ `zalo_message_phone`), `accountIds` (1–500), `days` (1–365), `phones` (≤ 2.000 ở RPC; từ 11/11/2026 Web, API và Desktop gửi tối đa 1.000 mỗi lượt; chuẩn hóa bằng `aka_agent_internal_normalize_phone`, số sai bỏ qua), `excludeCampaignId` (tùy chọn).
+`p_query`: `actionId` (chỉ `zalo_message_phone`), `accountIds` (1–500), `days` (1–365), `phones` (≤ 2.000 ở RPC, API và main Desktop nhận tới mức này; từ 11/11/2026 Web và Desktop gửi tối đa 1.000 mỗi lượt, có hiệu lực sau deploy/phát hành (WebApp #206, akaAgent #643); chuẩn hóa bằng `aka_agent_internal_normalize_phone`, số sai bỏ qua), `excludeCampaignId` (tùy chọn).
 Kết quả: `checkedAt`, `since` (00:00 giờ VN của ngày đầu khoảng), `days`, `accountCount`, `phoneCount`, `items[]` = mỗi số đã có: `phone`, `matchCount`, `campaignCount`, `latest {campaignId, campaignName, campaignDeleted, accountId, accountName, uploadedAt, status, processed}`.
 
 Quy tắc đối chiếu:
@@ -41,7 +41,7 @@ Hiệu năng: chỉ đọc ứng viên qua `idx_campaign_input_cooldown_phone` (
 
 ## Triển khai và gỡ
 
-Thứ tự: DB (đã xong) → công tắc `all` (đã đổi 22:28:25 VN 10/11 theo yêu cầu, bằng `UPDATE auto_system_settings SET value = '{"audience":"all","defaultDays":30,"maxDays":365}', updated_at = now() WHERE key = 'web.campaign_input_duplicates' AND value = '<giá trị cũ>'`, không trigger nào của bảng xử lý khóa này) → merge `dev` (WebApp #196, xong) → deploy API/Web (còn lại) → theo dõi lượt gọi đầu tiên.
+Thứ tự: DB (đã xong) → công tắc `all` (đã đổi 22:28:25 VN 10/11 theo yêu cầu, bằng `UPDATE auto_system_settings SET value = '{"audience":"all","defaultDays":30,"maxDays":365}', updated_at = now() WHERE key = 'web.campaign_input_duplicates' AND value = '<giá trị cũ>'`, không trigger nào của bảng xử lý khóa này) → merge `dev` (WebApp #196, xong) → deploy API/Web (xong, 07:18 VN 11/11, Fly v101) → theo dõi lượt gọi đầu tiên (07:18–17:41 VN 11/11: 7 lượt, đều HTTP 200, lâu nhất 4,3 s).
 Gỡ nhanh không DDL: đặt `audience` = `off` (Web ẩn lựa chọn 2/3). Gỡ hẳn: [rollback](../migrations/rollback_v491_campaign_input_duplicates.sql) (xóa hàm + dòng công tắc; không đụng dữ liệu).
 
 ## Desktop
