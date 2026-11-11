@@ -119,12 +119,12 @@ async function main() {
     assert.equal((await call({ kind: 'check', request: request({ days: 90 }) })).code, 'invalid_input_duplicates_request')
     assert.equal((await call({ kind: 'check', request: request({ accountIds: [] }) })).code, 'invalid_input_duplicates_request')
     assert.equal((await call({ kind: 'check', request: request({ actionId: 'zalo_message_friend' }) })).code, 'invalid_input_duplicates_request')
-    assert.equal((await call({ kind: 'check', request: request({ phones: Array.from({ length: 1001 }, (_, i) => `09${String(10000000 + i)}`) }) })).code, 'invalid_input_duplicates_request')
+    assert.equal((await call({ kind: 'check', request: request({ phones: Array.from({ length: 2001 }, (_, i) => `09${String(10000000 + i)}`) }) })).code, 'invalid_input_duplicates_request')
     assert.equal(rpcCalls.length, 0)
-    assert.equal((await call({ kind: 'check', request: request({ phones: Array.from({ length: 1000 }, (_, i) => `09${String(10000000 + i)}`) }) })).ok, true)
+    assert.equal((await call({ kind: 'check', request: request({ phones: Array.from({ length: 2000 }, (_, i) => `09${String(10000000 + i)}`) }) })).ok, true)
     assert.equal(rpcCalls.length, 1)
-    assert.equal(rpcCalls[0].params.p_query.phones.length, 1000)
-    ok('check: days above the switch maxDays, no account, other campaign type, >1,000 phones refused locally; exactly 1,000 sent')
+    assert.equal(rpcCalls[0].params.p_query.phones.length, 2000)
+    ok('check: days above the switch maxDays, no account, other campaign type, >2,000 phones (RPC limit) refused locally; exactly 2,000 sent')
 
     setting = { value: '{"audience":"all","defaultDays":30,"maxDays":365}' }
     const errorCases = [

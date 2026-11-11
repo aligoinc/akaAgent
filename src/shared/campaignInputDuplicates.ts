@@ -12,10 +12,15 @@ export const INPUT_DUPLICATES_RPC = 'aka_agent_read_campaign_input_duplicates'
 /** Loại chiến dịch có lựa chọn đối chiếu (đợt 1: Zalo nhắn tin, kết bạn đến SĐT). Khớp `v_supported` của V491. */
 export const INPUT_DUPLICATES_ACTIONS: readonly string[] = ['zalo_message_phone']
 /**
- * Mỗi lượt gọi máy chủ tối đa 1.000 số; 10.000 số = 10 lượt tuần tự. V491 nhận tới 2.000 số, nhưng lượt 2.000 số khi
- * dữ liệu nguội đo được tới 15 giây (trần hàm 20 giây) với danh sách trùng nhiều tổ chức khác (11/11/2026).
+ * Web/Desktop gửi mỗi lượt tối đa 1.000 số; 10.000 số = 10 lượt tuần tự. Lượt 2.000 số khi dữ liệu nguội đo được tới
+ * 15 giây (trần hàm 20 giây) với danh sách trùng nhiều tổ chức khác (11/11/2026).
  */
 export const INPUT_DUPLICATES_MAX_PHONES_PER_CALL = 1000
+/**
+ * API và main Desktop nhận tới 2.000 số mỗi lượt, đúng giới hạn của RPC V491: tab Web mở trước lần deploy hạ còn
+ * 1.000 số vẫn gửi lượt 2.000 số cho tới khi tải lại trang, không được từ chối.
+ */
+export const INPUT_DUPLICATES_RPC_MAX_PHONES = 2000
 export const INPUT_DUPLICATES_MAX_ACCOUNTS = 500
 export const INPUT_DUPLICATES_DEFAULT_DAYS = 30
 export const INPUT_DUPLICATES_MAX_DAYS = 365
@@ -113,9 +118,9 @@ export function validateInputDuplicatesRequest(value: unknown, maxDays = INPUT_D
     || !body.accountIds.every(positiveId)) {
     throw new Error('Vui lòng chọn ít nhất 1 tài khoản Zalo để đối chiếu.')
   }
-  if (!Array.isArray(body.phones) || body.phones.length > INPUT_DUPLICATES_MAX_PHONES_PER_CALL
+  if (!Array.isArray(body.phones) || body.phones.length > INPUT_DUPLICATES_RPC_MAX_PHONES
     || !body.phones.every(phone => typeof phone === 'string' && phone.length <= 64)) {
-    throw new Error(`Mỗi lượt đối chiếu tối đa ${INPUT_DUPLICATES_MAX_PHONES_PER_CALL.toLocaleString('vi-VN')} số điện thoại.`)
+    throw new Error(`Mỗi lượt đối chiếu tối đa ${INPUT_DUPLICATES_RPC_MAX_PHONES.toLocaleString('vi-VN')} số điện thoại.`)
   }
   if (body.excludeCampaignId !== undefined && body.excludeCampaignId !== null && !positiveId(body.excludeCampaignId)) {
     throw new Error('Chiến dịch không hợp lệ.')
