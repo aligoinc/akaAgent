@@ -5,8 +5,16 @@ export const DESKTOP_POLL_KEYS = {
   campaigns: 'desktop.campaigns.poll_interval_seconds',
   accounts: 'desktop.accounts.poll_interval_seconds'
 } as const
-export interface DesktopPollingSettings { campaigns: number; accounts: number }
-export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30 }
+export interface DesktopPollingSettings {
+  campaigns: number
+  accounts: number
+  /**
+   * Hiện ô "Gửi lặp lại sau mỗi x phút" trong form chiến dịch (`web.zalo_share_repeat.enabled`, cùng công tắc với Web,
+   * src/shared/zaloShareRepeat.ts). Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = ẩn.
+   */
+  zaloShareRepeatEnabled?: boolean
+}
+export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false }
 export function parseDesktopPollSeconds(value: unknown): number {
   const text = String(value ?? '').trim()
   const seconds = Number(text)

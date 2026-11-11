@@ -153,6 +153,11 @@ import {
   supportsRecentDeliveryCooldown
 } from '../../../../shared/campaignDeliveryCooldown'
 import {
+  ZALO_SHARE_REPEAT_DEFAULT_MINUTES, ZALO_SHARE_REPEAT_MAX_MINUTES, ZALO_SHARE_REPEAT_MIN_MINUTES,
+  ZALO_SHARE_REPEAT_MINUTES_ERROR, parseZaloShareRepeatMinutes
+} from '../../../../shared/zaloShareRepeat'
+import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
+import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
 } from '../../../../shared/advancedContent'
@@ -1682,6 +1687,8 @@ export default function CampaignAgentFormModal({
     createCampaignInputData
   } = useCampaignStore()
   const authUser = useAuthStore(state => state.user)
+  // Công tắc hiển thị "Gửi lặp lại sau mỗi x phút" (cùng công tắc với Web, đọc một lần khi đăng nhập).
+  const zaloShareRepeatFeatureEnabled = useDesktopPollingStore(state => state.settings.zaloShareRepeatEnabled === true)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -1875,6 +1882,8 @@ export default function CampaignAgentFormModal({
     sleepBetweenActions: initialSleepBetweenActions,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
+    zaloShareRepeatEnabled: campaign?.extraSettings?.zaloShareRepeatEnabled === true,
+    zaloShareRepeatAfterMinutes: String(parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes) ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES),
     content: initialManualDraft.content,
     formattedContentEnabled: initialManualDraft.formattedContentEnabled,
     advancedContentEnabled: hasSavedAdvancedGroupSnapshot
@@ -3428,6 +3437,15 @@ export default function CampaignAgentFormModal({
   const canUseRecentDeliveryCooldown = supportsRecentDeliveryCooldown(formData.actionId, {
     enableMessage: formData.enableMessage
   })
+  // "Gửi lặp lại sau mỗi x phút" (src/shared/zaloShareRepeat.ts): chỉ nhắn bạn bè/nhóm Zalo đang gửi dạng chia sẻ,
+  // data nhập trực tiếp. Chọn một trong hai với nhiều khung giờ; đang bật thì ô chống gửi lặp N ngày bị khoá ở tắt.
+  const supportsZaloShareRepeatOption = isZaloShareMessageMode && !isDataGroupSource
+  const showZaloShareRepeat = zaloShareRepeatFeatureEnabled && supportsZaloShareRepeatOption
+  const zaloShareRepeatActive = showZaloShareRepeat && formData.zaloShareRepeatEnabled === true && !usesMultiDailyTimeSlots
+  const recentDeliveryCooldownActive = canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled && !zaloShareRepeatActive
+  // Ô đang ẩn (công tắc tắt) vẫn giữ cài đặt đã lưu, trừ khi người dùng bật nhiều khung giờ hoặc chống gửi lặp.
+  const usesZaloShareRepeat = supportsZaloShareRepeatOption && formData.zaloShareRepeatEnabled === true &&
+    !usesMultiDailyTimeSlots && !recentDeliveryCooldownActive
   const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 ||
     isCommentSeedingFeedCampaign
   const canUseFacebookRestBrowse = supportsFacebookRestBrowse(formData.actionId)
@@ -6458,7 +6476,7 @@ export default function CampaignAgentFormModal({
               continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
               byActionCode
             },
-            recentDeliveryCooldownEnabled: canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled,
+            recentDeliveryCooldownEnabled: recentDeliveryCooldownActive,
             recentDeliveryCooldownAllAccounts: isZaloMessagePhoneCampaign && formData.recentDeliveryCooldownAllAccounts === true,
             recentDeliveryCooldownDays: normalizeRecentDeliveryCooldownDays(formData.recentDeliveryCooldownDays),
             imageOption: ((isSourceContentMode && !isNativeGroupShareMode) || isMobileManagedSmsCampaign || isFacebookJoinGroupCampaign || isFacebookGroupInviteCampaign || isPostBackgroundActive) ? 'none' : formData.imageOption,
@@ -6641,12 +6659,12 @@ export default function CampaignAgentFormModal({
             multiDailyTimeSlots: usesMultiDailyTimeSlots
               ? normalizedMultiDailySlots.join(',')
               : '',
-            // "Gửi lặp lại sau mỗi x phút" đặt ở Web (src/shared/zaloShareRepeat.ts); Desktop chưa có ô này nên chỉ
-            // giữ cài đặt đã lưu khi còn hợp lệ, để sửa chiến dịch trên Desktop không làm mất nó.
-            ...(campaign?.extraSettings?.zaloShareRepeatEnabled === true ? {
-              zaloShareRepeatEnabled: isZaloShareMessageMode && !isDataGroupSource && !usesMultiDailyTimeSlots
-                && !(canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled),
-              zaloShareRepeatAfterMinutes: campaign.extraSettings.zaloShareRepeatAfterMinutes
+            // "Gửi lặp lại sau mỗi x phút" (src/shared/zaloShareRepeat.ts): chỉ ghi cho nhắn bạn bè/nhóm Zalo.
+            ...((isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) ? {
+              zaloShareRepeatEnabled: usesZaloShareRepeat,
+              zaloShareRepeatAfterMinutes: parseZaloShareRepeatMinutes(formData.zaloShareRepeatAfterMinutes)
+                ?? parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes)
+                ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES
             } : {}),
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
             postKeywords: canUsePostContentConditionsForSave ? formData.postKeywords : '',
@@ -6794,8 +6812,7 @@ export default function CampaignAgentFormModal({
       return
     }
     if (
-      canUseRecentDeliveryCooldown &&
-      formData.recentDeliveryCooldownEnabled &&
+      recentDeliveryCooldownActive &&
       (!Number.isInteger(formData.recentDeliveryCooldownDays) ||
         formData.recentDeliveryCooldownDays < MIN_RECENT_DELIVERY_COOLDOWN_DAYS ||
         formData.recentDeliveryCooldownDays > MAX_RECENT_DELIVERY_COOLDOWN_DAYS)
@@ -7116,6 +7133,10 @@ export default function CampaignAgentFormModal({
         setManualAdvancedContentModalOpen(true)
       }
       showAlert(postBackgroundError, 'error')
+      return
+    }
+    if (usesZaloShareRepeat && parseZaloShareRepeatMinutes(formData.zaloShareRepeatAfterMinutes) === null) {
+      showAlert(ZALO_SHARE_REPEAT_MINUTES_ERROR, 'error')
       return
     }
     let validatedMultiDailyTimeSlots: string[] | null = null
@@ -13423,15 +13444,16 @@ export default function CampaignAgentFormModal({
 
     return (
       <div className="schedule-multi-window-panel">
-        <div className="schedule-multi-window-header">
-          <span>Cài đặt chạy nhiều khung giờ trong 1 ngày</span>
+        <div className={`schedule-multi-window-header${showZaloShareRepeat ? ' has-badge' : ''}`}>
+          <span>{showZaloShareRepeat ? 'Cài đặt chạy lặp lại trong 1 ngày' : 'Cài đặt chạy nhiều khung giờ trong 1 ngày'}</span>
+          {showZaloShareRepeat && <span className="schedule-repeat-choice-badge">Chọn 1 trong 2 cách</span>}
         </div>
         <div className="schedule-multi-window-body">
           <label className="schedule-checkbox-label schedule-multi-window-checkbox">
             <input
               type="checkbox"
               checked={formData.multiDailyTimeSlotsEnabled} data-agent-field="multiDailyTimeSlotsEnabled" data-agent-filled={agent.changed('multiDailyTimeSlotsEnabled')}
-              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked }))}
+              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked, ...(e.target.checked && showZaloShareRepeat ? { zaloShareRepeatEnabled: false } : {}) }))}
             />
             <span>Chạy trong nhiều khung giờ trong 1 ngày</span>
           </label>
@@ -13449,6 +13471,57 @@ export default function CampaignAgentFormModal({
             <div>- Cách viết: hh:mm, hh:mm,... mỗi khung giờ cách nhau bởi dấu phẩy, hh: giờ, mm: phút</div>
           </div>
         </div>
+        {showZaloShareRepeat && (
+          <>
+            <div className="schedule-repeat-or" aria-hidden="true"><span>hoặc</span></div>
+            <div className="schedule-multi-window-body schedule-share-repeat">
+              <div className="schedule-share-repeat-row">
+                <label className="schedule-checkbox-label schedule-multi-window-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={zaloShareRepeatActive}
+                    onChange={e => setFormData(p => ({
+                      ...p,
+                      zaloShareRepeatEnabled: e.target.checked,
+                      ...(e.target.checked ? { multiDailyTimeSlotsEnabled: false, recentDeliveryCooldownEnabled: false } : {})
+                    }))}
+                  />
+                  <span>Gửi lặp lại sau mỗi</span>
+                </label>
+                <input
+                  type="number"
+                  aria-label="Số phút gửi lặp lại"
+                  className="stepper-input schedule-share-repeat-minutes"
+                  min={ZALO_SHARE_REPEAT_MIN_MINUTES}
+                  max={ZALO_SHARE_REPEAT_MAX_MINUTES}
+                  step={1}
+                  value={formData.zaloShareRepeatAfterMinutes ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, zaloShareRepeatAfterMinutes: e.target.value }))}
+                  disabled={!zaloShareRepeatActive}
+                />
+                <span>phút</span>
+                <span className="schedule-share-repeat-tag">Chỉ có khi gửi dạng chia sẻ</span>
+              </div>
+              {zaloShareRepeatActive && (
+                <>
+                  <div className="schedule-share-repeat-presets">
+                    <span>Chọn nhanh:</span>
+                    {[15, 30, 60, 120].map(minutes => (
+                      <button type="button" key={minutes} onClick={() => setFormData(p => ({ ...p, zaloShareRepeatAfterMinutes: String(minutes) }))}>{minutes} phút</button>
+                    ))}
+                  </div>
+                  <div className="schedule-multi-window-notes">
+                    <div>- <strong>Thời gian chạy lại tính sau khi chiến dịch hoàn thành lượt gửi trước</strong>, không tính từ lúc bắt đầu gửi.</div>
+                    <div>- Gửi xong toàn bộ danh sách thì nghỉ đủ số phút trên rồi gửi lại từ đầu.</div>
+                    <div>- Dừng lặp khi lượt kế tiếp chạm giờ dừng chạy trong ngày (hoặc 23:59).</div>
+                    <div>- Bạn bè, group đang tạm dừng không được gửi lại.</div>
+                    <div>- Mỗi lượt vẫn tính vào giới hạn gửi trong ngày của tài khoản.</div>
+                  </div>
+                </>
+              )}
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -17642,7 +17715,7 @@ export default function CampaignAgentFormModal({
                       <label className="schedule-checkbox-label">
                         <input
                           type="checkbox"
-                          checked={formData.recentDeliveryCooldownEnabled} data-agent-field="recentDeliveryCooldownEnabled" data-agent-filled={agent.changed('recentDeliveryCooldownEnabled')}
+                          checked={formData.recentDeliveryCooldownEnabled && !zaloShareRepeatActive} disabled={zaloShareRepeatActive} data-agent-field="recentDeliveryCooldownEnabled" data-agent-filled={agent.changed('recentDeliveryCooldownEnabled')}
                           onChange={e => setFormData(p => ({
                             ...p,
                             recentDeliveryCooldownEnabled: e.target.checked,
@@ -17665,16 +17738,19 @@ export default function CampaignAgentFormModal({
                             recentDeliveryCooldownDays: Number(e.target.value)
                           }))}
                           className="stepper-input stepper-input-with-unit"
-                          disabled={!formData.recentDeliveryCooldownEnabled}
+                          disabled={!formData.recentDeliveryCooldownEnabled || zaloShareRepeatActive}
                         />
                         <span className="stepper-input-unit">ngày</span>
                       </div>
+                      {zaloShareRepeatActive && (
+                        <div className="schedule-share-repeat-lock-note" role="note">Đang bật “Gửi lặp lại sau mỗi x phút” ở phần lịch nên tuỳ chọn này tự tắt. Nếu để bật, từ lượt thứ hai toàn bộ người nhận sẽ bị bỏ qua.</div>
+                      )}
                       {isZaloMessagePhoneCampaign && selectedCampaignAction?.showStaffDeliveryCooldown === true && (
                         <label className="schedule-checkbox-label" style={{ marginTop: 16 }}>
                           <input
                             type="checkbox"
                             checked={formData.recentDeliveryCooldownAllAccounts === true}
-                            disabled={!formData.recentDeliveryCooldownEnabled}
+                            disabled={!formData.recentDeliveryCooldownEnabled || zaloShareRepeatActive}
                             onChange={e => setFormData(p => ({ ...p, recentDeliveryCooldownAllAccounts: e.target.checked }))}
                           />
                           <span>Kiểm tra trên toàn bộ tài khoản</span>

@@ -8,6 +8,7 @@ import { getBrowserRunLimits } from '../data/repositories/browserRunLimitsReposi
 import * as reads from '../data/repositories/campaignPendingReasonRepository'
 import { readChatPendingLimitReason } from '../data/repositories/campaignPendingChatLimitRepository'
 import { checkFacebookRandomConfiguration } from '../../shared/facebookRandomRunDiagnostics'
+import { parseZaloShareRepeatMinutes } from '../../shared/zaloShareRepeat'
 
 export interface PendingReasonRuntime {
   /** RAM-only observations; never start/claim/recover a runtime from this endpoint. */
@@ -37,7 +38,17 @@ export function pendingCampaignScheduleReason(campaign: Campaign, dbNow: string)
   if (campaign.dataTargetSourceMode === 'data_group' && campaign.scheduleEndDate && now >= Date.parse(campaign.scheduleEndDate)) {
     return `Chiến dịch đã hết hạn lúc ${formatTime(campaign.scheduleEndDate)}, đang chờ cập nhật trạng thái.`
   }
-  if (schedule > now) return `Chưa đến lịch chạy. Lịch tiếp theo: ${formatTime(schedule)}.`
+  if (schedule > now) {
+    // "Gửi lặp lại sau mỗi x phút": lịch đã lệch khỏi giờ chạy gốc nghĩa là đang chờ lượt gửi lặp kế tiếp.
+    const repeatMinutes = campaign.extraSettings?.zaloShareRepeatEnabled === true
+      ? parseZaloShareRepeatMinutes(campaign.extraSettings.zaloShareRepeatAfterMinutes) : null
+    const original = Date.parse(campaign.originalSchedule || '')
+    const clock = (value: number) => new Date(value + 7 * 60 * 60 * 1000).toISOString().slice(11, 16)
+    if (repeatMinutes && Number.isFinite(original) && clock(original) !== clock(schedule)) {
+      return `Đang chờ lượt gửi lặp kế tiếp lúc ${formatTime(schedule)}. Chiến dịch lặp lại sau mỗi ${repeatMinutes} phút, tính từ lúc gửi xong lượt trước.`
+    }
+    return `Chưa đến lịch chạy. Lịch tiếp theo: ${formatTime(schedule)}.`
+  }
   if (mobileManaged(campaign)) return null
   const vietnamNow = new Date(now + 7 * 60 * 60 * 1000)
   const seconds = vietnamNow.getUTCHours() * 3600 + vietnamNow.getUTCMinutes() * 60 + vietnamNow.getUTCSeconds()

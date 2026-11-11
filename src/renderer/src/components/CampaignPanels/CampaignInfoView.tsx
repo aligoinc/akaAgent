@@ -842,6 +842,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Ngày chạy trong tháng', value: formatMonthDays(campaign.scheduleDays), hidden: scheduleType !== 'monthly' },
           { label: 'Ngày kết thúc', value: campaign.scheduleEndDate ? formatDateTime(campaign.scheduleEndDate) : 'Không giới hạn' },
           { label: 'Giờ dừng trong ngày', value: formatTime(campaign.dailyStopTime) },
+          { label: 'Gửi lặp lại', value: onOff(true), hidden: extra.zaloShareRepeatEnabled !== true },
+          { label: 'Lặp lại sau mỗi', value: `${Number(extra.zaloShareRepeatAfterMinutes) || 60} phút, tính từ lúc gửi xong lượt trước`, hidden: extra.zaloShareRepeatEnabled !== true },
           { label: 'Chạy nhiều khung giờ', value: onOff(extra.multiDailyTimeSlotsEnabled), hidden: !supportsMultiDailyTimeSlots && !extra.multiDailyTimeSlotsEnabled },
           {
             label: 'Các khung giờ trong ngày',
