@@ -46,6 +46,7 @@ const reads = {
 const service = load('src/main/services/campaignPendingReasonService.ts', {
   '../../shared/campaignPendingReason': shared,
   '../../shared/facebookRandomRunDiagnostics': randomChecks,
+  '../../shared/zaloShareRepeat': load('src/shared/zaloShareRepeat.ts'),
   '../data/currentUser': { requireCurrentUser: () => user, requireCurrentUserCredentials: () => ({ username: 'fixture', password: 'fixture' }) },
   '../data/repositories/runtimeClockRepository': { getDatabaseRuntimeClock: async () => ({ dbNow: clock }) },
   '../data/repositories/entitlementRepository': { canUseCampaignActionWithEntitlements: () => authorized,
@@ -110,6 +111,14 @@ async function main() {
     shared.campaignPendingReasonVersion({ ...base, dailyStopTime: '18:00:00' }))
   assert.notEqual(shared.campaignPendingReasonVersion(base), shared.campaignPendingReasonVersion({ ...base, updatedAt: '2026-10-12T01:00:00.123457Z' }))
   const reason = service.pendingCampaignScheduleReason
+  // "Gửi lặp lại sau mỗi x phút": lịch đã lệch khỏi giờ chạy gốc thì báo đang chờ lượt gửi lặp kế tiếp.
+  const repeating = { ...base, actionId: 'zalo_message_group', schedule: '2026-10-12T03:20:00Z', originalSchedule: '2026-10-11T02:00:00Z',
+    extraSettings: { zaloMessageSendMode: 'share', zaloShareRepeatEnabled: true, zaloShareRepeatAfterMinutes: 60 } }
+  assert.match(reason(repeating, '2026-10-12T02:30:00Z'), /^Đang chờ lượt gửi lặp kế tiếp lúc .*10:20.* Chiến dịch lặp lại sau mỗi 60 phút, tính từ lúc gửi xong lượt trước\.$/)
+  for (const changed of [{ extraSettings: {} }, { schedule: '2026-10-13T02:00:00Z' }, { originalSchedule: null },
+    { extraSettings: { zaloShareRepeatEnabled: true, zaloShareRepeatAfterMinutes: 2 } }]) {
+    assert.match(reason({ ...repeating, ...changed }, '2026-10-12T02:30:00Z'), /^Chưa đến lịch chạy\. Lịch tiếp theo: /)
+  }
   assert.match(reason({ ...base, schedule: '2026-10-12T04:00:00Z' }, clock), /Chưa đến lịch chạy/)
   assert.equal(reason({ ...base, schedule: undefined }, clock), 'Lịch chạy chưa hợp lệ. Vui lòng kiểm tra lại cài đặt lịch.')
   assert.equal(reason({ ...base, dailyStopTime: '10:00' }, clock), 'Đã quá giờ dừng gửi 10:00. Chiến dịch không nhận lượt mới trong hôm nay.')
