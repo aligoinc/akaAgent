@@ -1,9 +1,10 @@
 -- Rollback V494 (trạng thái hệ thống + danh sách trạng thái theo hành động). Chỉ chạy khi người dùng yêu cầu rõ.
 -- DDL (DROP TABLE, ALTER TABLE) làm PostgREST nạp lại schema → chạy ngoài giờ cao điểm.
 --
--- Chỉ gỡ đúng những gì V494 thêm: bảng auto_account_action_result_statuses và hàm guard của nó, 6 trạng thái Zalo chưa bật,
--- ràng buộc + cột auto_status.system_status_code, bảng auto_system_statuses. Không sửa dòng nào khác của auto_status.
--- Từ chối nếu 6 trạng thái mới đã được dùng (policy, auto_error theo id hoặc theo chữ, automation, kết quả đã ghi) hoặc
+-- Chỉ gỡ đúng những gì V494 thêm: bảng auto_account_action_result_statuses và hàm guard của nó, 8 trạng thái chưa bật
+-- (6 lỗi/dừng của Zalo, 2 tương tác), ràng buộc + cột auto_status.system_status_code, bảng auto_system_statuses. Không sửa
+-- dòng nào khác của auto_status.
+-- Từ chối nếu 8 trạng thái mới đã được dùng (policy, auto_error theo id hoặc theo chữ, automation, kết quả đã ghi) hoặc
 -- đã có trạng thái kết quả khác được thêm sau V494: khi đó phải đối chiếu tay, không xóa cưỡng ép.
 -- Nếu sau V494 đã có trang quản trị ghi vào hai bảng mới, chép dữ liệu ra biên nhận trước:
 --   SELECT * FROM public.auto_system_statuses ORDER BY sort_order;
@@ -21,15 +22,16 @@ BEGIN
   END IF;
   SELECT array_agg(id) INTO v_new FROM public.auto_status
    WHERE code IN ('campaign_detail_receiver_blocked', 'campaign_detail_account_restricted', 'campaign_detail_limit_reached',
-                  'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown');
-  IF coalesce(cardinality(v_new), 0) <> 6 THEN
-    RAISE EXCEPTION 'rollback v494: không đủ 6 trạng thái Zalo của V494, đối chiếu tay';
+                  'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown',
+                  'campaign_detail_reacted', 'campaign_detail_replied');
+  IF coalesce(cardinality(v_new), 0) <> 8 THEN
+    RAISE EXCEPTION 'rollback v494: không đủ 8 trạng thái của V494, đối chiếu tay';
   END IF;
-  IF (SELECT count(*) FROM public.auto_status WHERE component_type = 'campaign_detail') <> 28 THEN
-    RAISE EXCEPTION 'rollback v494: số trạng thái kết quả khác 28, đã có trạng thái thêm sau V494';
+  IF (SELECT count(*) FROM public.auto_status WHERE component_type = 'campaign_detail') <> 30 THEN
+    RAISE EXCEPTION 'rollback v494: số trạng thái kết quả khác 30, đã có trạng thái thêm sau V494';
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_status WHERE id = ANY(v_new) AND is_active) THEN
-    RAISE EXCEPTION 'rollback v494: có trạng thái Zalo mới đã được bật';
+    RAISE EXCEPTION 'rollback v494: có trạng thái mới đã được bật';
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_account_action_status_policies WHERE status_id = ANY(v_new))
      OR EXISTS (SELECT 1 FROM public.auto_error e WHERE e.detail_status_id = ANY(v_new)
@@ -37,7 +39,7 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.auto_campaign_action_detail_statuses WHERE status_id = ANY(v_new))
      OR EXISTS (SELECT 1 FROM public.auto_automation_trigger_statuses WHERE sub_status_ids && v_new)
      OR EXISTS (SELECT 1 FROM public.auto_campaign_details WHERE status_id = ANY(v_new) OR sub_status_id = ANY(v_new)) THEN
-    RAISE EXCEPTION 'rollback v494: 6 trạng thái Zalo mới đã được dùng, không xóa';
+    RAISE EXCEPTION 'rollback v494: 8 trạng thái mới đã được dùng, không xóa';
   END IF;
 END
 $v494_rollback_guard$;
@@ -47,8 +49,9 @@ DROP FUNCTION public.aka_agent_guard_action_result_status_v494();
 ALTER TABLE public.auto_status DROP CONSTRAINT auto_status_detail_system_status_check;
 DELETE FROM public.auto_status
  WHERE code IN ('campaign_detail_receiver_blocked', 'campaign_detail_account_restricted', 'campaign_detail_limit_reached',
-                'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown');
+                'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown',
+                'campaign_detail_reacted', 'campaign_detail_replied');
 ALTER TABLE public.auto_status DROP COLUMN system_status_code;
 DROP TABLE public.auto_system_statuses;
--- Không đặt lại auto_status_id_seq: 6 id đã cấp không dùng lại.
+-- Không đặt lại auto_status_id_seq: 8 id đã cấp không dùng lại.
 COMMIT;

@@ -6,10 +6,14 @@
 -- CHỈ THÊM, KHÔNG ĐỔI HÀNH VI BỘ CHẠY:
 --   1. Bảng mới public.auto_system_statuses (6 dòng) và cột public.auto_status.system_status_code (FK). 22 trạng thái kết quả
 --      đang có được gắn một trạng thái hệ thống; CHECK buộc mọi trạng thái campaign_detail về sau phải có.
---   2. 6 trạng thái cơ bản mới của Zalo, is_active=false, CHƯA có policy và CHƯA auto_error nào trỏ tới: chưa bộ chạy nào ghi.
---      Bật từng trạng thái là việc của migration sau, làm cùng bộ ghi và các nơi đang đếm theo chữ 'thất bại'.
+--   2. 8 trạng thái cơ bản mới, is_active=false, CHƯA có policy và CHƯA auto_error nào trỏ tới: chưa bộ chạy nào ghi.
+--      6 trạng thái lỗi/dừng của Zalo (bật là việc của migration sau, làm cùng bộ ghi và các nơi đang đếm theo chữ 'thất bại')
+--      và 2 trạng thái tương tác sau khi gửi tin: 'đã thả cảm xúc', 'đã phản hồi' (người dùng yêu cầu 11/11; cùng tên với hai
+--      dấu reacted_at/responded_at của bảng theo dõi tương tác V339, tính năng đó đang tắt từ 06/10).
 --   3. Bảng mới public.auto_account_action_result_statuses: hành động nào có những trạng thái nào. is_active=true là bộ chạy
 --      đang ghi (có bằng chứng trong log hoặc policy/code); false là đã khai báo, chưa bật. Mới khai báo cho 10 hành động Zalo.
+--      Nhắn bạn bè và nhắn người lạ có thêm 4 trạng thái tương tác ở dạng chưa bật: đã nhận, đã xem, đã thả cảm xúc, đã phản
+--      hồi ('đã nhận' id 32 và 'đã xem' id 34 là trạng thái có sẵn của SMS/Email, không tạo dòng trùng).
 --
 -- KHÔNG ĐỤNG: auto_error, auto_account_action_status_policies (report_group giữ 4 giá trị vì app đã cài từ chối giá trị lạ),
 -- auto_campaign_action_detail_statuses (status_id trống là kết quả hoàn nguyên V369 theo yêu cầu người dùng 10/10),
@@ -68,10 +72,11 @@ BEGIN
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_status s
              WHERE s.code IN ('campaign_detail_receiver_blocked', 'campaign_detail_account_restricted', 'campaign_detail_limit_reached',
-                              'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown')
+                              'campaign_detail_session_expired', 'campaign_detail_connection_error', 'campaign_detail_result_unknown',
+                              'campaign_detail_reacted', 'campaign_detail_replied')
                 OR (s.component_type = 'campaign_detail' AND lower(s.status_value) IN ('người nhận chặn tin', 'tài khoản bị hạn chế',
-                              'đạt giới hạn', 'hết phiên đăng nhập', 'lỗi kết nối', 'chưa rõ kết quả'))) THEN
-    RAISE EXCEPTION 'v494: mã hoặc giá trị của 6 trạng thái Zalo mới đã tồn tại trong auto_status';
+                              'đạt giới hạn', 'hết phiên đăng nhập', 'lỗi kết nối', 'chưa rõ kết quả', 'đã thả cảm xúc', 'đã phản hồi'))) THEN
+    RAISE EXCEPTION 'v494: mã hoặc giá trị của 8 trạng thái mới đã tồn tại trong auto_status';
   END IF;
 END
 $v494_preflight$;
@@ -137,7 +142,7 @@ UPDATE public.auto_status s
   ) AS m(id, code, system_status_code)
  WHERE s.id = m.id AND s.code = m.code AND s.component_type = 'campaign_detail';
 
--- 2. Trạng thái cơ bản mới của Zalo: khai báo, chưa bật -----------------------------------------------------------------
+-- 2. Trạng thái cơ bản mới: khai báo, chưa bật ---------------------------------------------------------------------------
 INSERT INTO public.auto_status
   (code, name, description, status_key, status_value, flatform_type, component_type, is_default, is_terminal,
    can_set_manually, is_active, is_delete, sort_order, system_status_code)
@@ -159,7 +164,14 @@ VALUES
    'connection_error', 'lỗi kết nối', 'zalo', 'campaign_detail', false, true, false, false, false, 270, 'error'),
   ('campaign_detail_result_unknown', 'Chưa rõ kết quả',
    'Đã gửi lệnh nhưng không xác định được kết quả, ví dụ quá thời gian gửi media; không tự gửi lại. Hiện ghi Thất bại. Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
-   'result_unknown', 'chưa rõ kết quả', 'zalo', 'campaign_detail', false, true, false, false, false, 280, 'error');
+   'result_unknown', 'chưa rõ kết quả', 'zalo', 'campaign_detail', false, true, false, false, false, 280, 'error'),
+  -- Tương tác sau khi gửi tin. Dùng chung mọi kênh như 'đã nhận'/'đã xem'/'đã click'; xếp ngay sau 'đã xem' (150).
+  ('campaign_detail_reacted', 'Đã thả cảm xúc',
+   'Người nhận thả tim, like hoặc cảm xúc khác vào tin đã gửi; gỡ cảm xúc không đổi lại. Với Zalo là dấu reacted_at của bảng theo dõi tương tác (V339). Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
+   'reacted', 'đã thả cảm xúc', 'all', 'campaign_detail', false, false, false, false, false, 152, 'success'),
+  ('campaign_detail_replied', 'Đã phản hồi',
+   'Người nhận nhắn lại sau lượt gửi; không cần trả lời đúng tin. Với Zalo là dấu responded_at của bảng theo dõi tương tác (V339). Chưa bật: chưa bộ chạy nào ghi trạng thái này (V494).',
+   'replied', 'đã phản hồi', 'all', 'campaign_detail', false, false, false, false, false, 154, 'success');
 
 ALTER TABLE public.auto_status
   ADD CONSTRAINT auto_status_detail_system_status_check
@@ -240,7 +252,7 @@ SELECT v.action_code, s.id, true, v.sort_order, v.note
   ) AS v(action_code, status_code, sort_order, note)
   JOIN public.auto_status s ON s.code = v.status_code;
 
--- Đã khai báo, chưa bật: các cặp có trong log lỗi API Zalo 08–11/11/2026.
+-- Đã khai báo, chưa bật: các cặp có trong log lỗi API Zalo 08–11/11/2026 và 4 trạng thái tương tác của tin nhắn riêng.
 INSERT INTO public.auto_account_action_result_statuses (action_code, status_id, is_active, sort_order, note)
 SELECT v.action_code, s.id, false, v.sort_order, v.note
   FROM (VALUES
@@ -269,7 +281,17 @@ SELECT v.action_code, s.id, false, v.sort_order, v.note
     ('zalo_change_alias', 'campaign_detail_connection_error', 150, 'fetch failed, ECONNRESET.'),
     ('zalo_tag_contact', 'campaign_detail_connection_error', 150, 'fetch failed.'),
     ('zalo_message_stranger', 'campaign_detail_result_unknown', 160, 'Quá thời gian gửi media.'),
-    ('zalo_message_friend', 'campaign_detail_result_unknown', 160, 'Quá thời gian gửi media.')
+    ('zalo_message_friend', 'campaign_detail_result_unknown', 160, 'Quá thời gian gửi media.'),
+    -- Tương tác sau khi gửi thành công, xếp giữa 'thành công' (10) và 'thất bại' (20). Chỉ tin nhắn riêng: theo dõi tương
+    -- tác V339 loại trừ tin nhóm và tài khoản Zalo trình duyệt.
+    ('zalo_message_stranger', 'campaign_detail_received', 12, 'Zalo báo tin đã tới máy người nhận. Theo dõi tương tác V339 chưa lưu dấu này.'),
+    ('zalo_message_stranger', 'campaign_detail_viewed', 14, 'Người nhận đã xem ít nhất một tin của lượt gửi (dấu seen_at của V339).'),
+    ('zalo_message_stranger', 'campaign_detail_reacted', 16, 'Người nhận thả tim, like hoặc cảm xúc khác (dấu reacted_at của V339).'),
+    ('zalo_message_stranger', 'campaign_detail_replied', 18, 'Người nhận nhắn lại sau lượt gửi (dấu responded_at của V339).'),
+    ('zalo_message_friend', 'campaign_detail_received', 12, 'Zalo báo tin đã tới máy người nhận. Theo dõi tương tác V339 chưa lưu dấu này.'),
+    ('zalo_message_friend', 'campaign_detail_viewed', 14, 'Người nhận đã xem ít nhất một tin của lượt gửi (dấu seen_at của V339).'),
+    ('zalo_message_friend', 'campaign_detail_reacted', 16, 'Người nhận thả tim, like hoặc cảm xúc khác (dấu reacted_at của V339).'),
+    ('zalo_message_friend', 'campaign_detail_replied', 18, 'Người nhận nhắn lại sau lượt gửi (dấu responded_at của V339).')
   ) AS v(action_code, status_code, sort_order, note)
   JOIN public.auto_status s ON s.code = v.status_code;
 
@@ -281,7 +303,7 @@ BEGIN
     RAISE EXCEPTION 'v494: auto_system_statuses không đủ 6 dòng';
   END IF;
   SELECT count(*) INTO v_count FROM public.auto_status WHERE component_type = 'campaign_detail';
-  IF v_count <> 28 THEN RAISE EXCEPTION 'v494: mong đợi 28 trạng thái kết quả, có %', v_count; END IF;
+  IF v_count <> 30 THEN RAISE EXCEPTION 'v494: mong đợi 30 trạng thái kết quả, có %', v_count; END IF;
   IF EXISTS (SELECT 1 FROM public.auto_status
              WHERE (component_type = 'campaign_detail') IS DISTINCT FROM (system_status_code IS NOT NULL)) THEN
     RAISE EXCEPTION 'v494: trạng thái hệ thống gắn sai component';
@@ -293,18 +315,21 @@ BEGIN
              WHERE p.action_code IS NULL AND p.is_delete = false AND p.report_group <> y.report_group) THEN
     RAISE EXCEPTION 'v494: trạng thái hệ thống lệch nhóm báo cáo của policy mặc định';
   END IF;
-  -- 6 trạng thái mới: chưa bật, chưa có policy, chưa auto_error nào dùng (theo id lẫn theo chữ).
+  -- 8 trạng thái mới: chưa bật, chưa có policy, chưa auto_error nào dùng (theo id lẫn theo chữ).
   IF (SELECT count(*) FROM public.auto_status s WHERE s.code LIKE 'campaign\_detail\_%' AND s.is_active = false
         AND s.flatform_type = 'zalo' AND s.system_status_code IN ('failure', 'stopped', 'error')) <> 6
+     OR (SELECT count(*) FROM public.auto_status s WHERE s.code IN ('campaign_detail_reacted', 'campaign_detail_replied')
+           AND s.is_active = false AND s.flatform_type = 'all' AND s.system_status_code = 'success') <> 2
+     OR (SELECT count(*) FROM public.auto_status s WHERE s.component_type = 'campaign_detail' AND s.is_active = false) <> 8
      OR EXISTS (SELECT 1 FROM public.auto_account_action_status_policies p JOIN public.auto_status s ON s.id = p.status_id WHERE s.is_active = false)
      OR EXISTS (SELECT 1 FROM public.auto_error e JOIN public.auto_status s
                   ON s.id = e.detail_status_id OR lower(s.status_value) = lower(e.detail_status) WHERE s.is_active = false) THEN
-    RAISE EXCEPTION 'v494: 6 trạng thái Zalo mới phải ở dạng chưa bật và chưa được dùng';
+    RAISE EXCEPTION 'v494: 8 trạng thái mới phải ở dạng chưa bật và chưa được dùng';
   END IF;
   SELECT count(*) INTO v_count FROM public.auto_account_action_result_statuses WHERE is_active;
   IF v_count <> 28 THEN RAISE EXCEPTION 'v494: mong đợi 28 cặp hành động–trạng thái đang ghi, có %', v_count; END IF;
   SELECT count(*) INTO v_count FROM public.auto_account_action_result_statuses WHERE NOT is_active;
-  IF v_count <> 26 THEN RAISE EXCEPTION 'v494: mong đợi 26 cặp đã khai báo chưa bật, có %', v_count; END IF;
+  IF v_count <> 34 THEN RAISE EXCEPTION 'v494: mong đợi 34 cặp đã khai báo chưa bật, có %', v_count; END IF;
   -- Cặp đang ghi phải phân giải được policy (riêng hoặc mặc định), như bộ chạy làm lúc bắt đầu chiến dịch.
   IF EXISTS (SELECT 1 FROM public.auto_account_action_result_statuses r
              WHERE r.is_active AND NOT EXISTS (

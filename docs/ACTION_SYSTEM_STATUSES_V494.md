@@ -5,6 +5,8 @@ phần mới. DDL làm PostgREST nạp lại schema nên phải apply ngoài gi�
 
 Người dùng chốt ngày 11/11/2026 sau đợt rà soát log Zalo: mỗi trạng thái kết quả của hành động phải gắn với đúng một
 trạng thái hệ thống, danh sách trạng thái của Zalo phải đủ, và mỗi hành động phải có danh sách trạng thái khai báo trước.
+Cùng ngày người dùng yêu cầu thêm cho các hành động gửi tin nhắn Zalo bốn trạng thái tương tác: đã nhận, đã xem, đã tim/like,
+đã phản hồi.
 
 ## Vì sao cần
 
@@ -32,18 +34,20 @@ tài khoản, chiến dịch, input để trống.
 
 | Mã | Tên | Quy về `report_group` | Trạng thái cơ bản đang gắn |
 |---|---|---|---|
-| `success` | Thành công | success | thành công, đã click, đã đổi tên, đã gắn tag, đã gửi, đã gửi lời mời kết bạn, đã gửi tin nhắn, đã nhận, đã xem, đã duyệt bài |
+| `success` | Thành công | success | thành công, đã click, đã đổi tên, đã gắn tag, đã gửi, đã gửi lời mời kết bạn, đã gửi tin nhắn, đã nhận, đã xem, đã duyệt bài, *đã thả cảm xúc*, *đã phản hồi* |
 | `failure` | Thất bại | failure | thất bại, không tồn tại, tag không tồn tại, tham số không hợp lệ, *người nhận chặn tin* |
 | `skipped` | Bỏ qua | skipped | bỏ qua, đã gửi lời mời, đã là bạn bè, đã là thành viên, đã tham gia |
 | `stopped` | Dừng | pending | *tài khoản bị hạn chế*, *đạt giới hạn*, *hết phiên đăng nhập* |
 | `error` | Lỗi | failure | lỗi, *lỗi kết nối*, *chưa rõ kết quả* |
 | `pending` | Chờ | pending | đang gọi, chờ duyệt bài |
 
-Chữ nghiêng là 6 trạng thái mới ở mục 2. Cột `report_group` của bảng này cho biết trạng thái hệ thống quy về nhóm nào
+Chữ nghiêng là 8 trạng thái mới ở mục 2. Cột `report_group` của bảng này cho biết trạng thái hệ thống quy về nhóm nào
 trong 4 nhóm cũ. `report_group` của `auto_account_action_status_policies` giữ nguyên 4 giá trị: lớp `ActionStatusCatalog`
 trên app đã cài từ chối cả danh mục khi gặp giá trị lạ, nên không thêm `stopped`/`error` vào đó.
 
-### 2. Sáu trạng thái cơ bản mới của Zalo, chưa bật
+### 2. Tám trạng thái cơ bản mới, chưa bật
+
+Sáu trạng thái lỗi và dừng của Zalo:
 
 | Giá trị | Trạng thái hệ thống | Mã Zalo | Hiện đang ghi |
 |---|---|---|---|
@@ -54,8 +58,19 @@ trên app đã cài từ chối cả danh mục khi gặp giá trị lạ, nên 
 | lỗi kết nối | Lỗi | ECONNRESET, ETIMEDOUT, ENOTFOUND, HTTP 500/502 | thất bại |
 | chưa rõ kết quả | Lỗi | quá thời gian gửi media | thất bại |
 
-Cả sáu có `is_active=false`, `flatform_type='zalo'`, không có policy và không `auto_error` nào trỏ tới. Bộ chạy không ghi
-được chúng: `ActionStatusCatalog.status()` ném `status_unavailable` với trạng thái chưa bật (bộ kiểm thử xác nhận).
+Hai trạng thái tương tác sau khi gửi tin, dùng chung mọi kênh (`flatform_type='all'`) như "đã nhận", "đã xem", "đã click":
+
+| Giá trị | Trạng thái hệ thống | Ý nghĩa | Nguồn dữ liệu của Zalo |
+|---|---|---|---|
+| đã thả cảm xúc | Thành công | Người nhận thả tim, like hoặc cảm xúc khác vào tin | dấu `reacted_at` của theo dõi tương tác V339 |
+| đã phản hồi | Thành công | Người nhận nhắn lại sau lượt gửi | dấu `responded_at` của V339 |
+
+Tên lấy đúng theo nhãn giao diện đang có của cột "Tương tác Zalo" (`src/shared/zaloCampaignEngagement.ts`): yêu cầu ghi
+"đã tim/like", giao diện đang gọi là "Đã thả cảm xúc". "Đã nhận" (id 32) và "đã xem" (id 34) đã có trong danh mục từ SMS và
+Email nên không tạo dòng mới.
+
+Cả tám có `is_active=false`, không có policy và không `auto_error` nào trỏ tới. Bộ chạy không ghi được chúng:
+`ActionStatusCatalog.status()` ném `status_unavailable` với trạng thái chưa bật (bộ kiểm thử xác nhận).
 
 ### 3. Hành động – trạng thái
 
@@ -66,14 +81,14 @@ chỉ nhận trạng thái `campaign_detail` và không cho bật cặp khi tr�
 Tên dễ nhầm: `auto_account_action_status` là khóa hành động theo từng tài khoản; `auto_account_action_status_policies` là
 cách đếm; bảng mới là danh sách khai báo.
 
-Đã khai báo cho 10 hành động Zalo (28 cặp đang ghi, 26 cặp chưa bật). `zalo_join_group` không có dòng nào vì không có
+Đã khai báo cho 10 hành động Zalo (28 cặp đang ghi, 34 cặp chưa bật). `zalo_join_group` không có dòng nào vì không có
 kết quả trong log và code Desktop chỉ còn nhắc tới nó trong một danh sách báo cáo.
 
 | Hành động | Đang ghi | Đã khai báo, chưa bật |
 |---|---|---|
 | Tìm SĐT | thành công, không tồn tại, thất bại | đạt giới hạn, hết phiên đăng nhập, lỗi kết nối |
-| Nhắn người lạ | thành công, thất bại | người nhận chặn tin, tài khoản bị hạn chế, hết phiên đăng nhập, lỗi kết nối, chưa rõ kết quả |
-| Nhắn bạn bè | thành công, thất bại | người nhận chặn tin, tài khoản bị hạn chế, đạt giới hạn, lỗi kết nối, chưa rõ kết quả |
+| Nhắn người lạ | thành công, thất bại | **đã nhận, đã xem, đã thả cảm xúc, đã phản hồi**, người nhận chặn tin, tài khoản bị hạn chế, hết phiên đăng nhập, lỗi kết nối, chưa rõ kết quả |
+| Nhắn bạn bè | thành công, thất bại | **đã nhận, đã xem, đã thả cảm xúc, đã phản hồi**, người nhận chặn tin, tài khoản bị hạn chế, đạt giới hạn, lỗi kết nối, chưa rõ kết quả |
 | Nhắn group | thành công, thất bại, không tồn tại | tài khoản bị hạn chế, đạt giới hạn, lỗi kết nối |
 | Kết bạn | thành công, thất bại, đã là bạn bè, không tồn tại | người nhận chặn tin, đạt giới hạn, hết phiên đăng nhập, lỗi kết nối |
 | Thêm thành viên vào group | thành công, thất bại, đã là thành viên | người nhận chặn tin, tài khoản bị hạn chế, đạt giới hạn |
@@ -84,6 +99,10 @@ kết quả trong log và code Desktop chỉ còn nhắc tới nó trong một d
 
 "Đã là thành viên" của Thêm thành viên vào group có policy (mã 178) và nhánh code nhưng chưa có dòng log nào từ
 09/10/2026. "Đã gửi lời mời" của Kết bạn không khai báo: chỉ có 1 dòng ngày 09/10 và không còn nơi nào phát.
+
+Bốn trạng thái tương tác xếp giữa "thành công" và "thất bại" (thứ tự 12, 14, 16, 18) vì chúng là bước tiếp theo của một
+lượt gửi thành công. Nhắn group chưa có bốn trạng thái này: theo dõi tương tác V339 loại trừ tin nhóm (và tài khoản Zalo
+trình duyệt), nên chưa có nguồn dữ liệu nào cho nhóm.
 
 Mới khai báo Zalo. Facebook, Email, SMS chưa rà log nên chưa có dòng.
 
@@ -113,17 +132,19 @@ Mới khai báo Zalo. Facebook, Email, SMS chưa rà log nên chưa có dòng.
 
 ## Kiểm thử
 
-`bash scripts/test-v494-action-system-statuses.sh` (PostgreSQL 16 cục bộ, Node ≥ 22.7): **48/48**.
+`bash scripts/test-v494-action-system-statuses.sh` (PostgreSQL 16 cục bộ, Node ≥ 22.7): **54/54**.
 
 - Fixture dựng 41 dòng `auto_status`, 19 policy, hành động Zalo, quyền, RLS và ACL mặc định như production. Preflight md5
   của chính migration xác nhận fixture trùng dữ liệu production ở các trường nó phụ thuộc.
 - Apply: 41 dòng cũ không đổi cột nào, policy và `auto_error` không đổi.
 - Ràng buộc, guard, quyền của từng role.
 - Lớp `ActionStatusCatalog` thật nạp danh mục sau migration; preflight 10 hành động Zalo đạt; 28 cặp đang ghi phân giải
-  được policy; 26 cặp chưa bật bị từ chối với `status_unavailable`.
+  được policy; 34 cặp chưa bật bị từ chối (`status_unavailable`, riêng "đã nhận"/"đã xem" là `policy_missing` vì trạng thái
+  có sẵn nhưng chưa có policy kết quả).
+- Bốn trạng thái tương tác chỉ có ở nhắn bạn bè và nhắn người lạ, đúng thứ tự; "đã nhận"/"đã xem" dùng lại dòng 32/34.
 - Chạy lại bị từ chối; danh mục, policy mặc định hoặc danh sách hành động lệch bản chụp bị từ chối và không để lại gì.
 - Rollback trả `auto_status` về đúng từng cột; rollback từ chối khi trạng thái mới đã có kết quả, đã được `auto_error`
-  trỏ tới, đã bật, hoặc đã có trạng thái thêm sau V494.
+  trỏ tới, đã bật, hoặc đã có trạng thái thêm sau V494; cả khi "đã phản hồi" đã được dùng làm trạng thái phụ.
 
 Chưa chạy trên production, kể cả chạy thử rồi ROLLBACK.
 
@@ -132,8 +153,8 @@ Chưa chạy trên production, kể cả chạy thử rồi ROLLBACK.
 1. Chọn lúc ngoài giờ cao điểm (cao điểm REST 09:45–12:00 VN; chiều 14:00–16:30 VN).
 2. Apply bằng `apply_migration` tên `migration_v494_action_system_statuses`. Preflight tự dừng nếu danh mục đã đổi so với
    bản chụp 11/11.
-3. Kiểm sau apply: md5 sổ migration bằng md5 file; 6 dòng `auto_system_statuses`; 28 trạng thái `campaign_detail` đều có
-   `system_status_code`; 54 dòng `auto_account_action_result_statuses`; `edge_logs` không có 5xx/503 quanh phút apply;
+3. Kiểm sau apply: md5 sổ migration bằng md5 file; 6 dòng `auto_system_statuses`; 30 trạng thái `campaign_detail` đều có
+   `system_status_code`; 62 dòng `auto_account_action_result_statuses`; `edge_logs` không có 5xx/503 quanh phút apply;
    một lượt chạy Zalo thật vẫn ghi kết quả.
 
 [Rollback](../migrations/rollback_v494_action_system_statuses.sql) chỉ gỡ đúng phần V494 thêm và từ chối khi phần đó đã
@@ -154,3 +175,17 @@ theo chữ đó, không làm bằng dữ liệu đơn thuần:
    sửa code để ghi mà vẫn giữ mục tiêu trong hàng đợi; bản app cũ sẽ đánh `hoàn thành` nếu chỉ đổi dữ liệu.
 4. **Lỗi mạng**: cần chốt có tính vào chuỗi lỗi liên tiếp không (proxy chết phải dừng chiến dịch) và có trả mục tiêu về
    hàng đợi không (tránh gửi trùng khi chưa rõ đã gửi hay chưa).
+5. **Tương tác sau khi gửi tin** (đã nhận, đã xem, đã thả cảm xúc, đã phản hồi):
+   - Nguồn dữ liệu là theo dõi tương tác V339 ([tài liệu](ZALO_CAMPAIGN_ENGAGEMENT.md)), **đang tắt từ 15:44 ngày 06/10/2026**
+     (`zalo.campaign_engagement.enabled=false`). Chưa có ghi chép vì sao tắt; phải hỏi lý do và đo tải trước khi bật lại.
+   - V339 lưu ba dấu độc lập `seen_at`, `responded_at`, `reacted_at` trong `auto_campaign_detail_zalo_engagement`, không đổi
+     trạng thái của dòng kết quả. **Chưa có dấu "đã nhận"**: bộ chạy có nhận sự kiện `delivered_messages` của Zalo nhưng chỉ
+     dùng nó khi kèm xác nhận đã xem. Cần thêm cột `delivered_at` và sửa cả ba bộ chạy.
+   - Cần chốt cách đưa dấu thành trạng thái: (a) đổi trạng thái chính của dòng từ "thành công" lên mức cao nhất đạt được,
+     như Email đang làm với "đã xem"/"đã click"; khi đó báo cáo và Automation đang chọn "thành công" phải quy theo trạng thái
+     hệ thống trước; hoặc (b) giữ trạng thái chính là "thành công" và ghi tương tác vào trạng thái phụ (`sub_status_id`),
+     không ảnh hưởng nơi đang đọc.
+   - Một tin có thể vừa được xem, vừa được thả cảm xúc, vừa được phản hồi. Nếu mỗi dòng chỉ mang một trạng thái thì lấy mức
+     cao nhất theo thứ tự đã nhận < đã xem < đã thả cảm xúc < đã phản hồi; ba dấu thời gian vẫn giữ riêng.
+   - V339 không theo dõi tin nhóm, tài khoản Zalo trình duyệt, lượt gửi lỗi hoặc gửi một phần; "đã xem" và "đã thả cảm xúc"
+     cần Zalo trả mã tin, còn "đã phản hồi" thì không.

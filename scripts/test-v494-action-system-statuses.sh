@@ -192,14 +192,26 @@ expect "19 trạng thái component khác để trống" "$(q "SELECT count(*) FR
 expect "6 trạng thái Zalo mới, chưa bật" \
   "$(q "SELECT string_agg(status_value || '>' || system_status_code, ',' ORDER BY sort_order) FROM public.auto_status WHERE id > 55 AND NOT is_active AND flatform_type = 'zalo' AND component_type = 'campaign_detail'")" \
   "người nhận chặn tin>failure,tài khoản bị hạn chế>stopped,đạt giới hạn>stopped,hết phiên đăng nhập>stopped,lỗi kết nối>error,chưa rõ kết quả>error"
+expect "2 trạng thái tương tác mới, chưa bật, xếp ngay sau 'đã xem'" \
+  "$(q "SELECT string_agg(status_value || '>' || system_status_code || '>' || flatform_type, ',' ORDER BY sort_order) FROM public.auto_status WHERE component_type = 'campaign_detail' AND sort_order BETWEEN 150 AND 159")" \
+  "đã xem>success>all,đã thả cảm xúc>success>all,đã phản hồi>success>all"
 expect "trạng thái mới không có policy" "$(q "SELECT count(*) FROM public.auto_account_action_status_policies p JOIN public.auto_status s ON s.id = p.status_id WHERE s.id > 55")" "0"
-expect "28 cặp đang ghi, 26 cặp chưa bật" "$(q "SELECT count(*) FILTER (WHERE is_active) || '/' || count(*) FILTER (WHERE NOT is_active) FROM public.auto_account_action_result_statuses")" "28/26"
+expect "28 cặp đang ghi, 34 cặp chưa bật" "$(q "SELECT count(*) FILTER (WHERE is_active) || '/' || count(*) FILTER (WHERE NOT is_active) FROM public.auto_account_action_result_statuses")" "28/34"
 expect "10 hành động Zalo có danh sách, zalo_join_group không có" \
   "$(q "SELECT count(DISTINCT action_code) || '/' || count(*) FILTER (WHERE action_code = 'zalo_join_group') FROM public.auto_account_action_result_statuses")" "10/0"
 expect "danh sách đang ghi của Kết bạn" \
   "$(q "SELECT string_agg(s.status_value, ',' ORDER BY r.sort_order) FROM public.auto_account_action_result_statuses r JOIN public.auto_status s ON s.id = r.status_id WHERE r.action_code = 'zalo_add_friend' AND r.is_active")" \
   "thành công,thất bại,đã là bạn bè,không tồn tại"
-expect "cặp chưa bật chỉ trỏ tới trạng thái chưa bật" "$(q "SELECT count(*) FROM public.auto_account_action_result_statuses r JOIN public.auto_status s ON s.id = r.status_id WHERE r.is_active <> s.is_active")" "0"
+expect "cặp đang ghi chỉ trỏ tới trạng thái đang bật" "$(q "SELECT count(*) FROM public.auto_account_action_result_statuses r JOIN public.auto_status s ON s.id = r.status_id WHERE r.is_active AND NOT s.is_active")" "0"
+for action in zalo_message_stranger zalo_message_friend; do
+  expect "$action: 4 trạng thái tương tác nằm giữa thành công và thất bại, chưa bật" \
+    "$(q "SELECT string_agg(s.status_value || CASE WHEN r.is_active THEN '' ELSE '*' END, ',' ORDER BY r.sort_order) FROM public.auto_account_action_result_statuses r JOIN public.auto_status s ON s.id = r.status_id WHERE r.action_code = '$action' AND r.sort_order <= 20")" \
+    "thành công,đã nhận*,đã xem*,đã thả cảm xúc*,đã phản hồi*,thất bại"
+done
+expect "nhắn group và hành động khác không có trạng thái tương tác" \
+  "$(q "SELECT count(*) FROM public.auto_account_action_result_statuses r JOIN public.auto_status s ON s.id = r.status_id WHERE s.code IN ('campaign_detail_received', 'campaign_detail_viewed', 'campaign_detail_reacted', 'campaign_detail_replied') AND r.action_code NOT IN ('zalo_message_stranger', 'zalo_message_friend')")" "0"
+expect "'đã nhận' và 'đã xem' dùng lại dòng có sẵn, không tạo trùng" \
+  "$(q "SELECT string_agg(id || ':' || status_value || ':' || is_active::text, ',' ORDER BY id) FROM public.auto_status WHERE lower(status_value) IN ('đã nhận', 'đã xem')")" "32:đã nhận:true,34:đã xem:true"
 
 # ---- Ràng buộc và guard ----
 refuse "trạng thái kết quả mới thiếu trạng thái hệ thống bị từ chối" "auto_status_detail_system_status_check" \
@@ -222,14 +234,14 @@ refuse "hành động không tồn tại bị từ chối" "auto_account_action_
   q "INSERT INTO public.auto_account_action_result_statuses (action_code, status_id) VALUES ('zalo_unknown', 20)"
 
 # ---- Quyền ----
-expect "Desktop select * auto_status thấy cột mới" "$(q "SET ROLE aka_agent_desktop; SELECT count(*) FILTER (WHERE system_status_code IS NOT NULL) FROM (SELECT * FROM public.auto_status) s")" "28"
-expect "chat worker to_jsonb(auto_status) chạy được" "$(q "SET ROLE aka_agent_chat_api; SELECT jsonb_array_length(jsonb_agg(to_jsonb(s))) FROM public.auto_status s")" "47"
+expect "Desktop select * auto_status thấy cột mới" "$(q "SET ROLE aka_agent_desktop; SELECT count(*) FILTER (WHERE system_status_code IS NOT NULL) FROM (SELECT * FROM public.auto_status) s")" "30"
+expect "chat worker to_jsonb(auto_status) chạy được" "$(q "SET ROLE aka_agent_chat_api; SELECT jsonb_array_length(jsonb_agg(to_jsonb(s))) FROM public.auto_status s")" "49"
 for role in anon authenticated aka_agent_desktop; do
   for table in auto_system_statuses auto_account_action_result_statuses; do
     refuse "$role không đọc được $table" "permission denied" q "SET ROLE $role; SELECT count(*) FROM public.$table"
   done
 done
-expect "service_role đọc được hai bảng mới" "$(q "SET ROLE service_role; SELECT (SELECT count(*) FROM public.auto_system_statuses) + (SELECT count(*) FROM public.auto_account_action_result_statuses)")" "60"
+expect "service_role đọc được hai bảng mới" "$(q "SET ROLE service_role; SELECT (SELECT count(*) FROM public.auto_system_statuses) + (SELECT count(*) FROM public.auto_account_action_result_statuses)")" "68"
 expect "anon/authenticated không dùng được sequence và hàm guard mới" \
   "$(q "SELECT has_sequence_privilege('anon', 'public.auto_account_action_result_statuses_id_seq', 'USAGE')::text || has_sequence_privilege('authenticated', 'public.auto_account_action_result_statuses_id_seq', 'USAGE')::text || has_function_privilege('anon', 'public.aka_agent_guard_action_result_status_v494()', 'EXECUTE')::text || has_function_privilege('authenticated', 'public.aka_agent_guard_action_result_status_v494()', 'EXECUTE')::text")" \
   "falsefalsefalsefalse"
@@ -266,16 +278,17 @@ for (const error of data.errors) for (const actionCode of data.actions) {
 let active = 0, planned = 0
 for (const row of data.declared) {
   if (row.active) { catalog.selectPolicy(row.action, row.code); active++; continue }
-  // Trạng thái chưa bật không được phép phát: bộ chạy phải từ chối ngay ở danh mục.
+  // Cặp chưa bật không được phép phát: bộ chạy phải từ chối ngay ở danh mục, vì trạng thái chưa bật
+  // (status_unavailable) hoặc vì trạng thái có sẵn nhưng chưa có policy kết quả ('đã nhận', 'đã xem': policy_missing).
   try { catalog.selectPolicy(row.action, row.code); throw new Error('planned status resolved: ' + row.code) }
-  catch (error) { if (!(error instanceof ResultContractError) || error.reason !== 'status_unavailable') throw error }
+  catch (error) { if (!(error instanceof ResultContractError) || !['status_unavailable', 'policy_missing'].includes(error.reason)) throw error }
   planned++
 }
 console.log(statuses.length + '/' + policies.length + '/' + active + '/' + planned)
 NODE
 chmod 644 "$WORK/catalog-check.mts"
-expect "ActionStatusCatalog nạp danh mục sau V494, preflight Zalo đạt, trạng thái chưa bật bị từ chối" \
-  "$(node --experimental-transform-types --no-warnings "$WORK/catalog-check.mts")" "47/19/28/26"
+expect "ActionStatusCatalog nạp danh mục sau V494, preflight Zalo đạt, cặp chưa bật bị từ chối" \
+  "$(node --experimental-transform-types --no-warnings "$WORK/catalog-check.mts")" "49/19/28/34"
 
 # ---- Chạy lại và lệch dữ liệu ----
 refuse "apply lần hai bị từ chối" "v494: đã apply" run_file t1 "$MIGRATION"
@@ -295,7 +308,7 @@ ok "rollback V494"
 expect "sau rollback auto_status trùng từng cột với ban đầu" "$(q "$FP_ALL")" "$before_all"
 expect "sau rollback không còn bảng, cột, hàm của V494" \
   "$(q "SELECT (to_regclass('public.auto_system_statuses') IS NULL)::text || (to_regclass('public.auto_account_action_result_statuses') IS NULL)::text || (SELECT count(*) FROM pg_attribute WHERE attrelid = 'public.auto_status'::regclass AND attname = 'system_status_code' AND NOT attisdropped) || (SELECT count(*) FROM pg_proc WHERE proname = 'aka_agent_guard_action_result_status_v494')")" "truetrue00"
-expect "rollback không đặt lại sequence (6 id đã cấp không dùng lại)" "$(q "SELECT (last_value >= 61)::text FROM public.auto_status_id_seq")" "true"
+expect "rollback không đặt lại sequence (8 id đã cấp không dùng lại)" "$(q "SELECT (last_value >= 63)::text FROM public.auto_status_id_seq")" "true"
 refuse "rollback lần hai bị từ chối" "chưa apply V494" run_file t1 "$ROLLBACK"
 out=$(run_file t1 "$MIGRATION") || fail "apply lại sau rollback: $out"
 ok "apply lại sau rollback"
@@ -306,6 +319,9 @@ q "INSERT INTO public.auto_campaign_details (status, status_id) SELECT status_va
 refuse "rollback từ chối khi trạng thái mới đã có kết quả" "đã được dùng" run_file t3 "$ROLLBACK"
 q "DELETE FROM public.auto_campaign_details WHERE status = 'người nhận chặn tin'; UPDATE public.auto_error SET detail_status = 'đạt giới hạn' WHERE id = 42" >/dev/null
 refuse "rollback từ chối khi auto_error đã trỏ tới trạng thái mới" "đã được dùng" run_file t3 "$ROLLBACK"
+q "UPDATE public.auto_error SET detail_status = NULL WHERE id = 42; INSERT INTO public.auto_campaign_details (status, status_id, sub_status_id) SELECT 'thành công', 20, id FROM public.auto_status WHERE code = 'campaign_detail_replied'" >/dev/null
+refuse "rollback từ chối khi 'đã phản hồi' đã được dùng làm trạng thái phụ" "đã được dùng" run_file t3 "$ROLLBACK"
+q "DELETE FROM public.auto_campaign_details WHERE sub_status_id IS NOT NULL" >/dev/null
 q "UPDATE public.auto_error SET detail_status = NULL WHERE id = 42; UPDATE public.auto_status SET is_active = true WHERE code = 'campaign_detail_session_expired'" >/dev/null
 refuse "rollback từ chối khi trạng thái mới đã bật" "đã được bật" run_file t3 "$ROLLBACK"
 q "UPDATE public.auto_status SET is_active = false WHERE code = 'campaign_detail_session_expired'; INSERT INTO public.auto_status (code, name, status_key, status_value, component_type, system_status_code) VALUES ('campaign_detail_later', 'Sau', 'later', 'sau', 'campaign_detail', 'failure')" >/dev/null
