@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CircleHelp, MessageCircleQuestion, Sparkles, Stethoscope } from 'lucide-react'
+import { ChevronDown, CircleHelp, MessageCircleQuestion, Sparkles, Stethoscope } from 'lucide-react'
 import { CAMPAIGN_SUPPORT_QUESTION, type CampaignAssistantMode } from '../../../../shared/campaignSupport'
 import type { AiChatProject } from '../../../../shared/aiChat'
 
@@ -69,10 +69,11 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, a
   // Nút nằm chung cột Hành động của danh sách chiến dịch: không có mục nào thì không vẽ gì.
   if (!legacy && agents.length === 0) return null
   return <>
-    <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button"
+    <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button campaign-cell-assistant-button"
       aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} title="Trợ lý aka">
-      <Sparkles size={14} /><span>Trợ lý aka</span>
+      <Sparkles size={14} /><span className="campaign-cell-button-label">Trợ lý aka</span>
       {agentState && <span className={`ai-chat-dot ${agentState}`} title={agentState === 'pending' ? 'Đang chờ trợ lý trả lời' : 'Có câu trả lời mới'} />}
+      <ChevronDown size={12} className="campaign-cell-button-chevron" />
     </button>
     {open && createPortal(<div ref={menu} role="menu" aria-label="Trợ lý aka" className="campaign-assistant-menu" style={position}
       onClick={event => event.stopPropagation()}>

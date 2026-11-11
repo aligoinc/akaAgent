@@ -6508,14 +6508,15 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       })()}
                       <div className="campaign-action-dropdown">
                         <button
-                          className="btn-icon campaign-control-button campaign-label-button"
+                          className="btn-icon campaign-control-button campaign-label-button campaign-cell-action-button"
                           onClick={event => handleCampaignActionMenuToggle(campaign.id, event)}
                           title="Mở hành động"
                           aria-haspopup="menu"
                           aria-expanded={openCampaignActionMenuId === campaign.id}
                         >
-                          <ListTodo size={15} />
-                          <span>Hành động</span>
+                          <ListTodo size={14} />
+                          <span className="campaign-cell-button-label">Hành động</span>
+                          <ChevronDown size={12} className="campaign-cell-button-chevron" />
                         </button>
                         {openCampaignActionMenuId === campaign.id && campaignActionMenuPosition && createPortal(
                           <div ref={campaignActionMenuRef} className="campaign-action-menu" style={campaignActionMenuPosition} role="menu">
