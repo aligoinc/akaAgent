@@ -95,6 +95,11 @@ import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
 import { InputDuplicateFormNote } from './InputDuplicateFormNote'
 import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
+import {
+  campaignDataSplitAvailable, campaignDataSplitDedupeNotice, campaignDataSplitTooFewMessage, dedupeCampaignDataForSplit,
+  resolveSplitDataAcrossAccounts, sharedCampaignDataConfirmMessage, sharedCampaignDataConfirmTitle,
+  shouldConfirmSharedCampaignData, splitCampaignDataAcrossAccounts
+} from '../../../../shared/campaignDataSplit'
 import MediaLibraryModal from '../Media/MediaLibraryModal'
 import MediaPreviewHover from '../Media/MediaPreviewHover'
 import { isImageMediaSource, isVideoMediaSource } from '../Media/mediaImage'
@@ -1999,6 +2004,8 @@ export default function CampaignFormModal({
     commentImageOption: savedCommentImageOption,
     commentImages: savedCommentImages as CampaignMediaInput[],
     splitDataAcrossAccounts: false,
+    // Người dùng đã tự bật/tắt chia đều; chưa thì theo mặc định của loại chiến dịch.
+    splitDataChoiceMade: false,
     leaveGroupOnPendingApproval: campaign?.extraSettings?.leaveGroupOnPendingApproval ?? false,
     autoJoinGroupAfterPost: campaign?.extraSettings?.autoJoinGroupAfterPost ?? false,
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
@@ -3906,6 +3913,17 @@ export default function CampaignFormModal({
     status: 'chờ xử lý'
   }))
   const [details, setDetails] = useCampaignDraftField<Partial<CampaignInputData>[]>(draftPayload, draftValuesRef, 'details', () => normalizeInitialDetails(initialDetails))
+  // Chia đều data cho các tài khoản (src/shared/campaignDataSplit.ts): chưa tự chọn thì theo mặc định của loại
+  // chiến dịch; loại data gắn với từng tài khoản thì ẩn ô và không chia.
+  const canSplitDataAcrossAccounts = campaignDataSplitAvailable(formData.actionId)
+  const splitDataAcrossAccounts = resolveSplitDataAcrossAccounts(
+    formData.actionId, formData.splitDataAcrossAccounts, formData.splitDataChoiceMade)
+  const showSplitDataOption = !isEditingSavedCampaign && formData.accountIds.length > 1 &&
+    !hasPendingDirectDataGroupSnapshots && canSplitDataAcrossAccounts
+  const splitDataPreview = useMemo(
+    () => showSplitDataOption && splitDataAcrossAccounts ? dedupeCampaignDataForSplit(formData.actionId, details) : null,
+    [showSplitDataOption, splitDataAcrossAccounts, formData.actionId, details])
+  const sharedDataConfirmedRef = useRef(false)
   const [detailsPage, setDetailsPage] = useState(1)
   const detailsPageCount = Math.max(1, Math.ceil(details.length / CAMPAIGN_DETAILS_PAGE_SIZE))
   const visibleDetailsPage = Math.min(detailsPage, detailsPageCount)
@@ -6181,14 +6199,8 @@ export default function CampaignFormModal({
     const shouldDiscardDetailsForSave = formData.actionId === 'facebook_timeline_post' || formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
     const detailSource = isDataGroupSource || shouldDiscardDetailsForSave || hideDetailsSection ? [] : detailRows
 
-    if (!isDataGroupSource && !hasPendingDirectDataGroupSnapshots && formData.splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
-      for (let i = 0; i < numAccounts; i++) {
-        accountChunks.push([])
-      }
-      for (let i = 0; i < detailSource.length; i++) {
-        const accountIndex = i % numAccounts
-        accountChunks[accountIndex].push(detailSource[i])
-      }
+    if (!isDataGroupSource && !hasPendingDirectDataGroupSnapshots && splitDataAcrossAccounts && numAccounts > 1 && detailSource.length > 0) {
+      accountChunks.push(...splitCampaignDataAcrossAccounts(detailSource, numAccounts))
     } else {
       for (let i = 0; i < numAccounts; i++) {
         accountChunks.push(detailSource)
@@ -6777,6 +6789,8 @@ export default function CampaignFormModal({
 
   const handleSave = async () => {
     const saveSignal = saveCompletion.session.current.signal
+    const sharedDataConfirmed = sharedDataConfirmedRef.current
+    sharedDataConfirmedRef.current = false
     if (saveCompletion.hasPending()) {
       setSavingCampaign(true)
       try { await saveCompletion.retry() }
@@ -7213,7 +7227,14 @@ export default function CampaignFormModal({
     const detailRowsForSave = isFindDataSearchCampaign && !isEditingSavedCampaign
       ? findDataSearchKeywordRows
       : details
-    const validDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(detailRowsForSave)
+    const normalizedDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(detailRowsForSave)
+    // Chia đều cho từ 2 tài khoản: bỏ dòng trùng trước để một người không rơi vào hai tài khoản.
+    const splitsDetailsForSave = !isDataGroupSource && !isEditingSavedCampaign && !isSimpleCampaign && !hideDetailsSection &&
+      !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData &&
+      splitDataAcrossAccounts && formData.accountIds.length > 1
+    const validDetails = splitsDetailsForSave
+      ? dedupeCampaignDataForSplit(formData.actionId, normalizedDetails).rows
+      : normalizedDetails
     const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
     if (!isDataGroupSource && canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
       showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
@@ -7452,12 +7473,24 @@ export default function CampaignFormModal({
       }
     }
 
-    if (!isDataGroupSource && !isEditingSavedCampaign && !isSimpleCampaign && !hideDetailsSection &&
+    if (splitsDetailsForSave && validDetails.length > 0 && validDetails.length < formData.accountIds.length) {
+      showAlert(campaignDataSplitTooFewMessage(validDetails.length, formData.accountIds.length), 'error')
+      return
+    }
+    // Loại nên chia đều mà đang để mọi tài khoản gửi cả danh sách: hỏi lại một lần trước khi tạo.
+    if (!sharedDataConfirmed && !isDataGroupSource && !isEditingSavedCampaign && !isSimpleCampaign && !hideDetailsSection &&
       !hasPendingDirectDataGroupSnapshots && !hasSelectedFindDataSourceCampaign && !isDraftTargetFromFindData &&
-      formData.splitDataAcrossAccounts && validDetails.length > 0 && validDetails.length < formData.accountIds.length) {
-      showAlert(
-        `Có ${validDetails.length} data hợp lệ nhưng đang chia cho ${formData.accountIds.length} tài khoản. Vui lòng thêm data, giảm số tài khoản hoặc tắt chia data để mỗi chiến dịch có ít nhất 1 data.`,
-        'error'
+      shouldConfirmSharedCampaignData({
+        actionId: formData.actionId, splitDataAcrossAccounts,
+        accountCount: formData.accountIds.length, dataCount: validDetails.length
+      })) {
+      showConfirm(
+        sharedCampaignDataConfirmMessage(formData.accountIds.length, validDetails.length),
+        () => {
+          sharedDataConfirmedRef.current = true
+          void handleSave()
+        },
+        { title: sharedCampaignDataConfirmTitle, confirmText: 'Vẫn gửi cả danh sách', cancelText: 'Quay lại' }
       )
       return
     }
@@ -16430,21 +16463,30 @@ export default function CampaignFormModal({
                       Danh sách data đã lưu không chỉnh sửa trong form sửa chiến dịch.
                     </div>
                   )}
-                  {!isEditingSavedCampaign && formData.accountIds.length > 1 && !hasPendingDirectDataGroupSnapshots && (
+                  {showSplitDataOption && (
                     <div className="stepper-form-group" style={{ marginBottom: 12 }}>
                       <label className="schedule-checkbox-label" style={{ fontWeight: 500 }}>
                         <input
                           type="checkbox"
-                          checked={formData.splitDataAcrossAccounts}
-                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossAccounts: e.target.checked }))}
+                          checked={splitDataAcrossAccounts}
+                          onChange={e => setFormData(p => ({ ...p, splitDataAcrossAccounts: e.target.checked, splitDataChoiceMade: true }))}
                         />
-                        <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>(Mặc định là tất cả tài khoản chung 1 data)</span></span>
+                        <span>Chia đều data cho các tài khoản <span className="schedule-hint-inline" style={{ fontWeight: 'normal' }}>
+                          {splitDataAcrossAccounts
+                            ? `(Mỗi khách nhận 1 lần, từ 1 tài khoản${splitDataPreview?.rows.length ? `, khoảng ${Math.ceil(splitDataPreview.rows.length / formData.accountIds.length).toLocaleString('vi-VN')} data mỗi tài khoản` : ''})`
+                            : `(Đang tắt: mỗi tài khoản gửi cả danh sách, một khách có thể nhận ${formData.accountIds.length} lần)`}
+                        </span></span>
                       </label>
+                      {splitDataPreview && splitDataPreview.removed > 0 && (
+                        <div className="text-muted" style={{ marginTop: 4, fontSize: 12 }}>
+                          {campaignDataSplitDedupeNotice(splitDataPreview.removed).replace('Đã bỏ', 'Sẽ bỏ')}
+                        </div>
+                      )}
                     </div>
                   )}
                   {!isEditingSavedCampaign && formData.accountIds.length > 1 && hasPendingDirectDataGroupSnapshots && (
                     <div className="text-muted" style={{ marginBottom: 12, fontSize: 12 }}>
-                      Khi thêm bằng nhóm, mỗi campaign con nhận toàn bộ data phù hợp với tài khoản của nó; không áp dụng Chia đều.
+                      Lưu ý: khi thêm bằng nhóm, mỗi tài khoản nhận toàn bộ data phù hợp của nhóm và không chia đều được: một khách có thể nhận tới {formData.accountIds.length} lần.
                     </div>
                   )}
                   {!isEditingSavedCampaign && (
