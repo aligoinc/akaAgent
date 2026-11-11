@@ -70,6 +70,7 @@ import {
 } from '../../shared/advancedContent'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
 import { isRecentDeliveryCooldownEnabled } from '../../shared/campaignDeliveryCooldown'
+import { parseZaloShareRepeatMinutes, supportsZaloShareRepeat } from '../../shared/zaloShareRepeat'
 import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
@@ -2317,6 +2318,10 @@ export class CampaignScheduler {
       return
     }
 
+    if (await this.handleZaloShareRepeatAfterCompletion(campaign, now)) {
+      return
+    }
+
     if (await this.handleRerunAfterCompletion(campaign, now)) {
       return
     }
@@ -2433,6 +2438,23 @@ export class CampaignScheduler {
       return true
     }
 
+    return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
+      emptyDataSuffix: 'ở khung giờ tiếp theo',
+      scheduledLog: `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" ở khung giờ ${nextSlot} (${this.formatVietnamDateTime(nextSchedule)})`
+    })
+  }
+
+  /**
+   * Phần chung của "nhiều khung giờ" và "gửi lặp lại sau mỗi x phút": lượt chạy vừa xong, hẹn lượt kế tiếp lúc
+   * `nextSchedule`. Còn data đến lịch hoặc data hẹn giờ thì chạy nốt trước; không còn gì để chạy lại thì hoàn thành;
+   * còn lại đặt lại data (trừ data tạm dừng) và đưa chiến dịch về chờ xử lý. Luôn trả true.
+   */
+  private async rescheduleCompletedCampaignPass(
+    campaign: Campaign,
+    now: Date,
+    nextSchedule: Date,
+    labels: { emptyDataSuffix: string; scheduledLog: string }
+  ): Promise<boolean> {
     const details = await this.supabase.listCampaignInputData(campaign.id)
     // Inputs can arrive after the executor's snapshot. Keep the current slot
     // while due work remains; resetting it here would postpone unsent data.
@@ -2471,14 +2493,14 @@ export class CampaignScheduler {
     if (details.length > 0 && resettableCount === 0) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ${labels.emptyDataSuffix})`)
       }
       return true
     }
     if (campaign.actionId === PAGE_POST_ACTION_ID && details.length === 0) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có page cần chạy lại ${labels.emptyDataSuffix})`)
       }
       return true
     }
@@ -2488,7 +2510,7 @@ export class CampaignScheduler {
     ) {
       const completed = await this.transitionCampaignToCompleted(campaign)
       if (completed) {
-        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ở khung giờ tiếp theo)`)
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}" (không có data cần chạy lại ${labels.emptyDataSuffix})`)
       }
       return true
     }
@@ -2541,11 +2563,62 @@ export class CampaignScheduler {
         note: null
       })
     }
-    await this.logCampaignProgress(
-      campaign,
-      `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" ở khung giờ ${nextSlot} (${this.formatVietnamDateTime(nextSchedule)})`
-    )
+    await this.logCampaignProgress(campaign, labels.scheduledLog)
     return true
+  }
+
+  /**
+   * "Gửi lặp lại sau mỗi x phút" (nhắn bạn bè/nhóm Zalo đang gửi dạng chia sẻ): gửi xong toàn bộ danh sách thì hẹn
+   * gửi lại sau x phút, tính từ lúc hoàn thành lượt này. Lượt kế tiếp sang ngày mới hoặc chạm giờ dừng thì hoàn thành
+   * chiến dịch như khung giờ cuối của "nhiều khung giờ". Hợp đồng: src/shared/zaloShareRepeat.ts.
+   */
+  private async handleZaloShareRepeatAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    const extra = campaign.extraSettings
+    if (extra?.zaloShareRepeatEnabled !== true) return false
+    if (
+      !supportsZaloShareRepeat(campaign.actionId, extra.zaloMessageSendMode, campaign.dataTargetSourceMode) ||
+      extra.multiDailyTimeSlotsEnabled === true ||
+      isRecentDeliveryCooldownEnabled(campaign.actionId, extra)
+    ) {
+      return false
+    }
+    const minutes = parseZaloShareRepeatMinutes(extra.zaloShareRepeatAfterMinutes)
+    if (minutes === null) return false
+
+    const nextSchedule = new Date(now.getTime() + minutes * 60 * 1000)
+    // Như handleRerunAfterCompletion: lượt lặp thuộc ngày Việt Nam của lượt đã nhận; không tự mở lại sang ngày
+    // mới trước khi bước cập nhật lịch đầu ngày chạy.
+    const claimedVietnamDateKey = this.campaignRunBoundaries.get(campaign.id)?.claimedVietnamDateKey
+    const leavesClaimedVietnamDay = Boolean(
+      claimedVietnamDateKey &&
+      this.getVietnamDateKey(nextSchedule) !== claimedVietnamDateKey
+    )
+    if (leavesClaimedVietnamDay || !this.isSameVietnamDay(nextSchedule, now)) {
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(
+          campaign,
+          `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt gửi lặp kế tiếp đã sang ngày mới)`
+        )
+      }
+      return true
+    }
+
+    if (this.isAtOrAfterCampaignDispatchCutoff(nextSchedule, campaign.dailyStopTime)) {
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(
+          campaign,
+          `✅ Hoàn thành chiến dịch "${campaign.name}" (lượt gửi lặp kế tiếp vượt quá giờ dừng trong ngày)`
+        )
+      }
+      return true
+    }
+
+    return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
+      emptyDataSuffix: 'ở lượt gửi lặp kế tiếp',
+      scheduledLog: `⏳ Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
+    })
   }
 
   private async handleRerunAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {

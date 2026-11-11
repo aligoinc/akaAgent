@@ -6668,6 +6668,13 @@ export default function CampaignFormModal({
             multiDailyTimeSlots: usesMultiDailyTimeSlots
               ? normalizedMultiDailySlots.join(',')
               : '',
+            // "Gửi lặp lại sau mỗi x phút" đặt ở Web (src/shared/zaloShareRepeat.ts); Desktop chưa có ô này nên chỉ
+            // giữ cài đặt đã lưu khi còn hợp lệ, để sửa chiến dịch trên Desktop không làm mất nó.
+            ...(campaign?.extraSettings?.zaloShareRepeatEnabled === true ? {
+              zaloShareRepeatEnabled: isZaloShareMessageMode && !isDataGroupSource && !usesMultiDailyTimeSlots
+                && !(canUseRecentDeliveryCooldown && formData.recentDeliveryCooldownEnabled),
+              zaloShareRepeatAfterMinutes: campaign.extraSettings.zaloShareRepeatAfterMinutes
+            } : {}),
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
             postKeywords: canUsePostContentConditionsForSave ? formData.postKeywords : '',
             isFindPostByContentAI: canUsePostContentConditionsForSave ? formData.isFindPostByContentAI : false,
