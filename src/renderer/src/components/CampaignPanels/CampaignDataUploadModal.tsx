@@ -375,7 +375,7 @@ export default function CampaignDataUploadModal({
   const duplicateAccountIds = (scope: InputDuplicateScope): number[] => scope === 'current'
     ? duplicateCheck?.currentAccounts.map(account => account.id) ?? []
     : scope === 'picked' ? pickedIds ?? [] : []
-  /** Lựa chọn 2/3: đối chiếu số hợp lệ với máy chủ theo lượt 2.000 số (tuần tự, hủy được), rồi tách nhóm "Đã có ở chiến dịch khác". */
+  /** Lựa chọn 2/3: đối chiếu số hợp lệ với máy chủ theo lượt 1.000 số (tuần tự, hủy được), rồi tách nhóm "Đã có ở chiến dịch khác". */
   const finishReport = async (next: ImportVerificationResult, kind: ImportTab, revision: number, operation: number, scope = dupScope):
     Promise<{ report: ImportVerificationResult; existing: ImportExistingEntry[] | null } | null> => {
     if (!dupEnabled || !duplicateCheck || scope === 'file') { acceptReport(next, kind); return { report: next, existing: null } }

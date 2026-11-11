@@ -317,7 +317,7 @@ async function main() {
     assert.equal('duplicates' in s.submitted, false)
     ok('failure blocks insertion; Thử lại re-checks; "Chỉ lọc trong file" inserts without a summary (no confirm)')
 
-    // 8. 2,500 numbers: sequential 2,000 + 500 requests with progress; Hủy kiểm tra discards the in-flight answer; rerun merges.
+    // 8. 2,500 numbers: sequential 1,000 + 1,000 + 500 requests with progress; Hủy kiểm tra discards the in-flight answer; rerun merges.
     await open()
     // Typing 2,500 lines with fill() goes through Chromium's text insertion and is very slow: load a .txt file as customers do.
     const many = Array.from({ length: 2500 }, (_, i) => `090${String(i).padStart(7, '0')}`)
@@ -333,6 +333,10 @@ async function main() {
     assert.equal(await modal.locator('.modal-footer .btn-ghost').isDisabled(), false, 'the modal can be closed while checking')
     await smoke(() => window.dupSmoke.state.pending.shift()())
     await page.waitForFunction(() => window.dupSmoke.state.pending.length === 1)
+    assert.match(await progress.innerText(), /1\.000\/2\.500 số/)
+    assert.equal(await progress.getByRole('progressbar').getAttribute('aria-valuenow'), '1000')
+    await smoke(() => window.dupSmoke.state.pending.shift()())
+    await page.waitForFunction(() => window.dupSmoke.state.pending.length === 1)
     assert.match(await progress.innerText(), /2\.000\/2\.500 số/)
     assert.equal(await progress.getByRole('progressbar').getAttribute('aria-valuenow'), '2000')
     await progress.getByRole('button', { name: 'Hủy kiểm tra' }).click()
@@ -341,7 +345,7 @@ async function main() {
     await settle()
     assert.equal(await results.count(), 0)
     assert.equal(await checkButton.isDisabled(), false)
-    assert.deepEqual((await state()).calls.map(call => call.request.phones.length), [2000, 500])
+    assert.deepEqual((await state()).calls.map(call => call.request.phones.length), [1000, 1000, 500])
     await smoke(() => {
       const s = window.dupSmoke.state, latest = s.known['0912345678'].latest
       s.known['0900000005'] = { matchCount: 1, campaignCount: 1, latest: { ...latest, campaignName: 'Chiến dịch cũ', campaignDeleted: true } }
@@ -350,14 +354,15 @@ async function main() {
     await setFixture({ mode: 'ok' })
     await check()
     s = await state()
-    assert.deepEqual(s.calls.slice(2).map(call => call.request.phones.length), [2000, 500])
-    assert.equal(s.calls[3].request.phones[0], '0900002000')
+    assert.deepEqual(s.calls.slice(3).map(call => call.request.phones.length), [1000, 1000, 500])
+    assert.equal(s.calls[4].request.phones[0], '0900001000')
+    assert.equal(s.calls[5].request.phones[0], '0900002000')
     assert.deepEqual(await counts(), [2498, 2, 0, 0])
     const existingRows = await table.locator('tbody tr').allInnerTexts()
     assert.equal(existingRows.length, 2)
     assert.match(existingRows[0], /0900000005[\s\S]*Chiến dịch cũ \(đã xóa\)[\s\S]*Đã chạy · chiến dịch đã xóa/)
     assert.match(existingRows[1], /0900002100[\s\S]*Đang chạy/)
-    ok('2,500 numbers → 2,000 + 500 sequential requests with progress; cancel discards the late answer; results merged')
+    ok('2,500 numbers → 1,000 + 1,000 + 500 sequential requests with progress; cancel discards the late answer; results merged')
 
     // 9. Template tab: with dedup active the template waits for "Kiểm tra dữ liệu"; back to "Chỉ trong file này" it verifies at once.
     await open()
