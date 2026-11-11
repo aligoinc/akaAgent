@@ -19,7 +19,7 @@ Khác "Kiểm tra trùng lặp" ở Cài đặt chạy (V424/V431): cái cũ xé
 `public.aka_agent_read_campaign_input_duplicates(p_staff_id, p_organization_id, p_auth_username, p_auth_password, p_query jsonb) → jsonb`
 — STABLE, SECURITY DEFINER, `statement_timeout 20s`, EXECUTE chỉ `service_role` (Web gọi qua backend singleton, thông tin đăng nhập NULL như V462/V487). Không ghi, không bảng/index/trigger mới.
 
-`p_query`: `actionId` (chỉ `zalo_message_phone`), `accountIds` (1–500), `days` (1–365), `phones` (≤ 2.000; chuẩn hóa bằng `aka_agent_internal_normalize_phone`, số sai bỏ qua), `excludeCampaignId` (tùy chọn).
+`p_query`: `actionId` (chỉ `zalo_message_phone`), `accountIds` (1–500), `days` (1–365), `phones` (≤ 2.000 ở RPC; từ 11/11/2026 Web, API và Desktop gửi tối đa 1.000 mỗi lượt; chuẩn hóa bằng `aka_agent_internal_normalize_phone`, số sai bỏ qua), `excludeCampaignId` (tùy chọn).
 Kết quả: `checkedAt`, `since` (00:00 giờ VN của ngày đầu khoảng), `days`, `accountCount`, `phoneCount`, `items[]` = mỗi số đã có: `phone`, `matchCount`, `campaignCount`, `latest {campaignId, campaignName, campaignDeleted, accountId, accountName, uploadedAt, status, processed}`.
 
 Quy tắc đối chiếu:
