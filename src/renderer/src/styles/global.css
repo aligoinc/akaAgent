@@ -9136,7 +9136,7 @@ td.report-account-col span {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  min-width: 1510px;
+  min-width: 1496px;
   font-size: 12px;
 }
 
@@ -9147,8 +9147,7 @@ td.report-account-col span {
     minmax(280px, 2.2fr)
     92px
     minmax(150px, 1fr)
-    112px
-    126px
+    232px
     minmax(170px, 1.2fr)
     minmax(200px, 1.35fr)
     minmax(160px, 1fr)
@@ -9588,12 +9587,16 @@ button.campaign-data-group-intake-toggle:disabled {
 }
 
 .col-toggle,
-.col-assistant,
 .col-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: visible;
+}
+
+/* Cột Hành động chứa hai nút: "Trợ lý aka" và "Hành động". */
+.col-actions {
+  gap: 6px;
 }
 
 button.btn-icon.campaign-control-button {

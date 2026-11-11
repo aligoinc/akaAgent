@@ -6355,7 +6355,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 </div>
                 <div className="campaign-col col-toggle">Dừng/Chạy</div>
                 <div className="campaign-col col-progress">Trạng thái</div>
-                <div className="campaign-col col-assistant">Trợ lý aka</div>
                 <div className="campaign-col col-actions">Hành động</div>
                 <div className="campaign-col col-account">Tài khoản</div>
                 <div className="campaign-col col-data-group">Nhóm data</div>
@@ -6495,7 +6494,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                         </div>
                       </div>
                     </div>
-                    <div className="campaign-col col-assistant" onClick={e => e.stopPropagation()}>
+                    <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
+                      {/* Nút "Trợ lý aka" nằm chung cột Hành động (11/11/2026); không có agent thì chỉ còn nút Hành động. */}
                       {(() => {
                         // Desktop có nhóm agent riêng; chấm báo chỉ tính hội thoại của các agent trong menu này
                         // (hội thoại hỏi từ Web/iOS thuộc agent khác, vẫn xem được ở Hội thoại gần đây).
@@ -6506,8 +6506,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                           agentState={aiThreads.some(thread => thread.pending) ? 'pending' : aiThreads.some(thread => thread.unread) ? 'unread' : null}
                           onSelectAgent={project => handleAskAiAgent(campaign, project)} />
                       })()}
-                    </div>
-                    <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
                       <div className="campaign-action-dropdown">
                         <button
                           className="btn-icon campaign-control-button campaign-label-button"
