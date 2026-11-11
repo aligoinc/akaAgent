@@ -9136,7 +9136,7 @@ td.report-account-col span {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  min-width: 1510px;
+  min-width: 1412px;
   font-size: 12px;
 }
 
@@ -9147,8 +9147,7 @@ td.report-account-col span {
     minmax(280px, 2.2fr)
     92px
     minmax(150px, 1fr)
-    112px
-    126px
+    148px
     minmax(170px, 1.2fr)
     minmax(200px, 1.35fr)
     minmax(160px, 1fr)
@@ -9588,13 +9587,13 @@ button.campaign-data-group-intake-toggle:disabled {
 }
 
 .col-toggle,
-.col-assistant,
 .col-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: visible;
 }
+
 
 button.btn-icon.campaign-control-button {
   width: 30px;
@@ -26381,3 +26380,51 @@ body.theme-light .detail-dock-resize-handle {
 .app-access-control label { display: inline-flex; align-items: center; gap: 6px; }
 .app-access-control small { white-space: normal; max-width: 260px; font-size: 12px; }
 .app-access-control [role="alert"] { color: var(--color-danger, #b91c1c); }
+
+/* Ô Hành động của danh sách chiến dịch (thiết kế 11/11/2026): hai nút xếp dọc, "Trợ lý aka" nền tím nhạt ở trên,
+   "Hành động" nền sáng ở dưới; cả hai mở menu nên đều có mũi tên, mũi tên quay lên khi menu đang mở. */
+.campaign-table-row:not(.is-draft) .col-actions {
+  --cell-assist-bg: color-mix(in srgb, var(--accent-primary) 12%, var(--bg-secondary));
+  --cell-assist-bg-strong: color-mix(in srgb, var(--accent-primary) 20%, var(--bg-secondary));
+  --cell-assist-border: color-mix(in srgb, var(--accent-primary) 34%, var(--bg-secondary));
+  --cell-assist-text: color-mix(in srgb, var(--accent-primary) 68%, var(--text-primary));
+  --cell-assist-text-strong: color-mix(in srgb, var(--accent-primary) 55%, var(--text-primary));
+  --cell-action-bg: var(--bg-elevated);
+}
+body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action-bg: #ffffff; }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button,
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-action-button {
+  width: 100%;
+  height: 28px;
+  min-width: 0;
+  min-height: 28px;
+  max-width: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0 8px;
+  border: 1px solid;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color .12s ease, border-color .12s ease, color .12s ease, box-shadow .12s ease;
+}
+.campaign-table-row:not(.is-draft) .col-actions .campaign-cell-button-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-align: left; text-overflow: ellipsis; }
+.campaign-table-row:not(.is-draft) .col-actions .campaign-cell-button-chevron { flex-shrink: 0; transition: transform .12s ease; }
+.campaign-table-row:not(.is-draft) .col-actions button[aria-expanded="true"] .campaign-cell-button-chevron { transform: rotate(180deg); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button { color: var(--cell-assist-text); border-color: var(--cell-assist-border); background: var(--cell-assist-bg); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button:hover,
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button[aria-expanded="true"] { color: var(--cell-assist-text-strong); border-color: var(--accent-primary); background: var(--cell-assist-bg-strong); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button[aria-expanded="true"] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-primary) 22%, transparent); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-action-button { color: var(--text-primary); border-color: var(--border-default); background: var(--cell-action-bg); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-action-button:hover,
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-action-button[aria-expanded="true"] { color: var(--text-primary); border-color: var(--text-secondary); background: var(--bg-tertiary); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-action-button[aria-expanded="true"] { box-shadow: 0 0 0 3px color-mix(in srgb, var(--text-secondary) 20%, transparent); }
+/* Chấm báo: có câu trả lời mới = chấm đỏ đặc; đang chờ trả lời = vòng tím rỗng (khác cả hình lẫn màu). */
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button .ai-chat-dot { width: 8px; height: 8px; box-shadow: 0 0 0 2px var(--cell-assist-bg); }
+.campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button .ai-chat-dot.pending { box-sizing: border-box; border: 2px solid var(--accent-primary); background: transparent; box-shadow: none; }
+.campaign-table-row:not(.is-draft) .col-actions { flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; }

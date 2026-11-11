@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CircleHelp, MessageCircleQuestion, Sparkles, Stethoscope } from 'lucide-react'
+import { ChevronDown, CircleHelp, MessageCircleQuestion, Sparkles, Stethoscope } from 'lucide-react'
 import { CAMPAIGN_SUPPORT_QUESTION, type CampaignAssistantMode } from '../../../../shared/campaignSupport'
 import type { AiChatProject } from '../../../../shared/aiChat'
 
@@ -17,7 +17,7 @@ const LEGACY_CAMPAIGN_ASSISTANT_VISIBLE: boolean = typeof __AKA_LEGACY_CAMPAIGN_
 export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, agents = [], agentState = null, onSelectAgent }: {
   onSelect: (mode: LegacyAssistantMode) => void
   canDiagnose?: boolean
-  /** Agent hỏi đáp AI (V488) áp dụng cho chiến dịch này; rỗng thì ô Trợ lý để trống khi các mục cũ đang ẩn. */
+  /** Agent hỏi đáp AI (V488) áp dụng cho chiến dịch này; rỗng thì không hiện nút khi các mục cũ đang ẩn. */
   agents?: AiChatProject[]
   /** Chiến dịch có hội thoại đang chờ trả lời / có câu trả lời chưa xem. */
   agentState?: 'pending' | 'unread' | null
@@ -66,14 +66,16 @@ export default function CampaignAssistantMenu({ onSelect, canDiagnose = false, a
   }, [open])
   const select = (mode: LegacyAssistantMode) => { setOpen(false); button.current?.focus(); onSelect(mode) }
   const legacy = LEGACY_CAMPAIGN_ASSISTANT_VISIBLE
-  if (!legacy && agents.length === 0) return <span className="campaign-cell-muted">—</span>
+  // Nút nằm chung cột Hành động của danh sách chiến dịch: không có mục nào thì không vẽ gì.
+  if (!legacy && agents.length === 0) return null
   return <>
-    <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button"
-      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} title="Trợ lý AI">
-      <Sparkles size={14} /><span>Trợ lý</span>
+    <button ref={button} type="button" className="btn-icon assistant campaign-control-button campaign-label-button campaign-cell-assistant-button"
+      aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(value => !value)} title="Trợ lý aka">
+      <Sparkles size={14} /><span className="campaign-cell-button-label">Trợ lý aka</span>
       {agentState && <span className={`ai-chat-dot ${agentState}`} title={agentState === 'pending' ? 'Đang chờ trợ lý trả lời' : 'Có câu trả lời mới'} />}
+      <ChevronDown size={12} className="campaign-cell-button-chevron" />
     </button>
-    {open && createPortal(<div ref={menu} role="menu" aria-label="Trợ lý AI" className="campaign-assistant-menu" style={position}
+    {open && createPortal(<div ref={menu} role="menu" aria-label="Trợ lý aka" className="campaign-assistant-menu" style={position}
       onClick={event => event.stopPropagation()}>
       {legacy && canDiagnose && <button type="button" role="menuitem" onClick={() => select('diagnostics')}><Stethoscope size={15} />Chẩn đoán</button>}
       {legacy && <button type="button" role="menuitem" onClick={() => select('ask')}><MessageCircleQuestion size={15} />Hỏi AI</button>}
