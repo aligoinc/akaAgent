@@ -10,6 +10,7 @@ import {
   type DesktopAccountSnapshot, type DesktopCampaignPage, type DesktopCampaignPageQuery,
   type DesktopCampaignSelection, type DesktopCampaignSelectionQuery, type DesktopPollingSettings
 } from '../../../shared/desktopUiReads'
+import { ZALO_SHARE_REPEAT_SETTING_KEY, parseZaloShareRepeatSetting } from '../../../shared/zaloShareRepeat'
 
 async function scope() {
   const user = requireCurrentUser()
@@ -26,13 +27,14 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', Object.values(DESKTOP_POLL_KEYS))
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
     return {
       campaigns: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.campaigns)),
-      accounts: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.accounts))
+      accounts: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.accounts)),
+      zaloShareRepeatEnabled: parseZaloShareRepeatSetting(values.get(ZALO_SHARE_REPEAT_SETTING_KEY))
     }
   } catch { return { ...DEFAULT_DESKTOP_POLLING } }
 }
@@ -119,7 +121,10 @@ export async function getDesktopCampaignSources(id: number): Promise<number[]> {
     const { data, error } = await getSupabaseClient().from('auto_campaigns').select('id')
       .eq('staff_id', user.staffId).eq('organization_id', user.organizationId).eq('is_delete', false)
       .in('action_id', ['facebook_find_data_group', 'facebook_find_data_search'])
-      .contains(`extra_settings->${field}`, [id])
+      // extra_settings is jsonb: .contains(col, [id]) would send the Postgres array
+      // literal cs.{id}, which PostgREST rejects with 400. Send JSON literals and
+      // match IDs stored as numbers or strings, like hasPendingFindDataSource.
+      .or(`extra_settings->${field}.cs.${JSON.stringify([id])},extra_settings->${field}.cs.${JSON.stringify([String(id)])}`)
       .gt('id', afterId).order('id').limit(1000).abortSignal(AbortSignal.timeout(60_000))
     if (error) throw new Error(`Không thể tải chiến dịch nguồn: ${error.message}`)
     if (!data?.length) return ids

@@ -17,7 +17,8 @@ export const useDesktopPollingStore = create<{
       if (request !== generation) return
       set({ settings: {
         accounts: parseDesktopPollSeconds(settings.accounts),
-        campaigns: parseDesktopPollSeconds(settings.campaigns)
+        campaigns: parseDesktopPollSeconds(settings.campaigns),
+        zaloShareRepeatEnabled: settings.zaloShareRepeatEnabled === true
       } })
     }).catch(() => { /* Defaults must not block the UI or trigger retries. */ })
   }
