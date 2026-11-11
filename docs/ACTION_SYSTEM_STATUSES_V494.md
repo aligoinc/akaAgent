@@ -3,7 +3,7 @@
 **Trạng thái: ĐÃ apply akachat lúc 17:23:05 VN ngày 11/11/2026** (`20261111102305 /
 migration_v494_action_system_statuses`; **không apply lại**, không sửa file migration). md5 sổ migration bằng md5 file
 `0bdaa78e190ef7376ab6d0a0a54b73a0`. [Biên nhận](../migrations/snapshots/action-system-statuses-v494/apply-receipt.json).
-Chưa có code ứng dụng nào đọc phần mới; 8 trạng thái mới chưa bật.
+Migration và hồ sơ đã merge `dev_3` qua #642. Chưa có code ứng dụng nào đọc phần mới; 8 trạng thái mới chưa bật.
 
 Lịch hẹn 17:00 VN đã dừng trước khi gửi lệnh: lúc 16:53 VN sổ migration có thêm V495 (engine kết quả chiến dịch v2), sửa
 đúng bảng `auto_status`. V494 được chỉnh và kiểm thử lại trên schema sau V495 rồi mới apply, sau khi người dùng chọn apply
