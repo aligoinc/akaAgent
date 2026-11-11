@@ -35,10 +35,11 @@ async function main() {
 
     await open({})
     await save.click()
-    await waitForAlert('Có 1 data hợp lệ nhưng đang chia cho 3 tài khoản')
+    await waitForAlert('Có 1 data hợp lệ nhưng đang chia đều cho 3 tài khoản')
     assert.equal((await snapshot()).calls.filter(call => call.method === 'createCampaign').length, 0)
     assert.equal(await form.getByPlaceholder('Nhập tên chiến dịch...').inputValue(), 'Kiểm tra data rỗng')
-    await page.screenshot({ path: '/tmp/akaagent-empty-split-validation.png' })
+    // Cửa sổ ẩn trong container cloud làm chụp màn hình treo: đặt AKA_SMOKE_SKIP_SCREENSHOT=1 để bỏ qua.
+    if (!process.env.AKA_SMOKE_SKIP_SCREENSHOT) await page.screenshot({ path: '/tmp/akaagent-empty-split-validation.png' })
     console.log('PASS split: counts normalized targets, rejects 1 valid / 3 accounts before creating')
 
     await open({ rows: [{ uid: '', name: 'Chỉ có tên' }] })
@@ -98,6 +99,63 @@ async function main() {
       await form.waitFor({ state: 'detached' })
       console.log(`PASS ${actionId}: ignores stale hidden data/split settings and creates normally`)
     }
+
+    // Mặc định chia đều theo loại chiến dịch (src/shared/campaignDataSplit.ts).
+    const splitBox = form.getByRole('checkbox', { name: /Chia đều data cho các tài khoản/ })
+    const batches = current => current.calls.filter(call => call.method === 'createCampaignInputDataBatch').map(call => call.args[0].map(row => row.phone || row.uid))
+    const phoneRows = [{ phone: '0901000001' }, { phone: '0901000002' }, { phone: '+84 90 100 00 01' }, { phone: '0901000003' }]
+    const phoneForm = { actionId: 'zalo_message_phone', accountIds: [11, 12], enableMessage: true }
+
+    await open({ noSplitChoice: true, formData: phoneForm, rows: phoneRows })
+    assert.equal(await splitBox.isChecked(), true)
+    await form.getByText('Sẽ bỏ 1 dòng trùng trước khi chia đều cho các tài khoản.').waitFor()
+    await save.click()
+    await waitForAlert('Lưu chiến dịch thành công!')
+    state = await snapshot()
+    assert.deepEqual(batches(state), [['0901000001', '0901000003'], ['0901000002']])
+    assert.deepEqual(state.confirms, [])
+    assert.deepEqual(state.errors, [])
+    await form.waitFor({ state: 'detached' })
+    console.log('PASS default split: phone campaign splits by default and drops the duplicate target first')
+
+    await open({ noSplitChoice: true, formData: phoneForm, rows: phoneRows, acceptConfirm: false })
+    await splitBox.uncheck()
+    await form.getByText(/một khách có thể nhận 2 lần/).waitFor()
+    await save.click()
+    await page.waitForFunction(() => window.dataValidationSmoke.state.confirms.length === 1)
+    state = await snapshot()
+    assert.equal(state.confirms[0].title, 'Mỗi tài khoản gửi cả danh sách?')
+    assert(state.confirms[0].message.includes('cả 2 tài khoản sẽ cùng gửi tới 4 data'))
+    assert.equal(state.calls.filter(call => call.method === 'createCampaign').length, 0)
+    console.log('PASS shared confirm: turning split off asks before creating anything')
+
+    await open({ formData: { ...phoneForm, splitDataAcrossAccounts: false, splitDataChoiceMade: true }, rows: phoneRows })
+    assert.equal(await splitBox.isChecked(), false)
+    await save.click()
+    await waitForAlert('Lưu chiến dịch thành công!')
+    state = await snapshot()
+    assert.equal(state.confirms.length, 1)
+    assert.deepEqual(batches(state).map(rows => rows.length), [4, 4])
+    await form.waitFor({ state: 'detached' })
+    console.log('PASS shared after confirm: a saved explicit choice is kept and every account receives the whole list')
+
+    await open({ formData: { ...phoneForm, splitDataAcrossAccounts: false }, rows: phoneRows })
+    assert.equal(await splitBox.isChecked(), true)
+    console.log('PASS old draft: a stored false without an explicit choice follows the new default')
+
+    await open({ noSplitChoice: true, rows: [{ uid: 'group-1' }, { uid: 'group-2' }, { uid: 'group-3' }] })
+    assert.equal(await splitBox.isChecked(), false)
+    await save.click()
+    await waitForAlert('Lưu chiến dịch thành công!')
+    state = await snapshot()
+    assert.deepEqual(batches(state).map(rows => rows.length), [3, 3, 3])
+    assert.deepEqual(state.confirms, [])
+    await form.waitFor({ state: 'detached' })
+    console.log('PASS shared default: group-target campaigns keep sharing the list without a question')
+
+    await open({ noSplitChoice: true, formData: { actionId: 'facebook_message_friend', accountIds: [41, 42] }, rows: [{ uid: 'friend-1' }, { uid: 'friend-2' }] })
+    assert.equal(await splitBox.count(), 0)
+    console.log('PASS never split: Facebook friend campaigns hide the split option')
 
     const sourceItems = [41, 42, 43].map((accountId, index) => ({
       campaignPayload: { name: `Nguồn tìm data ${accountId}`, actionId: 'facebook_find_data_group', accountId,
@@ -209,7 +267,7 @@ async function main() {
     if (app) {
       const page = await app.firstWindow()
       console.error(await page.evaluate(() => ({ alerts: window.dataValidationSmoke?.state.alerts, errors: window.dataValidationSmoke?.state.errors })))
-      await page.screenshot({ path: '/tmp/akaagent-data-validation-failure.png' })
+      if (!process.env.AKA_SMOKE_SKIP_SCREENSHOT) await page.screenshot({ path: '/tmp/akaagent-data-validation-failure.png' })
     }
     throw error
   } finally {
