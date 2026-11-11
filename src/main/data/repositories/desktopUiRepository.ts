@@ -121,7 +121,10 @@ export async function getDesktopCampaignSources(id: number): Promise<number[]> {
     const { data, error } = await getSupabaseClient().from('auto_campaigns').select('id')
       .eq('staff_id', user.staffId).eq('organization_id', user.organizationId).eq('is_delete', false)
       .in('action_id', ['facebook_find_data_group', 'facebook_find_data_search'])
-      .contains(`extra_settings->${field}`, [id])
+      // extra_settings is jsonb: .contains(col, [id]) would send the Postgres array
+      // literal cs.{id}, which PostgREST rejects with 400. Send JSON literals and
+      // match IDs stored as numbers or strings, like hasPendingFindDataSource.
+      .or(`extra_settings->${field}.cs.${JSON.stringify([id])},extra_settings->${field}.cs.${JSON.stringify([String(id)])}`)
       .gt('id', afterId).order('id').limit(1000).abortSignal(AbortSignal.timeout(60_000))
     if (error) throw new Error(`Không thể tải chiến dịch nguồn: ${error.message}`)
     if (!data?.length) return ids
