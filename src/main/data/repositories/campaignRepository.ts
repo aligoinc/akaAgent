@@ -3812,7 +3812,13 @@ export async function maintainCampaignSchedules(
       }
 
       const details = await listCampaignInputData(campaign.id)
-      const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
+      // Dòng `tạm dừng` (khách tự dừng hoặc policy lỗi `input_effect='pause'`) chỉ bị bỏ qua, như câu đặt lại
+      // bên dưới và `rescheduleCompletedCampaignPass`: lượt trước coi là chạy hết khi mọi dòng còn lại đã
+      // `hoàn thành`. Mọi dòng đều `tạm dừng` thì không có gì để đặt lại nên không mở lại chiến dịch. Dòng
+      // `chờ xử lý`/`đang chạy` vẫn chặn làm mới; `đang chạy` là dòng một lượt chạy còn giữ, không đặt lại ở đây.
+      const resettableDetails = details.filter(detail => detail.status !== 'tạm dừng')
+      const allDataDone = resettableDetails.length > 0 &&
+        resettableDetails.every(detail => detail.status === 'hoàn thành')
       const shouldRefreshData = campaign.refreshData && (allDataDone || details.length === 0)
 
       if (campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID) {
