@@ -11,9 +11,10 @@ import { InputDuplicatesReadError, SESSION_INVALID } from '../data/repositories/
 
 /**
  * "Lọc trùng dữ liệu" của cửa sổ Upload dữ liệu trên Desktop (V491 + V493). Chỉ chạy khi khách chọn đối chiếu với
- * chiến dịch khác: mỗi lượt đọc lại công tắc (một dòng) rồi một lượt RPC chỉ đọc ≤ 2.000 SĐT qua client HTTP sẵn có
- * của tiến trình. DB đặt trần 20 s cho hàm; hạn cả lượt ở đây 25 s. Tối đa 2 lượt cùng lúc mỗi tiến trình (renderer
- * gửi tuần tự từng lượt), quá thì báo bận, không xếp hàng. Không cache, không hẹn giờ, không client/kết nối mới.
+ * chiến dịch khác: mỗi lượt đọc lại công tắc (một dòng) rồi một lượt RPC chỉ đọc ≤ 2.000 SĐT (giới hạn RPC; renderer
+ * gửi lượt 1.000) qua client HTTP sẵn có của tiến trình. DB đặt trần 20 s cho hàm; hạn cả lượt ở đây 25 s. Tối đa 2
+ * lượt cùng lúc mỗi tiến trình (renderer gửi tuần tự từng lượt), quá thì báo bận, không xếp hàng. Không cache, không
+ * hẹn giờ, không client/kết nối mới.
  */
 export const INPUT_DUPLICATES_DEADLINE_MS = 25_000
 export const INPUT_DUPLICATES_MAX_FLIGHTS = 2

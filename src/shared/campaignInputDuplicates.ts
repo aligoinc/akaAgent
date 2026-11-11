@@ -2,7 +2,7 @@
  * "Lọc trùng dữ liệu" của cửa sổ Upload dữ liệu: đối chiếu SĐT đang tải lên với dữ liệu đã tải vào chiến dịch
  * khác trong N ngày (akaAgent V491, RPC `aka_agent_read_campaign_input_duplicates`, chỉ đọc).
  *
- * Hợp đồng dùng chung Web/API. Desktop làm sau: chép nguyên văn sang `src/shared/campaignInputDuplicates.ts`
+ * Hợp đồng dùng chung Web/API/Desktop. Desktop chép nguyên văn sang `src/shared/campaignInputDuplicates.ts`
  * (sửa ở đây trước rồi chép lại). Quy tắc đối chiếu nằm trong RPC; tệp này chỉ giữ giới hạn, kiểu dữ liệu,
  * kiểm tra đầu vào/kết quả và nhãn tiếng Việt.
  */
@@ -11,8 +11,16 @@ export const INPUT_DUPLICATES_SETTING_KEY = 'web.campaign_input_duplicates'
 export const INPUT_DUPLICATES_RPC = 'aka_agent_read_campaign_input_duplicates'
 /** Loại chiến dịch có lựa chọn đối chiếu (đợt 1: Zalo nhắn tin, kết bạn đến SĐT). Khớp `v_supported` của V491. */
 export const INPUT_DUPLICATES_ACTIONS: readonly string[] = ['zalo_message_phone']
-/** Mỗi lượt gọi máy chủ tối đa 2.000 số (V491 từ chối nhiều hơn); 10.000 số = 5 lượt tuần tự. */
-export const INPUT_DUPLICATES_MAX_PHONES_PER_CALL = 2000
+/**
+ * Web/Desktop gửi mỗi lượt tối đa 1.000 số; 10.000 số = 10 lượt tuần tự. Lượt 2.000 số khi dữ liệu nguội đo được tới
+ * 15 giây (trần hàm 20 giây) với danh sách trùng nhiều tổ chức khác (11/11/2026).
+ */
+export const INPUT_DUPLICATES_MAX_PHONES_PER_CALL = 1000
+/**
+ * API và main Desktop nhận tới 2.000 số mỗi lượt, đúng giới hạn của RPC V491: tab Web mở trước lần deploy hạ còn
+ * 1.000 số vẫn gửi lượt 2.000 số cho tới khi tải lại trang, không được từ chối.
+ */
+export const INPUT_DUPLICATES_RPC_MAX_PHONES = 2000
 export const INPUT_DUPLICATES_MAX_ACCOUNTS = 500
 export const INPUT_DUPLICATES_DEFAULT_DAYS = 30
 export const INPUT_DUPLICATES_MAX_DAYS = 365
@@ -110,9 +118,9 @@ export function validateInputDuplicatesRequest(value: unknown, maxDays = INPUT_D
     || !body.accountIds.every(positiveId)) {
     throw new Error('Vui lòng chọn ít nhất 1 tài khoản Zalo để đối chiếu.')
   }
-  if (!Array.isArray(body.phones) || body.phones.length > INPUT_DUPLICATES_MAX_PHONES_PER_CALL
+  if (!Array.isArray(body.phones) || body.phones.length > INPUT_DUPLICATES_RPC_MAX_PHONES
     || !body.phones.every(phone => typeof phone === 'string' && phone.length <= 64)) {
-    throw new Error(`Mỗi lượt đối chiếu tối đa ${INPUT_DUPLICATES_MAX_PHONES_PER_CALL.toLocaleString('vi-VN')} số điện thoại.`)
+    throw new Error(`Mỗi lượt đối chiếu tối đa ${INPUT_DUPLICATES_RPC_MAX_PHONES.toLocaleString('vi-VN')} số điện thoại.`)
   }
   if (body.excludeCampaignId !== undefined && body.excludeCampaignId !== null && !positiveId(body.excludeCampaignId)) {
     throw new Error('Chiến dịch không hợp lệ.')
@@ -167,7 +175,7 @@ export function parseInputDuplicatesResult(value: unknown): InputDuplicatesCheck
   }
 }
 
-/** Danh sách số (đã chuẩn hóa, không trùng) → các lượt tối đa 2.000 số, giữ thứ tự. */
+/** Danh sách số (đã chuẩn hóa, không trùng) → các lượt tối đa 1.000 số, giữ thứ tự. */
 export function chunkInputDuplicatePhones(phones: readonly string[], size = INPUT_DUPLICATES_MAX_PHONES_PER_CALL): string[][] {
   const unique = Array.from(new Set(phones.filter(Boolean)))
   const chunks: string[][] = []
