@@ -1,6 +1,6 @@
 # V511 — Quản lý proxy theo tổ chức trên Web
 
-Ngày 12/11/2026. **Đã apply akachat 12/11/2026: p1 22:12:59, p2 22:20:33, p3 22:23:46 VN** (`20261112151259`/`152033`/`152346`; không apply lại; md5 sổ = file; dán SQL Editor bản `*_paste.sql` sau 6 lần hộp xác nhận MCP hết hạn; 13/13 vân tay hàm khớp kiểm thử cục bộ, 0 lỗi 5xx/503, PostgREST nạp lại schema 2–3,5 giây; [biên nhận](../migrations/snapshots/web-proxy-management-v511/apply-receipt.json)). **Chưa bật cờ tổ chức nào**, `check_mode` = `off`, `shared_runtime` chưa cho phép. Code Web/API ở akaAgentWebApp (`docs/WEB_PROXY_MANAGEMENT.md`), Desktop/App Server ở repo này (chưa phát hành). Hợp đồng dùng chung: akaAgentWebApp `packages/control-api/src/proxyManagement.ts`.
+Ngày 12/11/2026. **Đã apply akachat 12/11/2026: p1 22:12:59, p2 22:20:33, p3 22:23:46 VN** (`20261112151259`/`152033`/`152346`; không apply lại; md5 sổ = file; dán SQL Editor bản `*_paste.sql` sau 6 lần hộp xác nhận MCP hết hạn; 13/13 vân tay hàm khớp kiểm thử cục bộ, 0 lỗi 5xx/503, PostgREST nạp lại schema 2–3,5 giây; [biên nhận](../migrations/snapshots/web-proxy-management-v511/apply-receipt.json)). **Chưa bật cờ tổ chức nào**, `check_mode` = `off`, `shared_runtime` chưa cho phép. Code đã merge: repo này `dev_3` qua #652 (Desktop/App Server, chưa build/phát hành), Web/API akaAgentWebApp `dev` qua #217 (`docs/WEB_PROXY_MANAGEMENT.md`, chưa deploy). Hợp đồng dùng chung: akaAgentWebApp `packages/control-api/src/proxyManagement.ts`.
 
 ## Vì sao
 
