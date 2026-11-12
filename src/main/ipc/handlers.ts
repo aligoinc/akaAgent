@@ -21,7 +21,7 @@ import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
-import { ZaloChatApiClient } from '../services/zaloChatApiClient'
+import { ZaloChatApiClient, isServerOnFlyRealtimeUser, serverAccountsUseChatApi } from '../services/zaloChatApiClient'
 import { ZaloChatContactScanSource } from '../services/zaloChatContactScanSource'
 import { ZaloLocalChatSyncService } from '../services/zaloLocalChatSyncService'
 import { DesktopZaloHandoffStore } from '../services/desktopZaloHandoffStore'
@@ -250,16 +250,24 @@ export function registerIpcHandlers(
   let zaloLocalChatSync: ZaloLocalChatSyncService | null = null
   let phoneCheckChatMode: boolean | undefined
   const startZaloRemoteClients = (user: AuthUser, username: string, password: string): void => {
-    if (phoneCheckChatMode !== undefined && phoneCheckChatMode !== (user.isChatSync === true)) stopPhoneChecks()
-    phoneCheckChatMode = user.isChatSync === true
+    const serverViaChatApi = serverAccountsUseChatApi(user)
+    if (phoneCheckChatMode !== undefined && phoneCheckChatMode !== serverViaChatApi) stopPhoneChecks()
+    phoneCheckChatMode = serverViaChatApi
     if (user.isChatSync === true) {
       zaloServerClient.stop()
       zaloChatApiClient.start(user, username, password)
       zaloLocalChatSync?.start()
       return
     }
-    chatContactLoader?.stopAll()
     zaloLocalChatSync?.stop()
+    // V498: tổ chức không Chat có tài khoản Server chạy trên Fly. App Server đã thả tổ chức nên không nối App Server;
+    // tài khoản Server đi ChatApi (tiến trình, QR, kiểm phiên, quét data, kiểm SĐT). Không có đồng bộ Chat cục bộ.
+    if (isServerOnFlyRealtimeUser(user)) {
+      zaloServerClient.stop()
+      zaloChatApiClient.start(user, username, password)
+      return
+    }
+    chatContactLoader?.stopAll()
     zaloChatApiClient.stop()
     zaloServerClient.start(user, username, password)
   }
@@ -1552,9 +1560,9 @@ export function registerIpcHandlers(
   )
   registerAccountContactHandlers(supabase, contactLoader, zaloServerClient, {
     chatContactLoader,
-    isChatSync: () => getCurrentUser()?.isChatSync === true
+    serverAccountsUseChatApi: () => serverAccountsUseChatApi(getCurrentUser())
   })
-  stopPhoneChecks = registerZaloPhoneCheckHandlers(mainWindow, supabase, contactLoader, chatContactLoader, zaloServerClient, () => getCurrentUser()?.isChatSync === true)
+  stopPhoneChecks = registerZaloPhoneCheckHandlers(mainWindow, supabase, contactLoader, chatContactLoader, zaloServerClient, () => serverAccountsUseChatApi(getCurrentUser()))
   registerV2Handlers(mainWindow, pageRegistry)
 
   // Start account login poller

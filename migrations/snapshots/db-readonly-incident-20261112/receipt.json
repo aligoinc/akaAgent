@@ -1,0 +1,17 @@
+{
+  "incident": "DB akachat chuyển chỉ đọc (default_transaction_read_only=on, nguồn configuration file) 12/11/2026 09:06:41–09:26:48 VN; nghi ổ sắp đầy (DB 379 GB). Người dùng tăng dung lượng ổ trên Dashboard.",
+  "impact": {
+    "rest_writes": "Không lỗi (PostgREST mở giao dịch ghi READ WRITE): Desktop / App Server vẫn ghi được.",
+    "chat_api": "SQL qua Supavisor (aka_agent_chat_api) lỗi; máy Fly worker và zalo_runtime sập 10 lần rồi dừng hẳn 09:09 / 09:10 VN; không có sự kiện runtime mới 09:08–09:31.",
+    "auth": "Làm mới token lỗi 100% 09:05–09:25 VN (609 lượt) ⇒ Desktop 9.x báo 'fetch failed', lượt chạy lỗi, 18 chiến dịch + 3 tài khoản bị tạm dừng."
+  },
+  "actions": [
+    { "at": "2026-11-12T02:31:45Z", "who": "Claude theo lệnh người dùng ('Bật lại ngay')", "what": "flyctl machine start 784574da214578 7817d7daee2d58 --app aka-agent-chat-api (worker, zalo_runtime; không đổi image)" },
+    { "at": "2026-11-12T02:51:50Z", "who": "Claude theo lệnh người dùng ('nếu có thì tiếp tục lại giúp tôi')",
+      "what": "UPDATE auto_campaigns SET status='chờ xử lý', note=NULL cho 18 chiến dịch đang 'tạm dừng' với ghi chú 'Lượt chạy gặp lỗi: … fetch failed' (không token, không data đang chạy, data dở đã đóng 'hoàn thành' không gửi lại); UPDATE auto_accounts SET status='chờ xử lý' cho 3 tài khoản Facebook của staff 1687 bị tạm dừng cùng lúc",
+      "campaigns": [27901, 43713, 46778, 51544, 51561, 52509, 52827, 53389, 53469, 53810, 53811, 53813, 53814, 53815, 53826, 53827, 53881, 53883],
+      "accounts": [7995, 7998, 8088] }
+  ],
+  "not_touched": "Chiến dịch tạm dừng không có ghi chú (khách tự dừng), Facebook giới hạn tần suất, danh sách kết bạn đầy (223), chuỗi lỗi nghiệp vụ (Zalo 112, kết bạn không thành công…), tài khoản đổi 'chưa đăng nhập' (cần quét lại QR, không liên quan sự cố). Chiến dịch Fly của tổ chức có Chat tự chạy lại từ 09:32 sau khi bật máy.",
+  "data_not_resent": "Các data đang gửi dở lúc lỗi đã được đóng 'hoàn thành' kèm ghi chú 'Kết quả chưa xác nhận; không tự gửi lại' — không gửi lại để tránh trùng; khách muốn gửi lại thì thêm lại data."
+}

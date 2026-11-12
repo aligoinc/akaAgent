@@ -9,7 +9,7 @@ import type { ZaloServerClient } from '../../services/zaloServerClient'
 import { withRequestDeadline } from '../../services/requestDeadline'
 
 export function registerZaloPhoneCheckHandlers(window: BrowserWindow, supabase: SupabaseService,
-  local: ContactLoader, chat: ContactLoader, server: ZaloServerClient, isChatSync: () => boolean): () => void {
+  local: ContactLoader, chat: ContactLoader, server: ZaloServerClient, serverAccountsUseChatApi: () => boolean): () => void {
   let flight: { runId: string; accountId: number; credentials: object; controller: AbortController; cancel?: () => Promise<unknown> | void } | undefined
   const stop = () => {
     const active = flight
@@ -64,7 +64,7 @@ export function registerZaloPhoneCheckHandlers(window: BrowserWindow, supabase: 
         assertCurrent()
         if (!account || account.flatformType !== 'zalo') throw new Error('Không có quyền sử dụng tài khoản Zalo này.')
         let result: ZaloPhoneCheckResult
-        if (account.isZaloServer && !isChatSync()) {
+        if (account.isZaloServer && !serverAccountsUseChatApi()) {
           owned.cancel = () => server.executeCommand('contacts.cancelPhoneCheck', request.accountId, request.runId)
           try {
             result = await server.executeCommand('contacts.checkZaloPhones', request.accountId, request) as ZaloPhoneCheckResult

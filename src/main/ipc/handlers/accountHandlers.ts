@@ -110,7 +110,7 @@ export function registerAccountHandlers(
   )
 
   const shouldRouteZaloAccountToChatApi = (account: AutoAccount): boolean => (
-    account.isZaloServer && zaloChatApiClient?.isEnabled() === true
+    account.isZaloServer && zaloChatApiClient?.serverAccountsUseChatApi() === true
   )
   const shouldRouteZaloAccountToServer = (account: AutoAccount): boolean => (
     account.isZaloServer && !shouldRouteZaloAccountToChatApi(account)

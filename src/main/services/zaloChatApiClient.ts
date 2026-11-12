@@ -6,6 +6,7 @@ import type {
   ZaloSessionCheckResult
 } from '../../shared/types'
 import { IPC_EVENTS } from '../../shared/types'
+import { isServerOnFlyUser, serverAccountsUseChatApi } from '../../shared/zaloServerOnFly'
 import type {
   ZaloGroupInfoBatch,
   ZaloGroupMembersResult
@@ -147,6 +148,10 @@ const CHAT_CAMPAIGN_REALTIME_CHANNELS = new Set<string>([
   IPC_EVENTS.ACCOUNT_STATUS_UPDATED
 ])
 
+/** Tổ chức không Chat có tài khoản Zalo Server chạy trên Fly (V498, chốt lúc đăng nhập); xem `src/shared/zaloServerOnFly.ts`. */
+export const isServerOnFlyRealtimeUser = isServerOnFlyUser
+export { serverAccountsUseChatApi }
+
 export type ZaloChatBindingConflictCode =
   | 'zalo_already_linked'
   | 'account_already_has_another_zalo'
@@ -273,6 +278,24 @@ export class ZaloChatApiClient {
       this.user.zaloAccountCapabilities?.server === true
   }
 
+  /**
+   * Tổ chức không Chat có tài khoản Zalo Server chạy trên Fly theo cờ engine v2 (V497/V498, chốt lúc đăng nhập). App Server đã
+   * thả tổ chức nên mọi việc của tài khoản Server đi ChatApi như tổ chức có Chat: tiến trình chiến dịch, quét QR, kiểm phiên,
+   * đăng xuất, bạn bè/nhóm/nhãn, kiểm SĐT. Runtime cục bộ (tài khoản QR chạy trên máy qua ChatApi) vẫn chỉ dành cho Chat.
+   */
+  public isServerOnFlyOnly(): boolean {
+    return !this.isEnabled() && this.user !== null && isServerOnFlyRealtimeUser(this.user)
+  }
+
+  /** Tài khoản Zalo Server của người đăng nhập đi ChatApi: tổ chức có Chat, hoặc chạy trên Fly theo cờ. */
+  public serverAccountsUseChatApi(): boolean {
+    return this.isEnabled() || this.isServerOnFlyOnly()
+  }
+
+  private isRealtimeEnabled(): boolean {
+    return this.serverAccountsUseChatApi()
+  }
+
   public canUseLocalRuntime(): boolean {
     if (this.user?.appAccess?.separateAccess) return this.user.appAccess.usesChatRuntime && this.user.appAccess.staff.akaAgentAllowed
     return this.user?.isChatSync === true &&
@@ -285,10 +308,10 @@ export class ZaloChatApiClient {
       username: String(username || '').trim(),
       password: String(password || '')
     }
-    const enabled = user.appAccess?.separateAccess ? user.appAccess.usesChatRuntime && user.appAccess.staff.akaAgentAllowed : user.isChatSync === true &&
+    const enabled = (user.appAccess?.separateAccess ? user.appAccess.usesChatRuntime && user.appAccess.staff.akaAgentAllowed : user.isChatSync === true &&
       user.entitlements.zalo === true &&
       (user.zaloAccountCapabilities?.server === true ||
-        user.zaloAccountCapabilities?.qr === true)
+        user.zaloAccountCapabilities?.qr === true)) || isServerOnFlyRealtimeUser(user)
     const sameIdentity = this.user?.staffId === user.staffId &&
       this.user.organizationId === user.organizationId &&
       this.credentials?.username === credentials.username &&
@@ -640,8 +663,9 @@ export class ZaloChatApiClient {
     } finally { signal?.removeEventListener('abort', cancel) }
   }
 
+  /** Thao tác tài khoản Zalo Server qua ChatApi (QR, kiểm phiên, đăng xuất, quét data, kiểm SĐT). */
   private requireEnabled(): void {
-    if (!this.isEnabled() || !this.user || !this.credentials) {
+    if (!this.serverAccountsUseChatApi() || !this.user || !this.credentials) {
       throw new Error('Tổ chức chưa được cấp quyền Đồng bộ Chat cho sản phẩm đang sử dụng.')
     }
   }
@@ -786,7 +810,7 @@ export class ZaloChatApiClient {
   }
 
   private ensureRealtimeConnection(): void {
-    if (!this.isEnabled() || !this.user || !this.credentials) return
+    if (!this.isRealtimeEnabled() || !this.user || !this.credentials) return
     if (
       this.realtimeConnecting ||
       this.realtimeSocket?.readyState === WebSocket.OPEN ||
@@ -800,11 +824,11 @@ export class ZaloChatApiClient {
   }
 
   private async connectRealtime(generation: number): Promise<void> {
-    if (generation !== this.generation || !this.isEnabled()) return
+    if (generation !== this.generation || !this.isRealtimeEnabled()) return
     this.realtimeConnecting = true
     try {
       const token = await this.ensureToken()
-      if (generation !== this.generation || !this.isEnabled()) return
+      if (generation !== this.generation || !this.isRealtimeEnabled()) return
       const socket = new WebSocket(this.realtimeWebSocketUrl())
       this.realtimeSocket = socket
       const connectTimeout = setTimeout(() => {
@@ -830,7 +854,7 @@ export class ZaloChatApiClient {
         if (this.realtimeStableConnectionTimer) clearTimeout(this.realtimeStableConnectionTimer)
         this.realtimeStableConnectionTimer = null
         if (this.realtimeSocket === socket) this.realtimeSocket = null
-        if (generation === this.generation && this.isEnabled()) {
+        if (generation === this.generation && this.isRealtimeEnabled()) {
           this.scheduleRealtimeReconnect(generation)
         }
       })
@@ -922,7 +946,7 @@ export class ZaloChatApiClient {
   private scheduleRealtimeReconnect(generation: number): void {
     if (
       generation !== this.generation ||
-      !this.isEnabled() ||
+      !this.isRealtimeEnabled() ||
       this.realtimeReconnectTimer
     ) return
     const delay = this.realtimeReconnectDelayMs
@@ -1014,6 +1038,10 @@ export class ZaloChatApiClient {
 
   private async ensureToken(): Promise<string> {
     this.requireEnabled()
+    return this.desktopSessionToken()
+  }
+
+  private async desktopSessionToken(): Promise<string> {
     if (this.token && this.tokenExpiresAt > Date.now() + TOKEN_REUSE_SAFETY_MS) {
       return this.token
     }

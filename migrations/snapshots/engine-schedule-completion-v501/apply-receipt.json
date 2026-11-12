@@ -1,0 +1,59 @@
+{
+ "migration": "migration_v501_engine_schedule_completion",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~07:55 VN, \"à db đang nhẹ, apply luôn đi\" (bước 1 của docs/CAMPAIGN_OUTCOME_ENGINE_ZALO_COVERAGE.md mục 6)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "file_md5": "94e309b5061fe8466ff544dee4f6ec9d",
+ "file_bytes": 93508,
+ "generated_by": "scripts/build-v501-sql.cjs",
+ "rollback_file_md5": "2bb5d0fa15448a33afc1d164644607d4",
+ "ledger": {
+  "version": "20261112005556",
+  "name": "migration_v501_engine_schedule_completion",
+  "statements_md5": "94e309b5061fe8466ff544dee4f6ec9d",
+  "created_by": null
+ },
+ "applied_at_vn": "2026-11-12 07:56:08 (lệnh chạy 07:56:08–07:56:09, exit 0)",
+ "precheck": {
+  "at_vn": "2026-11-12 07:55:32",
+  "ledger_since_v500": [
+   "20261111170237 migration_v499_target_memory_per_account",
+   "20261111170305 migration_v500_zalo_error_policies"
+  ],
+  "claim_target_v1_md5": "c1d965ca4bd804bc1dd4f20f39d21e3f (= V499)",
+  "report_v1_md5": "03e17d13fd900cd2957e4548ba805ef8 (= V499)",
+  "not_present_yet": "finish_campaign_v2, finalize_v501, auto_engine_leases.campaign_schedule, CFG16, luật action_waiting",
+  "gate_unavailable_policy": true,
+  "v219_finalizer_md5": "7786668cdaed19f1b42e1cd37044734a",
+  "flagged_orgs": 0,
+  "engine_leases": 0,
+  "last_engine_target_run": "2026-11-11T14:16:31Z",
+  "db_load": "0 truy vấn client đang chạy, 0 chờ khoá"
+ },
+ "verify": {
+  "at_vn": "2026-11-12 07:56:35",
+  "function_md5": {
+   "aka_agent_engine_claim_target_v1(jsonb)": "9af133f7b9355215e5b86da4868aece8",
+   "aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": "9c5c2586105757b9892a90656899ccb0",
+   "aka_agent_engine_finalize_v501(bigint,text,text,jsonb)": "a14eef98b302d019c1911753352cdd12",
+   "aka_agent_engine_finish_campaign_v2(bigint,uuid,text)": "534ca5114184f4e4387fc8af626b064c"
+  },
+  "acl": "claim/report/finish_v2: postgres, service_role, aka_agent_chat_api, aka_agent_desktop; finalize_v501: chỉ postgres. Cả bốn SECURITY DEFINER, search_path=\"\", owner postgres",
+  "finish_campaign_v1_kept": true,
+  "lease_column": "auto_engine_leases.campaign_schedule timestamptz, nullable, không default",
+  "cfg16": "err_cfg_advanced_content_invalid, error_type 'engine v2', content_config",
+  "rule_action_waiting": "id 85 → err_engine_gate_unavailable",
+  "auto_error": "130 dòng, 22 dòng 'engine v2'",
+  "v219_finalizer_md5_unchanged": true,
+  "flagged_orgs": 0,
+  "engine_leases": 0,
+  "postgrest": "nhận lệnh nạp lại schema 07:56 VN, truy vấn schema 4.287 ms, nạp xong; không có PGRST002/PGRST003",
+  "edge_logs_rest": "00:48–00:57 UTC: 0 lỗi 5xx, 0 lỗi 503; khoảng 00:56:00–00:56:15 UTC trung bình 67 ms, p99 658 ms (các khoảng 15 giây khác 32–38 ms, p99 89–107 ms)",
+  "callers_now": "ChatApi api+worker chạy image api-worker-dbb38b7-dev-20261112 (release v175, gỡ v2 lúc ~01:02 VN, không có v2); 0 lời gọi rpc/aka_agent_engine_* qua PostgREST 20:00 VN 11/11 → 08:00 VN 12/11 ⇒ chưa có gì gọi các hàm này",
+  "tests_local": "smoke V501 18/18; campaign-outcome-engine-check-all.cjs 15/15; legacy-catalog-validator-smoke.cjs đạt (Desktop 8.2.0, 9.3.0, chat-sync); ChatApi npm run verify 184 file / 2.611 test; phát lại dữ liệu thật replay-all-5"
+ },
+ "scope": "Chỉ engine v2 gọi (Fly khi tổ chức bật cờ, Desktop bản cài mới). Hiện không tổ chức nào bật cờ, ChatApi chưa có v2, Desktop bản mới chưa phát hành ⇒ hành vi production không đổi. Bộ chạy cũ không đổi: không sửa hàm/trigger/dữ liệu cũ; dòng auto_error mới có error_type 'engine v2' nên bộ kiểm danh mục của bản cũ bỏ qua.",
+ "caution": "Bản Desktop thử 9.5.1-test-engine-v2 (dựng 11/11 21:09 VN, trước V501) không được mở lại: bộ chạy trong bản đó không biết các trạng thái claim mới và không gọi finish_campaign_v2. Dựng bản thử mới từ worktree hiện tại.",
+ "rollback": "migrations/rollback_v501_engine_schedule_completion.sql (md5 2bb5d0fa…): trả claim_target_v1/report_v1 về thân V499, xoá finish_campaign_v2, finalize_v501, cột campaign_schedule, luật action_waiting; CFG16 xoá nếu chưa dòng lịch sử nào dùng, còn thì chỉ tắt. Nơi chạy đang gọi finish_campaign_v2 phải được đưa về bản trước (hoặc tắt cờ tổ chức) trước khi gỡ.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v501_* hoặc đã có cột campaign_schedule / finish_campaign_v2 / CFG16 / luật action_waiting"
+}

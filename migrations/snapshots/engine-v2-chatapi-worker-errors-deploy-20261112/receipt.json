@@ -1,0 +1,66 @@
+{
+  "operation": "Deploy ChatApi (Fly app aka-agent-chat-api) chỉ nhóm worker: phân pha lỗi Zalo theo đọc/gửi (classifyZaloError của lõi) ở cổng Fly, và khoảng nghỉ ngắn của lõi, đi cùng chính sách V500",
+  "requested_by_user": "12/11/2026 ~00:10 VN, \"Deploy ngay\"",
+  "finding_before_deploy": {
+    "summary": "Bản api và worker đang chạy KHÔNG phải bản e16725c mà em đã deploy. Lúc 21:49:19 VN (worker) và 21:52:12 VN (api) ngày 11/11, một nơi khác đã cập nhật hai máy sang image worker-api-dbb38b7-v2-20261111 (sha256:355daf600c0447bd2b862060f06723c65811e8c6406124c988c8fce2772c9bf0). Không có release Fly mới (v173 vẫn là release cuối).",
+    "not_from_this_mac": "Thư mục ~/.fly/logs không có lần chạy flyctl nào quanh 21:49; không transcript Claude/Codex nào trên máy này chứa dbb38b7 hay lệnh deploy đó.",
+    "dbb38b7": "Đầu nhánh dev của ChatApi trên GitHub (commit 20:52 VN 11/11, phiên cloud khác: phần backend ChatWeb), đi trước d87593e 15 commit.",
+    "image_content": "Đọc md5 của mọi file nguồn trong máy worker bằng flyctl ssh (chỉ đọc): 63 file khác dbb38b7, toàn bộ là file của v2; khớp từng byte với worktree của em trừ 7 file (2 file index.ts gộp với dev, SOURCE.json, pacing.ts, zalo/common.ts, flyZaloPort.ts/.test.ts là bản trước thay đổi phân pha). Phần cấp phiên Desktop (desktopAuthRoutes) là bản 20:57 VN; phần quét data §16.9 chưa có.",
+    "decision": "Không dựng từ e16725c nữa (sẽ gỡ phần backend ChatWeb khỏi worker). Dựng từ đúng mã nguồn đang chạy rồi chỉ thêm phần mới."
+  },
+  "source": {
+    "worktree": "/Users/lequangnhut/Repos/akaAgentChatApi-deploy-dbb38b7",
+    "branch": "deploy/campaign-engine-v2-dbb38b7 (chưa commit)",
+    "base": "dbb38b742e4f7dd9d365e605d51c760c5cb10362",
+    "assembly": "Chép 63 file v2 (56 từ worktree akaAgentChatApi-deploy-v2/akaAgentChatApi-campaign-engine-v2 khi md5 trùng image, 7 lấy thẳng từ máy worker bằng flyctl ssh sftp get) rồi so: 465/465 file nguồn (apps/, packages/ trừ dist và node_modules, package.json, package-lock.json) trùng md5 với image đang chạy (running-source-manifest.txt, md5 ca61dfba58f16b74c8945bd7924a63a8). Dockerfile, tsconfig.base.json, tsconfig.json, vitest.config.ts nhận đúng dòng thêm của v2 (git apply sạch); bốn file này không nằm trong image nên không so được.",
+    "change_vs_running": [
+      "apps/system-worker/src/campaignEngine/flyZaloPort.ts (zalo_command_failed có operation thì xếp pha bằng classifyZaloError; tra số = read, gửi tin/kết bạn = send)",
+      "apps/system-worker/src/campaignEngine/flyZaloPort.test.ts (chỉ thêm 30 dòng test)",
+      "packages/campaign-engine/src/zalo/common.ts (classifyZaloError, ZaloOperation)",
+      "packages/campaign-engine/src/pacing.ts (nghỉ ngắn)",
+      "packages/campaign-engine/SOURCE.json (manifest chép lõi, sync-campaign-engine --check: Khớp nguồn 23 file)"
+    ],
+    "deploy_source_manifest_md5": "01ae1b8c32f0eaa86009cfbfc0405401 (deploy-source-manifest.txt)",
+    "verify": "npm ci + npm run verify 00:24:55–00:29:08 VN 12/11: typecheck đạt, 184/184 file test, 2.605 test đạt, bỏ qua 2"
+  },
+  "deploy": {
+    "command": "flyctl deploy --app aka-agent-chat-api --process-groups worker --remote-only --image-label worker-dbb38b7-v2-errors-20261112",
+    "start_vn": "2026-11-12 00:29:30",
+    "end_vn": "2026-11-12 00:31:05",
+    "image": "registry.fly.io/aka-agent-chat-api:worker-dbb38b7-v2-errors-20261112@sha256:fd3cef5c6bb655040587369c9de1ea6e8d17a542a8af64bce44911aefad86334 (119 MB)",
+    "machines_after": {
+      "worker 784574da214578": "image mới; tiến trình cũ nhận SIGTERM 00:30:50, máy launch 00:30:47, started 00:30:51 VN; Fly báo good state",
+      "api 7845747fe073e8": "không đổi (worker-api-dbb38b7-v2-20261111)",
+      "zalo_runtime 7817d7daee2d58": "không đổi (runtime-binnet-jxl-2ec75c3-20261107)"
+    },
+    "image_check": "Đọc lại trong máy worker mới (chỉ đọc): 465/465 file nguồn trùng deploy-source-manifest.txt; dist có classifyZaloError ở packages/campaign-engine/dist/zalo/common.js và apps/system-worker/dist/campaignEngine/flyZaloPort.js",
+    "rollback": "flyctl deploy --app aka-agent-chat-api --process-groups worker --image registry.fly.io/aka-agent-chat-api:worker-api-dbb38b7-v2-20261111@sha256:355daf600c0447bd2b862060f06723c65811e8c6406124c988c8fce2772c9bf0 (về bản 21:49: v2 không có phân pha theo đọc/gửi; V500 vẫn chạy được vì luật bắt-tất-cả theo pha đã có)"
+  },
+  "before": {
+    "read_at_vn": "2026-11-12 00:29:23",
+    "waiting_socket_total": 288,
+    "waiting_socket_new_30m": 0,
+    "fly_actions_5m": 2,
+    "engine_leases": 0,
+    "open_engine_runs": 0,
+    "worker_leader": "pid 2573321 (Supavisor, backend_start 11/11 20:59:08, lấy khoá lúc 21:49:29)",
+    "server_campaigns_running": 3,
+    "account_2445": "binding active, đã đăng nhập, sự kiện socket cuối 00:28:25"
+  },
+  "after": {
+    "read_at_vn": "2026-11-12 00:31:38 và 00:35:01",
+    "worker_leader": "pid 2603819 lấy khoá lúc 00:30:54 (3 giây sau khi worker khởi động), 0 tiến trình đang chờ khoá",
+    "waiting_socket_since_deploy": 0,
+    "waiting_socket_total": 288,
+    "engine_leases": 0,
+    "open_engine_runs": 0,
+    "fly_actions_since_deploy": "2 lệnh get_user_presence, completed",
+    "server_campaigns_running": "3 chiến dịch (tổ chức 692 ×2, 1191) chạy trên VPS, vẫn ghi kết quả lúc 00:34:27–00:34:42; không có data nào bị đóng 'không xác định kết quả'",
+    "account_2445": "binding vẫn active",
+    "worker_logs": "Khởi động bình thường (đọc cài đặt message gom, chatbot); không dòng error/warn",
+    "edge_logs_17:26-17:36Z": "0 lỗi 503; 3 lỗi 500 lúc 17:32:16Z đều là PATCH /rest/v1/contacts của gateway chat cũ 138.199.24.245 dừng ở 3,0 s (trần anon) — kiểu lỗi có sẵn cả ngày (06:00Z 2, 07:00Z 15, 10:00Z 16, 14:00Z 7), không liên quan worker; p50 43–45 ms, p99 101–318 ms"
+  },
+  "own_mistake": "Câu kiểm sau deploy đầu tiên của em lọc auto_campaign_logs bằng ILIKE theo thời gian và auto_campaign_input_data theo date_action, không có index phù hợp: chạy ~00:32:45–00:34:45 VN rồi bị statement_timeout 2 phút huỷ. Chỉ đọc, giữa đêm, không có 5xx trong khoảng đó. Câu thay thế đọc theo từng chiến dịch (có index).",
+  "not_verified": "Sau deploy chưa có lượt chạy nào của tổ chức 526 trên Fly, nên cách xếp pha mới chưa gặp lỗi thật nào trên production (mới có test). Lượt chạy kế tiếp của 526 sẽ cho thấy.",
+  "for_next_deploys": "Từ nay mọi lần deploy ChatApi phải dựng từ worktree akaAgentChatApi-deploy-dbb38b7 (dbb38b7 + v2). Worktree akaAgentChatApi-deploy-v2 (e16725c) đã cũ: deploy từ đó sẽ gỡ phần backend ChatWeb. Trước khi dựng, kiểm flyctl image show và md5 file trong máy, vì máy có thể đã bị nơi khác deploy."
+}

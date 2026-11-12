@@ -1,0 +1,50 @@
+{
+  "operation": "Tắt lại cờ org_organization.use_new_zalo_runtime cho các tổ chức bị trigger V371 bật sau lần đặt lại 14:45 VN; chỉ giữ tổ chức 526",
+  "requested_by_user": "11/11/2026 ~16:09 VN, yêu cầu trực tiếp trong phiên (\"tắt trigger đi, tắt cho các tổ chức khác luôn, chỉ giữ lại tổ chức test của tôi thôi\")",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "tool": "supabase db query --linked --workdir <checkout chính akaAgent>; một giao dịch, lock_timeout 3s",
+  "precondition": "V496 đã apply lúc 16:10:27 VN (trigger tắt, mặc định cột false), nên tổ chức tạo sau đó không bị bật cờ; biên nhận: migrations/snapshots/new-zalo-runtime-default-off-v496/apply-receipt.json",
+  "before": {
+    "read_at_vn": "2026-11-11 16:10:37",
+    "flag_true_ids": [526, 2089, 2090, 2091, 2092, 2093, 2094]
+  },
+  "orgs": [
+    { "id": 2089, "created_vn": "2026-11-11 15:03:34" },
+    { "id": 2090, "created_vn": "2026-11-11 15:18:29" },
+    { "id": 2091, "created_vn": "2026-11-11 15:25:23" },
+    { "id": 2092, "created_vn": "2026-11-11 15:31:10" },
+    { "id": 2093, "created_vn": "2026-11-11 16:05:23" },
+    { "id": 2094, "created_vn": "2026-11-11 16:08:15" }
+  ],
+  "dry_run": {
+    "at_vn": "2026-11-11 16:10–16:11",
+    "ids": [2089, 2090, 2091, 2092, 2093, 2094],
+    "aka_order_rows_changed": 0,
+    "tables_written": ["public.org_organization upd=6"],
+    "duration_ms": 4244,
+    "method": "DO block UPDATE ... WHERE use_new_zalo_runtime AND id <> 526 rồi RAISE để huỷ giao dịch; đếm aka_order có updated_at hoặc created_at = now(); liệt kê pg_stat_xact_user_tables"
+  },
+  "applied": {
+    "at_utc": "2026-11-11T09:11:07.12427+00:00",
+    "sql": "UPDATE public.org_organization SET use_new_zalo_runtime = false WHERE id = ANY(ARRAY[2089,2090,2091,2092,2093,2094]::bigint[]) AND use_new_zalo_runtime",
+    "turned_off_count": 6,
+    "turned_off_ids": [2089, 2090, 2091, 2092, 2093, 2094]
+  },
+  "verify": {
+    "at_vn": "2026-11-11 16:11:21",
+    "flag_true_ids": [526],
+    "trigger_enabled": "D",
+    "column_default": "false",
+    "aka_order_rows_changed_since_09_11_utc_for_these_orgs": 0
+  },
+  "notes": [
+    "Không code nào đọc cờ (đọc 16:05) nên việc bật rồi tắt cờ của 6 tổ chức này không đổi hành vi đang chạy.",
+    "Từ V496, tổ chức mới mặc định false; bật bộ mới cho từng tổ chức bằng tay."
+  ],
+  "rollback": {
+    "note": "Đưa 6 tổ chức về giá trị trigger đã đặt (true). Không cần: chưa code nào đọc cờ, và V497/ChatApi mới sẽ coi cờ true là chuyển tài khoản Server sang Fly.",
+    "sql": [
+      "UPDATE public.org_organization SET use_new_zalo_runtime = true WHERE id = ANY(ARRAY[2089,2090,2091,2092,2093,2094]::bigint[]) AND NOT use_new_zalo_runtime;"
+    ]
+  }
+}

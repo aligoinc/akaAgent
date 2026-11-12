@@ -92,6 +92,11 @@ import {
 } from './akaBizDesktopSqliteClient'
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
+import { DesktopEngineRunner } from '../engineAdapters/desktopEngineRunner'
+import {
+  CampaignMediaResolveError, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName, getMediaDownloadExtension,
+  hasDeclaredMediaSource, resolveCampaignMediaSource
+} from './campaignMediaSource'
 import {
   ensureCurrentUserCanUseCampaignAction,
   getAccountActionDailySendLimit,
@@ -347,16 +352,6 @@ interface FailedCampaignRun {
   campaignName: string
   payload: CampaignFailureCleanupPayload
   cleanup: CampaignFailureCleanup
-}
-
-class CampaignMediaResolveError extends Error {
-  constructor(
-    public readonly mediaName: string,
-    public readonly reason: string
-  ) {
-    super(`Không dùng được media "${mediaName}": ${reason}`)
-    this.name = 'CampaignMediaResolveError'
-  }
 }
 
 class CampaignRunUnitOwnershipLostError extends Error {
@@ -875,6 +870,8 @@ export class CampaignScheduler {
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
   readonly webEnrichment?: WebEnrichmentService
+  /** Engine kết quả v2 (packages/campaign-engine): chỉ Desktop, cho loại chiến dịch đã tách sang lõi. */
+  private readonly engineRunner?: DesktopEngineRunner
 
   constructor(
     supabase: SupabaseService,
@@ -897,6 +894,68 @@ export class CampaignScheduler {
     this.logSink = options.logSink
     this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
     this.isAccountStartupPending = options.isAccountStartupPending
+    if (this.runtimeTarget === 'desktop') this.engineRunner = new DesktopEngineRunner({
+      zaloRuntime: () => this.zaloRuntime,
+      staffId: () => getCurrentUser()?.staffId ?? null,
+      zaloRuntimeBlocked: () => this.zaloRuntimeBlockedForRestart || this.zaloRuntimeStopRequested,
+      acceptingWork: () => this.running && !this.zaloRuntimeStopRequested,
+      logProgress: (campaign, text) => this.logCampaignProgress(campaign, text),
+      broadcastCampaign: async campaignId => {
+        const current = await this.supabase.getCampaign(campaignId)
+        if (current) this.broadcastCampaignUpdate(current)
+      },
+      broadcastAccounts: () => {
+        try { this.mainWindow.webContents.send(IPC_EVENTS.ACCOUNT_STATUS_UPDATED) } catch { /* Window closed. */ }
+      },
+      isPauseRequested: campaignId => this.pauseRequests.has(campaignId),
+      completeReleasedPause: campaign => this.completeReleasedDesktopCampaignPause(campaign),
+      saveContact: (account, campaign, user) => this.upsertZaloFoundUserContact(account, { ...user, raw: user.raw ?? {} }, campaign.actionId),
+      saveResolvedProfile: (account, campaign, target) =>
+        this.upsertZaloResolvedProfileTarget(account, target as unknown as ZaloResolvedTarget, campaign.actionId),
+      saveJoinedGroup: (account, result, isJoined) =>
+        this.upsertZaloJoinGroupLinkContact(account, { ...result, groupName: result.groupName ?? undefined } as unknown as ZaloJoinGroupLinkResult, isJoined),
+      // Như materializeZaloFriendInputData / materializeZaloBirthdayInputData: danh bạ bạn bè vừa đọc, nguồn = loại chiến dịch.
+      saveFriendContacts: (account, raws, source) =>
+        this.upsertZaloApiUserContacts(raws.map(raw => this.mapZaloApiRawUserContact(account.id, raw, source))),
+      // Như pushZaloDetailToExternalSmsIfNeeded: tích hợp akaBiz của nhân viên, rồi addSmsCampaignDetail cho từng shop.
+      pushExternalSms: async (campaign, input) => {
+        const staffId = this.getAkaBizStaffIdForCampaign(campaign)
+        let integrations: Awaited<ReturnType<typeof getAkaBizIntegrationsForStaff>> | null = null
+        try {
+          integrations = staffId ? await getAkaBizIntegrationsForStaff(staffId) : null
+        } catch (err) {
+          return { integrationMissing: true, integrationError: err instanceof Error ? err.message : String(err), results: [] }
+        }
+        if (!integrations?.sms?.staffId) return { integrationMissing: true, results: [] }
+        const results: Array<{ shopId: number; ok: boolean; error?: string | null }> = []
+        for (const shopId of input.shopIds) {
+          try {
+            await addSmsCampaignDetail({ shopId, campaignId: campaign.id, phone: input.phone, name: input.name, content: input.content })
+            results.push({ shopId, ok: true })
+          } catch (err) {
+            console.error('Failed to push Zalo detail to akaBiz Sms:', err)
+            results.push({ shopId, ok: false, error: err instanceof Error ? err.message : String(err) })
+          }
+        }
+        return { results }
+      },
+      businessNow: () => this.getDatabaseBusinessNow(),
+      findDataSourceWaitNote: campaign => this.getFindDataSourceWaitNote(campaign),
+      noteCampaignWait: (campaign, note) => this.updateUnclaimedCampaignPreflightNote(campaign, note),
+      // Như rewriteZaloMessageForRun: cùng mã AI, cùng tham số, bỏ khung ```; lỗi ném kèm câu để lõi in dòng dùng nội dung gốc.
+      rewriteMessage: async (account, campaign, inputDataId, content) => {
+        const result = await callAiUsing(ZALO_MESSAGE_REWRITE_AI_CODE, { content, question: content, source: 'aka_agent' }, {
+          organizationId: campaign.organizationId ?? account.organizationId ?? null,
+          accountId: account.id,
+          campaignId: campaign.id,
+          campaignInputDataId: inputDataId ?? undefined,
+          blockName: 'zalo_send_message'
+        })
+        const rewritten = this.stripAiCodeFence(result.content)
+        if (result.ok && rewritten) return rewritten
+        throw new Error(result.error || 'AI trả về nội dung không hợp lệ.')
+      }
+    })
     if (this.runtimeTarget === 'desktop' && this.proxyRuntime) this.webEnrichment = new WebEnrichmentService({
       ready: account => this.running && !this.isAccountStartupPending?.(account)
         && !accountOperationRegistry.has(account.id) && !this.externalAccountRuns.has(account.id)
@@ -1062,6 +1121,7 @@ export class CampaignScheduler {
         abort.abort()
       } catch {}
     }
+    this.engineRunner?.abortAll()
     this.stopAllBackgroundPreviews()
     if (this.facebookPageIdentities.size === 0) {
       this.backgroundPages.destroyAll()
@@ -2036,6 +2096,31 @@ export class CampaignScheduler {
         continue
       }
       if (!this.running) break
+      // Engine v2: loại chiến dịch đã tách sang lõi chạy bằng bộ mới (DB quyết định kết quả); bộ cũ bỏ qua chiến dịch đó.
+      if (this.engineRunner?.support(account, currentCampaign).ok) {
+        this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
+        let engineResult: Awaited<ReturnType<DesktopEngineRunner['run']>> = null
+        try {
+          engineResult = await this.engineRunner.run(account, currentCampaign)
+          if (engineResult?.reason === 'maintenance_required' && this.running) {
+            // Như daily_maintenance_required của bản cũ: lịch còn là ngày cũ (chiến dịch tạm dừng qua đêm rồi chạy tiếp…).
+            // Chạy lại bảo trì lịch ngày mới rồi thử lại đúng một lần với dòng vừa đọc lại.
+            const retried = await this.retryEngineAfterMaintenance(account, currentCampaign, businessNow)
+            if (retried) engineResult = retried
+          }
+        } finally {
+          if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
+        }
+        if (engineResult?.reason === 'wait') await this.rememberEngineWait(account, currentCampaign, engineResult)
+        if (engineResult?.reason === 'concurrency_limit') {
+          // Như concurrency_limit_reached của bản cũ: ghi câu chờ (khi đổi) rồi nhường hàng đợi của tài khoản.
+          const note = browserRunLimitWaitNote(account)
+          if (note && currentCampaign.note !== note) await this.updateUnclaimedCampaignPreflightNote(currentCampaign, note)
+          break
+        }
+        if (!this.running) break
+        continue
+      }
       this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
       let outcome: Awaited<ReturnType<typeof this.executeCampaign>>
       try {
@@ -3487,6 +3572,49 @@ export class CampaignScheduler {
       accountLimitKey: this.getPreclaimLimitAccountKey(account),
       untilMs: Date.now() + waitMs
     })
+  }
+
+  /**
+   * Engine v2 chờ khoá/hạn mức: claim không dời lịch chiến dịch (V501, như bản cũ) nên nhớ tới wait.until, tối đa 5 phút,
+   * để không hỏi DB mỗi tick. Khoá theo updated_at sau lượt (claim chỉ ghi câu chờ khi đổi); sửa chiến dịch thì kiểm lại ngay.
+   */
+  private async rememberEngineWait(account: AutoAccount, campaign: Campaign, result: { detail?: Record<string, unknown> }): Promise<void> {
+    if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo') return
+    const claim = result.detail?.claim as { wait?: { until?: string | null } } | undefined
+    const until = claim?.wait?.until ? Date.parse(claim.wait.until) : Number.NaN
+    const waitMs = Number.isFinite(until) ? Math.min(until - Date.now(), PRECLAIM_LIMIT_RECHECK_MAX_MS) : PRECLAIM_LIMIT_RECHECK_MAX_MS
+    if (!(waitMs > 0)) return
+    const fresh = await this.supabase.getCampaign(campaign.id).catch(() => null)
+    if (!fresh?.updatedAt || fresh.status !== 'chờ xử lý' || fresh.isDelete) return
+    this.preclaimLimitSkips.set(campaign.id, {
+      accountId: account.id,
+      campaignUpdatedAt: fresh.updatedAt,
+      accountLimitKey: this.getPreclaimLimitAccountKey(account),
+      untilMs: Date.now() + waitMs
+    })
+  }
+
+  /** Engine v2 trả maintenance_required: chạy lại bảo trì lịch ngày mới, đọc lại chiến dịch, còn đến lượt thì chạy lại một lần. */
+  private async retryEngineAfterMaintenance(account: AutoAccount, campaign: Campaign, businessNow: Date):
+    Promise<Awaited<ReturnType<DesktopEngineRunner['run']>>> {
+    const coordinator = this.maintenanceCoordinator
+    if (!coordinator || !this.engineRunner) {
+      await this.logCampaignProgress(campaign, `⚠️ Chiến dịch "${campaign.name}" đang chờ cập nhật lịch ngày mới.`).catch(() => {})
+      return null
+    }
+    coordinator.invalidate()
+    try {
+      await coordinator.ensureReady()
+    } catch (error) {
+      console.error(`Failed stale-schedule maintenance for engine campaign ${campaign.id}:`, error)
+      this.sendLog('⚠️ Chưa cập nhật xong lịch chiến dịch ngày mới; scheduler sẽ tự thử lại trước khi chạy tiếp.')
+      return null
+    }
+    if (!this.running) return null
+    const refreshed = await this.supabase.getCampaign(campaign.id)
+    if (!refreshed || refreshed.isDelete || refreshed.status !== 'chờ xử lý' || !this.isWithinCampaignDispatchSchedule(refreshed, businessNow)
+      || !this.engineRunner.support(account, refreshed).ok) return null
+    return this.engineRunner.run(account, refreshed)
   }
 
   /** campaign is this tick's pending row; any edit changes updated_at and ends the skip. */
@@ -17680,14 +17808,7 @@ export class CampaignScheduler {
   }
 
   private hasDeclaredMediaSource(item: CampaignMediaInput): boolean {
-    if (typeof item === 'string') {
-      const value = item.trim()
-      return Boolean(value)
-    }
-    if (!item || typeof item !== 'object') return false
-    const localPath = String(item.localPath || '').trim()
-    const cloudUrl = String(item.cloudUrl || '').trim()
-    return Boolean(localPath || cloudUrl)
+    return hasDeclaredMediaSource(item)
   }
 
   private isCampaignMediaImageOrVideo(item: CampaignMediaInput): boolean {
@@ -17695,81 +17816,21 @@ export class CampaignScheduler {
     return isImageOrVideoMediaSource(item.mimeType, item.localPath, item.cloudUrl, item.name)
   }
 
+  // Một bản dùng chung với engine v2 (campaignMediaSource.ts).
   private async resolveCampaignMediaSource(item: CampaignMediaInput, mediaTempPaths: string[] = []): Promise<string> {
-    const mediaName = this.getCampaignMediaName(item)
-
-    if (typeof item === 'string') {
-      const value = item.trim()
-      if (!value) throw new CampaignMediaResolveError(mediaName, 'không có local path hoặc cloud URL hợp lệ')
-      if (value.startsWith('data:')) return value
-      if (/^https?:\/\//i.test(value)) return this.downloadCampaignMediaUrl(value, mediaName, mediaTempPaths)
-      if (existsSync(value)) return value
-      throw new CampaignMediaResolveError(mediaName, 'local path không tồn tại và không có cloud URL fallback')
-    }
-
-    const localPath = String(item?.localPath || '').trim()
-    const localMissingReason = localPath ? 'local path không tồn tại' : 'không có local path'
-    if (localPath) {
-      if (localPath.startsWith('data:') || existsSync(localPath)) return localPath
-    }
-
-    const cloudUrl = String(item?.cloudUrl || '').trim()
-    if (cloudUrl) {
-      try {
-        return await this.downloadCampaignMediaUrl(cloudUrl, mediaName, mediaTempPaths)
-      } catch (err) {
-        if (this.isCampaignMediaResolveError(err)) {
-          throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và ${err.reason}`)
-        }
-        throw err
-      }
-    }
-
-    if (localPath) {
-      throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và không có cloud URL fallback`)
-    }
-    throw new CampaignMediaResolveError(mediaName, 'không có local path hoặc cloud URL hợp lệ')
+    return resolveCampaignMediaSource(item, mediaTempPaths)
   }
 
   private async downloadCampaignMediaUrl(url: string, mediaName: string, mediaTempPaths: string[] = []): Promise<string> {
-    try {
-      const response = await fetch(url, {
-        method: 'GET',
-        redirect: 'follow',
-        signal: AbortSignal.timeout(60000)
-      })
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const contentType = response.headers.get('content-type') || 'application/octet-stream'
-      const buf = Buffer.from(await response.arrayBuffer())
-      const ext = this.getMediaDownloadExtension(url, contentType, mediaName)
-      const tempPath = join(tmpdir(), `campaign-media-${Date.now()}-${Math.floor(Math.random() * 1e6)}${ext}`)
-      writeFileSync(tempPath, buf)
-      mediaTempPaths.push(tempPath)
-      return tempPath
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      throw new CampaignMediaResolveError(mediaName, `cloud URL không tải được (${message})`)
-    }
+    return downloadCampaignMediaUrl(url, mediaName, mediaTempPaths)
   }
 
   private getMediaDownloadExtension(url: string, contentType: string, mediaName: string): string {
-    try {
-      const ext = extname(new URL(url).pathname)
-      if (ext) return ext
-    } catch {}
-
-    const nameExt = extname(mediaName)
-    if (nameExt) return nameExt
-
-    return getRuntimeMediaDownloadExtensionForMimeType(contentType) || '.bin'
+    return getMediaDownloadExtension(url, contentType, mediaName)
   }
 
   private getCampaignMediaName(item: CampaignMediaInput): string {
-    if (typeof item === 'string') return item.split(/[\\/]/).pop() || item || 'media'
-    return item?.name ||
-      item?.localPath?.split(/[\\/]/).pop() ||
-      item?.cloudUrl?.split('/').pop()?.split('?')[0] ||
-      'media'
+    return getCampaignMediaName(item)
   }
 
   private isCampaignMediaResolveError(err: unknown): err is CampaignMediaResolveError {
@@ -17787,13 +17848,7 @@ export class CampaignScheduler {
   }
 
   private cleanupCampaignMediaTempFiles(paths: string[]): void {
-    const uniquePaths = Array.from(new Set(paths.map(path => String(path || '').trim()).filter(Boolean)))
-    paths.length = 0
-    for (const path of uniquePaths) {
-      try {
-        unlinkSync(path)
-      } catch {}
-    }
+    cleanupCampaignMediaTempFiles(paths)
   }
 
   /**

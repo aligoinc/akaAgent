@@ -21,6 +21,7 @@
     "src/server/main/**/*",
     "src/server/preload/**/*",
     "src/shared/**/*",
+    "packages/campaign-engine/src/**/*",
     "electron.vite.config.ts",
     "electron.server.vite.config.ts"
   ]

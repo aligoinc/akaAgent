@@ -2,11 +2,11 @@ import { parseDocument } from 'htmlparser2'
 import { escapeContentVariantSeparators, findContentVariantSeparatorIndexes } from './contentSpin'
 
 interface HtmlNodeLike {
-  type?: string
-  name?: string
-  data?: string
-  attribs?: Record<string, string>
-  children?: HtmlNodeLike[]
+  type?: string | undefined
+  name?: string | undefined
+  data?: string | undefined
+  attribs?: Record<string, string> | undefined
+  children?: HtmlNodeLike[] | undefined
 }
 
 export const FORMATTED_CONTENT_ACTION_IDS = [
@@ -197,7 +197,7 @@ const splitFormattedNodeSequence = (
 
   for (const node of nodes) {
     const nodeVariants = splitFormattedNode(node, state)
-    variants[variants.length - 1].push(...(nodeVariants[0] || []))
+    variants[variants.length - 1]!.push(...(nodeVariants[0] || []))
     for (let index = 1; index < nodeVariants.length; index += 1) {
       variants.push([...(nodeVariants[index] || [])])
     }
@@ -261,7 +261,7 @@ const trimFormattedNodesAtBoundary = (
 
   while (result.length > 0) {
     const index = boundary === 'start' ? 0 : result.length - 1
-    const trimmed = trimFormattedNodeAtBoundary(result[index], boundary)
+    const trimmed = trimFormattedNodeAtBoundary(result[index]!, boundary)
     if (!trimmed || !hasFormattedNodeText(trimmed)) {
       result.splice(index, 1)
       continue

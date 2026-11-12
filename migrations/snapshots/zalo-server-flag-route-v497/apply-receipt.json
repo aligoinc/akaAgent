@@ -1,0 +1,39 @@
+{
+  "migration": "migration_v497_zalo_server_flag_route",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "11/11/2026 ~17:01 VN, \"Tiếp tục\" (các bước thử còn lại: V497, deploy ChatApi)",
+  "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+  "file_md5": "cded4e05281d02e13b774f2af21f3e0b",
+  "file_bytes": 18657,
+  "generated_by": "scripts/build-v497-sql.py từ nguyên văn bản live (scripts/fixtures/zalo-server-flag-route/live-functions-20261111.json)",
+  "ledger": {
+    "version": "20261111100225",
+    "name": "migration_v497_zalo_server_flag_route",
+    "statements_md5": "cded4e05281d02e13b774f2af21f3e0b",
+    "created_by": null
+  },
+  "applied_at_vn": "2026-11-11 17:02:25",
+  "precheck": {
+    "at_vn": "2026-11-11 16:52:55",
+    "aka_agent_app_access_chat_organizations(bigint[])": "b48a2ab3d264c6a1c75345cd69a7582e (khớp bản dùng để sinh V497)",
+    "recover_server_zalo_running_state(bigint,text,boolean)": "02c1541f6dbfcb1a352e94da888ac0bd (khớp)",
+    "objects_absent": true
+  },
+  "verify": {
+    "at_vn": "2026-11-11 17:02:36",
+    "functions": {
+      "aka_agent_app_access_chat_organizations(bigint[])": { "md5": "020a5b0a82d3354007feb3b769a5a62d", "acl": "{postgres=X/postgres,service_role=X/postgres}" },
+      "recover_server_zalo_running_state(bigint,text,boolean)": { "md5": "e51b12406b7c1d67c36c9885c79f3a18", "acl": "giữ nguyên như trước" },
+      "aka_agent_zalo_server_flag_route(bigint)": { "md5": "9fc8fdbcfeeb1ccbaccb21e98078d980", "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}" },
+      "private.aka_agent_zalo_server_mark_vps_released(bigint)": { "md5": "512bea468fba50dc513d532a5d5a729a", "acl": "{postgres=X/postgres,service_role=X/postgres}" }
+    },
+    "handoff_table": "private.auto_zalo_server_session_handoff có, 0 dòng",
+    "flag_route_orgs": 1,
+    "flag_route_526": true,
+    "app_server_skips_526": "không (chưa có dòng to_fly), VPS vẫn giữ tài khoản 2445 tới khi ChatApi mới nhận"
+  },
+  "edge_logs": "10:01–10:02 UTC 0 lỗi 5xx; phút nạp lại schema p99 1.096 ms",
+  "locks": "Không ALTER bảng nào đang dùng (chỉ bảng mới của V497); thay 2 hàm cũ không chặn lượt gọi đang chạy. Không lặp lại sự cố khoá của V495.",
+  "do_not_reapply": "Preflight từ chối khi sổ migration đã có migration_v497_* hoặc khi md5 hai hàm cũ khác bản live dùng để sinh",
+  "rollback": "migrations/rollback_v497_zalo_server_flag_route.sql: trả hai hàm về nguyên văn bản live, xoá hàm/bảng mới; bị chặn khi còn dòng to_fly (trả tài khoản về VPS trước)"
+}

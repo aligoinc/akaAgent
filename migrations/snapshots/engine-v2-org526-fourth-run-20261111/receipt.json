@@ -1,0 +1,58 @@
+{
+  "operation": "Chạy lại chiến dịch 32956 (tổ chức 526) để xem tiến trình trên Desktop bản thử 9.5.1 (engine v2, V498) chạy trực tiếp từ dist với thư mục dữ liệu riêng",
+  "requested_by_user": "11/11/2026 ~21:15 VN, \"Chạy lại 32956\" (sau khi anh đăng nhập bản thử)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "desktop_test_app": {
+    "binary": "<worktree>/dist/mac-arm64/akaAgent.app/Contents/MacOS/akaAgent --user-data-dir=~/Library/Application Support/aka-biz-auto-test-engine-v2",
+    "launched_vn": "21:14:33",
+    "login_vn": "21:14:55 (presence 9.5.1 mac, staff 547; lần đăng nhập Desktop 9.x đầu tiên của 547: tạo private.aka_agent_desktop_users và gắn máy)",
+    "chatapi": "POST /api/chat/desktop/session 200 lúc 14:14:55Z (ChatApi api v173 nhận tổ chức không Chat chạy theo cờ), GET /ws cùng giây",
+    "side_effects": [
+      "AutoCheck của bản thử (hồ sơ trình duyệt trống) đổi tài khoản Facebook 2509 của tổ chức 526 từ 'đã đăng nhập' sang 'chưa đăng nhập' (log 21:15 VN); chưa sửa lại",
+      "ZaloServerClient báo 'Connection failed: Sai thông tin đăng nhập, gói chưa bật Zalo Server hoặc đã hết hạn' lặp lại: App Server đã thả tổ chức 526 (thao tác tài khoản Server cho tổ chức không Chat chưa chuyển sang ChatApi, kế hoạch mục 16.9)"
+    ]
+  },
+  "writes": {
+    "at_utc": "2026-11-11T14:15:57.891693+00:00",
+    "same_as": "engine-v2-org526-third-run-20261111 (data 8478863/8478864 hoàn thành → chờ xử lý như nút chạy lại data của Desktop; chiến dịch hoàn thành → chờ xử lý như reopenCompletedCampaignAfterInputInsert; một giao dịch có kiểm trước)"
+  },
+  "run": {
+    "runner": "fly:784574da214578:640",
+    "targets": [
+      {
+        "run": 7,
+        "input": 8478863,
+        "phone_tail": "455",
+        "started_vn": "21:15:58",
+        "completed_vn": "21:16:01",
+        "final": "hoàn thành",
+        "outcomes": [
+          "v2:7:lookup ok",
+          "v2:7:message ok delivered",
+          "v2:7:friend ok delivered"
+        ]
+      },
+      {
+        "run": 8,
+        "input": 8478864,
+        "phone_tail": "704",
+        "started_vn": "21:16:31",
+        "completed_vn": "21:16:34",
+        "final": "hoàn thành",
+        "outcomes": [
+          "v2:8:lookup ok",
+          "v2:8:message ok delivered",
+          "v2:8:friend err_zalo_already_friend not_delivered"
+        ]
+      }
+    ],
+    "campaign_log": "13 dòng giống lần chạy 20:42 (Bắt đầu, Xử lý, Tìm SĐT, Nhắn tin người lạ, Kết bạn, Hoàn thành, Nghỉ 30s, …, Đã là bạn bè (Z225), Hoàn thành chiến dịch)",
+    "campaign_after": "hoàn thành lúc 21:16:34 VN",
+    "notes": [
+      "Cả hai số nhận tin lần thứ tư trong ngày; số 455 nhận lời mời kết bạn lần thứ ba (Zalo vẫn nhận)."
+    ]
+  },
+  "desktop_progress": {
+    "confirmed_by_user": "11/11/2026 sau 21:16 VN: anh báo \"Đã thấy\" dòng tiến trình của 32956 trên tab Tiến trình của bản Desktop thử 9.5.1 (tổ chức 526)"
+  }
+}

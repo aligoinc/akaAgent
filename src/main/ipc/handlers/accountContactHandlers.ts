@@ -47,7 +47,8 @@ export function registerAccountContactHandlers(
   zaloServerClient?: ZaloServerClient,
   options: {
     chatContactLoader?: ContactLoader
-    isChatSync?: () => boolean
+    /** Tài khoản Zalo Server đi ChatApi (có Chat hoặc chạy trên Fly theo cờ) thay vì App Server. */
+    serverAccountsUseChatApi?: () => boolean
   } = {}
  ): void {
   const boundReaders = new Set<number>()
@@ -76,7 +77,7 @@ export function registerAccountContactHandlers(
     await ensureContactAccess(supabase, accountId, 'person')
     const account = await supabase.getAccount(accountId)
     if (account?.flatformType === 'zalo' && account.isZaloServer) {
-      if (options.isChatSync?.() && options.chatContactLoader) {
+      if (options.serverAccountsUseChatApi?.() && options.chatContactLoader) {
         return options.chatContactLoader.loadFriends(accountId)
       }
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
@@ -89,7 +90,7 @@ export function registerAccountContactHandlers(
     await ensureContactAccess(supabase, accountId, 'group')
     const account = await supabase.getAccount(accountId)
     if (account?.flatformType === 'zalo' && account.isZaloServer) {
-      if (options.isChatSync?.() && options.chatContactLoader) {
+      if (options.serverAccountsUseChatApi?.() && options.chatContactLoader) {
         return options.chatContactLoader.loadGroups(accountId)
       }
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
@@ -137,7 +138,7 @@ export function registerAccountContactHandlers(
     await ensureContactAccess(supabase, accountId, 'zalo_tag')
     const account = await supabase.getAccount(accountId)
     if (account?.flatformType === 'zalo' && account.isZaloServer) {
-      if (options.isChatSync?.() && options.chatContactLoader) {
+      if (options.serverAccountsUseChatApi?.() && options.chatContactLoader) {
         return options.chatContactLoader.loadZaloGroupMembers(accountId, request)
       }
       if (!zaloServerClient) throw new Error('Chưa kết nối akaAgent Zalo Server')
@@ -153,7 +154,7 @@ export function registerAccountContactHandlers(
       throw new Error('Tài khoản không tồn tại hoặc không thuộc quyền quản lý của bạn')
     }
     if (account?.flatformType === 'zalo' && account.isZaloServer) {
-      if (options.isChatSync?.() && options.chatContactLoader) {
+      if (options.serverAccountsUseChatApi?.() && options.chatContactLoader) {
         options.chatContactLoader.cancelLoad(accountId)
         return { success: true }
       }

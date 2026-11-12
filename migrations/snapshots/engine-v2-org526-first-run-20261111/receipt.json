@@ -1,0 +1,27 @@
+{
+  "operation": "Lần chạy thật đầu tiên của engine v2 trên Fly: chiến dịch 9150 (tổ chức thử 526, không có Chat), tài khoản Server 2445",
+  "requested_by_user": "11/11/2026 ~17:14 VN, \"Chạy 23099\". 23099 không chạy được (lịch hằng tuần thứ 2,3, hết hạn 12/10) nên chạy 9150: cùng loại, chỉ chữ, lịch hằng ngày; 2 số chờ (đuôi 423, 704) nằm trong 4 số của 23099",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "resume": {
+    "at_utc": "2026-11-11T10:16:26.588673+00:00",
+    "sql": "UPDATE auto_campaigns SET status='chờ xử lý', note=NULL, updated_at=now() WHERE id=9150 AND organization_id=526 AND account_id=2445 AND status='tạm dừng' AND (runtime_claim_token IS NULL OR runtime_claim_target='server') AND runtime_unit_token IS NULL AND không có data 'đang chạy' (giống RPC Tiếp tục)",
+    "note": "9150 còn claim token của bộ chạy VPS từ 25/08 (tạm dừng giữa lượt, VPS không nhả); trigger aka_agent_clear_campaign_runtime_claim_metadata xoá token khi đổi trạng thái"
+  },
+  "run": {
+    "runner": "fly:784574da214578:640 (worker v172)",
+    "lease": "account 2445, campaign 9150, 180 giây, nhả khi xong",
+    "targets": [
+      { "run": 1, "input": 2028620, "phone_tail": "423", "started_vn": "17:16:26", "marked_vn": "17:16:27", "completed_vn": "17:16:28", "final": "hoàn thành", "outcomes": ["v2:1:lookup zalo_find_phone_user ok", "v2:1:message zalo_message_stranger ok delivered"] },
+      { "run": 2, "input": 2028621, "phone_tail": "704", "started_vn": "17:16:58", "marked_vn": "17:16:59", "completed_vn": "17:16:59", "final": "hoàn thành", "outcomes": ["v2:2:lookup zalo_find_phone_user ok", "v2:2:message zalo_message_stranger ok delivered"] }
+    ],
+    "pacing": "nghỉ 30 giây giữa 2 data (actionLimits.sleepBetweenActions = 30)",
+    "fly_commands": "4 lệnh campaign_find_user / send_text, đều completed",
+    "history_details": "4 dòng auto_campaign_details: Tìm SĐT thành công ('Đã tìm thấy SĐT …: <tên>'), Nhắn tin người lạ thành công ('Đã gửi tin nhắn đến <tên>')",
+    "campaign_log": "🚀 Bắt đầu chiến dịch → ▶️ Xử lý - <SĐT> → Tìm SĐT: … → Nhắn tin người lạ: … → ✅ Hoàn thành - <SĐT> → ⏳ Nghỉ 30s trước khi xử lý mục tiếp theo... → … → ✅ Hoàn thành chiến dịch (đúng câu của Desktop/VPS)",
+    "campaign_after": "hoàn thành lúc 17:16:59, không còn token/lease; schedule ghi lại 17:16:26 khi nhận lượt",
+    "duplicates": "mỗi data đúng một lệnh send_text và một dòng lịch sử nhắn tin",
+    "target_events": "không có (không chờ, không bị ngắt)",
+    "quota": "dấu 'sắp gửi' giữ chỗ hạn mức ngày 2026-11-11"
+  },
+  "still_on_fly": "Tài khoản 2445 vẫn trên Fly (cờ 526 bật). Trong lúc này thao tác tài khoản Server của 526 từ Desktop/Web (quét QR, kiểm phiên, đăng xuất, nhãn, danh bạ, kiểm SĐT) vẫn gọi VPS nên lỗi; tạo/tạm dừng/chạy tiếp chiến dịch vẫn được. Quay lại: tắt cờ use_new_zalo_runtime của 526 (ChatApi trả phiên, VPS nối lại, không quét QR)."
+}

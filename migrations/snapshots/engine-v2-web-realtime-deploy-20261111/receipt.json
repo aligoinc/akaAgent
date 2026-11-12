@@ -1,0 +1,64 @@
+{
+  "operation": "Deploy Web/API (Fly app aka-agent-web-app): vé kênh tiến trình ChatApi cho tổ chức không Chat có tài khoản Zalo Server chạy trên Fly theo cờ engine v2",
+  "requested_by_user": "11/11/2026 tối, \"Deploy Web ngay\" (sau \"Dựng bản Web\")",
+  "source": {
+    "worktree": "/Users/lequangnhut/Repos/akaAgentWebApp-deploy-realtime",
+    "branch": "deploy/web-realtime-de8fa4f (chưa commit)",
+    "base": "de8fa4f62b73b1d1208bc249bc7423472a0a8baf (commit của bản đang chạy web-de8fa4f-20261111, Fly v102)",
+    "applied": "3 file API từ worktree akaAgentWebApp-campaign-engine-v2: aka-agent-control.repository.ts (isZaloServerFlagRouted gọi aka_agent_zalo_server_flag_route, PGRST202 → false), aka-agent-control.service.ts (realtimeTicket cấp campaignWebSocketUrl/campaignTicket khi chatSyncEnabled hoặc flag route; lỗi kiểm → chỉ App Server), aka-agent-control.service.test.ts (+2 ca)",
+    "not_included": "#204 (mặc định chia đều data) đang có trên dev nhưng chưa deploy",
+    "verify": "npm ci; build control-api trước; typecheck 8 workspace đạt; test 4.061 ca đạt, bỏ qua 2 (control-api 211, campaign-core 390, journey-core 86, control-client 68, API 1.728, Web 1.097, mobile 481); ca Web CampaignsPage chọn 1.001 dòng hết giờ 15 s khi chạy chung, chạy riêng 87/87 đạt; npm run build đạt; giả lập Dockerfile (runtime-check-dockerfile.py, 1.381 file nguồn): importFailures [], moduleNotFound false, server dừng ở kiểm biến môi trường"
+  },
+  "deploy": {
+    "build": "flyctl deploy --app aka-agent-web-app --build-only --push --remote-only --image-label web-de8fa4f-realtime-20261111 (20:10:55–20:12:10 VN)",
+    "image": "registry.fly.io/aka-agent-web-app:web-de8fa4f-realtime-20261111@sha256:01f0c2ed7cdd8492b2b56b9be1c44058f694fe6c6a53d0d6d2b80ff8a64c1381 (83 MB)",
+    "update": "flyctl deploy --app aka-agent-web-app --image <image@digest> --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m (xong 20:12:52 VN)",
+    "machine_after": "48ee749f357398 v103, started, 1/1 check đạt, cập nhật 2026-11-11T13:12:39Z",
+    "rollback": "flyctl deploy --app aka-agent-web-app --image registry.fly.io/aka-agent-web-app:web-de8fa4f-20261111@sha256:6d17d3c8334431a473668987efaaa14cf83cf75add6e87dac0406bb92a04e531 --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m; DB không cần đổi"
+  },
+  "post_checks": {
+    "http": {
+      "/healthz": 200,
+      "/": 200,
+      "/api/aka-agent/control/v1/auth/login-content": 200,
+      "/api/aka-agent/control/v1/me": 401,
+      "/api/aka-agent/control/v1/notifications": 401,
+      "/api/aka-agent/control/v1/accounts": 401,
+      "/api/aka-agent/control/v1/settings/web-polling": 401,
+      "POST /api/aka-agent/control/v1/realtime-ticket": 401
+    },
+    "container_code": "grep -c aka_agent_zalo_server_flag_route /app/apps/api/dist/server.js = 1 (qua flyctl ssh, chỉ đọc)",
+    "logs": "40 dòng cuối sau deploy: không có error/warn; mã 200/401/402/404 (404 là các lần thử đường dẫn thiếu tiền tố API)",
+    "db": "Không đổi DB. Hàm aka_agent_zalo_server_flag_route có từ V497 (đã apply 17:02 VN), service_role có quyền gọi"
+  },
+  "not_verified": "Chưa thử bằng phiên Web thật của tổ chức 526 khi có chiến dịch đang chạy (cần đăng nhập của anh). ChatApi đang chạy (bản deploy 17:05) đã nhận vé Web của tổ chức theo cờ qua isOrganizationServerEnabled.",
+  "followup_frontend_fix": {
+    "reason": "Anh chạy 32956 lúc 20:17 VN và báo \"Không thấy\" tiến trình trên Web. Bản v103 chỉ có phần API; giao diện apps/web/src/realtime/RealtimeContext.tsx chỉ mở socket tiến trình khi user.chatSyncEnabled nên bỏ qua campaignUrl mà API cấp.",
+    "server_side_checked": "edge_logs 13:13–13:24 UTC: API gọi rpc/aka_agent_zalo_server_flag_route 2–10 lượt/phút, đều 200. SQL chỉ đọc: aka_agent_zalo_server_flag_route(526)=true, aka_agent_app_access_staff_allowed(547,'akaAgent')=true, aka_agent_staff_time_allowed(547)=true, staff 547 active. Bộ chạy v2 trên Fly ghi tiến trình qua runtime.appendLog → appendCampaignLogWithRealtime (flyEngineRunner.ts).",
+    "change": "connect() mở socket tiến trình khi chatCampaignEnabled || ticket.campaignUrl; connectCampaign không còn URL với tổ chức không Chat thì setCampaignStatus('disabled') và dừng (tổ chức Chat vẫn thử lại). RealtimeContext.test.tsx: +2 ca, ca đổi Chat giữa phiên cho lượt đầu vé không có URL.",
+    "applied_to": "worktree akaAgentWebApp-campaign-engine-v2 (nhánh feat/campaign-engine-v2-realtime) và thư mục dựng akaAgentWebApp-deploy-realtime; hai file giống nhau (md5 RealtimeContext.tsx b8a77967…, test d5a64b04…), bản gốc hai nơi cũng giống nhau",
+    "verify": "Web typecheck sạch cả hai nơi; vitest Web 117 file: 1.105 ca (nhánh dev) và 1.100 ca (bản dựng) đều đạt; npm run build -w @aka-agent/web đạt, file vào assets/index-BidBtNiM.js (bản đang chạy v103: assets/index-Bc219zJD.js)",
+    "build": "flyctl deploy --app aka-agent-web-app --build-only --push --remote-only --image-label web-de8fa4f-realtime2-20261111 (xong trước 20:35 VN 11/11, exit 0)",
+    "image": "registry.fly.io/aka-agent-web-app:web-de8fa4f-realtime2-20261111@sha256:2299aa06d19efef9285d2186abe2945c3abaff46d4269da6627b4df0a7b05d32 (83 MB)",
+    "deploy": "flyctl deploy --app aka-agent-web-app --image registry.fly.io/aka-agent-web-app:web-de8fa4f-realtime2-20261111@sha256:2299aa06d19efef9285d2186abe2945c3abaff46d4269da6627b4df0a7b05d32 --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m (20:36:43–20:37:09 VN, exit 0)",
+    "rollback": "flyctl deploy --app aka-agent-web-app --image registry.fly.io/aka-agent-web-app:web-de8fa4f-realtime-20261111@sha256:01f0c2ed7cdd8492b2b56b9be1c44058f694fe6c6a53d0d6d2b80ff8a64c1381 --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m (về v103: còn phần API, mất sửa giao diện); hoặc image v102 web-de8fa4f-20261111@sha256:6d17d3c8… để bỏ cả phần API",
+    "requested_by_user": "11/11/2026 \"Deploy ngay\" (sau câu hỏi deploy image Web mới)",
+    "machine_after": "48ee749f357398 v104, started, 1/1 check đạt, cập nhật 2026-11-11T13:36:57Z; health check lỗi 1 lần lúc 13:36:58Z khi server chưa nghe cổng, đạt từ 13:37:03Z",
+    "post_checks": {
+      "http": {
+        "/healthz": 200,
+        "/": 200,
+        "/api/aka-agent/control/v1/auth/login-content": 200,
+        "/api/aka-agent/control/v1/me": 401,
+        "/api/aka-agent/control/v1/accounts": 401,
+        "/api/aka-agent/control/v1/settings/web-polling": 401,
+        "POST /api/aka-agent/control/v1/realtime-ticket": 401
+      },
+      "bundle": "index.html trên aka-agent-web-app.fly.dev và agent.akabiz.net trỏ assets/index-BidBtNiM.js, đúng bản build local có sửa (v103 là index-Bc219zJD.js); sw.js precache cũng là index-BidBtNiM.js",
+      "logs": "100 dòng cuối: ngoài cảnh báo checksum offload và lần health check lúc khởi động, không có lỗi; sau 13:37Z chỉ có mã 200/401/402, 3 lượt realtime-ticket",
+      "db": "Không đổi DB"
+    },
+    "not_verified": null,
+    "verified_by_user": "Anh thấy dòng tiến trình trên Web khi chạy lại 32956 lúc 20:42 VN (biên nhận engine-v2-org526-third-run-20261111)"
+  }
+}
