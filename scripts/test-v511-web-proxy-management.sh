@@ -18,7 +18,8 @@ as_pg() { if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi
 [ "$(id -u)" = 0 ] && chown postgres "$WORK"
 chmod 755 "$WORK"
 python3 "$ROOT/scripts/build-v511-guarded-apply-sql.py" >/dev/null
-cp $MIGRATIONS "$ROLLBACK" "$ROOT"/migrations/tests/migration_v511_web_proxy_management_p?_guarded_apply.sql "$WORK/" && chmod 644 "$WORK"/*.sql
+python3 "$ROOT/scripts/build-v511-paste-sql.py" >/dev/null
+cp $MIGRATIONS "$ROLLBACK" "$ROOT"/migrations/tests/migration_v511_web_proxy_management_p?_guarded_apply.sql "$ROOT"/migrations/tests/migration_v511_web_proxy_management_p?_paste.sql "$WORK/" && chmod 644 "$WORK"/*.sql
 cleanup() { as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$WORK"; }
 trap cleanup EXIT
 as_pg "$PGBIN/initdb" -D "$WORK/data" -A trust -U postgres -E UTF8 --locale=C >/dev/null
@@ -454,5 +455,24 @@ expect "script dán: md5 sổ = md5 file" "$(q "SELECT string_agg(md5(statements
   "$(for part in 1 2 3; do md5sum < "$WORK/${G}_p$part.sql" | cut -c1-32; done | paste -sd,)"
 refuse "script dán: dán lại bị từ chối" "đã có trong sổ migration, không chạy lại" run_file ${G}_p1_guarded_apply.sql
 expect "script dán: không bật cờ tổ chức nào" "$(q "SELECT count(*) FROM org_organization WHERE web_proxy_management_enabled")" "0"
+
+# Bản dán gọn (scripts/build-v511-paste-sql.py): nội dung một lần, kiểm md5 trước khi chạy.
+out=$(run_file rollback_v511_web_proxy_management.sql) || fail "rollback trước khi thử bản dán gọn: $out"
+q "DELETE FROM supabase_migrations.schema_migrations"
+refuse "bản dán gọn: phần 2 trước phần 1 bị từ chối" "Chưa chạy phần 1" run_file ${G}_p2_paste.sql
+sed 's/Không đụng: hàm tạo tài khoản/Không đụng: hàm tạo tài khoản!/' "$WORK/${G}_p1_paste.sql" > "$WORK/p1_corrupt.sql"
+refuse "bản dán gọn: chép sai một ký tự bị từ chối" "Nội dung dán bị thiếu hoặc sai" run_file p1_corrupt.sql
+expect "bản dán gọn: lượt bị từ chối không đổi gì" "$(q "SELECT (SELECT count(*) FROM supabase_migrations.schema_migrations) || ',' || (to_regclass('public.auto_proxy_checks') IS NULL) || ',' || (SELECT count(*) FROM information_schema.columns WHERE table_name = 'org_organization' AND column_name = 'web_proxy_management_enabled')")" "0,true,0"
+for part in 1 2 3; do
+  out=$(run_file ${G}_p${part}_paste.sql) || fail "bản dán gọn phần $part: $out"
+  case "$out" in *"applied|"*"|${G}_p$part|t"*) ;; *) fail "bản dán gọn phần $part: kết quả lạ: $out" ;; esac
+done
+ok "bản dán gọn: ba phần apply và báo md5 khớp"
+expect "bản dán gọn: md5 sổ = md5 file" "$(q "SELECT string_agg(md5(statements[1]), ',' ORDER BY name) FROM supabase_migrations.schema_migrations")" \
+  "$(for part in 1 2 3; do md5sum < "$WORK/${G}_p$part.sql" | cut -c1-32; done | paste -sd,)"
+expect "bản dán gọn: đủ hàm và trigger" "$(q "SELECT (SELECT count(*) FROM pg_proc WHERE proname IN ('aka_agent_control_proxies','aka_agent_proxy_check_worker')) || ',' || (SELECT count(*) FROM pg_trigger WHERE tgname = 'trg_account_proxy_scope_guard')")" "2,1"
+expect "bản dán gọn: RPC chạy được" "$(q "UPDATE org_organization SET web_proxy_management_enabled = true WHERE id = 1"; rpc 12 1 summary '{}' | jq_ "d['total'] > 0"; q "UPDATE org_organization SET web_proxy_management_enabled = false WHERE id = 1")" "True"
+refuse "bản dán gọn: dán lại bị từ chối" "đã chạy rồi" run_file ${G}_p3_paste.sql
+expect "bản dán gọn: không bật cờ tổ chức nào" "$(q "SELECT count(*) FROM org_organization WHERE web_proxy_management_enabled")" "0"
 
 echo "Tất cả $pass kiểm tra đạt"

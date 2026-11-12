@@ -60,4 +60,4 @@ Tắt nhanh: `proxies.check_mode = 'off'`; ẩn trang cho tổ chức: cờ `fal
 
 ## Kiểm thử
 
-`bash scripts/test-v511-web-proxy-management.sh` (PG16 cục bộ, 111 kiểm tra; apply ba phần theo thứ tự, phần 2 trước phần 1 bị từ chối, cả ba script dán SQL Editor): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.
+`bash scripts/test-v511-web-proxy-management.sh` (PG16 cục bộ, 120 kiểm tra; apply ba phần theo thứ tự, phần 2 trước phần 1 bị từ chối, script dán SQL Editor và bản dán gọn `*_paste.sql` sinh bằng `scripts/build-v511-paste-sql.py`: chép sai một ký tự bị từ chối trước khi chạy): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.
