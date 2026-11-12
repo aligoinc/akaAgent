@@ -1,0 +1,66 @@
+{
+  "operation": "Bật cờ org_organization.use_new_zalo_runtime cho 3 tổ chức không Chat đang chạy chiến dịch, để thử engine v2 trên Fly với khách thật",
+  "requested_by_user": "13/11/2026 ~00:00 VN, trong phiên: \"check 1 vài tổ chức đang chạy chiến dịch bật lên thử xem nó có chạy ổn ko\"",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "tool": "supabase db query --linked -f, một giao dịch, lock_timeout 3s, guard đúng 3 tổ chức đang tắt cờ",
+  "selection": {
+    "why_not_chat_orgs": "4 tổ chức có Chat chạy chiến dịch hôm 12/11 (990, 138, 1023, 564; 49/49 chiến dịch Server bộ mới nhận chạy) không còn lượt nào trong đêm: lịch hằng ngày đã dời sang 06:16 trở đi",
+    "criteria": "tổ chức không Chat đang có chiến dịch Server 'đang chạy' lúc 00:02 VN; đủ điều kiện aka_agent_zalo_server_flag_route (gói 16/18 còn hạn, quyền QR + Server); 0 nhân viên dùng Desktop trong 7 ngày (Desktop 9.5.0 chưa chuyển thao tác tài khoản Server sang ChatApi theo cờ); cả 11 chiến dịch đang hoạt động đều qua zaloCampaignV2Support với env của Fly (theo dõi tương tác bật)",
+    "organizations": [
+      692,
+      900,
+      1191
+    ],
+    "server_accounts": 13,
+    "logged_in_before": 11,
+    "running_campaigns_before": [
+      52903,
+      53758,
+      53759,
+      34443
+    ]
+  },
+  "flag_on_at_vn": "2026-11-13 00:04:32",
+  "handoff": {
+    "to_fly_rows_requested_at_vn": "00:04:40",
+    "vps_released_at_vn": "00:05:12-00:05:13",
+    "session_copied_at_vn": "00:05:25-00:05:26",
+    "fly_connected_at_vn": "00:05:28-00:05:29",
+    "connected": "11/11 tài khoản đang đăng nhập; không quét QR",
+    "not_connected": {
+      "3415, 8456": "phiên đã chết trên VPS từ 12/11 18:07 (Đăng nhập thất bại); sau khi chép, completeLogin ghi 'đã đăng nhập' từ 00:05:26 tới 00:11:32, lúc runtime thử đủ 10 lần, báo error và ChatApi ghi lại 'chưa đăng nhập'",
+      "5863": "nối lúc 00:05:29, bị Zalo đá ra lúc 00:05:50 (3003 KICKOUT_BY_WORKER) như đã xảy ra trên VPS lúc 09:09 12/11; chủ tài khoản đang mở Zalo ở nơi khác"
+    },
+    "data_cut_by_vps_stop": 0
+  },
+  "engine_v2_first_minutes": {
+    "first_target_at_vn": "00:05:29",
+    "leases": "4 chiến dịch, runtime_target fly, heartbeat mỗi 60 giây",
+    "targets_by_00_09_56": {
+      "total": 28,
+      "completed": 27,
+      "in_progress": 1,
+      "error_codes": [
+        "err_zalo_user_not_found",
+        "err_zalo_receiver_blocks_stranger_message"
+      ]
+    },
+    "details": {
+      "thành công": 55,
+      "không tồn tại": 9,
+      "thất bại": 3
+    },
+    "commands": "campaign_find_user 19 ok / 9 Z216; prepare_campaign_media 10 ok; send_campaign_media 8 ok / 2 Z122; send_text 15 ok / 1 Z122; send_friend_request 12 ok; change_friend_display_name 9 ok; 0 waiting_socket",
+    "pacing": "nghỉ đúng cấu hình chiến dịch (60 giây, 120 giây); không nghỉ sau Z122/Z216 theo chính sách V500",
+    "customer_lines": "như Desktop, có mã công khai (vd 'Người nhận chặn tin nhắn từ người lạ (Z122)')",
+    "unmatched_signals": 0,
+    "worker_fallback_or_error_lines": 0,
+    "targets_by_00_11_30": {
+      "total": 32,
+      "completed": 32,
+      "open_over_5_minutes": 0,
+      "waiting_socket": 0
+    }
+  },
+  "rollback": "UPDATE public.org_organization SET use_new_zalo_runtime = false WHERE id IN (692, 900, 1191); ChatApi trả phiên về VPS (to_vps), VPS nhận lại và tự nối bằng phiên đã lưu, không quét QR (đã thử với tổ chức 526 lúc 01:00 12/11)"
+}
