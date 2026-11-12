@@ -3,6 +3,7 @@ import type { FacebookRandomDiagnosticSettings } from '../../../shared/facebookR
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser } from '../currentUser'
 import { mapAccountFromDB, mapCampaignActionFromDB, mapCampaignFromDB } from '../mappers'
+import { serverAccountsUseChatApi } from '../../../shared/zaloServerOnFly'
 
 // On-demand diagnostics use the existing HTTP client. Never load log/session/password fields.
 const campaignFields = 'id,name,account_id,action_id,status,note,is_delete,staff_id,organization_id,schedule,original_schedule,schedule_type,schedule_days,schedule_week_days,schedule_end_date,daily_stop_time,continue_next_day,extra_settings,data_target_source_mode,data_group_id,provisioning_state,updated_at,runtime_claim_token,runtime_unit_token'
@@ -28,7 +29,8 @@ export async function readPendingReasonAccount(id: number, signal: AbortSignal):
   if (error) throw error
   if (!data) return null
   const account = mapAccountFromDB({ ...data, facebook_random_run_revision: data.facebook_random_run_config?.revision })
-  const isChatManaged = user.isChatSync === true && Number(data.organization_id) === user.organizationId
+  // Tài khoản Server do ChatApi chạy: tổ chức có Chat, hoặc chạy trên Fly theo cờ engine v2 (V497/V498).
+  const isChatManaged = serverAccountsUseChatApi(user) && Number(data.organization_id) === user.organizationId
     && account.flatformType === 'zalo' && account.isZaloServer === true && !account.isZaloShowWeb
   const group = data.auto_account_groups as unknown as Record<string, unknown> | null
   // akaChat's executor only joins active, nondeleted groups from the same tenant.

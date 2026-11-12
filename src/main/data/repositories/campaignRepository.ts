@@ -53,6 +53,7 @@ import {
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
+import { CampaignProgressReuse, type CampaignProgressRow } from '../campaignProgressReuse'
 import { mapCampaignConfigFromDB, mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB, mapCampaignListItemFromDB } from '../mappers'
 import {
   getCurrentUserCredentials,
@@ -1593,6 +1594,43 @@ async function attachCampaignInputDataProgress<T extends { id: number }>(campaig
   })
 }
 
+/**
+ * Cách đếm tiến độ cho một lượt đọc trang của giao diện Desktop (docs/DESKTOP_UI_IDLE_READS.md). Chỉ có khi khóa
+ * `desktop.campaigns.progress_recount_seconds` bật; không truyền thì đếm mọi chiến dịch như trước, không ghi nhớ.
+ */
+export interface CampaignPageProgressOptions {
+  /** `reuse`: lượt đọc nền, chỉ đếm lại chiến dịch có thể đã đổi. `full`: đếm tất cả và ghi nhớ. */
+  mode: 'reuse' | 'full'
+  recountSeconds: number
+  selectedId?: number | null
+}
+
+/** Số tiến độ đã đếm theo phiên, chỉ phục vụ hiển thị danh sách; bộ chạy và các đường đọc khác không dùng. */
+const campaignPageProgressReuse = new CampaignProgressReuse()
+
+async function attachCampaignPageProgress<T extends CampaignProgressRow>(
+  campaigns: T[],
+  options: CampaignPageProgressOptions
+): Promise<T[]> {
+  if (campaigns.length === 0) return campaigns
+  const user = requireCurrentUser()
+  // Vẫn là hàm đếm hiện có (cùng RPC, cùng phạm vi phiên); chỉ khác ở danh sách ID được gửi đi.
+  const progressByCampaign = await campaignPageProgressReuse.resolve(
+    `${user.organizationId}:${user.staffId}`,
+    campaigns,
+    { mode: options.mode, recountMs: options.recountSeconds * 1000, selectedId: options.selectedId },
+    loadCampaignInputDataProgress
+  )
+  return campaigns.map(campaign => {
+    const progress = progressByCampaign.get(campaign.id)
+    return {
+      ...campaign,
+      inputDataCompletedCount: progress?.completed ?? 0,
+      inputDataTotalCount: progress?.total ?? 0
+    }
+  })
+}
+
 const CAMPAIGN_DATA_GROUP_SOURCE_STATUS_VALUES = new Set<CampaignDataGroupSourceStatus>([
   'baselining',
   'active',
@@ -1822,7 +1860,11 @@ export async function listCampaignSummaries(): Promise<CampaignListItem[]> {
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 
-export async function listCampaignSummariesForPage(ids: number[], extraAccounts: Array<{ id: number; name: string }> = []): Promise<CampaignListItem[]> {
+export async function listCampaignSummariesForPage(
+  ids: number[],
+  extraAccounts: Array<{ id: number; name: string }> = [],
+  progressOptions?: CampaignPageProgressOptions
+): Promise<CampaignListItem[]> {
   if (ids.length === 0) return []
   if (ids.length > 101) throw new Error('Campaign page exceeds 101 IDs')
   const u = requireCurrentUser()
@@ -1857,6 +1899,7 @@ export async function listCampaignSummariesForPage(ids: number[], extraAccounts:
   const campaignsWithDataGroupSources = await attachCampaignDataGroupSourceSummaries(
     campaignsWithSecondaryAccountNames
   )
+  if (progressOptions) return attachCampaignPageProgress(campaignsWithDataGroupSources, progressOptions)
   return attachCampaignInputDataProgress(campaignsWithDataGroupSources)
 }
 

@@ -26,6 +26,8 @@ import { isRenewalPortalUrl, type RenewalRequirement } from '../../../shared/ren
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
+import { loadZaloServerOnFly } from './zaloServerOnFlyRepository'
+import { loadCampaignEngineV2Enabled } from './campaignEngineFlagRepository'
 
 const client = () => getSupabaseClient()
 
@@ -171,6 +173,15 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   ])
   const { entitlements, zaloAccountCapabilities, chatSyncEnabled } = entitlementAccess
   const appAccess = await loadAppAccessForStaff(staffRow.id, staffRow.username, staffRow.password)
+  const isChatSync = appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled
+  // V498: chỉ hỏi khi tổ chức không Chat có quyền Server (thêm một lượt gọi lúc đăng nhập).
+  // V513: cờ engine v2 chọn bộ chạy chiến dịch Zalo QR/Web của bản này; chỉ hỏi khi tổ chức có quyền Zalo. Hai lượt gọi chạy song song.
+  const [zaloServerOnFly, campaignEngineV2] = await Promise.all([
+    !isChatSync && !appAccess.separateAccess && entitlements.zalo === true && zaloAccountCapabilities.server === true
+      ? loadZaloServerOnFly()
+      : Promise.resolve(false),
+    entitlements.zalo === true ? loadCampaignEngineV2Enabled() : Promise.resolve(false)
+  ])
 
   return {
     staffId: staffRow.id,
@@ -187,7 +198,9 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     zaloAccountCapabilities,
     entitlements,
     accountProducts,
-    isChatSync: appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled,
+    isChatSync,
+    zaloServerOnFly,
+    campaignEngineV2,
     appAccess,
     chatSyncProducts,
     deviceLabel: deviceRecord.device_label || null,

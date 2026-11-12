@@ -1,5 +1,6 @@
 import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignAction, CampaignConfig, CampaignInput, CampaignInputData, CampaignDetail, CampaignInputStatus, CampaignDetailStatus, CampaignListItem, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactType, AutoAccountAction, AutoAccountActionStatus, AutoErrorPolicy, ContentTemplate, ContentTemplateChannelConfig, ContentTemplateChannelName, ContentTemplateChannels, ContentTemplateContentType, ContentTemplateGroup, MediaFile, MediaGroup, ZaloAccount } from '../../shared/types'
 import { getCurrentUser } from './currentUser'
+import { serverAccountsUseChatApi } from '../../shared/zaloServerOnFly'
 import { getCampaignEditVersion } from './campaignEditVersion'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
@@ -9,7 +10,7 @@ export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const currentUser = getCurrentUser()
   const isZaloServerChatAccount = flatformType === 'zalo'
     && currentUser?.organizationId === organizationId
-    && currentUser.isChatSync === true
+    && serverAccountsUseChatApi(currentUser)
     && row.is_zalo_show_web !== true
     && row.is_zalo_server === true
   const loginStatus = row.login_status as string

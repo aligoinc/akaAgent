@@ -1,0 +1,88 @@
+{
+  "operation": "Bật Chat (is_chat_sync) cho gói 635 (sản phẩm 16, có Server) của tổ chức 526 để thử engine v2 trên Fly",
+  "requested_by_user": "11/11/2026 ~14:55 VN, bấm \"Bật Chat cho 526\"; 14:59 hỏi lại \"bật chat làm gì?\"; 15:06 bấm \"Tắt Chat lại\" (anh muốn thử tổ chức không Chat, không muốn bật Chat)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "before": {
+    "product_635_is_chat_sync": false,
+    "chat_runtime_server_526": false,
+    "account_2445": {
+      "login_status": "đã đăng nhập",
+      "zalo_session_last_verified_at": "2026-11-11T07:20:44.493+00:00"
+    },
+    "campaigns_526": {
+      "hoàn thành": 9,
+      "tạm dừng": 4,
+      "đang chạy": 0
+    }
+  },
+  "dry_run": {
+    "rows": 1,
+    "duration_ms": 102,
+    "chat_runtime_server_after": true,
+    "tables_written": {
+      "aka_order": "upd 1",
+      "aka_order_history": "ins 1",
+      "org_organization_product": "upd 1",
+      "org_organization_product_history": "ins 1"
+    }
+  },
+  "applied": {
+    "at_utc": "2026-11-11T07:58:10.957448+00:00",
+    "sql": "UPDATE public.org_organization_product SET is_chat_sync = true WHERE id = 635 AND organization_id = 526 AND product_id = 16 AND NOT is_chat_sync"
+  },
+  "verify": {
+    "chat_runtime_server_526": true,
+    "chat_orgs": [
+      526
+    ],
+    "aka_order_635_is_chat_sync": true
+  },
+  "after_effects": [
+    {
+      "at_utc": "2026-11-11T07:58:15.157+00:00",
+      "account_id": 2445,
+      "source": "chat_api",
+      "event": "logout",
+      "message": "Tài khoản Server chưa có session Chat; đã cập nhật trạng thái đăng nhập."
+    }
+  ],
+  "notes": [
+    "Bộ mới chưa có trên Fly (V495 chưa apply, worker chưa deploy): lúc này Fly chỉ chạy bộ cũ cho 526, và tài khoản 2445 phải quét QR qua Chat mới chạy được.",
+    "Phiên VPS vẫn còn trong auto_accounts.zalo_session. VPS chỉ tự nối lại phiên có zalo_session_last_verified_at IS NULL (listPendingZaloServerSessions -> restoreUnverifiedServerSession)."
+  ],
+  "rollback_executed": {
+    "dry_run_first_attempt": "Huỷ vì chờ quá 3 giây khoá advisory aka-agent-zalo-runtime-entitlement-mutation (trigger serialize_zalo_runtime_entitlement_change lấy độc quyền; các hàm nhận việc Zalo giữ dùng chung). Không ghi gì.",
+    "dry_run_account_only": {
+      "rows": 1,
+      "tables_written": {
+        "auto_accounts": "upd 1"
+      }
+    },
+    "applied": {
+      "at_utc": "2026-11-11T08:07:38.626192+00:00",
+      "attempts": 1,
+      "lock_timeout": "1s",
+      "sql": [
+        "UPDATE public.org_organization_product SET is_chat_sync = false WHERE id = 635 AND organization_id = 526 AND product_id = 16 AND is_chat_sync",
+        "UPDATE public.auto_accounts SET zalo_session_last_verified_at = NULL WHERE id = 2445 AND zalo_session IS NOT NULL AND zalo_session_last_verified_at IS NOT NULL"
+      ]
+    },
+    "after": {
+      "checked_at_vn": "2026-11-11 15:09:18",
+      "chat_runtime_526": false,
+      "chat_orgs": [],
+      "aka_order_635_is_chat_sync": false,
+      "account_2445": {
+        "login_status": "đã đăng nhập",
+        "zalo_session_last_verified_at": "2026-11-11T08:09:02.904+00:00",
+        "last_error": null
+      },
+      "account_logs": [
+        "08:09:00.983Z zalo_server status_changed: Tài khoản bắt đầu thao tác runtime.",
+        "08:09:03.065Z zalo_server login: chưa đăng nhập → đã đăng nhập",
+        "08:09:03.206Z zalo_server operation_finished"
+      ]
+    },
+    "downtime": "Tài khoản 2445 ở trạng thái \"chưa đăng nhập\" từ 14:58:15 tới 15:09:03 VN; tổ chức 526 không có chiến dịch nào đang chạy."
+  }
+}

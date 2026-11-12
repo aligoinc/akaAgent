@@ -1,0 +1,32 @@
+{
+  "operation": "Lần chạy thật thứ hai của engine v2 trên Fly: chiến dịch 32956 (tổ chức 526, nhắn tin + kết bạn theo SĐT), đồng thời để xem tiến trình trên Web sau deploy 20:12",
+  "requested_by_user": "11/11/2026 ~20:16 VN, \"Chạy 32956\" (2 số đuôi 455, 704, nằm trong nhóm số anh đã đồng ý)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "precheck_vn": "20:16:59: 32956 tạm dừng, không token; 2 data chờ; tài khoản 2445 rảnh, không khoá thao tác, không lease; binding Fly 625 có sự kiện 20:16:33",
+  "resume": {
+    "at_utc": "2026-11-11T13:17:13.059492+00:00",
+    "sql": "UPDATE auto_campaigns SET status='chờ xử lý', note=NULL, updated_at=now() WHERE id=32956 AND organization_id=526 AND account_id=2445 AND status='tạm dừng' AND (runtime_claim_token IS NULL OR runtime_claim_target='server') AND runtime_unit_token IS NULL AND không có data 'đang chạy' (giống RPC Tiếp tục)"
+  },
+  "run": {
+    "runner": "fly:784574da214578:640",
+    "targets": [
+      { "run": 3, "input": 8478863, "phone_tail": "455", "started_vn": "20:17:13", "completed_vn": "20:17:15", "final": "hoàn thành",
+        "outcomes": ["v2:3:lookup ok", "v2:3:message ok delivered", "v2:3:friend ok delivered"] },
+      { "run": 4, "input": 8478864, "phone_tail": "704", "started_vn": "20:17:45", "completed_vn": "20:17:48", "final": "hoàn thành",
+        "outcomes": ["v2:4:lookup ok", "v2:4:message ok delivered", "v2:4:friend err_zalo_already_friend not_delivered"], "input_note": "Đã là bạn bè (Z225)" }
+    ],
+    "fly_commands": "campaign_find_user, send_text, send_friend_request (số 455); campaign_find_user, send_text, send_friend_request (số 704); đều completed",
+    "campaign_log": [
+      "🚀 Bắt đầu chiến dịch", "▶️ Xử lý - <SĐT 455>", "Tìm SĐT: Đã tìm thấy SĐT <SĐT>: <tên>", "Nhắn tin người lạ: Đã gửi tin nhắn đến <tên>",
+      "Kết bạn: Đã gửi lời mời kết bạn đến <tên>", "✅ Hoàn thành - <SĐT 455>", "⏳ Nghỉ 30s trước khi xử lý mục tiếp theo...",
+      "▶️ Xử lý - <SĐT 704>", "Tìm SĐT: …", "Nhắn tin người lạ: …", "Kết bạn: Đã là bạn bè (Z225)", "✅ Hoàn thành - <SĐT 704>", "✅ Hoàn thành chiến dịch"
+    ],
+    "history_details": "6 dòng: Tìm SĐT thành công ×2, Nhắn tin người lạ thành công ×2, Kết bạn thành công ×1, Kết bạn 'đã là bạn bè' ×1 ('Đã là bạn bè (Z225)')",
+    "campaign_after": "hoàn thành 20:17:48, không còn lease/token",
+    "notes": [
+      "Bước kết bạn của bộ mới chạy đúng: gửi lời mời; người đã là bạn bè ghi trạng thái 'đã là bạn bè' kèm mã công khai Z225 (dòng auto_error err_zalo_already_friend, chính sách seed từ hành vi cũ).",
+      "Số 704 nhận tin lần thứ hai trong ngày (lần đầu từ 9150 lúc 17:16) vì chiến dịch không bật chống gửi lặp; đúng cấu hình."
+    ]
+  },
+  "web_progress": "Web đã deploy 20:12:52 (vé kênh tiến trình ChatApi cho tổ chức theo cờ). Log Web có các lượt POST /realtime-ticket 200 lúc 20:17 nhưng không phân biệt được phiên của anh; chờ anh xác nhận có thấy dòng tiến trình trên Web không."
+}

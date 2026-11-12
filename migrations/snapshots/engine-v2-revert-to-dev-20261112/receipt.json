@@ -1,0 +1,55 @@
+{
+  "operation": "Gỡ engine v2 khỏi production: đưa ChatApi (api + worker) và Web/API về đúng nhánh dev của repo chính; trả tổ chức thử 526 về VPS",
+  "requested_by_user": "12/11/2026 ~00:55 VN: \"deploy lại những thứ ở repo chính đi, tính năng này bây giờ chưa cần test\", rồi \"deploy nhánh dev đi, có thể các repo có code mới pull code mới về rồi deploy lại\"",
+  "findings_before": {
+    "chatapi": "api và worker đang chạy dbb38b7 (đầu dev) + v2: api từ 21:52 VN 11/11 (image worker-api-dbb38b7-v2-20261111, do nơi khác deploy), worker từ 00:31 VN 12/11 (worker-dbb38b7-v2-errors-20261112, em deploy). dev ChatApi vẫn là dbb38b7.",
+    "web": "Máy 48ee749f357398 chạy v106 (tài khoản Fly khác, 22:24 VN 11/11, image digest a1d974d8… không nhãn). So 154 file nguồn API trong source map: 152 trùng dev 6cb64b4, 2 file (aka-agent-control.repository.ts, aka-agent-control.service.ts) là phần vé tiến trình v2 của em (trùng worktree akaAgentWebApp-deploy-realtime). dev Web đi trước de8fa4f 20 commit (#203–#208), không có migration hay RPC mới.",
+    "desktop_app_server": "Không bị v2 đụng tới (Desktop chưa phát hành, App Server không đổi), không deploy lại."
+  },
+  "step1_flag_off_526": {
+    "sql": "update public.org_organization set use_new_zalo_runtime = false where id = 526 and use_new_zalo_runtime = true",
+    "at_vn": "2026-11-12 01:00:39",
+    "result": "ChatApi (còn v2) trả tài khoản 2445 lúc 01:00:52: handoff to_vps xong, binding 625 tắt; aka_agent_app_access_chat_organizations(array[526]) trả rỗng; VPS nhận lại và kiểm phiên đạt lúc 01:02:09 (zalo_session_last_verified_at), tài khoản vẫn 'đã đăng nhập', không phải quét QR",
+    "now": "Không tổ chức nào bật cờ use_new_zalo_runtime"
+  },
+  "step2_chatapi": {
+    "source": "git archive dbb38b742e4f7dd9d365e605d51c760c5cb10362 (đầu dev) vào thư mục tạm sạch, không có packages/campaign-engine",
+    "command": "flyctl deploy --app aka-agent-chat-api --process-groups api,worker --remote-only --image-label api-worker-dbb38b7-dev-20261112",
+    "start_vn": "2026-11-12 01:02:32",
+    "end_vn": "2026-11-12 01:04:02",
+    "image": "registry.fly.io/aka-agent-chat-api:api-worker-dbb38b7-dev-20261112@sha256:f96e3b8a6f43a7ef17870d7b19a373d6d975824d88c15c9e37e7a9fbd474869a (118 MB)",
+    "checks": {
+      "image_content": "Cả hai máy (worker 784574da214578, api 7845747fe073e8): 423/423 file nguồn trùng bản archive",
+      "zalo_runtime": "không đổi (runtime-binnet-jxl-2ec75c3-20261107)",
+      "health_live": 200,
+      "worker_leader": "pid 2531752 lấy khoá lúc 01:03:52 (1 giây sau khi worker mới khởi động 01:03:51), 0 tiến trình chờ khoá",
+      "waiting_socket": "0 lệnh mới, tổng 288 như trước",
+      "logs": "Chỉ có dòng WARN checksum offload của init Fly (có ở mọi lần khởi động); api 0 dòng lỗi"
+    },
+    "rollback": "Muốn chạy lại v2: api = registry.fly.io/aka-agent-chat-api:worker-api-dbb38b7-v2-20261111@sha256:355daf600c0447bd2b862060f06723c65811e8c6406124c988c8fce2772c9bf0, worker = registry.fly.io/aka-agent-chat-api:worker-dbb38b7-v2-errors-20261112@sha256:fd3cef5c6bb655040587369c9de1ea6e8d17a542a8af64bce44911aefad86334, rồi bật lại cờ 526"
+  },
+  "step3_web": {
+    "source": "git archive 6cb64b4e70040998483ee0da8a5a97e52884d00d (đầu dev, merge #208) vào thư mục tạm sạch",
+    "verify": "npm ci, build control-api, typecheck 8 workspace đạt; test 4.073 đạt, 2 bỏ qua (control-api 217, campaign-core 390, journey-core 86, control-client 68, API 1.728 + 2 bỏ qua, Web 1.103, mobile 481)",
+    "build": "flyctl deploy --app aka-agent-web-app --build-only --push --remote-only --image-label web-6cb64b4-20261112 (01:15:27–01:16:55 VN)",
+    "image": "registry.fly.io/aka-agent-web-app:web-6cb64b4-20261112@sha256:e883e74d0a5f3be8879db216b0b2002c615ec3ffcf3f4b24bc0c2b8505a90bce (83 MB)",
+    "command": "flyctl deploy --app aka-agent-web-app --image <image trên> --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m",
+    "start_vn": "2026-11-12 01:17:34",
+    "end_vn": "2026-11-12 01:18:14",
+    "release": "v107",
+    "checks": {
+      "machine_config": "Chỉ đổi image và metadata (2 shared CPU/2 GB, services, env giữ nguyên)",
+      "http": "/healthz 200, / 200, /api/aka-agent/control/v1/auth/login-content 200; /me, /notifications, /accounts, /settings/web-polling 401 — giống hệt trước deploy",
+      "api_sources": "154/154 file nguồn API trong source map trùng dev 6cb64b4",
+      "web_bundle": "Trang phục vụ assets/index-ssfTzkhy.js, trùng tên bundle khi build lại 6cb64b4 ở máy này (trước deploy: index-D0MgNwTs.js)",
+      "logs": "99 dòng đầu sau khởi động: 23 lượt 200, 27 lượt 402, 0 dòng lỗi",
+      "notification_tick": "aka_agent_notification_tick vẫn 200 sau khởi động (18:18:14Z, 18:19:19Z)"
+    },
+    "new_for_customers_vs_v106": "#208 bộ lọc thời gian chiến dịch 'Trước và sau 7/30/90 ngày' (v106 đã có #203–#207)",
+    "removed": "Vé kênh tiến trình ChatApi cho tổ chức không Chat chạy theo cờ (v2)",
+    "rollback": "flyctl deploy --app aka-agent-web-app --image registry.fly.io/aka-agent-web-app@sha256:a1d974d8fa7abf64bf17e8146eb4440f9af99bd9a6154c8198bd12a004812d6d --ha=false --update-only --only-machines 48ee749f357398 --strategy rolling --wait-timeout 2m (v106)"
+  },
+  "edge_logs_17:58-18:19Z": "0 lỗi 5xx, 0 lỗi 503; p50 44–50 ms",
+  "kept": "DB giữ V495–V500 (chỉ thêm; không tổ chức nào bật cờ nên code cũ chạy như trước). Code v2 vẫn ở các worktree local (akaAgent campaign-engine-v2, akaAgentChatApi-campaign-engine-v2, akaAgentChatApi-deploy-dbb38b7, akaAgentWebApp-campaign-engine-v2, akaAgentWebApp-deploy-realtime), chưa commit.",
+  "main_checkouts": "Không đụng: dựng từ git archive của đúng commit; chỉ git fetch trong worktree"
+}

@@ -1,0 +1,25 @@
+/* Port từ WebApp apps/web/src/features/CampaignLimitCell.css (12/11/2026). */
+/* Ô "Giới hạn lượt" của danh sách chiến dịch: mỗi hành động một dòng (tên · thanh hôm nay · đã chạy/giới hạn · số trong giờ). */
+.campaign-limit-cell { width: 100%; min-width: 0; display: flex; flex-direction: column; gap: 5px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; font-variant-numeric: tabular-nums; }
+button.campaign-limit-cell { cursor: pointer; }
+button.campaign-limit-cell:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 3px; border-radius: 4px; }
+.campaign-limit-cell.is-stale { opacity: .55; }
+.campaign-limit-row { display: grid; grid-template-columns: 58px minmax(28px, 1fr) auto 50px; align-items: center; column-gap: 6px; row-gap: 2px; min-width: 0; }
+.campaign-limit-name { display: flex; align-items: center; gap: 3px; min-width: 0; overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-limit-shared { flex: 0 0 auto; color: var(--accent-primary); }
+.campaign-limit-track { height: 6px; overflow: hidden; border-radius: 999px; background: rgba(148, 163, 184, .2); }
+.campaign-limit-track > span { display: block; height: 100%; border-radius: inherit; background: var(--accent-info); transition: width var(--transition-fast); }
+.campaign-limit-day { min-width: 38px; color: var(--text-primary); font-size: 11px; font-weight: 650; text-align: right; white-space: nowrap; }
+.campaign-limit-unlimited { grid-column: 2 / 4; color: var(--text-tertiary); font-size: 10px; white-space: nowrap; }
+.campaign-limit-hour { display: inline-flex; align-items: center; justify-content: flex-end; gap: 3px; color: var(--text-tertiary); font-size: 10.5px; white-space: nowrap; }
+.campaign-limit-hour.is-full { color: var(--accent-warning); font-weight: 650; }
+.campaign-limit-note { grid-column: 1 / -1; display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.campaign-limit-note svg { flex: 0 0 auto; }
+.campaign-limit-note.is-wait { color: var(--accent-warning); }
+.campaign-limit-note.is-done { color: var(--text-secondary); }
+.campaign-limit-note.is-lock { color: var(--accent-error); }
+.campaign-limit-row.is-day .campaign-limit-track > span { background: color-mix(in srgb, var(--text-secondary) 60%, transparent); }
+.campaign-limit-cell.is-muted .campaign-limit-track > span { background: var(--text-tertiary); }
+.campaign-limit-cell.is-muted .campaign-limit-day { color: var(--text-secondary); font-weight: 500; }
+body.theme-light .campaign-limit-hour.is-full,
+body.theme-light .campaign-limit-note.is-wait { color: #b45309; }

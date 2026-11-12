@@ -1,0 +1,42 @@
+{
+ "migration": "migration_v500_zalo_error_policies",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~00:01 VN, \"ok apply đi\" (anh duyệt từng câu Q1–Q8 tối 11/11, docs/CAMPAIGN_OUTCOME_ENGINE_ZALO_FULL_REVIEW.md)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+ "file_md5": "e6ae5ac1441ab45a9c6b159c41776107",
+ "file_bytes": 51796,
+ "generated_by": "scripts/build-v500-sql.cjs",
+ "ledger": {
+  "version": "20261111170305",
+  "name": "migration_v500_zalo_error_policies",
+  "statements_md5": "e6ae5ac1441ab45a9c6b159c41776107"
+ },
+ "applied_at_vn": "2026-11-12 00:03:06 (lệnh chạy 00:03:05–00:03:07, exit 0)",
+ "precheck": "như V499 (cùng lượt kiểm 00:01:56) + V499 đã apply và đạt hậu kiểm 00:02:55",
+ "verify": {
+  "at_vn": "2026-11-12 00:03:30",
+  "counts": {
+   "policies_v500_review": 109,
+   "signal_rules_v500_review": 14,
+   "new_engine_codes_active": 7,
+   "engine_codes_with_zalo_codes": 0,
+   "seed_rule_target_missing_identity_active": false,
+   "policy_lint_issues": 0
+  },
+  "simulate_fly_zalo_message_phone": {
+   "127 nhắn người lạ": "Z127, requeue, no_count, streak increment ngưỡng 3, campaign pause, khoá 30 phút",
+   "ECONNRESET tra số (before_send)": "NET01, requeue, no_count, streak increment ngưỡng 4, campaign pause, khoá 11 thao tác 5 phút, không nghỉ",
+   "122 nhắn người lạ": "Z122, complete, count, không nghỉ, nhớ 30 ngày",
+   "216 tra số": "Z216, complete, count, không nghỉ, nhớ 30 ngày",
+   "215 kết bạn": "Z215, complete, no_count, không nghỉ, không nhớ",
+   "-69 nhắn người lạ": "UNK01, complete, count_if_committed, streak increment",
+   "123 nhắn người lạ": "Z123 giữ như cũ: complete, count, khoá 30 phút"
+  },
+  "postgrest": "không nạp lại schema (chỉ dữ liệu)",
+  "edge_logs_rest": "16:58–17:03 UTC: 0 lỗi 5xx, 0 lỗi 503",
+  "tests_local": "scripts/test-v500-zalo-error-policies.cjs 13/13; scripts/legacy-catalog-validator-smoke.cjs đạt (Desktop 8.2.0, 9.3.0, chat-sync)"
+ },
+ "scope": "Chỉ engine v2 đọc: hiện là tổ chức 526 trên Fly (cờ use_new_zalo_runtime) và Desktop bản mới chưa phát hành. Bộ chạy cũ đọc auto_error theo zalo_error_codes nên không đổi.",
+ "rollback": "migrations/rollback_v500_zalo_error_policies.sql (xoá dòng v500_review, bật lại luật seed target_missing_identity, tắt 7 mã mới)",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v500_* hoặc đã có dòng v500_review"
+}

@@ -9,6 +9,13 @@ bị từ chối. 0 lỗi 503/5xx quanh phút apply. Caller WebApp API (aligoinc
 chưa phát hành nên chưa có lượt gọi thật. Sửa hàm cũ về sau thì phải sửa cả v2.
 [Receipt](../../migrations/snapshots/control-session-chat-scope-v490/apply-receipt.json).
 
+[Bản Desktop thử nội bộ 9.5.1 engine v2](../audits/akaagent-9.5.1-test-engine-v2-20261111/README.md):
+**Đã build local Mac ARM64 lúc 21:07:59–21:09:05 VN, 11/11/2026, chỉ để thử nội bộ; không tải lên, không đổi feed.**
+Nguồn worktree `campaign-engine-v2` (nền `54cfde31` + thay đổi engine v2 chưa commit). Bản này chạy bộ mới cho tài khoản QR/Web
+và nghe tiến trình ChatApi cho tổ chức không Chat chạy trên Fly (V498). Không phải bản phát hành.
+**Không mở lại bản này sau V501 (apply 12/11/2026 07:56 VN):** bộ chạy trong bản không biết các trạng thái claim mới và không gọi
+`finish_campaign_v2`; muốn thử thì dựng bản mới từ worktree.
+
 [Build akaAgent Zalo Server 9.5.1](../audits/akaagent-server-9.5.1-20261110/README.md):
 **Đã build local App Server Windows x64 nội bộ lúc 13:28:54–13:29:42 VN, 10/11/2026;
 người dùng đã cài lên VPS, bản mới gửi request từ 13:41:50 VN. Chưa upload.** Nguồn repo chính

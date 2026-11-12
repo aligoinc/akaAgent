@@ -3095,6 +3095,17 @@ export interface AuthUser {
   accountProducts: AuthAccountProduct[]
   /** Quyền đồng bộ Chat hiệu lực, gộp từ Product Zalo 16/18 còn hạn của tổ chức. */
   isChatSync?: boolean
+  /**
+   * V498: tài khoản Zalo Server của tổ chức đang chạy trên Fly (có Chat, hoặc ChatApi đã nhận theo cờ engine v2).
+   * Chỉ hỏi khi tổ chức không Chat có quyền Server; chốt lúc đăng nhập. Tổ chức không Chat chỉ dùng để nghe tiến trình
+   * chiến dịch từ ChatApi, thao tác tài khoản vẫn đi App Server.
+   */
+  zaloServerOnFly?: boolean
+  /**
+   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly).
+   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
+   */
+  campaignEngineV2?: boolean
   /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
   chatWebEnabledAtLogin?: boolean
   /** Opaque desktop login generation; never a Chat authentication token. */

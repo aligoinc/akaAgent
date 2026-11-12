@@ -50,6 +50,13 @@ const handlers: Record<string, any> = {
     return result
   },
   getDesktopPollingSettings: () => state.settings,
+  // Trạng thái cửa sổ/máy giả cho run-desktop-ui-idle-reads-smoke.cjs; bộ điều phối chỉ hỏi khi khóa cài đặt bật.
+  getDesktopUiAttention: async () => {
+    if (state.attentionFail) throw new Error('Fixture attention error')
+    if (state.attentionHang) await new Promise(() => {})
+    return { ...(state.attention || { hidden: false, idleSeconds: 0 }) }
+  },
+  onDesktopUiAttentionChanged: listen('attention'),
   getDesktopCampaignPage: async (query: any) => {
     if (state.failPage) throw new Error('Fixture page error')
     const filtered = rows.filter(row => matches(row, query.filters))

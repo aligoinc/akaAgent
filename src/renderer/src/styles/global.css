@@ -9136,10 +9136,11 @@ td.report-account-col span {
 /* =========== CAMPAIGN TABLE (multi-column) =========== */
 .campaign-table {
   width: 100%;
-  min-width: 1412px;
+  min-width: 1516px;
   font-size: 12px;
 }
 
+/* 12/11/2026: cột "Giới hạn lượt" sau cột Trạng thái; bỏ cột "Ngày update" (thành dòng nhỏ trong cột Trạng thái). */
 .campaign-table-header,
 .campaign-table-row {
   display: grid;
@@ -9147,11 +9148,11 @@ td.report-account-col span {
     minmax(280px, 2.2fr)
     92px
     minmax(150px, 1fr)
+    minmax(236px, 1.25fr)
     148px
     minmax(170px, 1.2fr)
     minmax(200px, 1.35fr)
-    minmax(160px, 1fr)
-    minmax(132px, 0.9fr);
+    minmax(160px, 1fr);
   column-gap: 8px;
   align-items: center;
 }
@@ -26428,3 +26429,10 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
 .campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button .ai-chat-dot { width: 8px; height: 8px; box-shadow: 0 0 0 2px var(--cell-assist-bg); }
 .campaign-table-row:not(.is-draft) .col-actions button.campaign-cell-assistant-button .ai-chat-dot.pending { box-sizing: border-box; border: 2px solid var(--accent-primary); background: transparent; box-shadow: none; }
 .campaign-table-row:not(.is-draft) .col-actions { flex-direction: column; align-items: stretch; justify-content: center; gap: 4px; }
+
+/* Danh sách chiến dịch (12/11/2026, như Web): cột "Giới hạn lượt" và dòng ngày update trong cột Trạng thái. */
+.campaign-updated-line { color: var(--text-tertiary); font-size: 10px; line-height: 1.2; white-space: nowrap; }
+.campaign-limit-heading { display: flex; flex-direction: column; gap: 1px; line-height: 1.15; }
+.campaign-limit-heading small { color: var(--text-tertiary); font-size: 9px; font-weight: 500; letter-spacing: 0; text-transform: none; }
+.campaign-table-row .col-limits { align-self: start; padding-top: 4px; }
+.campaign-table-row .col-limits.is-empty { align-self: center; padding-top: 0; }
