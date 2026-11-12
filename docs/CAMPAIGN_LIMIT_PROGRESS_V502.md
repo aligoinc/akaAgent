@@ -1,6 +1,6 @@
 # V502: hàm đọc tiến độ giới hạn cho danh sách chiến dịch (Web, iOS, Desktop) và tab "Hành động"
 
-Ngày 12/11/2026. **CHƯA apply lên akachat.** Code Web/API và app iOS ở akaAgentWebApp nhánh `claude/fervent-gates-c8ldgw` (chưa deploy/phát hành; iOS đọc qua cùng API với Web, không gọi DB); Desktop ở akaAgent cùng nhánh (chưa build/phát hành). Web/API và Desktop chạy được khi DB chưa có hàm (cột "Giới hạn lượt" để trống, tab Hành động dùng bộ đọc cũ).
+Ngày 12/11/2026. **Đã apply akachat lúc 18:18:12 VN 12/11** (`20261112111812 / migration_v502_campaign_limit_progress`; không apply lại; md5 sổ = file `2dd29be7…`; [biên nhận](../migrations/snapshots/campaign-limit-progress-v502/apply-receipt.json)). Code Web/API và app iOS ở akaAgentWebApp nhánh `claude/fervent-gates-c8ldgw` (chưa deploy/phát hành; iOS đọc qua cùng API với Web, không gọi DB); Desktop ở akaAgent cùng nhánh (chưa build/phát hành). Web/API và Desktop chạy được khi DB chưa có hàm (cột "Giới hạn lượt" để trống, tab Hành động dùng bộ đọc cũ).
 
 - Migration: [migration_v502_campaign_limit_progress.sql](../migrations/migration_v502_campaign_limit_progress.sql)
 - Rollback: [rollback_v502_campaign_limit_progress.sql](../migrations/rollback_v502_campaign_limit_progress.sql) (chỉ `DROP FUNCTION`)
@@ -52,13 +52,15 @@ Thân hàm chạy dưới dạng câu truy vấn trên production:
 - Nhân viên có nhiều chiến dịch nhất (100 chiến dịch, 120 cặp, Facebook): 639 ms lần đầu. Bản nháp đầu trả 518 KB vì mỗi chiến dịch có ~169 khóa cài đặt dạng cờ/số; đã đổi sang `p_extra_keys` để chỉ trả khóa cần.
 - Danh sách Web gọi RPC trang trung bình 0,145 lần/giây (45 ngày) nên hàm mới thêm cùng mức đó.
 
-Chưa đo bằng hàm thật (chưa apply).
+Đo bằng hàm thật trên production (chạy thử trong giao dịch tự hủy ngay trước khi apply, rồi gọi lại dưới `service_role` sau apply): trang 101 chiến dịch 44–258 ms, 120–200 KB (nhân viên 347: 121 cặp khung giờ); nhân viên 4–5 chiến dịch 7–38 ms, 11–16 KB; chế độ chi tiết 6–205 ms, 6–15 KB.
 
 ## Apply
 
 - Tạo hàm là DDL: PostgREST nạp lại schema, nên apply buổi tối muộn (xem ghi chú V494 về 21 lỗi 500 của gateway chat khi nạp lại schema lúc 17:23).
 - Trước khi apply, đọc lại sổ migration: số `vN` dùng chung cho mọi repo/nhánh, sáng 12/11 sổ đã tới V501. Nếu V502 đã bị dùng thì đổi số file và tên hàm lỗi `v502_*` trước khi apply.
 - Sau apply: gọi thử dưới `service_role` cho một nhân viên thật, đo thời gian và kích thước; ghi biên nhận vào `migrations/snapshots/campaign-limit-progress-v502/`.
+
+**Đã apply 18:18:12 VN 12/11/2026** theo yêu cầu người dùng (sớm hơn lịch 19:00; hai lời nhắc 18:45/19:00 đã tắt). Sổ lúc đó đã tới V510 (V503–V510 do phiên khác apply chiều 12/11), số V502 vẫn trống. Trước khi apply đã chạy toàn bộ migration + gọi thử 4 nhân viên thật trong một giao dịch kết thúc bằng lỗi có chủ ý (không lưu, không nạp lại schema) để chắc hàm còn khớp schema sau V510. Hậu kiểm: md5 sổ = file; quyền hàm đọc chỉ `postgres` + `service_role`, hàm Desktop chỉ `postgres` + `aka_agent_desktop`, cả hai `statement_timeout=8s`; hàm Desktop với token thật của nhân viên 284 trả kết quả trùng md5 với hàm đọc (danh sách và chi tiết), sai mật khẩu bị từ chối (`automation_auth_invalid`), nhân viên khác bị từ chối (`desktop_staff_scope_denied`), Desktop gọi thẳng hàm đọc bị từ chối. PostgREST nạp lại schema mất khoảng 3,5 giây (truy vấn schema 1,75 giây); 0 lỗi 5xx/503, riêng 10 giây đó có 149 request trên 1 giây (lâu nhất 2,1 giây). Chi tiết: [biên nhận](../migrations/snapshots/campaign-limit-progress-v502/apply-receipt.json).
 
 ## Desktop (12/11/2026, chưa build/phát hành)
 
