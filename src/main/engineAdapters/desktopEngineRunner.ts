@@ -39,6 +39,8 @@ const DRAIN_TIMEOUT_MS = 10_000
 export interface DesktopEngineHost {
   zaloRuntime(): ZaloRuntimeService | undefined
   staffId(): number | null
+  /** Tổ chức của phiên bật cờ engine v2 (V513, chốt lúc đăng nhập); false thì mọi chiến dịch chạy bộ cũ. */
+  engineEnabled(): boolean
   /** Chặn bộ mới khi chế độ chạy Zalo đang đổi (cần khởi động lại app) như bộ cũ. */
   zaloRuntimeBlocked(): boolean
   /** Bộ lập lịch đã ngừng nhận việc (đăng xuất, đổi chế độ chạy…): dừng sau data đang xử lý. */
@@ -98,6 +100,9 @@ export class DesktopEngineRunner {
 
   /** Chiến dịch có chạy bằng bộ mới ở bản cài này không. */
   support(account: AutoAccount, campaign: Campaign): V2Support {
+    // Công tắc theo tổ chức (V513): cờ tắt, chưa đọc được hay DB chưa có hàm thì chạy bộ cũ như bản chưa có engine v2.
+    // Cờ chốt lúc đăng nhập, nên không đổi bộ chạy giữa lúc chiến dịch đang chạy dở.
+    if (!this.host.engineEnabled()) return { ok: false, reason: 'org_flag_off' }
     if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo' || account.isZaloServer === true) {
       return { ok: false, reason: 'runtime' }
     }

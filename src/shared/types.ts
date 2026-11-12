@@ -3101,6 +3101,11 @@ export interface AuthUser {
    * chiến dịch từ ChatApi, thao tác tài khoản vẫn đi App Server.
    */
   zaloServerOnFly?: boolean
+  /**
+   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly).
+   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
+   */
+  campaignEngineV2?: boolean
   /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
   chatWebEnabledAtLogin?: boolean
   /** Opaque desktop login generation; never a Chat authentication token. */

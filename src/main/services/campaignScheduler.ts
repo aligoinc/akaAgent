@@ -897,6 +897,7 @@ export class CampaignScheduler {
     if (this.runtimeTarget === 'desktop') this.engineRunner = new DesktopEngineRunner({
       zaloRuntime: () => this.zaloRuntime,
       staffId: () => getCurrentUser()?.staffId ?? null,
+      engineEnabled: () => getCurrentUser()?.campaignEngineV2 === true,
       zaloRuntimeBlocked: () => this.zaloRuntimeBlockedForRestart || this.zaloRuntimeStopRequested,
       acceptingWork: () => this.running && !this.zaloRuntimeStopRequested,
       logProgress: (campaign, text) => this.logCampaignProgress(campaign, text),
