@@ -897,6 +897,22 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   huỷ, lượt vẫn chỉ đọc danh sách tag một lần; đóng hẳn sau đó vẫn huỷ); đối chứng âm: 3 ca mới hỏng với adapter cũ, đạt với adapter mới; smoke
   V512 đạt; check-all 26 bước; ChatApi `npm run verify` 184 file / 2.647 test, chạy lại 2 file dùng V512 mới (19 test) đạt.
 
+### 12/11 ~22:35–23:00 VN: công tắc Desktop theo cờ tổ chức (V513, PR #651; V513 chưa apply)
+
+- #650 merge vào `dev_3` lúc 22:08 VN khi Desktop còn chọn bộ mới chỉ theo bản cài ⇒ bản build kế tiếp từ `dev_3` sẽ chạy bộ mới cho tài
+  khoản QR/Web của mọi khách. Anh chốt dùng chung cờ `org_organization.use_new_zalo_runtime` (cờ đang chọn bộ mới cho tài khoản Server trên Fly).
+- Desktop chạy bộ mới khi **bản cài có bộ mới và tổ chức bật cờ**; thiếu một trong hai thì bộ cũ. Với tổ chức không Chat, bật cờ còn chuyển tài
+  khoản Server của họ từ VPS sang Fly (V497).
+- [V513](../migrations/migration_v513_engine_desktop_flag.sql): `aka_agent_engine_desktop_enabled_v1()` đọc cờ của tổ chức trong phiên Desktop
+  (như V498), EXECUTE chỉ `aka_agent_desktop`. Desktop gọi một lần lúc đăng nhập, song song với V498, chỉ khi tổ chức có quyền Zalo
+  (`AuthUser.campaignEngineV2`); `DesktopEngineRunner.support()` trả `org_flag_off` khi cờ tắt. Lỗi đọc, hết giờ hay DB chưa có V513 đều là cờ
+  tắt, nên merge #651 trước khi apply V513 vẫn an toàn. Đổi cờ có hiệu lực khi đăng nhập lại (bước dọn data dở lúc đăng nhập đã có), không đổi bộ
+  chạy giữa lúc chiến dịch đang chạy dở.
+- Giới hạn: DB mất kết nối đúng lúc báo kết quả, rồi cờ bị tắt trước khi đăng nhập lại ⇒ kết quả còn trong nhật ký trên máy chỉ gửi bù khi bật lại
+  cờ (data dở vẫn được đóng SYS01/SYS02, không gửi trùng).
+- **Kiểm:** `node scripts/test-v513-engine-desktop-flag.cjs` 8 nhóm (PG17, hàm phiên Desktop nguyên văn bản live); smoke bộ chạy Desktop thêm ca
+  công tắc (9 nhóm); check-all 27 bước; typecheck hai cấu hình sạch; `npm run build` đạt.
+
 ## 5. Phủ hiện tại và phần còn lại (12/11 ~04:10 VN)
 
 **Phủ ước tính trên chiến dịch chạy 30 ngày** (đếm production 12/11, chỉ đọc; có chồng lấn nên là ước tính):
