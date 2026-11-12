@@ -1,0 +1,54 @@
+{
+ "migration": "migration_v514_status_system_group_guard",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~23:03 VN, \"Apply V514\" (câu hỏi: Apply V514 lên akachat bây giờ không?)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "file_md5": "7a2cd05d93aa8a82789ae01ec4ef796b",
+ "file_bytes": 15774,
+ "source_commit": "b7b26e3f (nhánh feat/status-system-group-guard, PR #653)",
+ "rollback_file_md5": "ede425ed9e9c492886920404bafac9d8",
+ "ledger": {
+  "version": "20261112160346",
+  "name": "migration_v514_status_system_group_guard",
+  "statements_md5": "7a2cd05d93aa8a82789ae01ec4ef796b"
+ },
+ "applied_at_vn": "2026-11-12 23:03:46–23:03:48 (exit 0, postflight trong file đạt; câu lệnh vào postgres_logs 16:03:47.411 UTC)",
+ "what": "Trigger auto_status_system_group_guard_v514 (BEFORE INSERT / UPDATE OF report_group, system_status_code, parent_status_id, component_type ON auto_status, chỉ trạng thái kết quả) và hàm aka_agent_guard_status_system_group_v514(); view aka_agent_engine_policy_lint giữ 4 loại kiểm của V495, thêm status_group_mismatch và detail_status_differs_from_auto_error.",
+ "precheck": {
+  "at_vn": "2026-11-12 23:03:37",
+  "ledger_tail": [
+   "20261112152033 migration_v511_web_proxy_management_p2",
+   "20261112152346 migration_v511_web_proxy_management_p3",
+   "20261112153048 migration_v513_engine_desktop_flag"
+  ],
+  "ledger_v514": 0,
+  "v494_ready": true,
+  "function_exists": false,
+  "lint_md5_before": "a5731bb6a4059bd38983d6240682e1be",
+  "lint_rows_before": 0,
+  "auto_status_triggers_before": ["auto_status_parent_guard_v495", "auto_status_result_component_guard"],
+  "campaign_detail_statuses": 30,
+  "locks_on_auto_status": 0,
+  "db_load": "0 truy vấn client đang chạy, 0 chờ khoá"
+ },
+ "verify": {
+  "at_vn": "23:04:10",
+  "ledger_statements_md5_equal_file": true,
+  "trigger": "CREATE TRIGGER auto_status_system_group_guard_v514 BEFORE INSERT OR UPDATE OF report_group, system_status_code, parent_status_id, component_type ON public.auto_status FOR EACH ROW EXECUTE FUNCTION aka_agent_guard_status_system_group_v514() (enabled O)",
+  "function": {"secdef": false, "config": ["search_path=\"\""], "owner": "postgres", "execute_granted_to_app_roles": false},
+  "lint_md5_after": "c191ade6b515d03bf51761d1e81b9c7f",
+  "lint_columns": "issue:text,subject:text",
+  "lint_acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+  "lint_rows_after": 0,
+  "probe_bad_update": "UPDATE trạng thái 'thất bại' sang system_status_code success trong giao dịch con: bị chặn status_report_group_system_mismatch",
+  "probe_good_update": "UPDATE report_group = report_group qua trigger: đi qua, rồi tự huỷ giao dịch con",
+  "failed_status_after": "failure/failure (không đổi)",
+  "postgrest": "nạp lại schema 16:03:47.48 UTC: đọc schema 1.612,6 ms, nạp xong 16:03:49.24; không lỗi",
+  "edge_logs_rest": "16:03:00–16:04:20 UTC: 0 lỗi 5xx, 0 lỗi 503, p50 44–47 ms; riêng 16:03:40–16:03:50 (lúc nạp lại schema) có 16 request trên 1 giây, p99 952 ms; trước và sau p99 91–106 ms",
+  "postgres_logs": "chỉ dòng câu lệnh V514; không lỗi",
+  "tests_local": "node scripts/test-v514-status-system-group-guard.cjs 6 nhóm (PG17: fixture engine → V495…V512 → V494 nguyên văn → V514); campaign-outcome-engine-check-all.cjs 28/28"
+ },
+ "scope": "Bộ chạy không ghi auto_status nên không đổi hành vi chạy chiến dịch; trigger chỉ chặn lần thêm / sửa trạng thái kết quả làm lệch nhóm. View rà soát chỉ đọc.",
+ "rollback": "migrations/rollback_v514_status_system_group_guard.sql (md5 ede425ed9e9c492886920404bafac9d8): bỏ trigger và hàm, trả view rà soát đúng md5 bản V495 (a5731bb6…). Thay view / xoá hàm làm PostgREST nạp lại schema: chạy ngoài giờ cao điểm.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v514_* hoặc hàm đã có, hoặc view rà soát khác bản V495"
+}

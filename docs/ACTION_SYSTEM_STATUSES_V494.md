@@ -148,7 +148,7 @@ V494 sau khi chỉnh:
   kiểm cả 30 trạng thái kết quả có `auto_status.report_group` trùng nhóm của trạng thái hệ thống.
 - Rollback từ chối thêm khi luật sự kiện, chính sách engine hoặc `parent_status_id` đã trỏ tới 8 trạng thái mới.
 
-Hai cột `report_group` và `system_status_code` cùng nằm trên một dòng và phải khớp nhau. **Từ V514** (12/11/2026) trigger
+Hai cột `report_group` và `system_status_code` cùng nằm trên một dòng và phải khớp nhau. **Từ V514** (apply akachat 12/11/2026 23:03:46 VN, `20261112160346`) trigger
 `auto_status_system_group_guard_v514` ép lúc ghi: nhóm báo cáo hiệu lực (của dòng, không có thì của trạng thái gốc) phải có và trùng
 nhóm của trạng thái hệ thống, trạng thái gốc phải cùng nhóm hệ thống với dòng con; view `aka_agent_engine_policy_lint` báo
 `status_group_mismatch` cho dòng lệch có sẵn.
