@@ -103,7 +103,7 @@ async function main() {
     for (const text of ['Nhóm CSKH', 'tối đa 40 lượt/ngày', 'tiếp tục chạy các hành động còn lượt']) assert(notes.includes(text), `notes show ${text}`)
     const management = await view.locator('.campaign-actions-management').innerText()
     for (const text of ['Nghỉ giữa 2 lần', '120 giây', '11:30 · hằng ngày', '18:00', 'Tiếp tục hành động còn lượt', 'Dự kiến', 'Data còn chờ', '80',
-      'tối đa 0 tin nhắn', 'khoảng 4 ngày gửi, theo 20 tin nhắn/ngày của Nhắn tin người lạ · xong khoảng 14/11',
+      'tối đa 8 tin nhắn · theo Nhắn tin người lạ', 'khoảng 3 ngày gửi, theo 40 lời mời/ngày của Kết bạn · xong khoảng 12/11',
       'Nhóm Nhóm CSKH · gói tối đa 40 lượt/ngày', 'Hôm nay dùng chung lượt với “Chiến dịch tháng 11” (4)'])
       assert(management.includes(text), `management shows ${text}`)
     assert.equal(await page.locator('.campaign-actions-heading span').innerText(), 'Tài khoản Tài khoản kiểm thử · Cập nhật lúc 10:00')

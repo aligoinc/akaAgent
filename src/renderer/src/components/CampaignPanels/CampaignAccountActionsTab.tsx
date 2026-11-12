@@ -9,6 +9,7 @@ import {
   campaignLimitActionView, campaignLimitResume, formatCampaignLimitTime,
   type CampaignLimitActionView, type CampaignLimitProgressItem
 } from '../../../../shared/campaignLimitProgress'
+import { campaignActionsEstimate } from '../../../../shared/campaignActionsView'
 import { useAuthStore } from '../../stores/authStore'
 import { useServerClock } from '../../hooks/useCampaignLimitProgress'
 import './CampaignAccountActionsTab.css'
@@ -120,22 +121,6 @@ function bannerOf(
   }
 }
 
-/** Ước tính số ngày gửi còn lại theo hành động có giới hạn ngày thấp nhất (không tính Tìm SĐT). */
-function estimateOf(rows: CampaignAccountActionRow[], pending: number | null, now: number, nextDayStartsAt: number, daily: boolean) {
-  const limited = rows.filter(row => row.limited && row.dayLimit !== null && row.code !== 'zalo_find_phone_user')
-  if (!limited.length || pending === null) return null
-  const left = (row: CampaignAccountActionRow) => Math.max(0, (row.dayLimit as number) - (now >= nextDayStartsAt ? 0 : row.dayUsed ?? 0))
-  // Hành động có giới hạn ngày thấp nhất quyết định số ngày gửi; bằng nhau thì lấy hành động còn ít lượt hơn hôm nay.
-  const bottleneck = limited.reduce((best, row) => (row.dayLimit as number) < (best.dayLimit as number)
-    || (row.dayLimit === best.dayLimit && left(row) < left(best)) ? row : best)
-  const dayLimit = bottleneck.dayLimit as number
-  const remainingToday = Math.min(...limited.map(left))
-  const after = Math.max(0, pending - remainingToday)
-  const moreDays = Math.ceil(after / Math.max(1, dayLimit))
-  const finishAt = daily && pending > 0 ? (after > 0 ? nextDayStartsAt + (moreDays - 1) * 86_400_000 : now) : null
-  return { bottleneck, dayLimit, remainingToday, sendDays: moreDays + (pending > 0 && remainingToday > 0 ? 1 : 0), finishAt }
-}
-
 /**
  * Tab "Hành động" của chi tiết chiến dịch (port giao diện thẻ từ Web, 12/11/2026): mỗi hành động một thẻ gồm trạng
  * thái và giờ chạy lại, giới hạn và số đã chạy trong ngày/trong giờ, giờ từng lượt rời khung giờ, kết quả hôm nay;
@@ -221,7 +206,7 @@ export default function CampaignAccountActionsTab({ campaign, accountGroupName, 
   const banner = data ? bannerOf(data, rows, status, campaign.note, now, nextDayStartsAt) : null
   const pending = campaign.inputDataTotalCount === undefined ? null
     : Math.max(0, Number(campaign.inputDataTotalCount || 0) - Number(campaign.inputDataCompletedCount || 0))
-  const estimate = management ? estimateOf(rows, pending, now, nextDayStartsAt, management.scheduleType === 'daily') : null
+  const estimate = management ? campaignActionsEstimate(rows, pending, now, nextDayStartsAt, management.scheduleType === 'daily', management.skippableCodes) : null
   const scheduleMs = management?.schedule ? Date.parse(management.schedule) : Number.NaN
   const others = new Map<string, { name: string | null; counted: number }>()
   for (const row of rows) for (const item of row.today?.campaigns ?? []) if (!item.current && item.counted > 0) {
@@ -332,7 +317,7 @@ export default function CampaignAccountActionsTab({ campaign, accountGroupName, 
       {estimate && pending !== null && <section aria-label="Dự kiến">
         <strong>Dự kiến <small>(ước tính)</small></strong>
         <div><span>Data còn chờ</span><span>{pending}</span></div>
-        <div><span>Hôm nay còn</span><span>tối đa {estimate.remainingToday} {unitOf(estimate.bottleneck.code)}</span></div>
+        <div><span>Hôm nay còn</span><span>tối đa {estimate.remainingToday} {unitOf(estimate.todayLimitedBy.code)}{estimate.todayLimitedBy !== estimate.bottleneck ? ` · theo ${estimate.todayLimitedBy.name}` : ''}</span></div>
         {pending > 0 && <div><span>Cần thêm</span><span>khoảng {estimate.sendDays} ngày gửi, theo {estimate.dayLimit} {unitOf(estimate.bottleneck.code)}/ngày của {estimate.bottleneck.name}{estimate.finishAt !== null ? ` · xong khoảng ${dayLabel(estimate.finishAt, now)}` : ''}</span></div>}
       </section>}
       <section aria-label="Tài khoản">
