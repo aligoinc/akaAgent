@@ -26,11 +26,13 @@ export default function CampaignDraftRow({ draft, actionLabel, accountLabel, sch
         </div>
       </div>
       <div className="campaign-col col-toggle" title="Mở nháp để tạo chiến dịch"><span className="campaign-cell-muted">—</span></div>
-      <div className="campaign-col col-progress">
+      <div className="campaign-col col-progress" title={`Nháp\nCập nhật ${updatedLabel}`}>
         <div className="campaign-status-stack">
           <span className="status-badge">Nháp</span>
+          <small className="campaign-updated-line">Cập nhật {updatedLabel}</small>
         </div>
       </div>
+      <div className="campaign-col col-limits is-empty"><span className="campaign-cell-muted">—</span></div>
       <div className="campaign-col col-actions" onClick={event => event.stopPropagation()}>
         <div className="campaign-draft-actions">
           <button type="button" className="btn-icon campaign-control-button" title={`Sửa nháp ${draft.name}`}
@@ -44,7 +46,6 @@ export default function CampaignDraftRow({ draft, actionLabel, accountLabel, sch
       <div className="campaign-col col-account" title={accountLabel}><div className="campaign-strong-line">{accountLabel}</div></div>
       <div className="campaign-col col-data-group"><span className="campaign-cell-muted">—</span></div>
       <div className="campaign-col col-send-date" title={scheduleLabel}><div className="campaign-send-time-line">{scheduleLabel}</div></div>
-      <div className="campaign-col col-update-date" title={updatedLabel}><div className="campaign-strong-line">{updatedLabel}</div></div>
     </div>
   )
 }

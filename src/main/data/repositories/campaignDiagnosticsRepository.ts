@@ -84,7 +84,7 @@ async function countCampaignActionWindow(
 }
 
 /** Mã bộ chạy kiểm tra giới hạn lượt: akaChat theo `limit_check_action_codes` đã chọn; bộ chạy akaAgent theo descriptor quota. */
-function campaignQuotaCodes(campaign: Campaign, action: CampaignAction | null, isChatManaged: boolean): Set<string> {
+export function campaignQuotaCodes(campaign: Campaign, action: CampaignAction | null, isChatManaged: boolean): Set<string> {
   const limits = campaign.extraSettings?.actionLimits
   const selected = Array.isArray(limits?.enabledActionCodes) ? new Set(limits.enabledActionCodes) : null
   return isChatManaged

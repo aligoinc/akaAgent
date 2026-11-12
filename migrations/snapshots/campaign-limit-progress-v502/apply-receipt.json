@@ -1,0 +1,72 @@
+{
+  "migration": "migration_v502_campaign_limit_progress",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261112111812",
+  "applied_at_vn": "2026-11-12T18:18:12+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user message 'giờ có thể chạy được rồi' at 18:12 VN 12/11/2026, answering the earlier note 'nói apply ngay nếu muốn apply trước 19:00'; the 18:45 reminder and the 19:00 apply task were disabled after the apply",
+  "file_md5": "2dd29be7fd23a822aafd149ccb9e1b59",
+  "file_bytes": 20375,
+  "ledger_statements_md5": "2dd29be7fd23a822aafd149ccb9e1b59",
+  "ledger_statements_chars": 20332,
+  "source_commit": "ab26533a",
+  "rollback_file": "migrations/rollback_v502_campaign_limit_progress.sql",
+  "rollback_md5": "ec7fcaede5ed4a5cd5abfb5d9ee1c399",
+  "preflight_read_only_at_vn": "2026-11-12T18:12:37+07:00",
+  "preflight": {
+    "ledger_had_v502": false,
+    "ledger_since_v501": "V503-V510 were applied from other sessions on 12/11 between 16:48 and 17:45 VN (engine share batch, send exclusion, materialize, realtime SMS, drop target memory, Zalo group 126/127, Zalo personal 112, engagement lookups) plus chat_zalo/shops/chatbot migrations; none named v502",
+    "functions_existed": false,
+    "active_client_backends_on_cpu": 4,
+    "lock_waits": 0,
+    "edge_10_35_11_15_utc": "558-639 requests/s, p50 44-47 ms, 0 5xx"
+  },
+  "dry_run_on_production": {
+    "at_vn": "2026-11-12T18:14+07:00",
+    "how": "whole migration body (without BEGIN/COMMIT) plus test calls in one transaction ending with RAISE, so everything rolled back and no NOTIFY was delivered; checked afterwards that neither function exists",
+    "list_mode": {
+      "staff_284": "101 campaigns, 87 ms, 141545 bytes, 6 windows",
+      "staff_347": "101 campaigns, 258 ms, 199537 bytes, 121 windows",
+      "staff_509": "5 campaigns, 38 ms, 15658 bytes",
+      "staff_1614": "4 campaigns, 7 ms, 10727 bytes"
+    },
+    "detail_mode": "6-205 ms, 5.8-14.8 KB, today rows 0-26"
+  },
+  "postflight_at_vn": "2026-11-12T18:18:19+07:00",
+  "postflight": {
+    "reader": {
+      "signature": "public.aka_agent_control_campaign_limit_progress(bigint,bigint,bigint[],bigint[],text[],boolean)",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "security_definer": false,
+      "volatility": "stable",
+      "proconfig": ["search_path=public, pg_temp", "statement_timeout=8s"],
+      "owner": "postgres",
+      "functiondef_md5": "2cdd745546021aa355d52a5abe6daa79"
+    },
+    "desktop": {
+      "signature": "public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "security_definer": true,
+      "volatility": "stable",
+      "proconfig": ["search_path=pg_catalog, public", "statement_timeout=8s"],
+      "owner": "postgres",
+      "functiondef_md5": "702547ece59fecfeecfb53360f737f02"
+    },
+    "service_role_call": "staff 284, 101 campaigns, list mode: 44 ms, 119790 bytes, 6 windows, chatSync false (set local role service_role + request.jwt.claims, rolled back)",
+    "desktop_call": {
+      "staff": 284,
+      "how": "set local role aka_agent_desktop with request.jwt.claims sub = that staff's auth_user_id from private.aka_agent_desktop_users; automation username/password read inside the SQL, never printed; rolled back",
+      "list_md5_equals_reader_with_empty_chat_products": true,
+      "detail_md5_equals_reader_with_empty_chat_products": true,
+      "wrong_password": "rejected: automation_auth_invalid",
+      "other_staff_id": "rejected: desktop_staff_scope_denied",
+      "desktop_calls_reader_directly": "rejected: permission denied for function aka_agent_control_campaign_limit_progress"
+    },
+    "postgrest_reload": "reload message 11:18:12.786Z, schema cache queried in 1751.3 ms, loaded 11:18:16.284Z (about 3.5 s); 806 functions",
+    "edge_logs_11_17_40_11_19_20_utc": "0 5xx, 0 503; the 10 s bucket 11:18:10 had 149 requests over 1 s (max 2092 ms, p50 55 ms), every other bucket max under 1 s and p50 43-46 ms"
+  },
+  "not_done": [
+    "API/Web (akaAgentWebApp claude/fervent-gates-c8ldgw) not merged or deployed: nothing calls the reader yet",
+    "Desktop not built or released; iOS not released"
+  ]
+}
