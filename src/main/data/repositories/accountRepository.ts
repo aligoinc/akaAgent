@@ -1498,7 +1498,7 @@ function removeUndefined<T extends Record<string, unknown>>(payload: T): Partial
   ) as Partial<T>
 }
 
-// V509: trigger trên auto_accounts chặn proxy khác tổ chức, hoặc proxy do đồng nghiệp thêm khi phần mềm trên các máy của
+// V511: trigger trên auto_accounts chặn proxy khác tổ chức, hoặc proxy do đồng nghiệp thêm khi phần mềm trên các máy của
 // nhân viên chưa đọc proxy theo tổ chức. Dịch sang câu khách hiểu được.
 function accountProxyScopeError(message: string): Error | null {
   if (message.includes('proxy_shared_runtime_not_ready')) {

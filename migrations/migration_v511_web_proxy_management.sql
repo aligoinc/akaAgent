@@ -1,5 +1,5 @@
--- V509: quản lý proxy theo tổ chức trên Web (akaAgentWebApp, trang /proxies).
--- Nguồn: akachat cgjbsmqtfhqvttudyjzq, đọc 12/11/2026 (ledger mới nhất V508). Hợp đồng, rollout, gỡ: docs/WEB_PROXY_MANAGEMENT_V509.md.
+-- V511: quản lý proxy theo tổ chức trên Web (akaAgentWebApp, trang /proxies).
+-- Nguồn: akachat cgjbsmqtfhqvttudyjzq, đọc 12/11/2026 (ledger mới nhất V510). Hợp đồng, rollout, gỡ: docs/WEB_PROXY_MANAGEMENT_V511.md.
 --
 -- Thêm, không sửa hàm cũ:
 --   * org_organization.web_proxy_management_enabled (mặc định false): bật trang Quản lý proxy trên Web cho tổ chức.
@@ -24,11 +24,11 @@ DECLARE
   v_policy record;
 BEGIN
   IF current_user <> 'postgres' THEN
-    RAISE EXCEPTION 'V509 phải chạy bằng postgres';
+    RAISE EXCEPTION 'V511 phải chạy bằng postgres';
   END IF;
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
-     AND EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v509_%') THEN
-    RAISE EXCEPTION 'V509 đã có trong sổ migration, không chạy lại';
+     AND EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v511_%') THEN
+    RAISE EXCEPTION 'V511 đã có trong sổ migration, không chạy lại';
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
              AND ((table_name = 'org_organization' AND column_name = 'web_proxy_management_enabled')
@@ -42,7 +42,7 @@ BEGIN
                 WHERE n.nspname = 'private' AND p.proname = 'aka_agent_guard_account_proxy_scope')
      OR EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.auto_accounts'::regclass AND tgname = 'trg_account_proxy_scope_guard')
      OR EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key IN ('proxies.check_mode', 'proxies.shared_runtime')) THEN
-    RAISE EXCEPTION 'V509: đối tượng đích đã tồn tại, kiểm tra trước, không ghi đè';
+    RAISE EXCEPTION 'V511: đối tượng đích đã tồn tại, kiểm tra trước, không ghi đè';
   END IF;
 
   -- Đối tượng sẽ thay phải đúng bản đã đọc trên production.
@@ -52,34 +52,34 @@ BEGIN
      OR v_policy.cmd <> 'ALL' OR v_policy.permissive <> 'RESTRICTIVE' OR v_policy.roles::text <> '{aka_agent_desktop}'
      OR v_policy.qual IS DISTINCT FROM '(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))'
      OR v_policy.with_check IS DISTINCT FROM '(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))' THEN
-    RAISE EXCEPTION 'V509: policy desktop_owned_resource của auto_proxies khác bản đã đọc';
+    RAISE EXCEPTION 'V511: policy desktop_owned_resource của auto_proxies khác bản đã đọc';
   END IF;
   IF (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'auto_proxies') <> 2 THEN
-    RAISE EXCEPTION 'V509: auto_proxies có policy khác ngoài desktop_owned_resource và v435_existing_role_access';
+    RAISE EXCEPTION 'V511: auto_proxies có policy khác ngoài desktop_owned_resource và v435_existing_role_access';
   END IF;
   IF (SELECT pg_get_indexdef('public.auto_proxies_staff_name_unique'::regclass))
      IS DISTINCT FROM 'CREATE UNIQUE INDEX auto_proxies_staff_name_unique ON public.auto_proxies USING btree (staff_id, lower(name)) WHERE (is_delete = false)' THEN
-    RAISE EXCEPTION 'V509: index auto_proxies_staff_name_unique khác bản đã đọc';
+    RAISE EXCEPTION 'V511: index auto_proxies_staff_name_unique khác bản đã đọc';
   END IF;
   IF md5(pg_get_functiondef('private.aka_agent_desktop_data_context()'::regprocedure)) <> '1c661248ef952acb98ee2a2082cf8bf8' THEN
-    RAISE EXCEPTION 'V509: private.aka_agent_desktop_data_context() khác bản đã đọc';
+    RAISE EXCEPTION 'V511: private.aka_agent_desktop_data_context() khác bản đã đọc';
   END IF;
   IF to_regprocedure('private.aka_agent_staff_scope_for_request()') IS NULL THEN
-    RAISE EXCEPTION 'V509: thiếu private.aka_agent_staff_scope_for_request()';
+    RAISE EXCEPTION 'V511: thiếu private.aka_agent_staff_scope_for_request()';
   END IF;
 
   -- Dữ liệu: luật mới không được làm hỏng dòng đang có.
   IF EXISTS (SELECT 1 FROM public.auto_proxies WHERE organization_id IS NULL) THEN
-    RAISE EXCEPTION 'V509: có proxy thiếu organization_id';
+    RAISE EXCEPTION 'V511: có proxy thiếu organization_id';
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_proxies WHERE NOT is_delete
              GROUP BY organization_id, lower(name) HAVING count(*) > 1) THEN
-    RAISE EXCEPTION 'V509: có tên proxy trùng trong một tổ chức, đổi tên trước';
+    RAISE EXCEPTION 'V511: có tên proxy trùng trong một tổ chức, đổi tên trước';
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_accounts a JOIN public.auto_proxies p ON p.id = a.proxy_id
              WHERE NOT COALESCE(a.is_delete, false)
                AND (p.organization_id IS DISTINCT FROM a.organization_id OR p.staff_id IS DISTINCT FROM a.staff_id)) THEN
-    RAISE EXCEPTION 'V509: có tài khoản đang dùng proxy của nhân viên hoặc tổ chức khác';
+    RAISE EXCEPTION 'V511: có tài khoản đang dùng proxy của nhân viên hoặc tổ chức khác';
   END IF;
 END;
 $preflight$;
@@ -89,15 +89,15 @@ $preflight$;
 ALTER TABLE public.org_organization
   ADD COLUMN web_proxy_management_enabled boolean NOT NULL DEFAULT false;
 COMMENT ON COLUMN public.org_organization.web_proxy_management_enabled IS
-  'V509: bật trang Quản lý proxy theo tổ chức trên Web (akaAgentWebApp). Không ảnh hưởng phần mềm Desktop và app iOS.';
+  'V511: bật trang Quản lý proxy theo tổ chức trên Web (akaAgentWebApp). Không ảnh hưởng phần mềm Desktop và app iOS.';
 
 -- 2. Hạn dùng và ghi chú do khách nhập. Desktop chỉ có quyền INSERT/UPDATE theo cột cũ nên không ghi được hai cột này.
 ALTER TABLE public.auto_proxies
   ADD COLUMN expires_on date,
   ADD COLUMN note text,
   ADD CONSTRAINT auto_proxies_note_length CHECK (note IS NULL OR char_length(note) <= 500);
-COMMENT ON COLUMN public.auto_proxies.expires_on IS 'V509: ngày hết hạn theo giờ Việt Nam do khách nhập; NULL = chưa đặt hạn.';
-COMMENT ON COLUMN public.auto_proxies.staff_id IS 'Nhân viên đã thêm proxy. Từ V509 proxy dùng chung trong tổ chức (organization_id).';
+COMMENT ON COLUMN public.auto_proxies.expires_on IS 'V511: ngày hết hạn theo giờ Việt Nam do khách nhập; NULL = chưa đặt hạn.';
+COMMENT ON COLUMN public.auto_proxies.staff_id IS 'Nhân viên đã thêm proxy. Từ V511 proxy dùng chung trong tổ chức (organization_id).';
 
 -- 3. Tên duy nhất trong tổ chức (chặt hơn bản cũ: một nhân viên chỉ thuộc một tổ chức).
 DROP INDEX public.auto_proxies_staff_name_unique;
@@ -127,7 +127,7 @@ CREATE TABLE public.auto_proxy_checks (
 );
 CREATE INDEX idx_auto_proxy_checks_next ON public.auto_proxy_checks (next_check_at);
 COMMENT ON TABLE public.auto_proxy_checks IS
-  'V509: kết quả kiểm tra kết nối proxy (một dòng mỗi proxy). Chỉ đọc/ghi qua aka_agent_control_proxies và aka_agent_proxy_check_worker.';
+  'V511: kết quả kiểm tra kết nối proxy (một dòng mỗi proxy). Chỉ đọc/ghi qua aka_agent_control_proxies và aka_agent_proxy_check_worker.';
 ALTER TABLE public.auto_proxy_checks ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE public.auto_proxy_checks FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop, aka_agent_chat_api;
 
@@ -146,10 +146,10 @@ CREATE POLICY desktop_owned_delete ON public.auto_proxies AS RESTRICTIVE FOR DEL
 -- 6. Cài đặt hệ thống.
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
   ('proxies.check_mode', 'off',
-   'V509: kiểm tra kết nối proxy hằng ngày trong API Web. off = không kiểm tra; shadow = kiểm tra, chỉ admin akaBiz thấy kết quả; on = khách thấy.',
+   'V511: kiểm tra kết nối proxy hằng ngày trong API Web. off = không kiểm tra; shadow = kiểm tra, chỉ admin akaBiz thấy kết quả; on = khách thấy.',
    false, true),
   ('proxies.shared_runtime', '{"server":false,"desktopMinVersion":null}',
-   'V509: phần mềm nào đã đọc proxy theo tổ chức. server=true sau khi cài App Server mới; desktopMinVersion = bản Desktop đầu tiên đọc theo tổ chức. Chưa bật thì không gắn được proxy do nhân viên khác thêm.',
+   'V511: phần mềm nào đã đọc proxy theo tổ chức. server=true sau khi cài App Server mới; desktopMinVersion = bản Desktop đầu tiên đọc theo tổ chức. Chưa bật thì không gắn được proxy do nhân viên khác thêm.',
    false, true);
 
 -- 7. Hàm phụ.
@@ -1101,38 +1101,38 @@ DECLARE
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'org_organization'
                  AND column_name = 'web_proxy_management_enabled' AND is_nullable = 'NO' AND column_default = 'false') THEN
-    RAISE EXCEPTION 'V509 postflight: thiếu cột cờ tổ chức';
+    RAISE EXCEPTION 'V511 postflight: thiếu cột cờ tổ chức';
   END IF;
   IF EXISTS (SELECT 1 FROM public.org_organization WHERE web_proxy_management_enabled) THEN
-    RAISE EXCEPTION 'V509 postflight: migration không được tự bật cờ cho tổ chức nào';
+    RAISE EXCEPTION 'V511 postflight: migration không được tự bật cờ cho tổ chức nào';
   END IF;
   IF (SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = 'auto_proxies') <> 5 THEN
-    RAISE EXCEPTION 'V509 postflight: số policy của auto_proxies sai';
+    RAISE EXCEPTION 'V511 postflight: số policy của auto_proxies sai';
   END IF;
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'aka_agent_desktop', 'aka_agent_chat_api'] LOOP
     FOREACH v_fn IN ARRAY ARRAY['public.aka_agent_control_proxies(bigint,bigint,text,jsonb)', 'public.aka_agent_proxy_check_worker(text,jsonb)'] LOOP
       IF has_function_privilege(v_role, v_fn, 'EXECUTE') THEN
-        RAISE EXCEPTION 'V509 postflight: % còn EXECUTE %', v_role, v_fn;
+        RAISE EXCEPTION 'V511 postflight: % còn EXECUTE %', v_role, v_fn;
       END IF;
     END LOOP;
     IF has_table_privilege(v_role, 'public.auto_proxy_checks', 'SELECT') THEN
-      RAISE EXCEPTION 'V509 postflight: % đọc được auto_proxy_checks', v_role;
+      RAISE EXCEPTION 'V511 postflight: % đọc được auto_proxy_checks', v_role;
     END IF;
     IF has_function_privilege(v_role, 'private.aka_agent_proxy_list_json(bigint,bigint,boolean,bigint[])', 'EXECUTE') THEN
-      RAISE EXCEPTION 'V509 postflight: % còn EXECUTE hàm private', v_role;
+      RAISE EXCEPTION 'V511 postflight: % còn EXECUTE hàm private', v_role;
     END IF;
   END LOOP;
   IF NOT has_function_privilege('service_role', 'public.aka_agent_control_proxies(bigint,bigint,text,jsonb)', 'EXECUTE')
      OR NOT has_function_privilege('service_role', 'public.aka_agent_proxy_check_worker(text,jsonb)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'V509 postflight: service_role thiếu EXECUTE';
+    RAISE EXCEPTION 'V511 postflight: service_role thiếu EXECUTE';
   END IF;
   IF private.aka_agent_proxy_check_mode() <> 'off'
      OR private.aka_agent_proxy_shared_runtime_ready(0, true) OR private.aka_agent_proxy_shared_runtime_ready(0, false) THEN
-    RAISE EXCEPTION 'V509 postflight: cài đặt mặc định sai';
+    RAISE EXCEPTION 'V511 postflight: cài đặt mặc định sai';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.auto_accounts'::regclass
                  AND tgname = 'trg_account_proxy_scope_guard' AND tgenabled = 'O') THEN
-    RAISE EXCEPTION 'V509 postflight: thiếu trigger trên auto_accounts';
+    RAISE EXCEPTION 'V511 postflight: thiếu trigger trên auto_accounts';
   END IF;
 END;
 $postflight$;

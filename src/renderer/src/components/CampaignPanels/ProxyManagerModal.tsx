@@ -90,7 +90,7 @@ export default function ProxyManagerModal({
     [proxies, selectedProxyId]
   )
   const isEditing = Boolean(selectedProxy)
-  // V509: proxy dùng chung trong tổ chức; phần mềm chỉ sửa/xoá proxy do chính mình thêm.
+  // V511: proxy dùng chung trong tổ chức; phần mềm chỉ sửa/xoá proxy do chính mình thêm.
   const currentStaffId = useAuthStore(state => state.user?.staffId)
   const isColleagueProxy = (proxy: AutoProxy | null) =>
     !!proxy && proxy.staffId !== undefined && currentStaffId !== undefined && proxy.staffId !== currentStaffId

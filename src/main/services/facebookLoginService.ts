@@ -98,7 +98,7 @@ export class FacebookLoginService {
   private async applyProxy(partition: string, proxyId: number | null | undefined, signal: AbortSignal): Promise<AutoProxy | null> {
     const guard = this.fence()
     const proxy = proxyId ? await this.read(readSignal => getProxy(proxyId, readSignal), signal) : null
-    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không đăng nhập bằng IP của máy (V509).
+    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không đăng nhập bằng IP của máy (V511).
     if (proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
     // Only abandon the read. A late proxy lookup must never change a partition
     // after cancellation, while an apply already started must finish draining.

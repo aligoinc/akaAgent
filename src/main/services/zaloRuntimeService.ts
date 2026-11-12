@@ -3008,7 +3008,7 @@ export class ZaloRuntimeService {
 
   private async createZaloClient(account: AutoAccount): Promise<Zalo> {
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
-    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không âm thầm chạy bằng IP của máy (V509).
+    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không âm thầm chạy bằng IP của máy (V511).
     if (account.proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
     const agent = proxy && proxy.isActive !== false
       ? await this.createProxyAgent(proxy)

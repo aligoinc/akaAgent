@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Thử V509 (quản lý proxy theo tổ chức trên Web) trên PostgreSQL 16 cục bộ, không chạm production.
+# Thử V511 (quản lý proxy theo tổ chức trên Web) trên PostgreSQL 16 cục bộ, không chạm production.
 # Fixture dựng các bảng/hàm/policy liên quan như akachat ngày 12/11/2026 (định nghĩa hàm private.aka_agent_desktop_data_context
 # và private.aka_agent_staff_scope_for_request, trigger khoá tài nguyên tài khoản, policy Desktop của auto_proxies/auto_accounts,
 # quyền theo cột của aka_agent_desktop). Preflight của migration xác nhận policy/index/hàm khớp production.
@@ -7,13 +7,13 @@
 # quyền người thêm/quản trị; trigger chặn proxy khác tổ chức/khác nhân viên khi phần mềm chưa hỗ trợ; Desktop đọc proxy
 # của tổ chức nhưng chỉ ghi proxy của mình; bộ kiểm tra (claim/report/lease/hash/2 lần hỏng/thử lại); chạy lại bị từ chối;
 # rollback trả trạng thái cũ và từ chối khi còn tài khoản dùng proxy của nhân viên khác.
-# Dùng: bash scripts/test-v509-web-proxy-management.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
+# Dùng: bash scripts/test-v511-web-proxy-management.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-MIGRATION="$ROOT/migrations/migration_v509_web_proxy_management.sql"
-ROLLBACK="$ROOT/migrations/rollback_v509_web_proxy_management.sql"
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/v509.XXXXXX")
+MIGRATION="$ROOT/migrations/migration_v511_web_proxy_management.sql"
+ROLLBACK="$ROOT/migrations/rollback_v511_web_proxy_management.sql"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/v511.XXXXXX")
 as_pg() { if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi; }
 [ "$(id -u)" = 0 ] && chown postgres "$WORK"
 chmod 755 "$WORK"
@@ -22,7 +22,7 @@ cleanup() { as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -m immediate stop >/dev/null 2
 trap cleanup EXIT
 as_pg "$PGBIN/initdb" -D "$WORK/data" -A trust -U postgres -E UTF8 --locale=C >/dev/null
 as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -o "-k $WORK -c listen_addresses=''" -l "$WORK/log" -w start >/dev/null
-DB=v509
+DB=v511
 psql_db() { local db=$1; shift; as_pg "$PGBIN/psql" -h "$WORK" -U postgres -d "$db" -v ON_ERROR_STOP=1 -qAt "$@"; }
 q() { psql_db "$DB" -c "$1"; }
 # Gọi RPC bằng service_role trong một giao dịch riêng.
@@ -41,7 +41,7 @@ jq_() { python3 -c "import json,sys; d=json.loads(sys.stdin.read()); print(eval(
 psql_db postgres <<'SQL'
 CREATE ROLE anon NOLOGIN; CREATE ROLE authenticated NOLOGIN; CREATE ROLE service_role NOLOGIN BYPASSRLS;
 CREATE ROLE aka_agent_desktop NOLOGIN; CREATE ROLE aka_agent_chat_api NOLOGIN BYPASSRLS;
-CREATE DATABASE v509;
+CREATE DATABASE v511;
 SQL
 psql_db "$DB" >/dev/null <<'SQL'
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, service_role;
@@ -219,10 +219,10 @@ ok "dựng fixture"
 
 expect "md5 hàm data_context khớp production" "$(q "SELECT md5(pg_get_functiondef('private.aka_agent_desktop_data_context()'::regprocedure))")" "1c661248ef952acb98ee2a2082cf8bf8"
 
-out=$(run_file migration_v509_web_proxy_management.sql) || fail "apply V509: $out"
-ok "apply V509"
-q "INSERT INTO supabase_migrations.schema_migrations VALUES ('20261112150000', 'migration_v509_web_proxy_management', NULL)"
-refuse "chạy lại bị từ chối" "đã có trong sổ migration" run_file migration_v509_web_proxy_management.sql
+out=$(run_file migration_v511_web_proxy_management.sql) || fail "apply V511: $out"
+ok "apply V511"
+q "INSERT INTO supabase_migrations.schema_migrations VALUES ('20261112150000', 'migration_v511_web_proxy_management', NULL)"
+refuse "chạy lại bị từ chối" "đã có trong sổ migration" run_file migration_v511_web_proxy_management.sql
 
 # Quyền
 expect "anon không gọi được RPC" "$(q "SELECT has_function_privilege('anon', 'public.aka_agent_control_proxies(bigint,bigint,text,jsonb)', 'EXECUTE')")" "f"
@@ -421,14 +421,14 @@ expect "check_all xếp hàng mọi proxy đang bật" "$(echo "$ca" | jq_ "(d['
 expect "check_all lần hai trong 10 phút" "$(rpc 12 1 check_all '{}' | jq_ "(d['queued'], d['retryAfterSeconds'] > 500)")" "(0, True)"
 
 # Rollback.
-refuse "rollback từ chối khi còn tài khoản dùng proxy đồng nghiệp" "Còn tài khoản dùng proxy do nhân viên khác thêm" run_file rollback_v509_web_proxy_management.sql
+refuse "rollback từ chối khi còn tài khoản dùng proxy đồng nghiệp" "Còn tài khoản dùng proxy do nhân viên khác thêm" run_file rollback_v511_web_proxy_management.sql
 q "UPDATE auto_accounts SET proxy_id = 103 WHERE id = 1001"
-out=$(run_file rollback_v509_web_proxy_management.sql) || fail "rollback: $out"
+out=$(run_file rollback_v511_web_proxy_management.sql) || fail "rollback: $out"
 ok "rollback chạy"
 expect "rollback: cột/bảng/hàm/cài đặt đã gỡ" "$(q "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_name IN ('org_organization','auto_proxies') AND column_name IN ('web_proxy_management_enabled','expires_on','note')) || ',' || (to_regclass('public.auto_proxy_checks') IS NULL) || ',' || (SELECT count(*) FROM pg_proc WHERE proname LIKE 'aka_agent_proxy%' OR proname = 'aka_agent_control_proxies') || ',' || (SELECT count(*) FROM auto_system_settings WHERE key LIKE 'proxies.%')")" "0,true,0,0"
 expect "rollback: Desktop lại chỉ đọc proxy của mình" "$(desk "SELECT string_agg(DISTINCT staff_id::text, ',') FROM auto_proxies")" "12"
 q "DELETE FROM supabase_migrations.schema_migrations"
-out=$(run_file migration_v509_web_proxy_management.sql) || fail "apply lại sau rollback: $out"
+out=$(run_file migration_v511_web_proxy_management.sql) || fail "apply lại sau rollback: $out"
 ok "apply lại sau rollback"
 
 echo "Tất cả $pass kiểm tra đạt"

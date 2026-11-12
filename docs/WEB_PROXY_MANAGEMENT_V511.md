@@ -1,4 +1,4 @@
-# V509 — Quản lý proxy theo tổ chức trên Web
+# V511 — Quản lý proxy theo tổ chức trên Web
 
 Ngày 12/11/2026. **Chưa apply production.** Code Web/API ở akaAgentWebApp (`docs/WEB_PROXY_MANAGEMENT.md`), Desktop/App Server ở repo này (chưa phát hành). Hợp đồng dùng chung: akaAgentWebApp `packages/control-api/src/proxyManagement.ts`.
 
@@ -42,7 +42,7 @@ Hàm phụ ở schema `private` (`aka_agent_proxy_*`, `aka_agent_guard_account_p
 
 ## Triển khai
 
-1. Apply V509 buổi tối muộn (DDL trên `org_organization`/`auto_proxies`/`auto_accounts` làm PostgREST nạp lại schema; `lock_timeout` 3 giây). Kiểm `supabase_migrations.schema_migrations` không có V509, md5 sổ = md5 file.
+1. Apply V511 buổi tối muộn (DDL trên `org_organization`/`auto_proxies`/`auto_accounts` làm PostgREST nạp lại schema; `lock_timeout` 3 giây). Kiểm `supabase_migrations.schema_migrations` không có V511, md5 sổ = md5 file.
 2. Bật cờ cho 3 tổ chức đang có tài khoản Zalo Server dùng proxy (nếu không, Web mới ẩn cửa sổ proxy họ đang dùng). Câu này chạy trigger đồng bộ đơn hàng CRM của từng tổ chức:
    ```sql
    UPDATE public.org_organization SET web_proxy_management_enabled = true
@@ -56,8 +56,8 @@ Tắt nhanh: `proxies.check_mode = 'off'`; ẩn trang cho tổ chức: cờ `fal
 
 ## Rollback
 
-`migrations/rollback_v509_web_proxy_management.sql`: gỡ trigger, hàm, bảng kiểm tra, cột hạn/ghi chú, cờ tổ chức, cài đặt; dựng lại policy và index cũ. Từ chối khi còn tài khoản dùng proxy của nhân viên khác (sau khi gỡ, bản Desktop/App Server mới sẽ vẫn đọc được nhưng RLS cũ chặn Desktop, nên phải chuyển/gỡ proxy các tài khoản đó trước). Mất hạn dùng, ghi chú và kết quả kiểm tra đã lưu. API/Web đã deploy vẫn chạy: thiếu cột/hàm thì coi như cờ tắt.
+`migrations/rollback_v511_web_proxy_management.sql`: gỡ trigger, hàm, bảng kiểm tra, cột hạn/ghi chú, cờ tổ chức, cài đặt; dựng lại policy và index cũ. Từ chối khi còn tài khoản dùng proxy của nhân viên khác (sau khi gỡ, bản Desktop/App Server mới sẽ vẫn đọc được nhưng RLS cũ chặn Desktop, nên phải chuyển/gỡ proxy các tài khoản đó trước). Mất hạn dùng, ghi chú và kết quả kiểm tra đã lưu. API/Web đã deploy vẫn chạy: thiếu cột/hàm thì coi như cờ tắt.
 
 ## Kiểm thử
 
-`bash scripts/test-v509-web-proxy-management.sh` (PG16 cục bộ, 102 kiểm tra): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.
+`bash scripts/test-v511-web-proxy-management.sh` (PG16 cục bộ, 102 kiểm tra): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.

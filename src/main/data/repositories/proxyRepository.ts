@@ -71,8 +71,8 @@ async function countProxyUsage(proxyId: number, staffId: number): Promise<number
   return count || 0
 }
 
-// Từ V509 proxy dùng chung trong tổ chức: đọc theo organization_id (RLS cho Desktop đọc cả tổ chức, chỉ ghi proxy của
-// mình). DB chưa có V509 thì RLS vẫn chỉ trả proxy của nhân viên nên kết quả như bản cũ.
+// Từ V511 proxy dùng chung trong tổ chức: đọc theo organization_id (RLS cho Desktop đọc cả tổ chức, chỉ ghi proxy của
+// mình). DB chưa có V511 thì RLS vẫn chỉ trả proxy của nhân viên nên kết quả như bản cũ.
 export async function listProxies(): Promise<AutoProxy[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
@@ -110,7 +110,7 @@ export async function listProxies(): Promise<AutoProxy[]> {
 export async function getProxy(id: number, signal?: AbortSignal): Promise<AutoProxy | null> {
   signal?.throwIfAborted()
   const u = requireCurrentUser()
-  // Bộ chạy đọc proxy theo tổ chức: tài khoản có thể gắn proxy do đồng nghiệp thêm (Web, V509).
+  // Bộ chạy đọc proxy theo tổ chức: tài khoản có thể gắn proxy do đồng nghiệp thêm (Web, V511).
   const query = client()
     .from('auto_proxies')
     .select('*')

@@ -1,4 +1,4 @@
--- Gỡ V509 (quản lý proxy theo tổ chức trên Web). Xoá hạn dùng, ghi chú và kết quả kiểm tra đã lưu; không đụng proxy,
+-- Gỡ V511 (quản lý proxy theo tổ chức trên Web). Xoá hạn dùng, ghi chú và kết quả kiểm tra đã lưu; không đụng proxy,
 -- tài khoản hay cờ khác. Từ chối khi còn tài khoản dùng proxy do nhân viên khác thêm: sau khi gỡ, Desktop/App Server
 -- lại đọc proxy theo nhân viên và tài khoản đó sẽ chạy không proxy — chuyển hoặc gỡ proxy cho các tài khoản đó trước.
 -- API/Web đã deploy vẫn chạy sau khi gỡ: thiếu cột/hàm thì trang Proxy tự ẩn (coi như cờ tắt).
@@ -9,10 +9,10 @@ SET LOCAL statement_timeout = '60s';
 DO $preflight$
 BEGIN
   IF current_user <> 'postgres' THEN
-    RAISE EXCEPTION 'Rollback V509 phải chạy bằng postgres';
+    RAISE EXCEPTION 'Rollback V511 phải chạy bằng postgres';
   END IF;
   IF to_regclass('public.auto_proxy_checks') IS NULL THEN
-    RAISE EXCEPTION 'V509 chưa apply, không có gì để gỡ';
+    RAISE EXCEPTION 'V511 chưa apply, không có gì để gỡ';
   END IF;
   IF EXISTS (SELECT 1 FROM public.auto_accounts AS account JOIN public.auto_proxies AS proxy ON proxy.id = account.proxy_id
              WHERE NOT COALESCE(account.is_delete, false) AND proxy.staff_id IS DISTINCT FROM account.staff_id) THEN
@@ -61,12 +61,12 @@ DO $postflight$
 BEGIN
   IF (SELECT pg_get_indexdef('public.auto_proxies_staff_name_unique'::regclass))
      IS DISTINCT FROM 'CREATE UNIQUE INDEX auto_proxies_staff_name_unique ON public.auto_proxies USING btree (staff_id, lower(name)) WHERE (is_delete = false)' THEN
-    RAISE EXCEPTION 'Rollback V509: index cũ dựng lại sai';
+    RAISE EXCEPTION 'Rollback V511: index cũ dựng lại sai';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public' AND tablename = 'auto_proxies'
                  AND policyname = 'desktop_owned_resource'
                  AND qual = '(staff_id = ( SELECT private.aka_agent_staff_scope_for_request() AS aka_agent_staff_scope_for_request))') THEN
-    RAISE EXCEPTION 'Rollback V509: policy cũ dựng lại sai';
+    RAISE EXCEPTION 'Rollback V511: policy cũ dựng lại sai';
   END IF;
 END;
 $postflight$;
