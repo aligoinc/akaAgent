@@ -1,6 +1,6 @@
 # V502: hàm đọc tiến độ giới hạn cho danh sách chiến dịch (Web, iOS, Desktop) và tab "Hành động"
 
-Ngày 12/11/2026. **Đã apply akachat lúc 18:18:12 VN 12/11** (`20261112111812 / migration_v502_campaign_limit_progress`; không apply lại; md5 sổ = file `2dd29be7…`; [biên nhận](../migrations/snapshots/campaign-limit-progress-v502/apply-receipt.json)). Code Web/API và app iOS ở akaAgentWebApp nhánh `claude/fervent-gates-c8ldgw` (chưa deploy/phát hành; iOS đọc qua cùng API với Web, không gọi DB); Desktop ở akaAgent cùng nhánh (chưa build/phát hành). Web/API và Desktop chạy được khi DB chưa có hàm (cột "Giới hạn lượt" để trống, tab Hành động dùng bộ đọc cũ).
+Ngày 12/11/2026. **Đã apply akachat lúc 18:18:12 VN 12/11** (`20261112111812 / migration_v502_campaign_limit_progress`; không apply lại; md5 sổ = file `2dd29be7…`; [biên nhận](../migrations/snapshots/campaign-limit-progress-v502/apply-receipt.json)). Code Web/API và app iOS **đã merge akaAgentWebApp `dev` qua #214** (chưa deploy API/Web, chưa phát hành iOS; iOS đọc qua cùng API với Web, không gọi DB); Desktop và SQL **đã merge `dev_3` qua #648** (chưa build/phát hành Desktop). Web/API và Desktop chạy được khi DB chưa có hàm (cột "Giới hạn lượt" để trống, tab Hành động dùng bộ đọc cũ).
 
 - Migration: [migration_v502_campaign_limit_progress.sql](../migrations/migration_v502_campaign_limit_progress.sql)
 - Rollback: [rollback_v502_campaign_limit_progress.sql](../migrations/rollback_v502_campaign_limit_progress.sql) (chỉ `DROP FUNCTION`)
