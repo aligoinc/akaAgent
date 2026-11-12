@@ -1,0 +1,50 @@
+{
+ "migration": "migration_v513_engine_desktop_flag",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~22:30 VN, \"Apply V513\" (câu hỏi: Apply V513 lên akachat bây giờ không?)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "file_md5": "15d206f352a696687f0492175d4e3eb5",
+ "file_bytes": 4755,
+ "source_commit": "dbfbb873 (nhánh feat/campaign-engine-v2-desktop-flag, PR #651)",
+ "rollback_file_md5": "7dd42bfec7e7273f62b9ce51a3f7c374",
+ "ledger": {
+  "version": "20261112153048",
+  "name": "migration_v513_engine_desktop_flag",
+  "statements_md5": "15d206f352a696687f0492175d4e3eb5"
+ },
+ "applied_at_vn": "2026-11-12 22:30:48–22:30:49 (exit 0, không lỗi; câu lệnh vào postgres_logs 15:30:49.101 UTC)",
+ "what": "Chỉ thêm hàm public.aka_agent_engine_desktop_enabled_v1() (SQL, STABLE, SECURITY DEFINER, search_path pg_catalog/public/private): cờ use_new_zalo_runtime của tổ chức trong phiên Desktop (private.aka_agent_desktop_data_context()); EXECUTE chỉ aka_agent_desktop. Không sửa hàm, bảng hay dữ liệu cũ.",
+ "precheck": {
+  "at_vn": "2026-11-12 22:30:38",
+  "ledger_tail": [
+   "20261112144814 migration_v512_fly_command_signal_rules",
+   "20261112151259 migration_v511_web_proxy_management_p1",
+   "20261112152033 migration_v511_web_proxy_management_p2",
+   "20261112152346 migration_v511_web_proxy_management_p3"
+  ],
+  "ledger_v513": 0,
+  "function_exists": false,
+  "flag_column": "boolean not null",
+  "desktop_context_md5_live_equals_test_fixture": true,
+  "staff_scope_md5_live_equals_test_fixture": true,
+  "flagged_orgs": 0,
+  "db_load": "1 truy vấn client đang chạy, 0 chờ khoá"
+ },
+ "verify": {
+  "at_vn": "22:31:24",
+  "ledger_statements_md5_equal_file": true,
+  "function": {"secdef": true, "volatile": "s", "config": ["search_path=pg_catalog, public, private"], "owner": "postgres", "returns": "boolean", "has_comment": true},
+  "execute": {"aka_agent_desktop": true, "anon": false, "authenticated": false, "service_role": false, "aka_agent_chat_api": false},
+  "call_outside_desktop_session": false,
+  "call_as_real_desktop_session": "false = cờ của tổ chức nhân viên mẫu (false); ngữ cảnh phiên trả đúng tổ chức của nhân viên đó (kiểm riêng, không in id), trong giao dịch không ghi gì",
+  "call_with_unknown_jwt": false,
+  "flagged_orgs": 0,
+  "postgrest": "nạp lại schema 15:30:49.12 UTC (tạo hàm): đọc schema 1.596 ms, nạp xong 15:30:51.09; không lỗi",
+  "edge_logs_rest": "15:30:00–15:31:40 UTC: 0 lỗi 5xx, 0 lỗi 503, p50 45–49 ms; riêng giây 15:30:49 (lúc nạp lại schema) có 20 request trên 1 giây, lâu nhất 1,3 giây; trước và sau p99 96–228 ms",
+  "postgres_logs": "chỉ dòng câu lệnh V513; không lỗi",
+  "tests_local": "node scripts/test-v513-engine-desktop-flag.cjs 8 nhóm (PG17, hai hàm phiên Desktop nguyên văn bản live); smoke bộ chạy Desktop 9 nhóm; campaign-outcome-engine-check-all.cjs 27/27; typecheck hai cấu hình; npm run build"
+ },
+ "scope": "Chưa Desktop nào gọi: chỉ bản Desktop dựng sau khi merge #651 đọc hàm này lúc đăng nhập. Không tổ chức nào bật cờ nên mọi Desktop chạy bộ cũ.",
+ "rollback": "migrations/rollback_v513_engine_desktop_flag.sql (md5 7dd42bfec7e7273f62b9ce51a3f7c374): xoá hàm; Desktop gặp PGRST202 thì coi như cờ tắt (sau khi đăng nhập lại). Tạo / xoá hàm làm PostgREST nạp lại schema: chạy ngoài giờ cao điểm.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v513_* hoặc hàm đã có"
+}

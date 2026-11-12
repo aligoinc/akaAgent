@@ -897,7 +897,7 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   huỷ, lượt vẫn chỉ đọc danh sách tag một lần; đóng hẳn sau đó vẫn huỷ); đối chứng âm: 3 ca mới hỏng với adapter cũ, đạt với adapter mới; smoke
   V512 đạt; check-all 26 bước; ChatApi `npm run verify` 184 file / 2.647 test, chạy lại 2 file dùng V512 mới (19 test) đạt.
 
-### 12/11 ~22:35–23:00 VN: công tắc Desktop theo cờ tổ chức (V513, PR #651; V513 chưa apply)
+### 12/11 ~22:05–22:35 VN: công tắc Desktop theo cờ tổ chức (PR #651; V513 apply 22:30:48 VN)
 
 - #650 merge vào `dev_3` lúc 22:08 VN khi Desktop còn chọn bộ mới chỉ theo bản cài ⇒ bản build kế tiếp từ `dev_3` sẽ chạy bộ mới cho tài
   khoản QR/Web của mọi khách. Anh chốt dùng chung cờ `org_organization.use_new_zalo_runtime` (cờ đang chọn bộ mới cho tài khoản Server trên Fly).
@@ -912,6 +912,9 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   cờ (data dở vẫn được đóng SYS01/SYS02, không gửi trùng).
 - **Kiểm:** `node scripts/test-v513-engine-desktop-flag.cjs` 8 nhóm (PG17, hàm phiên Desktop nguyên văn bản live); smoke bộ chạy Desktop thêm ca
   công tắc (9 nhóm); check-all 27 bước; typecheck hai cấu hình sạch; `npm run build` đạt.
+- **V513 đã apply akachat 12/11 22:30:48 VN** theo yêu cầu "Apply V513" (`20261112153048`, md5 sổ = file `15d206f3…`, không apply lại): chỉ
+  `aka_agent_desktop` gọi được; gọi bằng phiên Desktop thật ra đúng cờ (false) và ngữ cảnh nhận đúng tổ chức; PostgREST nạp lại schema 1,6 giây,
+  0 lỗi 5xx/503 (20 request chậm 1–1,3 giây đúng giây nạp lại); [biên nhận](../migrations/snapshots/engine-desktop-flag-v513/apply-receipt.json).
 
 ## 5. Phủ hiện tại và phần còn lại (12/11 ~04:10 VN)
 
