@@ -17,7 +17,8 @@ WORK=$(mktemp -d "${TMPDIR:-/tmp}/v511.XXXXXX")
 as_pg() { if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi; }
 [ "$(id -u)" = 0 ] && chown postgres "$WORK"
 chmod 755 "$WORK"
-cp $MIGRATIONS "$ROLLBACK" "$WORK/" && chmod 644 "$WORK"/*.sql
+python3 "$ROOT/scripts/build-v511-guarded-apply-sql.py" >/dev/null
+cp $MIGRATIONS "$ROLLBACK" "$ROOT"/migrations/tests/migration_v511_web_proxy_management_p?_guarded_apply.sql "$WORK/" && chmod 644 "$WORK"/*.sql
 cleanup() { as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$WORK"; }
 trap cleanup EXIT
 as_pg "$PGBIN/initdb" -D "$WORK/data" -A trust -U postgres -E UTF8 --locale=C >/dev/null
@@ -437,5 +438,21 @@ for part in 1 2 3; do
   out=$(run_file migration_v511_web_proxy_management_p$part.sql) || fail "apply lại phần $part sau rollback: $out"
 done
 ok "apply lại sau rollback"
+
+# Đường dự phòng: script dán SQL Editor (scripts/build-v511-guarded-apply-sql.py) tự ghi sổ migration.
+out=$(run_file rollback_v511_web_proxy_management.sql) || fail "rollback trước khi thử script dán: $out"
+q "DELETE FROM supabase_migrations.schema_migrations"
+G=migration_v511_web_proxy_management
+refuse "script dán: phần 2 trước phần 1 bị từ chối" "chưa thấy ${G}_p1 trong sổ migration" run_file ${G}_p2_guarded_apply.sql
+expect "script dán: lượt bị từ chối không đổi gì" "$(q "SELECT (SELECT count(*) FROM supabase_migrations.schema_migrations) || ',' || (to_regclass('public.auto_proxy_checks') IS NULL)")" "0,true"
+for part in 1 2 3; do
+  out=$(run_file ${G}_p${part}_guarded_apply.sql) || fail "script dán phần $part: $out"
+  case "$out" in *"applied|"*"|${G}_p$part|"*"|t|"*) ;; *) fail "script dán phần $part: kết quả lạ: $out" ;; esac
+done
+ok "script dán: ba phần apply và báo md5 khớp"
+expect "script dán: md5 sổ = md5 file" "$(q "SELECT string_agg(md5(statements[1]), ',' ORDER BY name) FROM supabase_migrations.schema_migrations")" \
+  "$(for part in 1 2 3; do md5sum < "$WORK/${G}_p$part.sql" | cut -c1-32; done | paste -sd,)"
+refuse "script dán: dán lại bị từ chối" "đã có trong sổ migration, không chạy lại" run_file ${G}_p1_guarded_apply.sql
+expect "script dán: không bật cờ tổ chức nào" "$(q "SELECT count(*) FROM org_organization WHERE web_proxy_management_enabled")" "0"
 
 echo "Tất cả $pass kiểm tra đạt"
