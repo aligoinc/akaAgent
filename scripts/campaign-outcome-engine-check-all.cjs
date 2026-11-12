@@ -12,6 +12,7 @@ const steps = [
   ['Kiểm V497 (định tuyến theo cờ)', ['scripts/test-v497-zalo-server-flag-route.cjs']],
   ['Kiểm V498 (Desktop biết tổ chức chạy trên Fly)', ['scripts/test-v498-zalo-server-on-fly-desktop.cjs']],
   ['Kiểm V513 (Desktop đọc cờ engine v2 của tổ chức)', ['scripts/test-v513-engine-desktop-flag.cjs']],
+  ['Kiểm V514 (giữ khớp trạng thái hệ thống V494 với engine)', ['scripts/test-v514-status-system-group-guard.cjs']],
   ['Kiểm V499 (nhớ mục tiêu theo tài khoản)', ['scripts/test-v499-target-memory-per-account.cjs']],
   ['Kiểm V500 (chính sách lỗi Zalo đã duyệt)', ['scripts/test-v500-zalo-error-policies.cjs']],
   ['Smoke Desktop nghe tiến trình từ ChatApi', ['scripts/run-zalo-chat-realtime-only-smoke-test.cjs']],
