@@ -42,7 +42,7 @@ Hàm phụ ở schema `private` (`aka_agent_proxy_*`, `aka_agent_guard_account_p
 
 ## Triển khai
 
-1. Apply V511 buổi tối muộn (DDL trên `org_organization`/`auto_proxies`/`auto_accounts` làm PostgREST nạp lại schema; `lock_timeout` 3 giây). Kiểm `supabase_migrations.schema_migrations` không có V511, md5 sổ = md5 file.
+1. Apply ba phần theo thứ tự `migration_v511_web_proxy_management_p1.sql` (cột, bảng, index, policy Desktop, cài đặt, hàm phụ, trigger) → `_p2.sql` (RPC cho Web) → `_p3.sql` (RPC bộ kiểm tra, quyền, kiểm tra cuối); mỗi phần một giao dịch, phần sau từ chối khi phần trước chưa xong, phần nào cũng từ chối chạy lại. Tách vì cả file ~67 KB quá sức một lần gửi của công cụ apply. DDL trên `org_organization`/`auto_proxies`/`auto_accounts` làm PostgREST nạp lại schema (`lock_timeout` 3 giây). Kiểm md5 sổ = md5 từng file.
 2. Bật cờ cho 3 tổ chức đang có tài khoản Zalo Server dùng proxy (nếu không, Web mới ẩn cửa sổ proxy họ đang dùng). Câu này chạy trigger đồng bộ đơn hàng CRM của từng tổ chức:
    ```sql
    UPDATE public.org_organization SET web_proxy_management_enabled = true
@@ -60,4 +60,4 @@ Tắt nhanh: `proxies.check_mode = 'off'`; ẩn trang cho tổ chức: cờ `fal
 
 ## Kiểm thử
 
-`bash scripts/test-v511-web-proxy-management.sh` (PG16 cục bộ, 102 kiểm tra): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.
+`bash scripts/test-v511-web-proxy-management.sh` (PG16 cục bộ, 105 kiểm tra; apply ba phần theo thứ tự, phần 2 trước phần 1 bị từ chối): preflight khớp hàm/policy/index production, quyền, cờ, mọi lệnh RPC, quyền người thêm/quản trị, trigger trên mọi đường ghi, Desktop đọc cả tổ chức nhưng chỉ ghi của mình, bộ kiểm tra (lease, 2 lần hỏng, thử lại, hash), chạy lại bị từ chối, rollback và apply lại.

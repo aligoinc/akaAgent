@@ -11,13 +11,13 @@
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-MIGRATION="$ROOT/migrations/migration_v511_web_proxy_management.sql"
+MIGRATIONS="$ROOT/migrations/migration_v511_web_proxy_management_p1.sql $ROOT/migrations/migration_v511_web_proxy_management_p2.sql $ROOT/migrations/migration_v511_web_proxy_management_p3.sql"
 ROLLBACK="$ROOT/migrations/rollback_v511_web_proxy_management.sql"
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/v511.XXXXXX")
 as_pg() { if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi; }
 [ "$(id -u)" = 0 ] && chown postgres "$WORK"
 chmod 755 "$WORK"
-cp "$MIGRATION" "$ROLLBACK" "$WORK/" && chmod 644 "$WORK"/*.sql
+cp $MIGRATIONS "$ROLLBACK" "$WORK/" && chmod 644 "$WORK"/*.sql
 cleanup() { as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -m immediate stop >/dev/null 2>&1 || true; rm -rf "$WORK"; }
 trap cleanup EXIT
 as_pg "$PGBIN/initdb" -D "$WORK/data" -A trust -U postgres -E UTF8 --locale=C >/dev/null
@@ -219,10 +219,15 @@ ok "dựng fixture"
 
 expect "md5 hàm data_context khớp production" "$(q "SELECT md5(pg_get_functiondef('private.aka_agent_desktop_data_context()'::regprocedure))")" "1c661248ef952acb98ee2a2082cf8bf8"
 
-out=$(run_file migration_v511_web_proxy_management.sql) || fail "apply V511: $out"
-ok "apply V511"
-q "INSERT INTO supabase_migrations.schema_migrations VALUES ('20261112150000', 'migration_v511_web_proxy_management', NULL)"
-refuse "chạy lại bị từ chối" "đã có trong sổ migration" run_file migration_v511_web_proxy_management.sql
+refuse "phần 2 trước phần 1 bị từ chối" "chưa apply phần 1" run_file migration_v511_web_proxy_management_p2.sql
+for part in 1 2 3; do
+  out=$(run_file migration_v511_web_proxy_management_p$part.sql) || fail "apply V511 phần $part: $out"
+  q "INSERT INTO supabase_migrations.schema_migrations VALUES ('2026111215000$part', 'migration_v511_web_proxy_management_p$part', NULL)"
+done
+ok "apply V511 ba phần theo thứ tự"
+refuse "chạy lại phần 1 bị từ chối" "đã có trong sổ migration" run_file migration_v511_web_proxy_management_p1.sql
+refuse "chạy lại phần 2 bị từ chối" "đã có trong sổ migration" run_file migration_v511_web_proxy_management_p2.sql
+refuse "chạy lại phần 3 bị từ chối" "đã có trong sổ migration" run_file migration_v511_web_proxy_management_p3.sql
 
 # Quyền
 expect "anon không gọi được RPC" "$(q "SELECT has_function_privilege('anon', 'public.aka_agent_control_proxies(bigint,bigint,text,jsonb)', 'EXECUTE')")" "f"
@@ -428,7 +433,9 @@ ok "rollback chạy"
 expect "rollback: cột/bảng/hàm/cài đặt đã gỡ" "$(q "SELECT (SELECT count(*) FROM information_schema.columns WHERE table_name IN ('org_organization','auto_proxies') AND column_name IN ('web_proxy_management_enabled','expires_on','note')) || ',' || (to_regclass('public.auto_proxy_checks') IS NULL) || ',' || (SELECT count(*) FROM pg_proc WHERE proname LIKE 'aka_agent_proxy%' OR proname = 'aka_agent_control_proxies') || ',' || (SELECT count(*) FROM auto_system_settings WHERE key LIKE 'proxies.%')")" "0,true,0,0"
 expect "rollback: Desktop lại chỉ đọc proxy của mình" "$(desk "SELECT string_agg(DISTINCT staff_id::text, ',') FROM auto_proxies")" "12"
 q "DELETE FROM supabase_migrations.schema_migrations"
-out=$(run_file migration_v511_web_proxy_management.sql) || fail "apply lại sau rollback: $out"
+for part in 1 2 3; do
+  out=$(run_file migration_v511_web_proxy_management_p$part.sql) || fail "apply lại phần $part sau rollback: $out"
+done
 ok "apply lại sau rollback"
 
 echo "Tất cả $pass kiểm tra đạt"
