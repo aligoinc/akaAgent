@@ -1,0 +1,25 @@
+{
+  "name": "@akaagent/campaign-engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Lõi engine kết quả chiến dịch v2 dùng chung cho Desktop (Electron main) và Zalo Server trên Fly. TypeScript thuần, không phụ thuộc Electron hay Supabase.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "htmlparser2": "^10.1.0"
+  }
+}

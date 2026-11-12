@@ -1,0 +1,286 @@
+{
+ "migrations": [
+  "migration_v503_engine_share_batch",
+  "migration_v504_engine_send_exclusion",
+  "migration_v505_engine_materialize",
+  "migration_v506_engine_realtime_sms",
+  "migration_v507_engine_drop_target_memory",
+  "migration_v508_zalo_group_126_127_per_group"
+ ],
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~16:46 VN, \"Apply ngay\" (câu hỏi: Apply chuỗi V503→V508 lên production bây giờ?)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn từng file theo thứ tự; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "items": [
+  {
+   "name": "migration_v503_engine_share_batch",
+   "what": "Gửi dạng chia sẻ theo lô: claim_batch_v1 / report_batch_v1, sửa thân claim_target_v1 / report_v1 (preflight đòi thân V501), CFG17, SYS09, luật share_interrupted",
+   "file_md5": "c0eecef882d2910fa1f40388ee5bff12",
+   "file_bytes": 92203,
+   "generated_by": "scripts/build-v503-sql.cjs",
+   "rollback_file_md5": "9fd166a448d66b47251a4297aee93c77",
+   "ledger": {
+    "version": "20261112094818",
+    "name": "migration_v503_engine_share_batch",
+    "statements_md5": "c0eecef882d2910fa1f40388ee5bff12",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:48:18–16:48:21 (exit 0, không lỗi)"
+  },
+  {
+   "name": "migration_v504_engine_send_exclusion",
+   "what": "Loại trừ gửi: send_exclusion_v1 theo lease, EXC01–03, CFG18–19, cổng send_exclusion (preflight đòi md5 pg_get_functiondef của aka_agent_campaign_send_exclusion_runtime = ca4ba08f…)",
+   "file_md5": "490f2481c4d9daa6c22681c4fce70bf4",
+   "file_bytes": 23048,
+   "generated_by": "scripts/build-v504-sql.cjs",
+   "rollback_file_md5": "a42541a309a732a9d6e647bfc70ad70e",
+   "ledger": {
+    "version": "20261112094850",
+    "name": "migration_v504_engine_send_exclusion",
+    "statements_md5": "490f2481c4d9daa6c22681c4fce70bf4",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:48:50–16:48:52 (exit 0, không lỗi)"
+  },
+  {
+   "name": "migration_v505_engine_materialize",
+   "what": "Lấy data đầu lượt: materialize_v1 theo lease, sửa thân claim_target_v1 (preflight đòi thân V503)",
+   "file_md5": "372a2509e34bdee44b87adda788861fc",
+   "file_bytes": 45628,
+   "generated_by": "scripts/build-v505-sql.cjs",
+   "rollback_file_md5": "c251b71a190ae95308780508dd1c7b79",
+   "ledger": {
+    "version": "20261112094917",
+    "name": "migration_v505_engine_materialize",
+    "statements_md5": "372a2509e34bdee44b87adda788861fc",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:49:17–16:49:19 (exit 0, không lỗi)"
+  },
+  {
+   "name": "migration_v506_engine_realtime_sms",
+   "what": "Group thời gian thực (sửa thân finish_campaign_v2, preflight đòi thân V501) và kiêm SMS nội bộ (sms_push_v1)",
+   "file_md5": "e179268f03bf4e90f2776401769dbe89",
+   "file_bytes": 30295,
+   "generated_by": "scripts/build-v506-sql.cjs",
+   "rollback_file_md5": "e2f6da86b69a3a593d8205e577e2521f",
+   "ledger": {
+    "version": "20261112094927",
+    "name": "migration_v506_engine_realtime_sms",
+    "statements_md5": "e179268f03bf4e90f2776401769dbe89",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:49:27–16:49:29 (exit 0, không lỗi)"
+  },
+  {
+   "name": "migration_v507_engine_drop_target_memory",
+   "what": "Bỏ hẳn nhớ mục tiêu theo tài khoản: viết lại claim_target_v1 / report_v1 / resolve_policy (preflight đòi thân V505 / V503 / V495), xoá bảng auto_target_memory (0 dòng), cột auto_outcome_policies.remember_target_days (giá trị cũ ghi 150 dòng auto_outcome_policy_history changed_by migration_v507), dòng cổng target_memory",
+   "file_md5": "bdd2dc8742c6ed8c92d0d0d3ac10d085",
+   "file_bytes": 80797,
+   "generated_by": "scripts/build-v507-sql.cjs",
+   "rollback_file_md5": "4b01c3ef491e00c9ed4b4c7756873c67",
+   "ledger": {
+    "version": "20261112095000",
+    "name": "migration_v507_engine_drop_target_memory",
+    "statements_md5": "bdd2dc8742c6ed8c92d0d0d3ac10d085",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:50:00–16:50:02 (exit 0, không lỗi)"
+  },
+  {
+   "name": "migration_v508_zalo_group_126_127_per_group",
+   "what": "Chỉ dữ liệu: dòng chính sách 220 (err_zalo_126_127_message_group × zalo_message_group) từ Q4 thành ignore / none / complete / khoá rỗng / continue; không nạp lại schema",
+   "file_md5": "dea7e6ebffa19b844a1afa7774f87063",
+   "file_bytes": 4956,
+   "generated_by": "scripts/build-v508-sql.cjs",
+   "rollback_file_md5": "b6a201be71b613c34b8d9caa45cfa09a",
+   "ledger": {
+    "version": "20261112095022",
+    "name": "migration_v508_zalo_group_126_127_per_group",
+    "statements_md5": "dea7e6ebffa19b844a1afa7774f87063",
+    "created_by": null
+   },
+   "applied_at_vn": "2026-11-12 16:50:22–16:50:24 (exit 0, không lỗi)"
+  }
+ ],
+ "precheck": {
+  "at_vn": "2026-11-12 16:46:56",
+  "ledger_v50x": [
+   "20261111170305 migration_v500_zalo_error_policies",
+   "20261112005556 migration_v501_engine_schedule_completion"
+  ],
+  "ledger_v503_v508": 0,
+  "ledger_max_other": "20261112072100 chatbot_claude_api (của nhóm chat/CRM, không đánh số vN)",
+  "git_all_branches": "chỉ nhánh claude/fervent-gates-c8ldgw giữ V502 (chưa apply); không nhánh nào dùng V503–V508",
+  "prosrc_md5_live_vs_preflight": {
+   "claim_batch_exists": false,
+   "claim_prosrc": "9af133f7b9355215e5b86da4868aece8",
+   "finish_v2_prosrc": "534ca5114184f4e4387fc8af626b064c",
+   "report_prosrc": "9c5c2586105757b9892a90656899ccb0",
+   "resolve_prosrc": "d4091353bcc2fb5df6c6308da13f0caa",
+   "send_exclusion_runtime_def": "ca4ba08f2a0fc853c3cee79ac1190001",
+   "share_rule_exists": false
+  },
+  "target_memory_rows": 0,
+  "flagged_orgs": 0,
+  "engine_leases": 0,
+  "last_engine_target_run": "2026-11-11T14:16:31.131537+00:00",
+  "policy_220": {
+   "camp": "pause",
+   "rev": 1,
+   "streak": "increment",
+   "target": "requeue"
+  },
+  "db_load": "7 truy vấn client đang chạy, 0 chờ khoá",
+  "callers": "edge_logs 24 giờ: 0 lời gọi tới rpc/aka_agent_engine_* hay bảng auto_engine_* / auto_outcome_* / auto_target_memory qua PostgREST; ChatApi api+worker chạy image api-worker-dbb38b7-dev-20261112 (dev, không có v2)",
+  "code_references": "auto_target_memory / remember_target_days: 0 file ở akaAgentWebApp origin/dev 4b5a3e2, akaAgentChatApi origin/dev d74f420, akaAgentChatWeb origin/dev 7d8a7dc, akaBizApi origin/dev 1930016, akaAgent origin/dev_3 (src, packages)"
+ },
+ "verify": {
+  "at_vn": "16:51:01",
+  "ledger_statements_md5_equal_file": true,
+  "function_prosrc_md5_after_v508": {
+   "aka_agent_engine_claim_target_v1(jsonb)": "e09100fd2b1fedfd951e22bfd4f8ab8a",
+   "aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": "4016395dd68d36561086868a1b7f1ba3",
+   "aka_agent_engine_resolve_policy(text,bigint,text,text,text,text)": "5bf0fd99ade24226a2974f6a3a1f1b4f",
+   "aka_agent_engine_finish_campaign_v2(bigint,uuid,text)": "48625d957157f8392c966c153016df41",
+   "aka_agent_engine_claim_batch_v1(jsonb)": "f8d6abae33359ea134c7ec65f94d5267",
+   "aka_agent_engine_report_batch_v1(uuid,jsonb,integer,boolean)": "90994a3cbe67f6f9c1f7d5dd8f0c4c79",
+   "aka_agent_engine_send_exclusion_v1(bigint,uuid,text,jsonb)": "521414d40664c567b8f89f4dee5add9c",
+   "aka_agent_engine_materialize_v1(bigint,uuid,text,jsonb)": "1e6a6aae949cee343c790fbf3674332a",
+   "aka_agent_engine_sms_push_v1(bigint,uuid,jsonb)": "13bd2b9aa97c686cf2e31521db776b0f"
+  },
+  "acl": {
+   "aka_agent_engine_claim_batch_v1(jsonb)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_claim_target_v1(jsonb)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_finish_campaign_v2(bigint,uuid,text)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_materialize_v1(bigint,uuid,text,jsonb)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\"",
+     "statement_timeout=60s"
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_report_batch_v1(uuid,jsonb,integer,boolean)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_resolve_policy(text,bigint,text,text,text,text)": {
+    "acl": "postgres,service_role",
+    "config": [
+     "search_path=\"\""
+    ],
+    "owner": "postgres",
+    "secdef": false
+   },
+   "aka_agent_engine_send_exclusion_v1(bigint,uuid,text,jsonb)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\"",
+     "statement_timeout=15s"
+    ],
+    "owner": "postgres",
+    "secdef": true
+   },
+   "aka_agent_engine_sms_push_v1(bigint,uuid,jsonb)": {
+    "acl": "aka_agent_chat_api,aka_agent_desktop,postgres,service_role",
+    "config": [
+     "search_path=\"\"",
+     "statement_timeout=30s"
+    ],
+    "owner": "postgres",
+    "secdef": true
+   }
+  },
+  "gates": [
+   "action_lock",
+   "delivery_cooldown",
+   "opt_out",
+   "quota",
+   "send_exclusion"
+  ],
+  "target_memory_table": null,
+  "remember_target_days_column": 0,
+  "history_migration_v507_rows": 150,
+  "auto_error_by_type": {
+   "auth": 2,
+   "business rule": 2,
+   "engine v2": 29,
+   "external email": 12,
+   "external facebook": 41,
+   "external zalo": 39,
+   "system": 12
+  },
+  "auto_error_note": "137 dòng (V501: 130); 7 mã mới CFG17, SYS09, EXC01, EXC02, CFG18, EXC03, CFG19 đều error_type 'engine v2' nên bộ kiểm danh mục bản cũ bỏ qua",
+  "policy_220_after": {
+   "rev": 2,
+   "streak": "ignore",
+   "camp": "none",
+   "target": "complete",
+   "lock": [],
+   "run": "continue"
+  },
+  "resolve_126_127_group": {
+   "desktop": {
+    "camp": "none",
+    "lock": [],
+    "quota": "no_count",
+    "run": "continue",
+    "streak": "ignore",
+    "target": "complete"
+   },
+   "fly": {
+    "camp": "none",
+    "lock": [],
+    "quota": "no_count",
+    "run": "continue",
+    "streak": "ignore",
+    "target": "complete"
+   }
+  },
+  "flagged_orgs": 0,
+  "engine_leases": 0,
+  "postgrest": "5 lần nhận lệnh nạp lại schema (V503–V507; V508 không nạp vì chỉ dữ liệu, bảng tạm pg_temp): truy vấn schema 7.891 / 3.917 / 2.945 / 1.893 / 3.501 ms, nạp xong cả 5; 513 → 512 relation (xoá auto_target_memory), 801 → 804 hàm; không có PGRST002/PGRST003. Lần đầu (V503) sát trần 8 giây",
+  "edge_logs_rest": "09:44–09:51 UTC (16:44–16:51 VN), khoảng 30 giây: 0 lỗi 5xx, 0 lỗi 503, ~22–23 nghìn request mỗi khoảng; p50 47–65 ms (09:49:00–09:49:30 UTC lên 102 ms), p99 238–407 ms bình thường, lên 1.926 / 770 / 906 / 971 ms ở các khoảng nạp lại schema",
+  "postgres_logs": "không lỗi nào nhắc auto_target_memory / remember_target_days / aka_agent_engine_* / auto_outcome_* / auto_engine_*",
+  "cron_job_113_close_stale": "aka_agent_engine_close_stale_v1(200) mỗi phút: 16:37–16:51 VN đều succeeded (7–60 ms), kể cả sau V507",
+  "tests_local": "smoke V503 16, V504 11, V505 9, V506 6, V507 4, V508 5 nhóm; campaign-outcome-engine-check-all.cjs 22/22; legacy-catalog-validator-smoke.cjs đạt (Desktop 8.2.0, 9.3.0, chat-sync); ChatApi npm run verify 184 file / 2.619 test (2 bỏ qua), Fly runner 16/16; phát lại dữ liệu thật replay-all-10 / replay-focus-7"
+ },
+ "scope": "Chỉ engine v2 gọi (Fly khi tổ chức bật cờ, Desktop bản cài mới). Hiện không tổ chức nào bật cờ, ChatApi chạy dev không có v2, Desktop bản mới chưa phát hành ⇒ hành vi production không đổi. Bộ chạy cũ không đổi: không sửa hàm / trigger / dữ liệu của bộ cũ; mã mới có error_type 'engine v2'.",
+ "caution": "Bản Desktop thử 9.5.1-test-engine-v2 (dựng 11/11 21:09 VN) không được mở lại. ChatApi bản phủ (worktree akaAgentChatApi-deploy-dbb38b7) cần đưa lên dev mới nhất (d74f420) trước khi deploy.",
+ "rollback": "Gỡ đúng thứ tự ngược: rollback_v508 → v507 → v506 → v505 → v504 → v503. Các file gỡ KHÔNG tự kiểm bản sau đã gỡ chưa (ví dụ rollback_v503 trả claim_target_v1 về thân V501 dù V505/V507 còn), nên đảo thứ tự là làm hỏng thân hàm. rollback_v508 trả dòng 220 về Q4; rollback_v507 dựng lại bảng / cột / dòng cổng và giá trị nhớ từ auto_outcome_policy_history. Nơi chạy đang gọi hàm mới phải được đưa về bản trước (hoặc tắt cờ tổ chức) trước khi gỡ.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v50N_* tương ứng hoặc đối tượng của bản đó đã có / đã xoá"
+}

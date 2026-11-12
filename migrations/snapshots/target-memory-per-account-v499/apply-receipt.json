@@ -1,0 +1,44 @@
+{
+ "migration": "migration_v499_target_memory_per_account",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~00:01 VN, \"ok apply đi\" (sau khi duyệt từng câu bảng lỗi Zalo)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+ "file_md5": "58b121710dbe4571306f36d3e8dde277",
+ "file_bytes": 55582,
+ "generated_by": "scripts/build-v499-sql.cjs",
+ "ledger": {
+  "version": "20261111170237",
+  "name": "migration_v499_target_memory_per_account",
+  "statements_md5": "58b121710dbe4571306f36d3e8dde277"
+ },
+ "applied_at_vn": "2026-11-12 00:02:44 (lệnh chạy 00:02:43–00:02:45, exit 0)",
+ "precheck": {
+  "at_vn": "2026-11-12 00:01:56",
+  "number_free": "sổ migration chưa có migration_v499_* / migration_v500_* (mới nhất: chat_zalo_message_gom_agent_run_account_page_index 20261111135055, chat_zalo_admin_audit_log 20261111135042, v498 20261111134640); git mọi nhánh chỉ tới v494",
+  "live_function_md5_before": {
+   "public.aka_agent_engine_claim_target_v1(jsonb)": "42cf164564f065435ecc9b9bc34c5184",
+   "public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": "52272025e5e3aa56cc4483c217e40205",
+   "public.aka_agent_engine_resolve_policy(text,bigint,text,text,text,text)": "d4091353bcc2fb5df6c6308da13f0caa"
+  },
+  "matches_v495_file": "thân claim/report/resolve trên production trùng md5 với migration_v495_campaign_outcome_engine.sql (cũng là bản các bộ kiểm dùng)",
+  "auto_target_memory_rows": 0,
+  "v500_rows_before": 0,
+  "policy_lint_issues": 0,
+  "live_engine_leases": 0,
+  "db_load": "1 backend đang chạy"
+ },
+ "verify": {
+  "at_vn": "2026-11-12 00:02:55",
+  "function_md5_after": {
+   "public.aka_agent_engine_claim_target_v1(jsonb)": "c1d965ca4bd804bc1dd4f20f39d21e3f",
+   "public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": "03e17d13fd900cd2957e4548ba805ef8"
+  },
+  "auto_target_memory": "có cột account_id; khoá duy nhất auto_target_memory_account_key_v499 (account_id, target_key, action_code); auto_target_memory_key_v495 đã gỡ; 0 dòng",
+  "grants": "report_v1 EXECUTE vẫn cho aka_agent_chat_api, aka_agent_desktop, service_role; claim_target_v1 không cho anon/authenticated",
+  "postgrest": "17:02:44.73 UTC nhận lệnh nạp lại schema; truy vấn schema 2.133,8 ms; nạp xong 17:02:47 (513 bảng/view, 792 hàm)",
+  "edge_logs_rest": "16:58–17:03 UTC: 0 lỗi 5xx, 0 lỗi 503, trung bình 41,7–48,7 ms mỗi phút",
+  "tests_local": "scripts/test-v499-target-memory-per-account.cjs 4/4"
+ },
+ "rollback": "migrations/rollback_v499_target_memory_per_account.sql (xoá bộ nhớ đệm theo tài khoản, trả hai hàm về thân V495, khoá theo tổ chức); gỡ V500 trước nếu muốn bỏ nhớ",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v499_* hoặc auto_target_memory.account_id đã có"
+}

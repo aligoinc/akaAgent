@@ -1,0 +1,65 @@
+{
+  "migration": "migration_v495_campaign_outcome_engine",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "11/11/2026 ~16:50 VN, \"Tiếp tục thử\" (thử bộ mới với tổ chức 526: V495 → V497 → deploy ChatApi)",
+  "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+  "file_md5": "e313b9930013c35f0b8f86882b8b50c2",
+  "file_bytes": 161190,
+  "ledger": {
+    "version": "20261111095339",
+    "name": "migration_v495_campaign_outcome_engine",
+    "statements_md5": "e313b9930013c35f0b8f86882b8b50c2",
+    "created_by": null
+  },
+  "apply_window_vn": "2026-11-11 16:53:32 → 16:53:40 (CLI), COMMIT ~16:53:39.9",
+  "precheck": {
+    "at_vn": "2026-11-11 16:52:55",
+    "ledger_head": "migration_v496_new_zalo_runtime_default_off; chưa có V495/V497",
+    "objects_absent": true,
+    "pg_cron": "1.6.4",
+    "roles": ["aka_agent_chat_api", "aka_agent_desktop", "anon", "authenticated", "authenticator", "service_role"],
+    "schema_vs_fixture_20261106": "12 bảng khớp fixture trừ cột mới auto_campaigns.web_campaign_form (+ CHECK auto_campaigns_web_campaign_form_check), không liên quan V495",
+    "catalog_rows_vs_fixture": "auto_error 108, auto_status 41, auto_account_actions 25, auto_account_action_status_policies 19 dòng giống hệt; auto_campaign_actions chỉ khác các cột fixture không chụp"
+  },
+  "verify": {
+    "at_vn": "2026-11-11 16:53:58",
+    "new_tables": 11,
+    "new_functions": 31,
+    "policies": 154,
+    "policies_by_source": { "seed_v495_error": 106, "seed_v495_status": 19, "seed_v495_class": 13, "seed_v495_engine": 14, "seed_v495_action": 2 },
+    "signal_rules": 70,
+    "engine_error_codes": 14,
+    "auto_error_with_public_code": 120,
+    "policy_lint_rows": 0,
+    "cron_job": "aka-agent-engine-close-stale, * * * * *, active",
+    "enabled_orgs_v1": ["526"],
+    "execute_grants_on_engine_functions": { "anon": 0, "authenticated": 0, "service_role": 30, "aka_agent_desktop": 9, "aka_agent_chat_api": 11 }
+  },
+  "incident": {
+    "summary": "Migration giữ khoá ACCESS EXCLUSIVE trên auto_error (rồi auto_account_actions, auto_status) suốt cả giao dịch ~7 giây. Kết quả: 13 lượt Desktop đọc auto_error (error_limit_in_day/hour) quá giờ (500), và 5 lượt ghi kết quả chiến dịch aka_agent_write_action_result_v1 bị deadlock (40P01: RPC giữ khoá bảng danh mục khác, chờ RowShareLock trên auto_error; migration giữ auto_error, chờ ACCESS EXCLUSIVE bảng còn lại; Postgres huỷ RPC). Bộ chạy cũ coi lỗi ghi là ResultContractError nên chuyển chiến dịch sang 'tạm dừng' và đóng data đang chạy dở thành 'hoàn thành', không gửi lại.",
+    "edge_logs_5xx_minute_09_53_utc": 16,
+    "postgrest_reload": "nhận lệnh nạp lại 09:53:39.96 UTC; phút 09:53 p99 2.098 ms; 09:54 về bình thường, 0 lỗi 5xx",
+    "paused_campaigns": [
+      { "campaign": 48793, "org": 1368, "staff": 1480, "account": 9854, "runtime": "App Server (VPS)", "failed_write": "zalo_message_stranger", "input_closed": 13225987, "sent_before_failure": "đã tìm SĐT; nhắn tin có thể đã gửi (lỗi ở bước ghi kết quả nhắn tin)" },
+      { "campaign": 53644, "org": 832, "staff": 855, "account": 4335, "runtime": "Desktop", "failed_write": "zalo_find_phone_user", "input_closed": 14317497, "sent_before_failure": "chỉ tra SĐT, chưa nhắn" },
+      { "campaign": 53293, "org": 1946, "staff": 2171, "account": 10938, "runtime": "App Server (VPS)", "failed_write": "zalo_find_phone_user", "input_closed": 14153361, "sent_before_failure": "chỉ tra SĐT, chưa nhắn" },
+      { "campaign": 27655, "org": 445, "staff": 466, "account": 6972, "runtime": "Fly chat-sync", "failed_write": "zalo_message_stranger", "input_closed": 6961439, "sent_before_failure": "đã tìm SĐT; nhắn tin có thể đã gửi" },
+      { "campaign": 49494, "org": 1023, "staff": 1089, "account": 4946, "runtime": "Fly chat-sync", "failed_write": "zalo_tag_contact", "input_closed": 12550173, "sent_before_failure": "đã tìm SĐT và đã nhắn (có lịch sử); lỗi ở bước gắn tag" }
+    ],
+    "state_after": "5 chiến dịch 'tạm dừng', không còn claim/unit token; tài khoản 'chờ xử lý'; data dở đóng 'hoàn thành' với ghi chú 'Lượt chạy/chiến dịch gặp lỗi: output_invalid:<thao tác>:write:deadlock detected — Kết quả chưa xác nhận; không tự gửi lại.'",
+    "lesson": "Lệnh ALTER TABLE trên bảng danh mục mà app đọc liên tục (auto_error, auto_status, auto_account_actions) phải nằm trong giao dịch riêng thật ngắn; đừng để chung với phần dựng hàm/nạp dữ liệu nhiều giây.",
+    "remediation": {
+      "approved_by_user": "11/11/2026 ~17:00 VN, \"Sửa ngay\"",
+      "at_utc": "2026-11-11T10:00:27.552236+00:00",
+      "mirrors": "Đúng câu UPDATE của aka_agent_set_zalo_server_campaign_status / aka_agent_set_desktop_campaign_status_v2 khi khách bấm Tiếp tục: status='chờ xử lý', note=NULL, updated_at=now(), chỉ khi đang 'tạm dừng' và không còn claim/unit token",
+      "dry_run": "DO block tự huỷ: chỉ ghi public.auto_campaigns upd=5 và public.auto_campaign_input_data upd=2, không bảng nào khác",
+      "campaigns_resumed": [27655, 48793, 49494, 53293, 53644],
+      "inputs_requeued": [14153361, 14317497],
+      "inputs_requeued_reason": "Hai data chỉ mới tra SĐT (lỗi ở bước ghi kết quả tra số, chưa chạy bước nhắn, không có dòng lịch sử nào) nên trả về hàng đợi để người nhận không bị bỏ sót. Ba data còn lại có thể đã nhận tin nên giữ 'hoàn thành'.",
+      "guards": "Câu UPDATE kiểm id, trạng thái, nguyên văn ghi chú lỗi deadlock, token rỗng; data phải không có dòng auto_campaign_details nào",
+      "not_undone": "Thông báo 'chiến dịch tạm dừng' (nếu khách đã nhận) không rút lại được"
+    }
+  },
+  "do_not_reapply": "Preflight từ chối khi public.auto_outcome_policies đã có",
+  "rollback": "migrations/rollback_v495_campaign_outcome_engine.sql"
+}

@@ -1,6 +1,6 @@
 /** Shared bucket selection for campaign lookups and read-only phone scans. */
 export type PhoneSearchLimitScope = 'hour' | 'day'
-export interface PhoneSearchAttempt { reqSrc: 32 | 40; outcome: 'success' | 'error'; errorCode?: string; errorMessage?: string }
+export interface PhoneSearchAttempt { reqSrc: 32 | 40; outcome: 'success' | 'error'; errorCode?: string | undefined; errorMessage?: string }
 export function phoneSearchErrorCode(error: unknown): string {
   return String((error as { code?: unknown } | null)?.code ?? '').trim()
 }

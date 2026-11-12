@@ -1,0 +1,126 @@
+{
+ "migration": "migration_v509_zalo_personal_112_too_long",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~17:44 VN, \"Apply ngay\" (câu hỏi: Apply V509 lên production bây giờ?)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "file_md5": "c470185ccd169ca0c8af84b73014f092",
+ "file_bytes": 12010,
+ "generated_by": "scripts/build-v509-sql.cjs",
+ "rollback_file_md5": "a9f4105c1393b023dfd71d8f2c340cd6",
+ "ledger": {
+  "version": "20261112104442",
+  "name": "migration_v509_zalo_personal_112_too_long",
+  "statements_md5": "c470185ccd169ca0c8af84b73014f092",
+  "created_by": null
+ },
+ "applied_at_vn": "2026-11-12 17:44:42–17:44:47 (exit 0, không lỗi)",
+ "what": "Chỉ dữ liệu của engine v2: mã err_engine_zalo_112_message_too_long (Z112, content_config, không có mã Zalo trong auto_error nên bộ chạy cũ không khớp); 3 dòng chính sách chép từ err_zalo_message_too_long (id 74 / 199 / 200), chỉ đổi câu cho khách; 2 luật zalo_code 112 × zalo_message_stranger / zalo_message_friend. Nhắn group giữ nguyên.",
+ "precheck": {
+  "at_vn": "2026-11-12 17:44:34",
+  "ledger_tail": [
+   "20261112094917 migration_v505_engine_materialize",
+   "20261112094927 migration_v506_engine_realtime_sms",
+   "20261112095000 migration_v507_engine_drop_target_memory",
+   "20261112095022 migration_v508_zalo_group_126_127_per_group"
+  ],
+  "ledger_v509": 0,
+  "git_all_branches": "không nhánh nào dùng V509",
+  "base_rows_118": [
+   "74:-:write:pause:complete:end_unit:r1",
+   "199:zalo_message_stranger:suppress:-:requeue:stop_campaign:r1",
+   "200:zalo_message_friend:suppress:-:requeue:stop_campaign:r1"
+  ],
+  "new_code": 0,
+  "rules_112_personal": 0,
+  "v509_rows": 0,
+  "lint_rows": 0,
+  "flagged_orgs": 0,
+  "engine_leases": 0,
+  "db_load": "5 truy vấn client đang chạy, 0 chờ khoá"
+ },
+ "verify": {
+  "at_vn": "17:45:02",
+  "ledger_statements_md5_equal_file": true,
+  "auto_error": {
+   "active": true,
+   "bad": false,
+   "class": "content_config",
+   "id": 158,
+   "limit": false,
+   "public": "Z112",
+   "title": "Nội dung quá dài",
+   "type": "engine v2",
+   "zalo_actions": [],
+   "zalo_codes": []
+  },
+  "policies": [
+   "272:-:write:pause:complete:end_unit",
+   "273:zalo_message_stranger:suppress:-:requeue:stop_campaign",
+   "274:zalo_message_friend:suppress:-:requeue:stop_campaign"
+  ],
+  "rules": [
+   "92:zalo_message_stranger:112:err_engine_zalo_112_message_too_long",
+   "93:zalo_message_friend:112:err_engine_zalo_112_message_too_long"
+  ],
+  "classify_112": {
+   "zalo_add_group_member": "err_zalo_api_business_failed",
+   "zalo_change_alias": "err_zalo_api_business_failed",
+   "zalo_message_friend": "err_engine_zalo_112_message_too_long",
+   "zalo_message_group": "err_zalo_112_message_group",
+   "zalo_message_stranger": "err_engine_zalo_112_message_too_long"
+  },
+  "classify_118_stranger": "err_zalo_message_too_long",
+  "resolve_new_code": {
+   "zalo_message_friend/desktop": {
+    "camp": "pause",
+    "detail": "suppress",
+    "log": "Nội dung quá dài",
+    "note": "Nội dung quá dài, vui lòng rút ngắn nội dung chiến dịch (gửi kèm 1 ảnh thì chữ dưới 2.000 ký tự)",
+    "quota": "no_count",
+    "run": "stop_campaign",
+    "streak": "ignore",
+    "target": "requeue"
+   },
+   "zalo_message_friend/fly": {
+    "camp": "pause",
+    "detail": "suppress",
+    "log": "Nội dung quá dài",
+    "note": "Nội dung quá dài, vui lòng rút ngắn nội dung chiến dịch (gửi kèm 1 ảnh thì chữ dưới 2.000 ký tự)",
+    "quota": "no_count",
+    "run": "stop_campaign",
+    "streak": "ignore",
+    "target": "requeue"
+   },
+   "zalo_message_stranger/desktop": {
+    "camp": "pause",
+    "detail": "suppress",
+    "log": "Nội dung quá dài",
+    "note": "Nội dung quá dài, vui lòng rút ngắn nội dung chiến dịch (gửi kèm 1 ảnh thì chữ dưới 2.000 ký tự)",
+    "quota": "no_count",
+    "run": "stop_campaign",
+    "streak": "ignore",
+    "target": "requeue"
+   },
+   "zalo_message_stranger/fly": {
+    "camp": "pause",
+    "detail": "suppress",
+    "log": "Nội dung quá dài",
+    "note": "Nội dung quá dài, vui lòng rút ngắn nội dung chiến dịch (gửi kèm 1 ảnh thì chữ dưới 2.000 ký tự)",
+    "quota": "no_count",
+    "run": "stop_campaign",
+    "streak": "ignore",
+    "target": "requeue"
+   }
+  },
+  "same_as_118_except_text": true,
+  "lint_rows": 0,
+  "auto_error_engine_v2_rows": 30,
+  "postgrest": "không nạp lại schema (không DDL; bảng tạm pg_temp); không có dòng postgrest_logs nào 10:42–10:47 UTC",
+  "edge_logs_rest": "10:42–10:45 UTC (17:42–17:45 VN), khoảng 30 giây: 0 lỗi 5xx, 0 lỗi 503, p50 44–45 ms, p99 117–189 ms (không nhích)",
+  "postgres_logs": "chỉ dòng câu lệnh V509 và job close_stale; không lỗi",
+  "tests_local": "smoke V509 5 nhóm; campaign-outcome-engine-check-all.cjs 23/23; ChatApi npm run verify 184 file / 2.619 test (2 bỏ qua), Fly runner 16/16; phát lại 11 chiến dịch thật đã gặp 112 không có / có V509 (46331, 53581, 53967 dừng ngay ở data đầu thay vì 4–12 data)"
+ },
+ "scope": "Chỉ engine v2 đọc. Hiện không tổ chức nào bật cờ, ChatApi chạy dev không có v2, Desktop bản mới chưa phát hành ⇒ hành vi production không đổi. Bộ chạy cũ đọc auto_error theo zalo_error_codes, mã mới để trống nên không khớp.",
+ "rollback": "migrations/rollback_v509_zalo_personal_112_too_long.sql (md5 a9f4105c…): xoá chính sách / luật source 'v509', tắt mã mới (is_active false, is_delete true; không xoá vì lịch sử có thể tham chiếu). Postflight kiểm 112 × hai thao tác không còn ra mã mới và mọi cặp khác giữ nguyên.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v509_* hoặc đã có chính sách / luật 112 cho nhắn người lạ / bạn bè"
+}

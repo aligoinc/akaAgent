@@ -1,0 +1,53 @@
+{
+  "migration": "migration_v496_new_zalo_runtime_default_off",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "11/11/2026 ~16:09 VN, yêu cầu trực tiếp trong phiên (\"tắt trigger đi, tắt cho các tổ chức khác luôn, chỉ giữ lại tổ chức test của tôi thôi\"); apply trong giờ cao điểm chiều theo yêu cầu này",
+  "tool": "supabase db query --linked -f, chạy nguyên văn file (BEGIN, lock_timeout 2s, LOCK ACCESS EXCLUSIVE, preflight, ALTER, postflight); dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+  "file_md5": "d5677641d02b4b4f78f0dc09d89c661f",
+  "ledger": {
+    "version": "20261111091027",
+    "name": "migration_v496_new_zalo_runtime_default_off",
+    "statements_md5": "d5677641d02b4b4f78f0dc09d89c661f",
+    "created_by": null
+  },
+  "applied_at_vn": "2026-11-11 16:10:27",
+  "before": {
+    "read_at_vn": "2026-11-11 16:05:49",
+    "trigger": "trg_use_new_zalo_runtime_on_insert",
+    "trigger_enabled": "O",
+    "trigger_function": "private.aka_agent_org_default_new_zalo_runtime()",
+    "column_default": "true",
+    "flag_true_ids": [526, 2089, 2090, 2091, 2092, 2093],
+    "ledger_v495_v497": null
+  },
+  "after": {
+    "read_at_vn": "2026-11-11 16:10:37",
+    "trigger_enabled": "D",
+    "column_default": "false",
+    "flag_true_ids": [526, 2089, 2090, 2091, 2092, 2093, 2094],
+    "note": "Tổ chức 2094 tạo 16:08:15 VN, trước lúc apply, nên trigger vẫn bật cờ; V496 không sửa dòng nào. Cờ của 2089–2094 tắt ở bước riêng ngay sau (engine-v2-flag-reset-20261111/receipt-after-v496.json)."
+  },
+  "readers_of_flag_at_apply": {
+    "db_functions": ["private.aka_agent_org_default_new_zalo_runtime() (chính hàm của trigger)"],
+    "chatapi_e16725c": "chỉ trong migrations/snapshots (biên nhận cũ)",
+    "akaagent_dev_3_src": "không có",
+    "webapp_origin_dev": "chỉ trong một fixture test SQL",
+    "conclusion": "Không code nào đọc cờ nên apply không đổi hành vi đang chạy"
+  },
+  "postgrest_reload": {
+    "reload_message_utc": "2026-11-11T09:10:27.744Z",
+    "schema_cache_queried_ms": 5676.4,
+    "schema_cache_loaded_utc": "2026-11-11T09:10:36.373Z",
+    "edge_logs_per_minute_utc": [
+      { "minute": "09:06", "req": 48421, "e5xx": 0, "p50_ms": 53, "p99_ms": 284 },
+      { "minute": "09:07", "req": 47116, "e5xx": 0, "p50_ms": 49, "p99_ms": 230 },
+      { "minute": "09:08", "req": 46970, "e5xx": 0, "p50_ms": 50, "p99_ms": 240 },
+      { "minute": "09:09", "req": 49014, "e5xx": 0, "p50_ms": 52, "p99_ms": 231 },
+      { "minute": "09:10", "req": 47148, "e5xx": 0, "p50_ms": 117, "p99_ms": 1541 },
+      { "minute": "09:11 (một phần)", "req": 21570, "e5xx": 0, "p50_ms": 66, "p99_ms": 390 }
+    ],
+    "summary": "0 lỗi 5xx/503; phút nạp lại schema (truy vấn schema 5,7 giây giờ cao điểm) p50 117 ms, p99 1,5 giây, rồi về lại"
+  },
+  "do_not_reapply": "Preflight của file từ chối khi sổ migration đã có migration_v496_* (và khi trigger không còn ở trạng thái bật, mặc định không còn true)",
+  "rollback": "migrations/rollback_v496_new_zalo_runtime_default_off.sql: bật lại trigger, mặc định true, ghi chú cột cũ; không sửa dòng tổ chức, không xoá dòng sổ migration. Lệnh sửa schema: chạy ngoài giờ cao điểm."
+}
