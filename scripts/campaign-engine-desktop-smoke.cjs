@@ -176,7 +176,7 @@ async function main() {
       const lines = [], contacts = [], pauses = new Set()
       const runtime = fakeRuntime(behaviors)
       const host = {
-        zaloRuntime: () => runtime, staffId: () => 8001, zaloRuntimeBlocked: () => false, acceptingWork: () => true,
+        zaloRuntime: () => runtime, staffId: () => 8001, engineEnabled: () => true, zaloRuntimeBlocked: () => false, acceptingWork: () => true,
         logProgress: async (campaign, text) => { lines.push(text) },
         broadcastCampaign: async () => {}, broadcastAccounts: () => {},
         isPauseRequested: id => pauses.has(id),
@@ -213,6 +213,17 @@ async function main() {
     assert.deepEqual(probe.runner.support(f0.account, f0.campaign), { ok: true })
     globalThis.__engineTest.engagement = false
     pass('Desktop chọn bộ mới chỉ cho tài khoản Zalo QR/Web của máy, theo tính năng chiến dịch; theo dõi tương tác bật vẫn chạy bộ mới')
+
+    // D0b: công tắc theo tổ chức (V513, cờ use_new_zalo_runtime chốt lúc đăng nhập). Cờ tắt thì mọi chiến dịch chạy bộ cũ,
+    // kể cả loại đã phủ; scheduler chỉ gọi run() khi support() đạt, nên bộ mới không nhận data nào.
+    const off = await runWith(f0, {}, { engineEnabled: () => false })
+    assert.deepEqual(off.runner.support(f0.account, f0.campaign), { ok: false, reason: 'org_flag_off' })
+    let flag = false
+    const toggled = await runWith(f0, {}, { engineEnabled: () => flag })
+    assert.equal(toggled.runner.support(f0.account, f0.campaign).ok, false)
+    flag = true
+    assert.equal(toggled.runner.support(f0.account, f0.campaign).ok, true, 'đăng nhập lại với cờ bật: bộ mới')
+    pass('công tắc theo tổ chức: cờ tắt (mặc định, lỗi đọc, DB chưa có V513) thì chạy bộ cũ; cờ bật thì chạy bộ mới cho loại đã phủ')
 
     // D1: chạy hết danh sách như Desktop; nghỉ theo nhóm tài khoản; lưu danh bạ + tên/UID của data; hoàn thành chiến dịch.
     const f1 = await makeCampaign({ phones: ['0922000001', '0922000002'], extra, content: 'Chào #{FULL_NAME}' })
