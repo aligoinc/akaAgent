@@ -1,0 +1,258 @@
+{
+  "version": "9.6.0",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0",
+  "worktree_used": true,
+  "source_branch": "codex/release-9.6.0",
+  "source_commit": "3c59c5cd65009ceea81dd4c1f511190a898c1eb7",
+  "source_base_commit": "7c0a6a79c23af562293f7755c7ebd3b643470529",
+  "source_base_ref": "origin/dev_3 sau PR #653",
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "dependencies": "npm ci trong worktree 00:40 VN 13/11 (778 gói); better-sqlite3 dựng lại cho Electron arm64, checksum ced697fc… như repo chính",
+  "build_window_vn": {
+    "desktop": "2026-11-13 00:43:39 - 00:47:07",
+    "server": "2026-11-13 00:47:24 - 00:48:13"
+  },
+  "build_input_manifest": {
+    "files": 1411,
+    "scope": "file Git theo dõi dưới src/, scripts/, build/, packages/ và 9 file cấu hình gốc",
+    "sha256_before": "0ea585bb44469525076728ab449558fd748dd1ec9af08b3ad1d93649ce47d0d5",
+    "sha256_after": "0ea585bb44469525076728ab449558fd748dd1ec9af08b3ad1d93649ce47d0d5"
+  },
+  "smokes": {
+    "desktop_runtime_snapshot": "12 checks",
+    "desktop_ui_idle_reads_logic": "13 nhóm",
+    "zalo_share_repeat": "42 ca",
+    "server_rest_request_reduction": "19/19",
+    "campaign_outcome_engine_check_all": "28 bước OK (SQL V495–V514 trên PG17, lõi, bộ chạy Desktop 9 nhóm, danh mục bản cũ 3 nhóm)"
+  },
+  "desktop": {
+    "checks": {
+      "typecheck_node": "passed",
+      "typecheck_renderer": "passed",
+      "packaged_output_parity": "passed",
+      "desktop_secret_absence": "passed",
+      "existing_installers_preserved": true,
+      "host_native_restored": true
+    },
+    "artifacts": [
+      {
+        "id": "win",
+        "platform": "Windows x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/akaAgent-Setup-9.6.0.exe",
+        "version": "9.6.0",
+        "resource_version": "9.6.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 627,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "pe_versions": {
+          "installer": {
+            "version": "9.6.0",
+            "machine": "14c",
+            "authenticode_present": false
+          },
+          "app": {
+            "version": "9.6.0",
+            "machine": "8664",
+            "authenticode_present": false
+          }
+        },
+        "installer_payload_parity": true,
+        "bytes": 153214569,
+        "sha256": "33ce5cfa65736b28e3204630dc3332ebcc2f658e5e2f0f59547610ac4d8dfe3c",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/build-9.6.0/akaAgent-Setup-9.6.0.exe"
+      },
+      {
+        "id": "arm",
+        "platform": "macOS ARM64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/akaAgent.dmg",
+        "version": "9.6.0",
+        "resource_version": "9.6.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "arm64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 182909288,
+        "sha256": "554d655397e7c3736cd27996f545f54112bfbcbdd621922bfc3dbbec3fd11efc",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/build-9.6.0/akaAgent.dmg"
+      },
+      {
+        "id": "intel",
+        "platform": "macOS Intel x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/akaAgentIntel.dmg",
+        "version": "9.6.0",
+        "resource_version": "9.6.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "x86_64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 190096367,
+        "sha256": "e384fc8d43ace1b373dcc5a64ba39cecf1f5e8772140e695af1f117fc59af47b",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.6.0/dist/build-9.6.0/akaAgentIntel.dmg"
+      }
+    ]
+  },
+  "app_server": {
+    "built": true,
+    "reason": "3 thay đổi chạy trên đường Zalo Server từ Server 9.5.1 (d1400ddb): 4a476f70 note đếm ngược hạn mức, 4b8fc15a gửi lặp lại sau x phút cho chiến dịch chia sẻ, 7ef1600b đọc proxy theo tổ chức; 28/214 file trong gói Server đổi",
+    "command": "npm run build:server:win:private",
+    "verification": {
+      "verified_at": "2026-11-12T17:48:27.901Z",
+      "version": "9.6.0",
+      "installer": "dist-server/private/2026-11-12T17-47-24-534Z/akaAgent-Zalo-Server-Internal-Setup-9.6.0.exe",
+      "installer_bytes": 140427821,
+      "installer_sha256": "f4127287a535bc98ca343330fe64a900401835e74507516a1712d2186b651cf2",
+      "checks": {
+        "windows_x64": true,
+        "installer_payload_parity": true,
+        "clean_host_credential_loading": true,
+        "server_main_parity": true,
+        "credential_absent_from_source_desktop_and_js": true,
+        "source_and_output_files_scanned": 4379,
+        "git_ignored": true,
+        "existing_server_installers_unchanged": true,
+        "host_native_restored": true
+      },
+      "windows_runtime_tested": false,
+      "published": false,
+      "rls_activation_applied": false
+    }
+  },
+  "existing_installers": {
+    "checked_unchanged": 65,
+    "removed_by_user_during_build": 87,
+    "note": "Người dùng tự dọn các bộ cài 8.x trong dist/ và dist-server/ của repo chính khoảng 00:45 VN (đã xác nhận); 65 bộ cài 9.x còn lại giữ nguyên checksum"
+  },
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "time_vn": "00:41:35-00:41:42",
+      "result": "exit=0"
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "time_vn": "00:41:42-00:42:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "snapshot-smoke",
+      "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+      "time_vn": "00:42:14-00:42:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "idle-reads-smoke",
+      "command": "node scripts/desktop-ui-idle-reads-logic-smoke.cjs",
+      "time_vn": "00:42:15-00:42:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "share-repeat-smoke",
+      "command": "node scripts/zalo-share-repeat-smoke-test.cjs",
+      "time_vn": "00:42:15-00:42:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "time_vn": "00:42:15-00:42:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-check-all",
+      "command": "env CHAT_REPO=/Users/lequangnhut/Repos/akaAgentChatApi node scripts/campaign-outcome-engine-check-all.cjs",
+      "time_vn": "00:42:15-00:43:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "build-win",
+      "command": "npm run build:win",
+      "time_vn": "2026-11-13 00:43:39 / 2026-11-13 00:45:07",
+      "result": "exit 0"
+    },
+    {
+      "label": "build-arm",
+      "command": "npm run build:mac",
+      "time_vn": "2026-11-13 00:45:07 / 2026-11-13 00:46:09",
+      "result": "exit 0"
+    },
+    {
+      "label": "build-intel",
+      "command": "npm run build:mac:intel",
+      "time_vn": "2026-11-13 00:46:09 / 2026-11-13 00:47:07",
+      "result": "exit 0"
+    },
+    {
+      "label": "build-server",
+      "command": "npm run build:server:win:private",
+      "time_vn": "2026-11-13 00:47:24 / 2026-11-13 00:48:13",
+      "result": "exit 0"
+    },
+    {
+      "label": "verify-server",
+      "command": "node scripts/staff-rls/verify-private-server-build.cjs dist-server/private/2026-11-12T17-47-24-534Z",
+      "time_vn": "2026-11-13 00:48:21 / 00:48:28",
+      "result": "exit 0"
+    },
+    {
+      "label": "verify-desktop",
+      "command": "node dist/build-9.6.0-work/verify-build.cjs (chép từ bản 9.4.0, đổi đường dẫn và số bản)",
+      "time_vn": "2026-11-13 00:50:27 / 00:50:59",
+      "result": "exit 0"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "feed_changed": false,
+  "app_server_installed_on_vps": false,
+  "database_changed": false,
+  "services_deployed": false,
+  "limitations": [
+    "Windows chưa ký Authenticode, chưa cài/chạy trên Windows thật.",
+    "Mac ký ad-hoc, chưa notarize; Intel chỉ thử SQLite qua Rosetta.",
+    "Chưa chạy luồng đăng nhập, chiến dịch hay Zalo thật trên bộ cài.",
+    "App Server chưa cài lên VPS."
+  ]
+}
