@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 # Thử V502 (hàm đọc tiến độ giới hạn cho danh sách chiến dịch Web và tab "Hành động") trên PostgreSQL 16 cục bộ,
 # không chạm production. Fixture chỉ dựng các cột mà hàm đọc, kèm index idx_auto_campaign_details_action_rate.
-# Kiểm: apply, quyền (chỉ service_role), phạm vi nhân viên/tổ chức, cách gắn nhãn dòng trong khung giờ, khung lớn
-# nhất theo cài đặt chiến dịch/nhóm, trần 500 dòng, chế độ chi tiết, tham số sai, apply lại bị từ chối, rollback.
+# Kiểm: apply, quyền (hàm đọc chỉ service_role, hàm Desktop chỉ aka_agent_desktop), phạm vi nhân viên/tổ chức, cách gắn
+# nhãn dòng trong khung giờ, khung lớn nhất theo cài đặt chiến dịch/nhóm, trần 500 dòng, chế độ chi tiết, tham số sai,
+# hàm Desktop với chuỗi xác thực token chép từ production (token đúng nhân viên + tài khoản/mật khẩu tự động hóa) ra đúng
+# JSON như hàm đọc, apply lại bị từ chối, rollback.
 # Dùng: bash scripts/test-v502-campaign-limit-progress.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
@@ -61,6 +63,76 @@ CREATE INDEX idx_auto_campaign_details_action_rate ON public.auto_campaign_detai
   WHERE is_delete = false AND action_code IS NOT NULL;
 CREATE TABLE public.org_organization_product (id bigserial PRIMARY KEY, organization_id bigint, product_id bigint,
   expiration_date timestamptz, is_deleted boolean, is_chat_sync boolean);
+
+-- Chuỗi xác thực token Desktop chép từ production (V434/V435), cùng bản với fixture WebApp
+-- scripts/test-fixtures/campaign-input-duplicates-schema.sql: token -> nhân viên, rồi tài khoản/mật khẩu tự động hóa.
+-- Đối chiếu production 12/11/2026: cùng logic (bỏ chú thích và nhánh tài khoản/chiến dịch mà V502 không dùng);
+-- md5(prosrc) production: auto_assert 7ffeb0f1…, assert_request_ownership 2d02b1ac…, staff_scope 72417ffd….
+CREATE SCHEMA private;
+CREATE TABLE public.org_staff (id bigint PRIMARY KEY, organization_id bigint, is_active boolean, username text, password text);
+INSERT INTO public.org_staff VALUES (1, 10, true, 'nv1', 'pw1'), (2, 10, true, 'nv2', 'pw2'), (3, 10, false, 'nv3', 'pw3');
+CREATE SCHEMA auth;
+CREATE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$
+  SELECT coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb
+$$;
+CREATE TABLE private.aka_agent_desktop_users(auth_user_id uuid PRIMARY KEY, staff_id bigint NOT NULL);
+INSERT INTO private.aka_agent_desktop_users VALUES ('00000000-0000-4000-8000-000000000001', 1), ('00000000-0000-4000-8000-000000000002', 2);
+CREATE FUNCTION private.aka_agent_staff_scope_for_request() RETURNS bigint
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = pg_catalog AS $$
+DECLARE v_claims jsonb; v_user uuid; v_staff bigint;
+BEGIN
+ IF current_setting('role',true) IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN NULL; END IF;
+ BEGIN
+  v_claims := NULLIF(current_setting('request.jwt.claims',true),'')::jsonb;
+  IF v_claims->>'role' IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN 0; END IF;
+  v_user := NULLIF(v_claims->>'sub','')::uuid;
+ EXCEPTION WHEN invalid_text_representation THEN RETURN 0;
+ END;
+ SELECT staff_id INTO v_staff FROM private.aka_agent_desktop_users WHERE auth_user_id=v_user;
+ RETURN COALESCE(v_staff,0);
+END;
+$$;
+CREATE FUNCTION private.aka_agent_assert_request_ownership(p_staff_id bigint, p_account_id bigint, p_campaign_id bigint) RETURNS boolean
+LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE v_staff bigint := private.aka_agent_staff_scope_for_request();
+BEGIN
+ IF v_staff IS NULL THEN RETURN true; END IF;
+ IF v_staff <= 0 OR (p_staff_id IS NOT NULL AND p_staff_id IS DISTINCT FROM v_staff) THEN
+   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_staff_scope_denied';
+ END IF;
+ RETURN true;
+END;
+$$;
+CREATE FUNCTION public.auto_assert_automation_identity(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text)
+RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_claim_role text;
+  v_claims jsonb;
+BEGIN
+  PERFORM private.aka_agent_assert_request_ownership(p_staff_id, NULL, NULL);
+  v_claim_role := NULLIF(current_setting('request.jwt.claim.role', true), '');
+  IF v_claim_role IS NULL THEN
+    BEGIN
+      v_claims := NULLIF(current_setting('request.jwt.claims', true), '')::jsonb;
+      v_claim_role := NULLIF(v_claims ->> 'role', '');
+    EXCEPTION WHEN OTHERS THEN v_claim_role := NULL;
+    END;
+  END IF;
+  IF v_claim_role IS NULL THEN v_claim_role := NULLIF(auth.jwt() ->> 'role', ''); END IF;
+  IF v_claim_role = 'service_role' THEN RETURN; END IF;
+  IF p_auth_username IS NULL OR p_auth_password IS NULL THEN RAISE EXCEPTION 'automation_auth_required'; END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.org_staff AS staff WHERE staff.id = p_staff_id AND staff.organization_id = p_organization_id
+      AND staff.is_active = true AND staff.username = p_auth_username AND staff.password = p_auth_password) THEN
+    RAISE EXCEPTION 'automation_auth_invalid';
+  END IF;
+END;
+$$;
+REVOKE ALL ON FUNCTION public.auto_assert_automation_identity(bigint,bigint,text,text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.auto_assert_automation_identity(bigint,bigint,text,text) TO service_role;
+REVOKE ALL ON FUNCTION private.aka_agent_staff_scope_for_request() FROM PUBLIC;
+REVOKE ALL ON FUNCTION private.aka_agent_assert_request_ownership(bigint,bigint,bigint) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION private.aka_agent_staff_scope_for_request() TO aka_agent_desktop, service_role;
+GRANT EXECUTE ON FUNCTION private.aka_agent_assert_request_ownership(bigint,bigint,bigint) TO aka_agent_desktop, service_role;
 
 INSERT INTO auto_campaign_actions VALUES
   ('zalo_message_phone', 'Nhắn tin theo SĐT', '{zalo_find_phone_user,zalo_message_stranger,zalo_add_friend}'),
@@ -177,13 +249,38 @@ refuse "danh sách rỗng bị từ chối" "Invalid campaign ids" psql_db -c "S
 refuse "quá 101 chiến dịch bị từ chối" "Invalid campaign ids" psql_db -c "SET ROLE service_role; SELECT aka_agent_control_campaign_limit_progress(1, 10, (SELECT array_agg(g) FROM generate_series(1, 102) g))"
 refuse "thiếu nhân viên bị từ chối" "Missing campaign scope" psql_db -c "SET ROLE service_role; SELECT aka_agent_control_campaign_limit_progress(NULL, 10, '{1}')"
 
+DSIG='public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)'
+# Gọi như PostgREST với token Desktop của nhân viên $1.
+desk() { psql_db -c "SET ROLE aka_agent_desktop; SET request.jwt.claims = '{\"role\":\"aka_agent_desktop\",\"sub\":\"00000000-0000-4000-8000-00000000000$1\"}'; SELECT $2"; }
+expect "hàm Desktop tồn tại" "$(q "SELECT to_regprocedure('$DSIG') IS NOT NULL")" "t"
+expect "hàm Desktop chỉ postgres và aka_agent_desktop được gọi" "$(q "SELECT string_agg(g, ',' ORDER BY g) FROM (SELECT DISTINCT a.grantee::regrole::text g FROM pg_proc p, aclexplode(p.proacl) a WHERE p.oid = to_regprocedure('$DSIG')) x")" "aka_agent_desktop,postgres"
+expect "hàm Desktop STABLE, SECURITY DEFINER, 8 giây" "$(q "SELECT provolatile::text || prosecdef::text || '|' || array_to_string(proconfig, ',') FROM pg_proc WHERE oid = to_regprocedure('$DSIG')")" "strue|search_path=pg_catalog, public,statement_timeout=8s"
+refuse "service_role không gọi hàm Desktop" "permission denied" psql_db -c "SET ROLE service_role; SELECT aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1}')"
+refuse "anon không gọi hàm Desktop" "permission denied" psql_db -c "SET ROLE anon; SELECT aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1}')"
+DESK_LIST="aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1,2,3,4,5,6,7,999}', $KEYS)"
+CORE_LIST="aka_agent_control_campaign_limit_progress(1, 10, '{1,2,3,4,5,6,7,999}', '{}', $KEYS)"
+# Cùng một giao dịch nên now() như nhau: JSON của Desktop phải trùng từng byte với hàm đọc (không mã gói akaChat).
+same=$(psql_db -c "BEGIN; SET LOCAL ROLE aka_agent_desktop; SET LOCAL request.jwt.claims = '{\"role\":\"aka_agent_desktop\",\"sub\":\"00000000-0000-4000-8000-000000000001\"}'; SELECT md5($DESK_LIST::text); RESET ROLE; SET LOCAL ROLE service_role; SELECT md5($CORE_LIST::text); COMMIT;")
+expect "Desktop ra đúng JSON của hàm đọc (danh sách)" "$(echo "$same" | sort -u | wc -l)|$(echo "$same" | wc -l)" "1|2"
+same=$(psql_db -c "BEGIN; SET LOCAL ROLE aka_agent_desktop; SET LOCAL request.jwt.claims = '{\"role\":\"aka_agent_desktop\",\"sub\":\"00000000-0000-4000-8000-000000000001\"}'; SELECT md5(aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1}', '{}', true)::text); RESET ROLE; SET LOCAL ROLE service_role; SELECT md5(aka_agent_control_campaign_limit_progress(1, 10, '{1}', '{}', '{}', true)::text); COMMIT;")
+expect "Desktop ra đúng JSON của hàm đọc (chi tiết)" "$(echo "$same" | sort -u | wc -l)|$(echo "$same" | wc -l)" "1|2"
+expect "Desktop thấy chiến dịch của mình" "$(desk 1 "(SELECT string_agg(c->>'id', ',' ORDER BY (c->>'id')::int) FROM jsonb_array_elements($DESK_LIST->'campaigns') c)")" "1,2,3,7"
+expect "Desktop không dùng mã gói akaChat" "$(desk 1 "$DESK_LIST->>'chatSync'")" "false"
+refuse "token của nhân viên khác bị từ chối" "desktop_staff_scope_denied" desk 2 "aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1}')"
+refuse "sai mật khẩu bị từ chối" "automation_auth_invalid" desk 1 "aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'sai', '{1}')"
+refuse "sai tổ chức bị từ chối" "automation_auth_invalid" desk 1 "aka_agent_read_campaign_limit_progress(1, 11, 'nv1', 'pw1', '{1}')"
+refuse "thiếu mật khẩu bị từ chối" "automation_auth_required" desk 1 "aka_agent_read_campaign_limit_progress(1, 10, 'nv1', NULL, '{1}')"
+refuse "không có token bị từ chối" "desktop_staff_scope_denied" psql_db -c "SET ROLE aka_agent_desktop; SELECT aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', '{1}')"
+refuse "Desktop: quá 101 chiến dịch bị từ chối" "Invalid campaign ids" desk 1 "aka_agent_read_campaign_limit_progress(1, 10, 'nv1', 'pw1', (SELECT array_agg(g) FROM generate_series(1, 102) g))"
+refuse "Desktop vẫn không gọi thẳng hàm đọc" "permission denied" desk 1 "aka_agent_control_campaign_limit_progress(1, 10, '{1}')"
+
 expect "hàm không ghi dữ liệu" "$(q "SELECT (SELECT count(*) FROM auto_campaign_details) || '|' || (SELECT sum(count_action_in_day) FROM auto_account_action_status)")" "529|34"
 expect "đọc khung giờ bằng index action_rate" "$(q "SET enable_seqscan = off; EXPLAIN SELECT d.created_at FROM auto_campaign_details d WHERE d.account_id = 100 AND d.action_code = 'zalo_add_friend' AND d.is_delete = false AND d.created_at >= now() - make_interval(mins => 65) AND d.counts_toward_limit IS NOT FALSE ORDER BY d.created_at DESC LIMIT 500" | grep -c idx_auto_campaign_details_action_rate)" "1"
 
 refuse "apply lần hai bị từ chối" "v502_target_already_exists_do_not_overwrite" run_file "$MIGRATION"
 q "DROP INDEX idx_auto_campaign_details_action_rate" >/dev/null
 out=$(run_file "$ROLLBACK") || fail "rollback: $out"
-expect "rollback xóa hàm" "$(q "SELECT to_regprocedure('$SIG') IS NULL")" "t"
+expect "rollback xóa cả hai hàm" "$(q "SELECT to_regprocedure('$SIG') IS NULL AND to_regprocedure('$DSIG') IS NULL")" "t"
 refuse "thiếu index thì không apply" "v502_action_rate_index_missing" run_file "$MIGRATION"
 out=$(run_file "$ROLLBACK") || fail "rollback lần hai: $out"
 ok "rollback chạy lại được"

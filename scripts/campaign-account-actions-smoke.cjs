@@ -219,13 +219,16 @@ async function ipcBoundary() {
   const window = { webContents: { mainFrame: {} } }
   const event = { sender: window.webContents, senderFrame: window.webContents.mainFrame }
   load('src/main/ipc/handlers/campaignAccountActionsHandlers.ts', {
-    electron: { ipcMain: { handle: (channel, callback) => { assert.equal(channel, shared.CAMPAIGN_ACCOUNT_ACTIONS_IPC); handler = callback } } },
+    electron: { ipcMain: { handle: (channel, callback) => { if (channel === shared.CAMPAIGN_ACCOUNT_ACTIONS_IPC) handler = callback; else assert.equal(channel, shared.CAMPAIGN_LIMIT_PROGRESS_IPC) } } },
     '../../../shared/campaignAccountActions': shared,
+    '../../../shared/campaignLimitProgress': load('src/shared/campaignLimitProgress.ts'),
     '../../data/currentUser': auth,
     '../../services/requestDeadline': deadline,
-    '../../services/campaignAccountActionsService': {
-      CampaignAccountActionsError,
-      readCampaignAccountActions: async id => {
+    '../../services/campaignAccountActionsService': { CampaignAccountActionsError },
+    // Từ V502 kênh tab đọc qua bộ đọc chi tiết (tự quay về bộ đọc cũ khi DB chưa có hàm).
+    '../../services/campaignLimitProgressService': {
+      readCampaignLimitProgress: async () => { throw new Error('not used') },
+      readCampaignAccountActionsDetail: async id => {
         reads++
         assert.equal(auth.requireCurrentUser().staffId, 9)
         if (mode === 'business') throw new CampaignAccountActionsError('Tài khoản của chiến dịch đã bị xóa.')

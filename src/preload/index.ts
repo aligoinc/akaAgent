@@ -55,7 +55,8 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
-import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
+import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, CAMPAIGN_LIMIT_PROGRESS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
+import type { CampaignLimitProgressResult } from '../shared/campaignLimitProgress'
 
 export type ElectronAPI = typeof electronAPI
 
@@ -769,6 +770,10 @@ const electronAPI = {
   /** Tab "Hành động" của chi tiết chiến dịch: chỉ đọc, không tạo/reset trạng thái hành động. */
   getCampaignAccountActions: (campaignId: number): Promise<CampaignAccountActionsResult> =>
     ipcRenderer.invoke(CAMPAIGN_ACCOUNT_ACTIONS_IPC, campaignId),
+
+  /** Cột "Giới hạn lượt" của danh sách chiến dịch (V502): chỉ đọc, <= 101 chiến dịch mỗi lượt. */
+  getCampaignLimitProgress: (campaignIds: number[]): Promise<CampaignLimitProgressResult> =>
+    ipcRenderer.invoke(CAMPAIGN_LIMIT_PROGRESS_IPC, campaignIds),
 
   getCampaignActionUsage: (accountId: number, actionCodes: string[]): Promise<CampaignActionUsage[]> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_USAGE, accountId, actionCodes),

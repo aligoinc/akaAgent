@@ -10,6 +10,7 @@ import FacebookRandomRunPlanModal from './FacebookRandomRunPlanModal'
 import { engagementDisplay, engagementApplicable, type EngagementFilter } from '../../../../shared/zaloCampaignEngagement'
 import { useCampaignRunLog } from '../../hooks/useCampaignRunLog'
 import { useCampaignPendingReasons } from '../../hooks/useCampaignPendingReasons'
+import { useCampaignLimitProgress, useServerClock } from '../../hooks/useCampaignLimitProgress'
 import { canCheckCampaignPendingReason } from '../../../../shared/campaignPendingReason'
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
@@ -83,6 +84,8 @@ import ActionManagerModal from './ActionManagerModal'
 import AccountInfoView from './AccountInfoView'
 import AccountInfoModal from './AccountInfoModal'
 import CampaignAccountActionsTab from './CampaignAccountActionsTab'
+import { CampaignLimitCell } from './CampaignLimitCell'
+import { CAMPAIGN_LIMIT_PROGRESS_MAX_IDS } from '../../../../shared/campaignLimitProgress'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
 import { CampaignRunReportTab, type CampaignReportDrillTarget } from './CampaignRunReport/CampaignRunReportTab'
@@ -2496,6 +2499,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   // Tab "Hành động": số hành động của chiến dịch đã tải và tín hiệu tải lại khi modal Hành động của tài khoản đóng.
   const [accountActionsCount, setAccountActionsCount] = useState<{ campaignId: number; count: number | null } | null>(null)
   const [accountActionsRevision, setAccountActionsRevision] = useState(0)
+  // Cột "Giới hạn lượt": đổi khi cần đọc lại ngay (Làm mới, vừa sửa giới hạn, vừa mở khóa hành động).
+  const [limitProgressForce, setLimitProgressForce] = useState(0)
   const [diagnosticFacebookAccount, setDiagnosticFacebookAccount] = useState<AutoAccount | null>(null)
   const [diagnosticRandomAccount, setDiagnosticRandomAccount] = useState<AutoAccount | null>(null)
   const [campaignFormSection, setCampaignFormSection] = useState<'schedule' | undefined>()
@@ -5563,6 +5568,33 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       return row ? [row] : []
     })
   }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading, campaignPage, campaignPageError])
+  // Cột "Giới hạn lượt" (V502): đọc sau lượt danh sách tải xong (tối đa 1 lượt/60 giây cho cùng tập chiến dịch), chỉ
+  // cho chiến dịch chưa hoàn thành đang hiện và chiến dịch đang mở chi tiết. Số "trong giờ" tự giảm theo đồng hồ.
+  // Theo trang đã tải (không theo bảng đang hiện): lúc bảng chờ truy vấn mới (đổi chọn/lọc) tập id giữ nguyên, không đọc thừa.
+  const limitIds = useMemo(() => {
+    const byId = new Map(filteredCampaigns.map(campaign => [campaign.id, campaign]))
+    const ids = (campaignPage?.order || []).flatMap(key => {
+      const campaign = key.kind === 'campaign' ? byId.get(Number(key.id)) : undefined
+      return campaign && campaign.status !== 'hoàn thành' ? [campaign.id] : []
+    })
+    if (selectedCampaignSummary && selectedCampaignSummary.status !== 'hoàn thành' && !ids.includes(selectedCampaignSummary.id)) ids.unshift(selectedCampaignSummary.id)
+    return ids.slice(0, CAMPAIGN_LIMIT_PROGRESS_MAX_IDS)
+  }, [filteredCampaigns, campaignPage, selectedCampaignSummary])
+  const limitProgress = useCampaignLimitProgress(limitIds, campaignPage, limitProgressForce, campaignSourceScope)
+  // Đồng hồ chỉ chạy khi có số phụ thuộc thời gian (lượt trong khung giờ, khóa có giờ mở lại, bộ đếm ngày).
+  const limitClockActive = useMemo(() => Boolean(limitProgress?.ready) && Array.from(limitProgress?.byCampaign.values() ?? [])
+    .some(item => item.actions.some(action => action.windowTimes.length > 0 || action.windowUsed > 0 || (action.locked && action.lockedUntil !== null) || (action.dayUsed ?? 0) > 0)), [limitProgress])
+  const limitNow = useServerClock(limitProgress?.clockOffsetMs, limitClockActive)
+  const selectedCampaignLimitItem = selectedCampaignSummary && limitProgress?.ready ? limitProgress.byCampaign.get(selectedCampaignSummary.id) : undefined
+  const selectedCampaignLimitLive = useMemo(() => selectedCampaignLimitItem && limitProgress ? {
+    item: selectedCampaignLimitItem, checkedAtMs: limitProgress.checkedAtMs, nextDayStartsAtMs: limitProgress.nextDayStartsAtMs, clockOffsetMs: limitProgress.clockOffsetMs
+  } : null, [selectedCampaignLimitItem, limitProgress])
+  const openCampaignActionsTab = (campaign: CampaignListItem) => {
+    setAccountInfoAccountId(campaign.accountId ?? null)
+    setSelectedCampaignId(campaign.id)
+    setDetailTab('accountActions')
+    setDetailDockOpen(true)
+  }
   const campaignRangeLabel = getCampaignRangeLabel(timePreset, dateFrom, dateTo)
   const campaignFilterPopoverStyle = filterPopoverPosition ? {
     ...filterPopoverPosition,
@@ -5573,6 +5605,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
 
   const handleReloadCampaigns = () => {
     campaignDrafts.refresh()
+    setLimitProgressForce(value => value + 1)
     setShowManualCampaignLoading(true)
     loadCampaigns({ refreshSources: true }).finally(() => setShowManualCampaignLoading(false))
   }
@@ -6237,7 +6270,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           setDiagnosticAccount(null); onDiagnosticsChanged?.()
         }} />}
         {campaignAccountActions && <AccountInfoModal account={campaignAccountActions.account} campaign={campaignAccountActions.campaign}
-          onClose={() => { setCampaignAccountActions(null); setAccountActionsRevision(value => value + 1); onDiagnosticsChanged?.() }} />}
+          onClose={() => { setCampaignAccountActions(null); setAccountActionsRevision(value => value + 1); setLimitProgressForce(value => value + 1); onDiagnosticsChanged?.() }} />}
         {diagnosticFacebookAccount && <FacebookCredentialsModal account={diagnosticFacebookAccount} onClose={() => {
           setDiagnosticFacebookAccount(null); onDiagnosticsChanged?.(); void loadAccounts()
         }} />}
@@ -6282,6 +6315,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
             onClose={() => {
               onDiagnosticsChanged?.()
               setLimitUpdateCampaign(null)
+              setAccountActionsRevision(value => value + 1)
+              setLimitProgressForce(value => value + 1)
               loadCampaigns()
               if (selectedCampaignId) refreshCampaignInputData(selectedCampaignId)
             }}
@@ -6355,11 +6390,11 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 </div>
                 <div className="campaign-col col-toggle">Dừng/Chạy</div>
                 <div className="campaign-col col-progress">Trạng thái</div>
+                <div className="campaign-col col-limits" title="Số lượt mỗi hành động đã chạy hôm nay so với giới hạn ngày, và số lượt trong khung giờ gần nhất"><span className="campaign-limit-heading">Giới hạn lượt<small>hôm nay · trong giờ</small></span></div>
                 <div className="campaign-col col-actions">Hành động</div>
                 <div className="campaign-col col-account">Tài khoản</div>
                 <div className="campaign-col col-data-group">Nhóm data</div>
                 <div className="campaign-col col-send-date">Ngày gửi</div>
-                <div className="campaign-col col-update-date">Ngày update</div>
               </div>
               {showCampaignTableLoading && (
                 <div className="campaign-table-loading-row">
@@ -6485,15 +6520,25 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                         <span className="campaign-cell-muted">-</span>
                       )}
                     </div>
-                    <div className="campaign-col col-progress" title={`${campaign.status}\n${progress.completed}/${progress.total}`}>
+                    <div className="campaign-col col-progress" title={`${campaign.status}\n${progress.completed}/${progress.total}\nCập nhật ${updatedLabel}`}>
                       <div className="campaign-status-stack">
                         <span className="status-badge">{campaign.status}</span>
                         <div className="campaign-progress-count">{progress.completed}/{progress.total}</div>
                         <div className="campaign-progress-track" aria-label={`Tiến độ ${progress.completed}/${progress.total}`}>
                           <span className="campaign-progress-fill" style={{ width: `${progress.percentage}%` }} />
                         </div>
+                        <small className="campaign-updated-line">Cập nhật {updatedLabel}</small>
                       </div>
                     </div>
+                    {(() => {
+                      // Chiến dịch đã hoàn thành không theo dõi giới hạn; DB chưa có hàm đọc (V502) thì để trống.
+                      const limitItem = limitProgress?.ready && campaign.status !== 'hoàn thành' ? limitProgress.byCampaign.get(campaign.id) : null
+                      return <div className={`campaign-col col-limits${limitItem?.actions.length ? '' : ' is-empty'}`} onClick={limitItem?.actions.length ? event => event.stopPropagation() : undefined}>
+                        <CampaignLimitCell item={limitItem} now={limitNow} nextDayStartsAt={limitProgress?.nextDayStartsAtMs ?? 0}
+                          accountName={accountLabel} muted={campaign.status === 'tạm dừng'} stale={limitProgress?.stale}
+                          onOpen={() => openCampaignActionsTab(campaign)} />
+                      </div>
+                    })()}
                     <div className="campaign-col col-actions" onClick={e => e.stopPropagation()}>
                       {/* Nút "Trợ lý aka" nằm chung cột Hành động (11/11/2026); không có agent thì chỉ còn nút Hành động. */}
                       {(() => {
@@ -6814,11 +6859,6 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       <div className="campaign-two-line-cell">
                         <div className="campaign-send-time-line">{scheduleTimeLabel}</div>
                         <div className="campaign-schedule-type-badge">{scheduleTypeLabel}</div>
-                      </div>
-                    </div>
-                    <div className="campaign-col col-update-date" title={updatedLabel}>
-                      <div className="campaign-two-line-cell">
-                        <div className="campaign-strong-line">{updatedLabel}</div>
                       </div>
                     </div>
                   </div>
@@ -8151,8 +8191,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                   campaign={selectedCampaignSummary}
                   accountGroupName={selectedCampaignAccount?.accountGroupName}
                   refreshKey={accountActionsRevision}
+                  live={selectedCampaignLimitLive}
                   onCount={(campaignId, count) => setAccountActionsCount({ campaignId, count })}
-                  onActionsChanged={() => onDiagnosticsChanged?.()}
+                  onActionsChanged={() => { setLimitProgressForce(value => value + 1); onDiagnosticsChanged?.() }}
+                  onEditLimits={canEditCampaign(selectedCampaignSummary.status) ? () => { void handleOpenLimitUpdate(selectedCampaignSummary) } : undefined}
                 />
               )}
 

@@ -1,9 +1,16 @@
--- V502: read-only facts for the WebApp campaign list column "Giới hạn lượt" and the detail tab "Hành động".
+-- V502: read-only facts for the campaign list column "Giới hạn lượt" and the detail tab "Hành động"
+-- (WebApp and Desktop).
 --
--- Adds ONE new function only. No table, column, index, policy, existing-function, role/global timeout,
--- pool or connection change. The WebApp API (service_role singleton) calls it once per campaign-list
--- refresh for the campaigns on the visible page (<= 101 ids), and once when the "Hành động" tab opens
--- (p_detail = true, exactly one id).
+-- Adds TWO new functions only. No table, column, index, policy, existing-function, role/global timeout,
+-- pool or connection change.
+--   public.aka_agent_control_campaign_limit_progress  (service_role) the reader. The WebApp API (service_role
+--     singleton) calls it once per campaign-list refresh for the campaigns on the visible page (<= 101 ids),
+--     and once when the "Hành động" tab opens (p_detail = true, exactly one id).
+--   public.aka_agent_read_campaign_limit_progress     (aka_agent_desktop) the same reader for the Desktop app
+--     with its own token: auto_assert_automation_identity binds the token to p_staff_id
+--     (private.aka_agent_assert_request_ownership) and checks that staff's automation username/password, the
+--     same identity as the report readers Desktop already calls (V487/V489, V491/V493). No akaChat product ids:
+--     Desktop already knows from its login whether the organization is chat-synced (chatSync is false).
 --
 -- The function returns FACTS, not decisions: campaign limit settings, account/group, daily counters,
 -- locks and the timestamps of the counted results inside the rate window. Effective limits
@@ -28,8 +35,13 @@ SET LOCAL lock_timeout = '3s';
 
 DO $preflight$
 BEGIN
-  IF to_regprocedure('public.aka_agent_control_campaign_limit_progress(bigint,bigint,bigint[],bigint[],text[],boolean)') IS NOT NULL THEN
+  IF to_regprocedure('public.aka_agent_control_campaign_limit_progress(bigint,bigint,bigint[],bigint[],text[],boolean)') IS NOT NULL
+    OR to_regprocedure('public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)') IS NOT NULL THEN
     RAISE EXCEPTION 'v502_target_already_exists_do_not_overwrite';
+  END IF;
+  IF to_regprocedure('public.auto_assert_automation_identity(bigint,bigint,text,text)') IS NULL
+    OR to_regrole('aka_agent_desktop') IS NULL THEN
+    RAISE EXCEPTION 'v502_desktop_identity_missing';
   END IF;
   IF to_regclass('public.auto_campaigns') IS NULL
     OR to_regclass('public.auto_accounts') IS NULL
@@ -268,6 +280,32 @@ GRANT EXECUTE ON FUNCTION public.aka_agent_control_campaign_limit_progress(bigin
 COMMENT ON FUNCTION public.aka_agent_control_campaign_limit_progress(bigint,bigint,bigint[],bigint[],text[],boolean) IS
   'V502 read-only facts for the WebApp campaign list "Giới hạn lượt" column and the "Hành động" tab: limit settings, account group, daily counters, locks, counted result timestamps inside the rate window and (detail) today''s results. service_role only; 8s per call; never writes.';
 
+-- Desktop entry point. SECURITY DEFINER so the reader runs as its owner; the token check happens first.
+CREATE FUNCTION public.aka_agent_read_campaign_limit_progress(
+  p_staff_id bigint,
+  p_organization_id bigint,
+  p_auth_username text,
+  p_auth_password text,
+  p_campaign_ids bigint[],
+  p_extra_keys text[] DEFAULT '{}'::text[],
+  p_detail boolean DEFAULT false
+) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER
+SET search_path = pg_catalog, public
+SET statement_timeout = '8s'
+AS $function$
+BEGIN
+  PERFORM public.auto_assert_automation_identity(p_staff_id, p_organization_id, p_auth_username, p_auth_password);
+  RETURN public.aka_agent_control_campaign_limit_progress(
+    p_staff_id, p_organization_id, p_campaign_ids, '{}'::bigint[], p_extra_keys, p_detail);
+END;
+$function$;
+ALTER FUNCTION public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean) FROM PUBLIC, anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean) TO aka_agent_desktop;
+COMMENT ON FUNCTION public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean) IS
+  'V502 Desktop entry to aka_agent_control_campaign_limit_progress: Desktop token bound to p_staff_id plus automation credentials (auto_assert_automation_identity). aka_agent_desktop only; 8s per call; never writes.';
+
 DO $postflight$
 DECLARE v_acl text;
 BEGIN
@@ -279,6 +317,23 @@ BEGIN
         WHERE pr.oid = to_regprocedure('public.aka_agent_control_campaign_limit_progress(bigint,bigint,bigint[],bigint[],text[],boolean)')) x)
      IS DISTINCT FROM ARRAY['postgres', 'service_role'] THEN
     RAISE EXCEPTION 'v502_reader_acl_unexpected: %', v_acl;
+  END IF;
+  SELECT proacl::text INTO v_acl FROM pg_proc
+    WHERE oid = to_regprocedure('public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)');
+  IF (SELECT array_agg(g ORDER BY g) FROM (
+        SELECT DISTINCT CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE a.grantee::regrole::text END AS g
+        FROM pg_proc pr, aclexplode(pr.proacl) a
+        WHERE pr.oid = to_regprocedure('public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)')) x)
+     IS DISTINCT FROM ARRAY['aka_agent_desktop', 'postgres'] THEN
+    RAISE EXCEPTION 'v502_desktop_acl_unexpected: %', v_acl;
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_proc
+    WHERE oid = to_regprocedure('public.aka_agent_read_campaign_limit_progress(bigint,bigint,text,text,bigint[],text[],boolean)')
+      AND prosecdef AND provolatile = 's' AND pg_get_userbyid(proowner) = 'postgres'
+      AND proconfig = ARRAY['search_path=pg_catalog, public', 'statement_timeout=8s']
+  ) THEN
+    RAISE EXCEPTION 'v502_desktop_attributes_unexpected';
   END IF;
 END
 $postflight$;
