@@ -31,7 +31,8 @@
       "3415, 8456": "phiên đã chết trên VPS từ 12/11 18:07 (Đăng nhập thất bại); sau khi chép, completeLogin ghi 'đã đăng nhập' từ 00:05:26 tới 00:11:32, lúc runtime thử đủ 10 lần, báo error và ChatApi ghi lại 'chưa đăng nhập'",
       "5863": "nối lúc 00:05:29, bị Zalo đá ra lúc 00:05:50 (3003 KICKOUT_BY_WORKER) như đã xảy ra trên VPS lúc 09:09 12/11; chủ tài khoản đang mở Zalo ở nơi khác"
     },
-    "data_cut_by_vps_stop": 0
+    "data_cut_by_vps_stop": 0,
+    "login_status_fix": "Đã sửa ở ChatApi PR #141 (deploy nhóm api 01:23:22–01:23:54 VN 13/11/2026, image dev-6bce37a-20261113): chép phiên giữ nguyên login_status; runtime ghi 'đã đăng nhập' khi ready, 'chưa đăng nhập' khi error"
   },
   "engine_v2_first_minutes": {
     "first_target_at_vn": "00:05:29",
@@ -62,5 +63,6 @@
       "waiting_socket": 0
     }
   },
-  "rollback": "UPDATE public.org_organization SET use_new_zalo_runtime = false WHERE id IN (692, 900, 1191); ChatApi trả phiên về VPS (to_vps), VPS nhận lại và tự nối bằng phiên đã lưu, không quét QR (đã thử với tổ chức 526 lúc 01:00 12/11)"
+  "rollback": "UPDATE public.org_organization SET use_new_zalo_runtime = false WHERE id IN (692, 900, 1191); ChatApi trả phiên về VPS (to_vps), VPS nhận lại và tự nối bằng phiên đã lưu, không quét QR (đã thử với tổ chức 526 lúc 01:00 12/11)",
+  "flag_off_at_vn": "2026-11-13 00:37:03 (theo yêu cầu); ChatApi trả phiên về VPS 00:37:13–00:37:28, VPS nối lại 00:38:34–00:38:36"
 }
