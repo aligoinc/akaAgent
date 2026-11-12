@@ -1476,7 +1476,7 @@ export function registerIpcHandlers(
   registerMediaHandlers(supabase)
   registerCustomerFeedbackHandlers()
   registerEmailNotificationHandlers(supabase)
-  registerDesktopUiHandlers()
+  registerDesktopUiHandlers(mainWindow)
   registerFacebookRandomRunHandlers(mainWindow)
   registerWebEnrichmentHandlers(mainWindow, campaignScheduler.webEnrichment)
   registerAppNotificationHandlers(supabase)

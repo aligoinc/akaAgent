@@ -1,5 +1,6 @@
 import { readCampaignHistory, type CampaignHistorySnapshot } from '../../../shared/campaignHistory'
 import type { DesktopCampaignPage, DesktopCampaignPageQuery } from '../../../shared/desktopUiReads'
+import { useDesktopPollingStore } from './desktopPollingStore'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { create } from 'zustand'
 import { AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, AutoAccount, AutoAccountGroup, AutoProxy, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, Campaign, CampaignAction, CampaignConfig, CampaignUpdate, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputStatus, CampaignDetail, CampaignDetailPageQuery, CampaignListItem, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, CampaignSummaryRefreshSignal, EmailCampaignLinkTrackingSummary } from '../../../shared/types'
@@ -534,6 +535,9 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
     const operation = (async () => {
       let firstRequest = true
       let retriedVisibility = false
+      // Chỉ lượt đọc nền đầu tiên (hẹn giờ/sự kiện) được dùng lại số tiến độ; lượt do người dùng gây ra và mọi
+      // lượt đọc nối tiếp đều đếm tất cả như trước (docs/DESKTOP_UI_IDLE_READS.md).
+      let progressMode: 'reuse' | 'full' = options?.passive === true ? 'reuse' : 'full'
       do {
         loadState.trailingRequested = false
         const revision = campaignPageRevision
@@ -541,7 +545,13 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         try {
           const query = get().campaignPageQuery!
           const queryKey = JSON.stringify(query)
-          const page = await window.electronAPI.getDesktopCampaignPage(query)
+          const recountSeconds = useDesktopPollingStore.getState().settings.progressRecountSeconds ?? 0
+          const progress = progressMode
+          progressMode = 'full'
+          // Khóa tắt (mặc định) thì gọi đúng như trước: một tham số, đếm mọi chiến dịch của trang.
+          const page = recountSeconds > 0
+            ? await window.electronAPI.getDesktopCampaignPage(query, { progress, recountSeconds })
+            : await window.electronAPI.getDesktopCampaignPage(query)
           if (JSON.stringify(get().campaignPageQuery) !== queryKey) { loadState.trailingRequested = true; continue }
           const loaded = [...page.items, ...(page.selected && !page.items.some(row => row.id === page.selected!.id) ? [page.selected] : [])]
           if (storeSessionEpoch !== requestEpoch || getStoreAuthScopeKey() !== authScope) break
