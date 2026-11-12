@@ -391,3 +391,29 @@ export function importExistingExportMatrix(entries: readonly ImportExistingEntry
     })
   ]
 }
+
+const IMPORT_TEMPLATE_HEADERS = ['Fullname', 'Uid', 'Mobile', 'Email', 'Info1', 'Info2', 'Info3', 'Info4', 'Info5']
+
+/** "Thêm data" → danh sách chờ thêm: 9 cột template (nhập lại được), dùng cho file "Đã có trong chiến dịch này". Như WebApp campaign-core. */
+export function pendingRowsExportMatrix(rows: readonly Partial<Record<ImportField, unknown>>[]): string[][] {
+  return [IMPORT_TEMPLATE_HEADERS, ...rows.map(row => IMPORT_FIELDS.map(field => importText(row[field])))]
+}
+
+/** "Thêm data" → Kiểm tra trùng: 9 cột template + nơi số đó đã có (dòng chờ thêm không còn vị trí nguồn). Như WebApp campaign-core. */
+export function pendingExistingExportMatrix(entries: readonly { row: Partial<Record<ImportField, unknown>>; existing: InputDuplicateItem }[]): string[][] {
+  return [
+    [...IMPORT_TEMPLATE_HEADERS, 'Đã có ở chiến dịch (gần nhất)', 'Tài khoản', 'Ngày tải lên', 'Trạng thái', 'Số chiến dịch có số này', 'Số lần đã tải lên'],
+    ...entries.map(({ row, existing }) => {
+      const latest = existing.latest
+      return [
+        ...IMPORT_FIELDS.map(field => importText(row[field])),
+        latest.campaignDeleted ? `${latest.campaignName} (đã xóa)` : latest.campaignName,
+        latest.accountName,
+        `${formatVietnamDate(latest.uploadedAt)} ${formatVietnamTime(latest.uploadedAt)}`.trim(),
+        inputDuplicateStatusLabel(latest),
+        String(existing.campaignCount),
+        String(existing.matchCount)
+      ]
+    })
+  ]
+}

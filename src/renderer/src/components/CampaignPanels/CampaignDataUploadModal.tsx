@@ -24,6 +24,7 @@ import { getAccountPlatformLabel } from '../../utils/accountLabels'
 import { createDefaultDataGroupName } from '../../utils/dataGroupNames'
 import type { AgentDataSource } from '../../../../shared/campaignAgentData'
 import { InputDuplicateAccountPicker, type InputDuplicateAccountOption } from './InputDuplicateAccountPicker'
+import { inputDuplicateMemoryKey, readDuplicateMemory, writeDuplicateMemory } from '../../utils/inputDuplicateMemory'
 import './CampaignImportDuplicates.css'
 
 type ImportTab = ImportSourceKind
@@ -89,22 +90,6 @@ export interface ImportDuplicateSummary {
   skipped: number
 }
 
-const readDuplicateMemory = (key: string): { days?: number; pickedIds?: number[] } => {
-  try {
-    const parsed: unknown = JSON.parse(window.localStorage.getItem(key) || '{}')
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
-    const record = parsed as Record<string, unknown>
-    return {
-      days: typeof record.days === 'number' && Number.isInteger(record.days) ? record.days : undefined,
-      pickedIds: Array.isArray(record.pickedIds)
-        ? record.pickedIds.filter((id): id is number => typeof id === 'number' && Number.isSafeInteger(id) && id > 0) : undefined
-    }
-  } catch { return {} }
-}
-const writeDuplicateMemory = (key: string, patch: { days?: number; pickedIds?: number[] }): void => {
-  try { window.localStorage.setItem(key, JSON.stringify({ ...readDuplicateMemory(key), ...patch })) }
-  catch { /* Không lưu được: chỉ mất phần nhớ lựa chọn cho lần sau. */ }
-}
 const checkedMessage = (next: ImportVerificationResult, found: ImportExistingEntry[] | null): string =>
   `Đã kiểm tra: ${next.valid.length} hợp lệ · ${next.rejected.length} lỗi/bị loại · ${next.duplicates.length} trùng${found ? ` · ${found.length} đã có ở chiến dịch khác` : ''}.`
 
@@ -278,7 +263,7 @@ export default function CampaignDataUploadModal({
   const templateFileInputRef = useRef<HTMLInputElement>(null)
   // "Lọc trùng dữ liệu" (V491/V493). Mặc định "Chỉ trong file này"; số ngày và tài khoản đã chọn được nhớ trên máy.
   const dupSupported = Boolean(duplicateCheck) && supportsInputDuplicateCheck(actionId)
-  const dupStorageKey = `aka.campaignImportDuplicates.v1:${authUser?.organizationId ?? ''}:${authUser?.staffId ?? ''}`
+  const dupStorageKey = inputDuplicateMemoryKey(authUser?.organizationId, authUser?.staffId)
   const dupConfigKey = duplicateCheck ? JSON.stringify([duplicateCheck.currentAccounts.map(account => account.id), duplicateCheck.excludeCampaignId ?? null]) : ''
   const [dupSetting, setDupSetting] = useState<InputDuplicatesSetting | null>(null)
   const dupEnabled = dupSupported && Boolean(dupSetting) && inputDuplicatesVisible(dupSetting ?? undefined, authUser?.isAdminAkabiz)
@@ -893,7 +878,10 @@ export default function CampaignDataUploadModal({
             <label><input type="radio" name="campaign-import-dedup-scope" checked={dupScope === 'current'} onChange={() => changeDupScope('current')} />
               <span className="campaign-import-dedup-option-text">
                 <span className="campaign-import-dedup-option-title">Với tài khoản đang chọn</span>
-                <span className="campaign-import-dedup-option-desc">Bỏ số đã có trong chiến dịch khác của tài khoản đang chọn cho chiến dịch này.</span>
+                {/* Thêm data: chỉ một tài khoản, nên nói rõ và chỉ sang lựa chọn 3 cho danh sách đã chia nhiều tài khoản. */}
+                <span className="campaign-import-dedup-option-desc">{duplicateCheck.excludeCampaignId
+                  ? `Chỉ so với chiến dịch khác của tài khoản ${duplicateCheck.currentAccounts.map(account => account.name).join(', ')}. Nếu danh sách gốc đã chia cho nhiều tài khoản, hãy chọn “Với các tài khoản Zalo bạn chọn”.`
+                  : 'Bỏ số đã có trong chiến dịch khác của tài khoản đang chọn cho chiến dịch này.'}</span>
               </span></label>
             {dupScope === 'current' && <div className="campaign-import-dedup-extra">{duplicateCheck.currentAccounts.map(account =>
               <span key={account.id} className="campaign-import-dedup-chip">{account.name}</span>)}</div>}
