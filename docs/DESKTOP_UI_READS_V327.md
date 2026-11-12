@@ -92,3 +92,11 @@ Code đã sửa, **chưa phát hành Desktop**; không migration/RPC/quyền m�
 - **Đối chiếu dữ liệu thật (chỉ đọc, 11/11):** cả 7 trường `find*TargetCampaignIds` đều là mảng jsonb; 763 phần tử hiện có đều là số nguyên. Trên 131 chiến dịch đích đang có nguồn (213 liên kết), bộ lọc mới cho đúng tập ID như cách tách phần tử bằng `jsonb_array_elements_text`. `aka_agent_desktop` có SELECT trên bảng và các cột dùng để lọc. PostgREST production đã trả 200 cho đúng dạng `or=(…cs.[52726],…cs.["52726"])` ngày 10/11 (lượt gọi của API Web).
 - **Quy tắc:** lọc chứa trên đường dẫn jsonb (`col->key`) phải gửi literal JSON (`cs.[…]`), không dùng `.contains(col, mảng)` (chỉ đúng với cột mảng Postgres). Trong `or=(…)`, giá trị không đặt trong nháy kép không được chứa dấu phẩy, nên mỗi literal chỉ chứa một ID.
 - **Smoke:** `node scripts/desktop-campaign-sources-smoke.cjs` đóng gói file repository thật, dùng supabase-js thật và Postgres 16 cục bộ dùng một lần (`PG_TEST_BINDIR` để đổi thư mục binary). Smoke chạy lại câu cũ (400/22P02), rồi kiểm ID số/chuỗi/mảng trộn, ID gần giống (`420`, `"042"`), sai trường/staff/tổ chức/action, đã xóa, phân trang 2.345 dòng và so với cách tách phần tử. Đặt `DESKTOP_UI_REPOSITORY_SOURCE=<file>` để chạy với bản khác; với bản trước khi sửa, smoke dừng ở `Không thể tải chiến dịch nguồn: invalid input syntax for type json`.
+
+## Giảm đọc khi không ai nhìn (12/11/2026)
+
+Bộ điều phối ở trên dựa vào `document.visibilityState` để ngừng khi ẩn, nhưng cửa sổ chính đặt
+`backgroundThrottling: false` nên trang luôn báo `visible` kể cả khi thu nhỏ. Phần bổ sung (ngừng khi ẩn theo trạng thái
+do tiến trình chính trả lời, giãn khi máy không có thao tác, dùng lại số tiến độ của chiến dịch không đổi) nằm ở
+[DESKTOP_UI_IDLE_READS.md](DESKTOP_UI_IDLE_READS.md): bốn khóa cài đặt mới, thiếu dòng = tắt = đúng hành vi mô tả trong
+tài liệu này. Đã merge `dev_3` qua #646, chưa phát hành; không migration/RPC.
