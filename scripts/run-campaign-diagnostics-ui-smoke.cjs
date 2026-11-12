@@ -17,7 +17,7 @@ async function main(){
   await row.getByText('Chiến dịch 91',{exact:true}).click()
   const rightPanel=page.locator('.campaign-page-panel').last()
   const openDiagnostics=async(id=91)=>{
-    await page.locator('.campaign-table-row').filter({has:page.getByText(`Chiến dịch ${id}`,{exact:true})}).getByRole('button',{name:'Trợ lý',exact:true}).click()
+    await page.locator('.campaign-table-row').filter({has:page.getByText(`Chiến dịch ${id}`,{exact:true})}).getByRole('button',{name:'Trợ lý aka',exact:true}).click()
     assert.equal(await page.getByRole('menuitem').first().innerText(),'Chẩn đoán')
     await page.getByRole('menuitem',{name:'Chẩn đoán',exact:true}).click()
   }

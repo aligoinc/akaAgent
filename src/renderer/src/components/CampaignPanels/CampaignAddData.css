@@ -1,0 +1,49 @@
+/*
+ * "Thêm data" vào chiến dịch đã tạo: khối kiểm tra trùng trên "Data chờ thêm" (trong chiến dịch này / với chiến dịch khác)
+ * và hộp "Kiểm tra trùng với chiến dịch khác". Chép từ akaAgentWebApp `apps/web/src/styles.css` (cùng biến màu).
+ */
+.add-current-data-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; min-width: 0; }
+.add-current-data-meta strong { color: var(--text-primary); }
+.add-current-data-list { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.add-current-data-list .add-current-data-preview-header { margin-bottom: 0; }
+.add-current-data-count { color: var(--text-secondary); font-weight: 400; }
+.add-data-check { display: flex; flex-direction: column; min-width: 0; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-elevated); font-size: 13px; }
+.add-data-check-row { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 10px 12px; }
+.add-data-check-row + .add-data-check-row { border-top: 1px solid var(--border-default); }
+.add-data-check-icon { flex: 0 0 18px; color: var(--text-secondary); }
+.add-data-check-icon.is-warn { color: color-mix(in srgb, var(--accent-warning) 68%, var(--text-primary)); }
+.add-data-check-icon.is-ok { color: color-mix(in srgb, var(--accent-success) 74%, var(--text-primary)); }
+.add-data-check-text { flex: 1; display: grid; gap: 1px; min-width: 0; color: var(--text-primary); }
+.add-data-check-label { color: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.add-data-check-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
+.add-data-check-skip { display: inline-flex; align-items: center; gap: 8px; margin: 0; color: var(--text-primary); font-size: 13px; white-space: nowrap; cursor: pointer; }
+.add-data-check-skip input { width: 15px; height: 15px; margin: 0; accent-color: var(--accent-primary); }
+.btn.add-data-check-primary { border: 1px solid var(--accent-primary-hover); background: var(--bg-secondary); color: var(--accent-primary-hover); font-weight: 600; }
+.btn.add-data-check-primary:not(:disabled):hover { background: var(--bg-hover); }
+.add-data-filter { display: flex; flex-wrap: wrap; gap: 6px; }
+.add-data-filter button { min-height: 28px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-full, 9999px); background: var(--bg-secondary); color: var(--text-primary); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
+.add-data-filter button[aria-pressed="true"] { border-color: var(--accent-primary-hover); background: var(--accent-primary-hover); color: #fff; }
+.modal-footer.add-current-data-footer { align-items: center; justify-content: space-between; gap: 12px; }
+.add-current-data-summary { min-width: 0; color: var(--text-secondary); font-size: 12px; }
+.add-current-data-footer-actions { display: flex; flex: 0 0 auto; gap: 8px; }
+/* Hộp "Kiểm tra trùng với chiến dịch khác". */
+.add-data-dup-dialog { display: flex; flex-direction: column; width: min(640px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); }
+.add-data-dup-body { display: flex; flex-direction: column; gap: 14px; min-height: 0; overflow: auto; font-size: 13px; }
+.add-data-dup-intro { color: var(--text-secondary); }
+.add-data-dup-intro strong { color: var(--text-primary); }
+.add-data-dup-scope { display: grid; gap: 8px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.add-data-dup-scope legend { margin-bottom: 8px; padding: 0; font-weight: 600; }
+.add-data-dup-window { min-width: 0; margin: 0; border: 0; }
+.add-data-dup-total .add-data-dup-total-meta { flex-basis: 100%; color: var(--text-secondary); }
+.add-data-dup-table { max-height: 240px; overflow: auto; border: 1px solid var(--border-default); border-radius: var(--radius-sm); }
+.add-data-dup-note { font-size: 12px; }
+.add-current-data-preview-header.add-data-dup-found-header { margin-bottom: -6px; }
+@media (max-width: 640px) {
+  .add-data-check-row { flex-wrap: wrap; }
+  .add-data-check-text { flex-basis: calc(100% - 30px); }
+  .add-data-check-actions { width: 100%; justify-content: flex-start; }
+  .add-data-pill-long { display: none; }
+  .modal-footer.add-current-data-footer { flex-wrap: wrap; }
+  .add-current-data-summary { flex-basis: 100%; }
+  .add-current-data-footer-actions { flex: 1; justify-content: flex-end; }
+}

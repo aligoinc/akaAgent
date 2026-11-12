@@ -31,7 +31,6 @@ export default function CampaignDraftRow({ draft, actionLabel, accountLabel, sch
           <span className="status-badge">Nháp</span>
         </div>
       </div>
-      <div className="campaign-col col-assistant"><span className="campaign-cell-muted">—</span></div>
       <div className="campaign-col col-actions" onClick={event => event.stopPropagation()}>
         <div className="campaign-draft-actions">
           <button type="button" className="btn-icon campaign-control-button" title={`Sửa nháp ${draft.name}`}
