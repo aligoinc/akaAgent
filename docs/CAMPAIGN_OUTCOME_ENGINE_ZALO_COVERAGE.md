@@ -4,8 +4,11 @@
 > là làm xong có thể cho khách dùng luôn". Sau khi code: dựng môi trường thử trên máy bằng dữ liệu thật trong DB, giả lập đủ
 > trường hợp, đạt rồi mới deploy production và thử thật.
 >
-> Production: V501 đã apply 12/11 07:56:08 VN (bước 1, mục 6); ngoài ra chưa đổi gì từ lúc gỡ v2 (01:00–01:18 VN 12/11). Các bước
-> production còn lại (deploy ChatApi, bật cờ) chờ anh bảo.
+> Production: V501 đã apply 12/11 07:56:08 VN (bước 1, mục 6); V503–V509, V512–V514 apply 12/11 chiều tối (biên nhận trong
+> `migrations/snapshots/`). **ChatApi `dev` `6a0db8b` (#137, #138, #139) đã deploy 12/11 23:35–23:45 VN** lên máy CPU riêng
+> (api, worker performance-2x 4 GB; zalo_runtime performance-4x 8 GB); biên nhận ở ChatApi `docs/DEPLOY_FLY_IO.md` mục
+> 12/11 và `docs/audits/fly-performance-vms-20261112/`. Web v109 (deploy 23:06 VN từ tài khoản khác) đã có WebApp #216.
+> Chưa tổ chức nào bật cờ, Desktop chưa phát hành; bật cờ chờ anh bảo.
 
 ## Tóm tắt (12/11 ~04:10 VN)
 
