@@ -21,6 +21,7 @@ import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
+import { CAMPAIGN_ADD_DATA_PREVIEW_IPC, type CampaignAddDataPreviewRequest, type CampaignAddDataPreviewResponse } from '../shared/campaignAppendData'
 import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest, type FoundFacebookGroupCardsResult } from '../shared/foundFacebookGroupCardsIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -674,6 +675,9 @@ const electronAPI = {
   // Upload dữ liệu → "Lọc trùng dữ liệu" (V491/V493): công tắc và một lượt đối chiếu ≤ 2.000 SĐT; không ném lỗi.
   campaignInputDuplicates: <R extends CampaignInputDuplicatesIpcRequest>(request: R): Promise<CampaignInputDuplicatesIpcResult<CampaignInputDuplicatesIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(CAMPAIGN_INPUT_DUPLICATES_IPC, request),
+  // Thêm data → xem trước data đã có trong chiến dịch này (chỉ đọc); không ném lỗi.
+  campaignAddDataPreview: (request: CampaignAddDataPreviewRequest): Promise<CampaignAddDataPreviewResponse> =>
+    ipcRenderer.invoke(CAMPAIGN_ADD_DATA_PREVIEW_IPC, request),
 
   // Campaign result automations
   listAutomations: (query?: AutomationListQuery): Promise<AutomationListResult> =>
