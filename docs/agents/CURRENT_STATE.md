@@ -1,4 +1,12 @@
-# Trạng thái đã xác nhận — cập nhật 10/11/2026
+# Trạng thái đã xác nhận — cập nhật 13/11/2026
+
+[Build akaAgent Desktop và App Server 9.6.0](../audits/akaagent-9.6.0-20261113/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 00:43:39–00:47:07 VN và App Server Windows x64 nội bộ lúc
+00:47:24–00:48:13 VN, 13/11/2026. Chưa upload/phát hành/feed; App Server chưa cài VPS.** Nguồn worktree `release-9.6.0`,
+nhánh `codex/release-9.6.0` `3c59c5cd` (nền `origin/dev_3` `7c0a6a79` sau PR #653, commit chỉ đổi version). Desktop có engine v2 chạy
+theo cờ tổ chức (V513) và thao tác tài khoản Server của tổ chức theo cờ qua ChatApi; App Server build lại vì note đếm ngược hạn mức,
+gửi lặp lại cho chiến dịch chia sẻ và đọc proxy theo tổ chức (28/214 file trong gói Server đổi từ 9.5.1). Không DB/deploy service.
+[Receipt](../audits/akaagent-9.6.0-20261113/build-receipt.json).
 
 [V490 phiên app iOS chỉ dùng Chat](../CONTROL_SESSION_CHAT_SCOPE_V490.md):
 **Đã apply akachat lúc 18:21:17 VN, 10/11/2026** (`20261110112117 / migration_v490_control_session_chat_scope`;

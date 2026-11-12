@@ -32,6 +32,14 @@ Chụp lại `dist-server/private/verification-before.json` (mọi `.exe` dướ
 host) ngay trước build, vì `scripts/staff-rls/verify-private-server-build.cjs` so với file này.
 Dựng đồ thị bằng esbuild thì renderer Server vào từ `src/server/renderer/index.ts`.
 
+**Build trong worktree (13/11/2026, 9.6.0).** `git worktree add .claude/worktrees/release-<ver> -b codex/release-<ver>
+origin/dev_3`, commit version, rồi `npm ci` (~15 giây; postinstall dựng `better-sqlite3` cho Electron arm64). Script build chỉ dọn
+`dist/`/`dist-server/` của chính worktree, không đụng bộ cài trong repo chính. Bộ kiểm App Server đọc
+`dist-server/private/verification-before.json` của checkout đang build, nên tạo file này trong worktree ngay trước
+`build:server:win:private`. Xong thì chép bộ cài sang `dist/build-<ver>/` và `dist-server/` của repo chính. Script hậu kiểm Desktop
+của 9.4.0 (`~/.codex/builds/akaagent-9.4.0-*/verify-build.cjs`) dùng lại được: đổi `root`, số bản, `(9<<16)+<minor>`, và dùng
+`path.resolve` cho file nằm ngoài worktree. Script, log, manifest của 9.6.0 ở `dist/build-9.6.0-work/` của repo chính.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
