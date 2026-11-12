@@ -1222,7 +1222,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
                       <option value="">Không dùng proxy</option>
                       {activeProxies.map(proxy => (
                         <option key={proxy.id} value={proxy.id}>
-                          {proxy.name} ({proxy.protocol}://{proxy.host}:{proxy.port})
+                          {proxy.name} ({proxy.protocol}://{proxy.host}:{proxy.port}){proxy.staffId !== undefined && authUser?.staffId !== undefined && proxy.staffId !== authUser.staffId ? ' · đồng nghiệp thêm' : ''}
                         </option>
                       ))}
                     </select>

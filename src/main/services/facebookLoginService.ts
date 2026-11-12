@@ -19,6 +19,7 @@ import { FacebookStartupBrowser } from './facebookStartupBrowser'
 import { accountOperationRegistry, type AccountOperationContext } from './accountOperationRegistry'
 import { withRequestDeadline } from './requestDeadline'
 import { FacebookLoginSession, inspectFacebookSession, loadFacebookHome, readFacebookCookies, authFingerprint, facebookCookieScope, writeFacebookCookies, trustedFacebookUrl } from './facebookLoginSession'
+import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
 
 type Created = { accountId: number; state: string; revision: number; skipped?: boolean }
 type SecretResult = { secret: FacebookSecret; revision: number }
@@ -97,6 +98,8 @@ export class FacebookLoginService {
   private async applyProxy(partition: string, proxyId: number | null | undefined, signal: AbortSignal): Promise<AutoProxy | null> {
     const guard = this.fence()
     const proxy = proxyId ? await this.read(readSignal => getProxy(proxyId, readSignal), signal) : null
+    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không đăng nhập bằng IP của máy (V509).
+    if (proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
     // Only abandon the read. A late proxy lookup must never change a partition
     // after cancellation, while an apply already started must finish draining.
     guard(); signal.throwIfAborted()

@@ -420,7 +420,7 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
     .select(ACCOUNT_SELECT)
     .single()
 
-  if (error) throw new Error(`Failed to create account: ${error.message}`)
+  if (error) throw accountProxyScopeError(error.message) ?? new Error(`Failed to create account: ${error.message}`)
   return mapAccountFromDB(toDbRow(data))
 }
 
@@ -560,7 +560,7 @@ export async function updateAccount(
     .select(ACCOUNT_SELECT)
     .maybeSingle()
 
-  if (error) throw new Error(`Failed to update account: ${error.message}`)
+  if (error) throw accountProxyScopeError(error.message) ?? new Error(`Failed to update account: ${error.message}`)
   if (!data) {
     throw new Error(changesZaloRuntimeType
       ? 'Tài khoản Zalo đã bắt đầu chạy hoặc loại tài khoản đã thay đổi. Vui lòng thử lại.'
@@ -1496,4 +1496,14 @@ function removeUndefined<T extends Record<string, unknown>>(payload: T): Partial
   return Object.fromEntries(
     Object.entries(payload).filter(([, value]) => value !== undefined)
   ) as Partial<T>
+}
+
+// V509: trigger trên auto_accounts chặn proxy khác tổ chức, hoặc proxy do đồng nghiệp thêm khi phần mềm trên các máy của
+// nhân viên chưa đọc proxy theo tổ chức. Dịch sang câu khách hiểu được.
+function accountProxyScopeError(message: string): Error | null {
+  if (message.includes('proxy_shared_runtime_not_ready')) {
+    return new Error('Proxy này do đồng nghiệp thêm. Phần mềm trên các máy của bạn chưa hỗ trợ dùng proxy của đồng nghiệp; hãy cập nhật tất cả máy lên bản mới hoặc chọn proxy do bạn thêm.')
+  }
+  if (message.includes('proxy_wrong_organization')) return new Error('Proxy không thuộc tổ chức của bạn.')
+  return null
 }
