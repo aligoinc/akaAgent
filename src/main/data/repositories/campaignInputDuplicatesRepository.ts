@@ -3,6 +3,7 @@ import {
   type InputDuplicatesCheckRequest, type InputDuplicatesCheckResult, type InputDuplicatesSetting
 } from '../../../shared/campaignInputDuplicates'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
+import { parseAppendPreviewEnabled } from '../../../shared/campaignAppendData'
 import { getSupabaseClient } from '../supabaseClient'
 
 const client = () => getSupabaseClient()
@@ -55,6 +56,20 @@ export async function readInputDuplicatesSetting(signal: AbortSignal): Promise<I
   if (signal.aborted) throw inputDuplicatesTimeout()
   if (error) throw inputDuplicatesUnavailable()
   return parseInputDuplicatesSetting(data?.value)
+}
+
+/**
+ * Công tắc xem trước "đã có trong chiến dịch này" của Thêm data: khóa `appendPreview` trong cùng dòng
+ * `web.campaign_input_duplicates` (thiếu dòng/thiếu khóa = bật, chỉ `false` mới tắt; như Web). Đọc lỗi thì ném để báo "Thử lại".
+ */
+export async function readAppendPreviewEnabled(signal: AbortSignal): Promise<boolean> {
+  requireCurrentUser()
+  const { data, error } = await client().from('auto_system_settings')
+    .select('value').eq('key', INPUT_DUPLICATES_SETTING_KEY).eq('is_active', true).eq('is_secret', false)
+    .abortSignal(signal).maybeSingle()
+  if (signal.aborted) throw inputDuplicatesTimeout()
+  if (error) throw inputDuplicatesUnavailable()
+  return parseAppendPreviewEnabled(data?.value)
 }
 
 /** Một lượt RPC chỉ đọc V491 bằng token Desktop và mật khẩu tự động hóa (cùng chuỗi xác thực với V489). */

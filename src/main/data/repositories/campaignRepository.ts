@@ -46,6 +46,10 @@ import {
   ZaloRemarketingCustomerListQuery
 } from '../../../shared/types'
 import { getVietnamMobileCarrier, normalizeVietnamMobilePhone, type VietnamMobileCarrier } from '../../../shared/phone'
+import {
+  appendInputDataDedupeKeys, appendInputDataKeyColumns, classifyAppendInputData, normalizeAppendInputIdentity,
+  type CampaignAddDataPreviewRequest, type CampaignAddDataPreviewResult
+} from '../../../shared/campaignAppendData'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
@@ -5597,41 +5601,15 @@ export async function bulkUpdateCampaignInputDataStatus(
   }
 }
 
-function getAppendInputDataDedupeKeys(row: Partial<CampaignInputData>, actionId?: string | null): string[] {
-  const requirement = getCampaignInputDataRequirement(actionId)
-  if (!requirement) return []
-  if (requirement.field === 'phone_or_uid') {
-    const keys: string[] = []
-    const phone = normalizeVietnamMobilePhone(row.phone)
-    const uid = String(row.uid || '').trim().replace(/\/+$/g, '').toLowerCase()
-    if (phone) keys.push(`phone:${phone}`)
-    if (uid) keys.push(`uid:${uid}`)
-    return keys
-  }
-  const value = String(row[requirement.field] || '').trim()
-  if (actionId === 'email_send') return value ? [value.toLowerCase()] : []
-  if (requirement.field === 'phone') {
-    const phone = normalizeVietnamMobilePhone(value)
-    return phone ? [phone] : []
-  }
-  const key = value.replace(/\/+$/g, '').toLowerCase()
-  return key ? [key] : []
-}
-
 function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: string): Partial<CampaignInputData> {
-  const requirement = getCampaignInputDataRequirement(actionId)
-  const shouldNormalizePhone = requirement?.field === 'phone' || requirement?.field === 'phone_or_uid' || isMobileManagedSmsCampaignAction(actionId)
-  const phone = shouldNormalizePhone
-    ? normalizeVietnamMobilePhone(row.phone)
-    : String(row.phone || '').trim()
+  // Định danh (SĐT/UID/email) dùng chung luật với xem trước của renderer: src/shared/campaignAppendData.ts.
+  const identity = normalizeAppendInputIdentity(row, actionId)
   return {
     name: String(row.name || '').trim(),
-    phone,
-    phoneCarrier: normalizeCampaignInputPhoneCarrier(phone, row.phoneCarrier),
-    uid: String(row.uid || '').trim(),
-    email: actionId === 'email_send'
-      ? String(row.email || '').trim().toLowerCase()
-      : String(row.email || '').trim(),
+    phone: identity.phone,
+    phoneCarrier: normalizeCampaignInputPhoneCarrier(identity.phone, row.phoneCarrier),
+    uid: identity.uid,
+    email: identity.email,
     info1: String(row.info1 || '').trim(),
     info2: String(row.info2 || '').trim(),
     info3: String(row.info3 || '').trim(),
@@ -5643,26 +5621,35 @@ function normalizeAppendInputDataRow(row: Partial<CampaignInputData>, actionId: 
   }
 }
 
-async function loadAppendInputDataExistingKeys(campaignId: number, actionId: string): Promise<Set<string>> {
-  const requirement = getCampaignInputDataRequirement(actionId)
-  if (!requirement) return new Set()
-  const selectFields = requirement.field === 'phone_or_uid' ? 'phone, uid' : requirement.field
+/**
+ * Khóa so trùng của mọi data đang có trong chiến dịch, đọc theo trang 1.000 dòng xếp theo id (trang ổn định khi
+ * PostgREST phân trang). Chỉ đọc cột định danh cần cho luật so trùng.
+ */
+async function loadAppendInputDataExistingKeys(campaignId: number, actionId: string, signal?: AbortSignal): Promise<{ keys: Set<string>; rowCount: number }> {
+  const selectFields = appendInputDataKeyColumns(actionId)
+  if (!selectFields) return { keys: new Set(), rowCount: 0 }
 
   const keys = new Set<string>()
+  let rowCount = 0
   let offset = 0
   while (true) {
-    const { data, error } = await client()
+    let query = client()
       .from('auto_campaign_input_data')
       .select(selectFields)
       .eq('campaign_id', campaignId)
       .eq('is_delete', false)
+      .order('id', { ascending: true })
       .range(offset, offset + CAMPAIGN_INPUT_DATA_FETCH_CHUNK - 1)
+    if (signal) query = query.abortSignal(signal)
+    const { data, error } = await query
 
+    if (signal?.aborted) throw new Error('Đọc data đã có trong chiến dịch quá thời gian.')
     if (error) throw new Error(`Failed to load existing campaign input data: ${error.message}`)
 
     const rows = (data || []) as unknown as Record<string, unknown>[]
+    rowCount += rows.length
     for (const row of rows) {
-      for (const key of getAppendInputDataDedupeKeys(mapCampaignInputDataFromDB(row), actionId)) {
+      for (const key of appendInputDataDedupeKeys(mapCampaignInputDataFromDB(row), actionId)) {
         keys.add(key)
       }
     }
@@ -5670,7 +5657,55 @@ async function loadAppendInputDataExistingKeys(campaignId: number, actionId: str
     offset += CAMPAIGN_INPUT_DATA_FETCH_CHUNK
   }
 
-  return keys
+  return { keys, rowCount }
+}
+
+export class CampaignAddDataPreviewError extends Error {
+  constructor(readonly code: 'campaign_not_found' | 'campaign_append_unsupported', message: string) {
+    super(message)
+    this.name = 'CampaignAddDataPreviewError'
+  }
+}
+
+/**
+ * "Thêm data" → xem trước data đã có trong chiến dịch này (chỉ đọc, không ghi gì). Cùng luật và cùng thứ tự xét với
+ * `addCampaignInputDataRows` khi bật "Bỏ qua data đã có", nên số "đã có" khớp số bị bỏ lúc bấm Thêm (nếu chiến dịch
+ * không đổi data giữa hai lần).
+ */
+export async function previewCampaignInputDataAppend(
+  request: CampaignAddDataPreviewRequest,
+  signal?: AbortSignal
+): Promise<CampaignAddDataPreviewResult> {
+  const u = requireCurrentUser()
+  let campaignQuery = client()
+    .from('auto_campaigns')
+    .select('id, action_id, data_target_source_mode')
+    .eq('id', request.campaignId)
+    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
+    .eq('is_delete', false)
+  if (signal) campaignQuery = campaignQuery.abortSignal(signal)
+  const { data: campaignRow, error: campaignError } = await campaignQuery.maybeSingle()
+  if (signal?.aborted) throw new Error('Đọc chiến dịch quá thời gian.')
+  if (campaignError) throw new Error(`Failed to load campaign: ${campaignError.message}`)
+  if (!campaignRow) throw new CampaignAddDataPreviewError('campaign_not_found', 'Không tìm thấy chiến dịch.')
+
+  const actionId = String((campaignRow as Record<string, unknown>).action_id || '')
+  const sourceMode = (campaignRow as Record<string, unknown>).data_target_source_mode
+  if (sourceMode === 'data_group' || !getCampaignInputDataRequirement(actionId) || APPEND_DATA_UNSUPPORTED_ACTION_IDS.has(actionId)) {
+    throw new CampaignAddDataPreviewError('campaign_append_unsupported', 'Loại chiến dịch này không hỗ trợ thêm data.')
+  }
+
+  const existing = await loadAppendInputDataExistingKeys(request.campaignId, actionId, signal)
+  const classification = classifyAppendInputData(actionId, request.items, existing.keys, { skipExisting: true })
+  return {
+    checkedAt: new Date().toISOString(),
+    campaignInputCount: existing.rowCount,
+    itemCount: request.items.length,
+    existingIndexes: classification.existingIndexes,
+    batchDuplicateIndexes: classification.batchDuplicateIndexes,
+    invalidIndexes: classification.invalidIndexes
+  }
 }
 
 export async function addCampaignInputDataRows(
@@ -5721,32 +5756,17 @@ export async function addCampaignInputDataRows(
   }
 
   const existingKeys = request.skipExistingInCampaign
-    ? await loadAppendInputDataExistingKeys(campaignId, campaign.actionId)
+    ? (await loadAppendInputDataExistingKeys(campaignId, campaign.actionId)).keys
     : new Set<string>()
-  const batchKeys = new Set<string>()
-  const validRows: Partial<CampaignInputData>[] = []
-  let skippedInvalidCount = 0
-  let skippedBatchDuplicateCount = 0
-  let skippedExistingCount = 0
-
-  for (const rawRow of rows) {
-    const row = normalizeAppendInputDataRow(rawRow, campaign.actionId)
-    const keys = getAppendInputDataDedupeKeys(row, campaign.actionId)
-    if (keys.length === 0 || !isCampaignInputDataValidForAction(row, campaign.actionId)) {
-      skippedInvalidCount += 1
-      continue
-    }
-    if (keys.some(key => batchKeys.has(key))) {
-      skippedBatchDuplicateCount += 1
-      continue
-    }
-    if (request.skipExistingInCampaign && keys.some(key => existingKeys.has(key))) {
-      skippedExistingCount += 1
-      continue
-    }
-    keys.forEach(key => batchKeys.add(key))
-    validRows.push(row)
-  }
+  const normalizedRows = rows.map(rawRow => normalizeAppendInputDataRow(rawRow, campaign.actionId))
+  // Cùng hàm với xem trước của form (src/shared/campaignAppendData.ts): không hợp lệ → trùng trong lượt → đã có → nhận.
+  const classification = classifyAppendInputData(campaign.actionId, normalizedRows, existingKeys, {
+    skipExisting: request.skipExistingInCampaign
+  })
+  const validRows = classification.acceptedIndexes.map(index => normalizedRows[index])
+  const skippedInvalidCount = classification.invalidIndexes.length
+  const skippedBatchDuplicateCount = classification.batchDuplicateIndexes.length
+  const skippedExistingCount = classification.existingIndexes.length
 
   const campaignSchedule = scheduleDate.toISOString()
   const isSmsTarget = isMobileManagedSmsCampaignAction(campaign.actionId)
