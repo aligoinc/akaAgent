@@ -186,14 +186,61 @@ Ghi chú:
   trong khi có thao tác; lệnh hỏi lỗi và treo; giãn 120 giây; sự kiện khi đang giãn; cách đếm của lượt nền, lượt người
   dùng và lượt nối tiếp.
 
+### Kiểm thử bằng dữ liệu thật (12/11/2026, chỉ đọc)
+
+Chỉ chạy `SELECT` và hàm đọc `aka_agent_control_campaign_progress` trên akachat; không có lệnh ghi nào, kể cả ghi rồi
+hoàn tác. Không đăng nhập Desktop (đăng nhập sẽ ghi phiên/thiết bị), nên đây là phép chạy lại ở mức module.
+
+**Chạy lại module trên chuỗi ảnh chụp production.** Mẫu 21 nhân viên (14 người đang có chiến dịch chạy, 7 người chỉ
+có chiến dịch tạm dừng/chờ/hoàn thành vừa thao tác), 259 chiến dịch, 229.462 dòng data. Chụp 11 nhịp trong 383 giây
+(17:17–17:24 VN): mỗi nhịp một câu đọc trả trạng thái, `updated_at`, `last_run_at`, nguồn nhóm data và số tiến độ thật
+tại cùng một thời điểm; dòng không đổi được xác nhận bằng md5 theo từng nhân viên. Mỗi nhân viên là một máy với bộ nhớ
+riêng; nhịp 0 đếm tất cả (mở trang), các nhịp sau là lượt nền, không mở chi tiết chiến dịch nào.
+
+| | Kết quả |
+| --- | --- |
+| Thay đổi thật trong 383 giây | 91 lần số tiến độ đổi (tất cả ở chiến dịch đang chạy); 20 lần chỉ đổi dấu hiệu, số không đổi |
+| Số module sẽ hiển thị khác số thật | **0 lần** trên 2.849 lượt so (259 chiến dịch × 11 nhịp), với hạn đếm lại 300 giây và cả khi coi như không có hạn (3.600 giây) |
+| Lượt nền ổn định (nhịp 2–9) | đếm 28–31/259 chiến dịch, 56–65 nghìn/229 nghìn dòng data (khoảng 25%); 6/21 máy không gọi RPC đếm |
+| Cả 10 lượt nền với hạn 300 giây | đếm 39,7% số dòng data (gồm lượt làm nóng ở giây 75 và lượt đếm lại theo hạn ở giây 383), tức giảm khoảng 60% |
+
+Mẫu cố ý nghiêng về máy đang chạy chiến dịch, nơi chiến dịch đang chạy chiếm khoảng 25% số dòng data. Ở mẫu ngẫu nhiên
+40 nhân viên trước đó tỷ lệ này là 6%, nên mức giảm trên toàn bộ máy nhiều khả năng cao hơn 60%; chưa đo trực tiếp.
+
+Điều dữ liệu thật cho thấy thêm:
+
+- Chiến dịch không chạy vẫn được đếm ở lượt nền đều thuộc đúng các điều đã thiết kế: 3 chiến dịch `chờ xử lý` có nguồn
+  nhóm data `active`; 2 chiến dịch vừa chuyển `đang chạy` sang `chờ xử lý` (khoảng chờ ổn định).
+- Bộ lập lịch Desktop ghi ghi chú chờ cho chiến dịch `chờ xử lý` bằng cách tăng `updated_at` thêm 1 ms
+  (`updated_at = expected + 1`), nên `updated_at` đổi mà không "mới" hơn theo đồng hồ. Module so sánh bằng nhau chứ không
+  so lớn hơn nên vẫn nhận ra; hệ quả chỉ là thỉnh thoảng đếm thừa các chiến dịch này.
+- Có máy khách ghi `updated_at` sớm hơn giờ DB 17 giây (đồng hồ máy lệch). Không ảnh hưởng vì cùng lý do trên; **đừng
+  đổi sang so sánh "mới hơn mốc X"** khi sửa module.
+- Sau lượt đếm đầu tiên của một chiến dịch, 90 giây kế tiếp vẫn đếm lại (coi như "vừa đổi"). An toàn nhưng tốn 2–3 lượt
+  đếm đầy đủ sau khi mở app hoặc đổi trang; để nguyên.
+
+**Dấu hiệu khi thêm data (lịch sử 18 giờ, 281.190 dòng data mới nhất của 898 chiến dịch).** Chỉ 1 chiến dịch không có
+lần cập nhật dòng chiến dịch nào sau lượt thêm data cuối, và chiến dịch đó có nguồn nhóm data đang sống (luôn được đếm).
+Giới hạn của phép này: với 155 chiến dịch, lần cập nhật cuối đến muộn hơn 90 giây sau lượt thêm, nên không kết luận
+được lúc thêm data có cập nhật ngay hay không. Đọc mã: `addCampaignInputDataToCampaign` gọi `updateCampaign` cho chiến
+dịch đích sau khi thêm; `add_control_campaign_input_rows` (Web/iOS) cập nhật dòng chiến dịch.
+
+**Cài đặt thật.** Production chỉ có hai dòng chu kỳ cũ (`30`, `30`); đưa qua bộ phân tích của app cho kết quả tắt hết
+(không hỏi trạng thái cửa sổ, chu kỳ 30 giây, không dùng lại số tiến độ). Phần `SELECT` của lệnh bật ở mục trên cho
+bốn dòng với id 112–115, id và khóa đều chưa dùng; lệnh `INSERT` chưa chạy.
+
+Trong 383 giây này không xảy ra ca "số của chiến dịch không chạy đổi mà dấu hiệu không đổi", nên lưới chặn bằng hạn
+đếm lại mới chỉ được kiểm bằng luật thuần, chưa gặp trên dữ liệu thật.
+
 **Chưa kiểm chứng**:
 
 - Chưa chạy app thật trên Windows và macOS: thu nhỏ, đóng cửa sổ trên macOS (ẩn), khóa màn hình, ngắt phiên Remote
   Desktop trên VPS, giá trị thật của `getSystemIdleTime()`. Cần thử trước khi bật khóa trên production.
-- Chưa chạy với DB thật: đường `listCampaignSummariesForPage` có bộ nhớ số tiến độ chỉ được kiểm bằng luật thuần và
-  typecheck.
-- Chưa có số đo lợi ích thật. Ước tính trước khi phát hành: mục 1 tối thiểu bằng phần đọc ban đêm (9,4% lượt đọc của
-  Desktop); mục 2 giảm khoảng 80% công đếm tiến độ, từ một mẫu 40 nhân viên tại một thời điểm.
+- Chưa chạy trọn đường của app với DB thật (đăng nhập Desktop rồi gọi `listCampaignSummariesForPage`): module đã chạy
+  lại trên dữ liệu thật như trên, còn phần nối vào repository mới được kiểm bằng typecheck.
+- Mục 1 không phụ thuộc dữ liệu nên không kiểm được bằng dữ liệu thật; lợi ích ước tính tối thiểu bằng phần đọc ban
+  đêm (9,4% lượt đọc của Desktop).
+- Mục 2: số đo ở trên là từ một mẫu 21 nhân viên trong 6 phút rưỡi của một buổi chiều; chưa có số đo sau phát hành.
 
 ### Đo sau khi bật
 
