@@ -1,6 +1,6 @@
 # Giảm đọc DB của giao diện Desktop khi không ai nhìn và khi số tiến độ không đổi
 
-Trạng thái 12/11/2026: **code xong trên nhánh `claude/zealous-maxwell-nr8iy6`, chưa merge `dev_3`, chưa build/phát hành Desktop**.
+Trạng thái 12/11/2026: **đã merge `dev_3` qua #646, chưa build/phát hành Desktop**.
 Không migration, RPC, quyền, index, kết nối hay polling mới. **Chưa có dòng cài đặt nào trong DB, nên với mọi máy
 tính năng đang tắt**: bản Desktop có mã này đọc đúng như bản trước cho tới khi quản trị thêm dòng (mục [Bật, tắt](#bật-tắt)).
 
@@ -161,7 +161,7 @@ WHERE key = 'desktop.campaigns.progress_recount_seconds';
 `key` có ràng buộc duy nhất `auto_system_settings_key_unique` (đã đọc trên akachat 12/11/2026). Có thể bật từng khóa
 một; nên bật `hidden_pause_enabled` trước, đo, rồi tới giãn và đếm tiến độ.
 
-Gỡ mã: revert commit của nhánh; không có gì trong DB phải gỡ ngoài các dòng cài đặt nếu đã thêm.
+Gỡ mã: revert PR #646; không có gì trong DB phải gỡ ngoài các dòng cài đặt nếu đã thêm.
 
 ## Kiểm chứng
 
@@ -170,7 +170,7 @@ Chạy trong container Linux ngày 12/11/2026 (Electron 33.3.1, xvfb), không DB
 | Lệnh | Kết quả |
 | --- | --- |
 | `npx tsc --noEmit -p tsconfig.node.json` và `-p tsconfig.web.json` | sạch |
-| `NODE_OPTIONS=--max-old-space-size=10240 npm run build` | đạt (main 3,6 s, preload 0,2 s, renderer 49,8 s). Không đặt `NODE_OPTIONS` thì bước renderer hết heap mặc định của Node trong container này; chưa thử điều đó trên mã gốc |
+| `NODE_OPTIONS=--max-old-space-size=10240 npm run build` | đạt (main 3,6 s, preload 0,2 s, renderer 49,8 s). Không đặt `NODE_OPTIONS` thì bước renderer hết heap mặc định của Node trong container này (mã gốc cũng vậy, xem mục Commands của CLAUDE.md) |
 | `node scripts/desktop-ui-idle-reads-logic-smoke.cjs` | 13 nhóm đạt: bộ phân tích khóa, chu kỳ theo trạng thái, bộ nhớ số tiến độ |
 | `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/run-desktop-ui-idle-reads-smoke.cjs` | 7 dòng PASS: store/panel/bộ điều phối thật, IPC giả, đồng hồ giả |
 | `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a sh -c 'openbox & sleep 2; node scripts/run-desktop-ui-attention-smoke.cjs'` | 5 dòng PASS: tiến trình chính thật, ẩn/hiện/thu nhỏ/khôi phục |

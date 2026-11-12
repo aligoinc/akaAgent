@@ -99,4 +99,4 @@ Bộ điều phối ở trên dựa vào `document.visibilityState` để ngừn
 `backgroundThrottling: false` nên trang luôn báo `visible` kể cả khi thu nhỏ. Phần bổ sung (ngừng khi ẩn theo trạng thái
 do tiến trình chính trả lời, giãn khi máy không có thao tác, dùng lại số tiến độ của chiến dịch không đổi) nằm ở
 [DESKTOP_UI_IDLE_READS.md](DESKTOP_UI_IDLE_READS.md): bốn khóa cài đặt mới, thiếu dòng = tắt = đúng hành vi mô tả trong
-tài liệu này. Code trên nhánh `claude/zealous-maxwell-nr8iy6`, chưa merge, chưa phát hành; không migration/RPC.
+tài liệu này. Đã merge `dev_3` qua #646, chưa phát hành; không migration/RPC.
