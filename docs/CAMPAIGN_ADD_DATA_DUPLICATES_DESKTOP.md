@@ -1,6 +1,6 @@
 # Lọc trùng trong "Thêm data" của chiến dịch đã tạo (Desktop) — 12/11/2026
 
-Trạng thái: **code nhánh `claude/jolly-lamport-3rmla9` (tạo từ `dev_3` tại `24ff928`), chưa merge, chưa build/phát hành Desktop**. Không migration, không RPC mới, không đổi quyền DB. Bản Web: akaAgentWebApp `docs/CAMPAIGN_ADD_DATA_DUPLICATES.md` (đã merge `dev` qua #209, chưa deploy). Nền: [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md) (lọc trùng với chiến dịch khác, V491/V493).
+Trạng thái: **đã merge `dev_3` qua #645 (nhánh `claude/jolly-lamport-3rmla9`, tạo từ `dev_3` tại `24ff928`), chưa build/phát hành Desktop**. Không migration, không RPC mới, không đổi quyền DB. Bản Web: akaAgentWebApp `docs/CAMPAIGN_ADD_DATA_DUPLICATES.md` (đã merge `dev` qua #209, chưa deploy). Nền: [CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md](CAMPAIGN_INPUT_DUPLICATES_DESKTOP_V493.md) (lọc trùng với chiến dịch khác, V491/V493).
 
 ## Khách thấy gì
 
