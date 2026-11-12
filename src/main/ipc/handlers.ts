@@ -63,6 +63,7 @@ import { registerCustomerFeedbackHandlers } from './handlers/customerFeedbackHan
 import { registerEmailNotificationHandlers } from './handlers/emailNotificationHandlers'
 import { registerDesktopUiHandlers } from './handlers/desktopUiHandlers'
 import { registerAppNotificationHandlers } from './handlers/appNotificationHandlers'
+import { registerNetworkStatusHandlers } from './handlers/networkStatusHandlers'
 import { registerReportHandlers } from './handlers/reportHandlers'
 import { registerMessageOptOutCustomerHandlers } from './handlers/messageOptOutCustomerHandlers'
 import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHandlers'
@@ -185,6 +186,7 @@ export function registerIpcHandlers(
   registerCampaignTypeVisibilityHandlers(mainWindow)
   registerNotificationCenterHandlers(mainWindow)
   registerAiChatHandlers(mainWindow)
+  registerNetworkStatusHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()
   const pageRegistry = new PageControllerRegistry()

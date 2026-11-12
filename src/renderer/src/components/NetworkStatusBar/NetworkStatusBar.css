@@ -1,0 +1,100 @@
+/* Dòng báo mất mạng: thẻ nhỏ treo ngay dưới thanh trên cùng của app, giữa màn hình, cao 28 px.
+   Không nằm trong thanh đó vì đó là chỗ kéo cửa sổ và bên phải có nút Cập nhật/Đăng xuất, câu dài sẽ đè lên.
+   Nổi trên trang và hầu hết cửa sổ đang mở để người đang nhập form vẫn thấy, không đẩy bố cục.
+   Mặc định giao diện tối; body.theme-light là sáng. */
+.network-status-bar {
+  --network-color: #ffaaaa;
+  --network-surface: #1b211f;
+  position: fixed;
+  top: var(--titlebar-height, 36px);
+  left: 50%;
+  z-index: 20500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: max-content;
+  max-width: calc(100vw - 24px);
+  height: 28px;
+  box-sizing: border-box;
+  padding: 0 6px 0 14px;
+  border: 1px solid color-mix(in srgb, var(--network-color) 32%, transparent);
+  border-top: 0;
+  border-radius: 0 0 12px 12px;
+  background: color-mix(in srgb, var(--network-color) 9%, var(--network-surface));
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+  color: var(--network-color);
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  animation: network-status-in .18s ease-out;
+  -webkit-app-region: no-drag;
+}
+/* Trong app trên Windows/Linux: vùng tiêu đề 36 px rồi thanh công cụ 36 px; macOS gộp hai thanh làm một. */
+.app-layout-authenticated:not(.platform-darwin) .network-status-bar { top: calc(var(--titlebar-height, 36px) + var(--utility-topbar-height, 36px)); }
+.network-status-bar.is-restored { --network-color: #77cda5; padding-right: 14px; }
+body.theme-light .network-status-bar { --network-color: #ba3434; --network-surface: #fff; box-shadow: 0 6px 18px rgba(15, 23, 42, .14); }
+body.theme-light .network-status-bar.is-restored { --network-color: #14734b; }
+.network-status-icon { flex: 0 0 auto; width: 15px; height: 15px; }
+.network-status-text { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.network-status-message { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; }
+.network-status-message strong { flex: 0 0 auto; font-weight: 600; }
+/* Cửa sổ hẹp mà câu gợi ý dài: cắt câu gợi ý trước, giữ nguyên câu báo, số giây và nút. */
+.network-status-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.network-status-countdown { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
+.network-status-countdown strong { font-weight: 700; }
+.network-status-countdown.is-checking { display: inline-flex; align-items: center; gap: 6px; padding-right: 8px; }
+.network-status-retry {
+  flex: 0 0 auto;
+  align-self: stretch;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.network-status-retry-label {
+  display: inline-flex;
+  align-items: center;
+  height: 22px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--network-color) 40%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--network-surface) 55%, transparent);
+  font-weight: 600;
+}
+.network-status-retry:hover .network-status-retry-label { background: color-mix(in srgb, var(--network-color) 12%, transparent); }
+.network-status-retry:focus-visible { outline: none; }
+.network-status-retry:focus-visible .network-status-retry-label { outline: 2px solid currentColor; outline-offset: 2px; }
+/* Vạch đếm ngược: ngắn dần từ đủ chiều ngang về 0 trong 60 giây. */
+.network-status-progress {
+  position: absolute;
+  right: 14px;
+  bottom: 0;
+  left: 14px;
+  height: 2px;
+  overflow: hidden;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--network-color) 14%, transparent);
+}
+.network-status-progress > span {
+  display: block;
+  height: 100%;
+  background: color-mix(in srgb, var(--network-color) 60%, transparent);
+  transform-origin: left center;
+  transition: transform 1s linear;
+}
+@keyframes network-status-in {
+  from { opacity: 0; transform: translate(-50%, -100%); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .network-status-bar { animation: none; }
+  .network-status-progress > span { transition: none; }
+}

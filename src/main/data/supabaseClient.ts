@@ -5,6 +5,7 @@ import { join } from 'path'
 import WebSocket from 'ws'
 import { DesktopSessionManager } from './desktopSession'
 import { createDesktopSessionTransport } from './desktopSessionTransport'
+import { probeNetwork, reportNetworkRequestFailure, reportNetworkRequestSuccess } from '../services/networkStatusSignals'
 
 dotenv.config({ path: join(process.cwd(), '.env') })
 
@@ -35,7 +36,21 @@ async function desktopFetch(input: string | URL | Request, init?: RequestInit): 
   else headers.set('Authorization', `Bearer ${await desktopSession.token(request.signal)}`)
   request.signal.throwIfAborted()
   // No retry/fallback: a failed/uncertain write is returned to its existing caller.
-  return fetch(new Request(request, { headers }))
+  let response: Response
+  try {
+    response = await fetch(new Request(request, { headers }))
+  } catch (error) {
+    // Dòng báo mất mạng: chỉ lỗi mạng thật, không tính request bị huỷ.
+    if (!request.signal.aborted) reportNetworkRequestFailure()
+    throw error
+  }
+  reportNetworkRequestSuccess()
+  return response
+}
+
+/** Lượt thử kết nối của dòng báo mất mạng: cùng máy chủ dữ liệu, không cần phiên đăng nhập. */
+export function probeDesktopBackend(): Promise<boolean> {
+  return probeNetwork(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 }
 
 /** Called only by the trusted, centrally operated App Server entry point.

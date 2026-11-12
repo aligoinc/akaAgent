@@ -30,6 +30,7 @@ import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
+import NetworkStatusBar from './components/NetworkStatusBar/NetworkStatusBar'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
 import type { NotificationTarget } from './components/Notifications/notificationTargets'
 import { useNotificationUnreadSync } from './stores/notificationCenterStore'
@@ -389,6 +390,7 @@ export default function App() {
     return (
       <div className={`app-layout ${platformClass}`} style={{ alignItems: 'center', justifyContent: 'center' }}>
         <div className="app-window-drag-frame" aria-hidden="true" />
+        <NetworkStatusBar />
         <div style={{ color: 'var(--text-secondary, #aaa)', fontSize: 13 }}>
           {checkingUpdate ? 'Đang kiểm tra cập nhật…' : 'Đang khởi tạo…'}
         </div>
@@ -411,6 +413,7 @@ export default function App() {
     return (
       <div className={`app-layout ${platformClass}`}>
         <div className="app-window-drag-frame" aria-hidden="true" />
+        <NetworkStatusBar />
         {renewal ? <RenewalPage /> : <LoginPage />}
         <AlertModal />
         <ConfirmModal />
@@ -441,6 +444,7 @@ export default function App() {
         onCheckUpdate={handleUpdateButtonClick}
       />
       <AppNotificationBar key={`${user.organizationId}:${user.staffId}`} />
+      <NetworkStatusBar />
       <div className="app-content-shell">
         <TopBar
           activePage={activePage}

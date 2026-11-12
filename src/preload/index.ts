@@ -56,6 +56,7 @@ import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResul
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
 
 import { CAMPAIGN_PENDING_REASON_IPC, type CampaignPendingReasonResult } from '../shared/campaignPendingReason'
+import { NETWORK_STATUS_IPC, type NetworkRequestSignal } from '../shared/networkStatus'
 import { CAMPAIGN_ACCOUNT_ACTIONS_IPC, type CampaignAccountActionsResult } from '../shared/campaignAccountActions'
 
 export type ElectronAPI = typeof electronAPI
@@ -657,6 +658,14 @@ const electronAPI = {
 
   getActiveAppNotification: (): Promise<AppNotification | null> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_NOTIFICATION_GET_ACTIVE),
+
+  // Dòng báo mất mạng
+  probeNetwork: (): Promise<boolean> => ipcRenderer.invoke(NETWORK_STATUS_IPC.PROBE),
+  onNetworkRequestSignal: (callback: (signal: NetworkRequestSignal) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, signal: NetworkRequestSignal) => callback(signal)
+    ipcRenderer.on(NETWORK_STATUS_IPC.REQUEST_SIGNAL, handler)
+    return () => ipcRenderer.removeListener(NETWORK_STATUS_IPC.REQUEST_SIGNAL, handler)
+  },
 
   // Reports
   getAccountActionStatusReport: (query: AccountActionReportQuery): Promise<AccountActionStatusReportResult> =>
