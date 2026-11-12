@@ -1,0 +1,77 @@
+{
+  "migration": "migration_v511_web_proxy_management (3 phần)",
+  "project": "akachat cgjbsmqtfhqvttudyjzq",
+  "appliedVia": "Supabase SQL Editor, bản dán gọn migrations/tests/migration_v511_web_proxy_management_pN_paste.sql (sinh bằng scripts/build-v511-paste-sql.py): một giao dịch, so md5 nội dung dán với file trước khi chạy, chạy phần giữa BEGIN;/COMMIT; của file, tự ghi sổ migration statements[1] = nguyên văn file. Lý do: hộp xác nhận của Supabase MCP apply_migration hết hạn 6 lần liền (12/11 18:2x–19:15 VN), không lần nào đổi DB.",
+  "parts": [
+    { "name": "migration_v511_web_proxy_management_p1", "version": "20261112151259", "appliedAtVietnam": "2026-11-12 22:12:59", "ledgerStatementsMd5": "61ffc263a23f1e1c56fcaafc728529f9", "fileMd5": "61ffc263a23f1e1c56fcaafc728529f9", "createdBy": null },
+    { "name": "migration_v511_web_proxy_management_p2", "version": "20261112152033", "appliedAtVietnam": "2026-11-12 22:20:33", "ledgerStatementsMd5": "b2b7b4c2f6c77a45606d655aceb3ddec", "fileMd5": "b2b7b4c2f6c77a45606d655aceb3ddec", "createdBy": null },
+    { "name": "migration_v511_web_proxy_management_p3", "version": "20261112152346", "appliedAtVietnam": "2026-11-12 22:23:46", "ledgerStatementsMd5": "eaf5313b14440e79ffd250de91f9c9db", "fileMd5": "eaf5313b14440e79ffd250de91f9c9db", "createdBy": null }
+  ],
+  "harmlessRefusal": "Giữa p2 và p3 người dùng dán nhầm p2 lần nữa: P0001 'Phần 2 đã chạy rồi, không chạy lại', không đổi gì (kiểm lại sổ ngay sau đó).",
+  "preflightLive": {
+    "atVietnam": "2026-11-12 19:07:53",
+    "ledgerHadV511": false,
+    "flagColumnAbsent": true,
+    "autoProxiesPolicies": 2,
+    "desktopDataContextMd5": "1c661248ef952acb98ee2a2082cf8bf8",
+    "proxiesWithoutOrganization": 0,
+    "duplicateNamesInOrganization": 0,
+    "otherMigrationsToday": "v501–v510 và vài migration chat/chatbot; không cái nào chạm auto_proxies, proxy_id, web_proxy hay trigger trên auto_accounts"
+  },
+  "postApplyLive": {
+    "atVietnam": "2026-11-12 22:24:05",
+    "flagColumn": "org_organization.web_proxy_management_enabled boolean NOT NULL DEFAULT false",
+    "organizationsEnabled": 0,
+    "autoProxiesNewColumns": ["expires_on", "note"],
+    "autoProxiesPolicies": ["desktop_org_read", "desktop_owned_delete", "desktop_owned_insert", "desktop_owned_update", "v435_existing_role_access"],
+    "autoProxiesIndexes": ["auto_proxies_org_name_unique", "auto_proxies_pkey", "idx_auto_proxies_org", "idx_auto_proxies_staff"],
+    "autoProxyChecks": { "rls": true, "rows": 0 },
+    "settings": { "proxies.check_mode": "off", "proxies.shared_runtime": "{\"server\":false,\"desktopMinVersion\":null}" },
+    "trigger": "trg_account_proxy_scope_guard on auto_accounts, tgenabled O",
+    "leakedPrivilegesToAnonAuthenticatedDesktopChatApi": false,
+    "serviceRoleExecute": { "aka_agent_control_proxies": true, "aka_agent_proxy_check_worker": true },
+    "liveProxies": 327,
+    "accountsUsingProxyOfOtherStaffOrOrg": 0,
+    "functionDefMd5": {
+      "aka_agent_control_proxies(bigint,bigint,text,jsonb)": "1102278ae312b8529b56b8a2712e4c1c",
+      "aka_agent_proxy_check_worker(text,jsonb)": "bcda0d1f9ce6071ac602d45655d54522",
+      "private.aka_agent_guard_account_proxy_scope()": "f627625f6081c390328be43d27bec454",
+      "private.aka_agent_proxy_check_field(text,jsonb)": "19c325dd4be423bff091c8925b50ca06",
+      "private.aka_agent_proxy_check_mode()": "19eda125b693a71954954dd21285db0f",
+      "private.aka_agent_proxy_endpoint_hash(text,text,integer,text,text)": "d67b21daa421baa3273007feed8b6775",
+      "private.aka_agent_proxy_id_list(jsonb,integer)": "ec8d3f4ac31bee1440d1231938ec3357",
+      "private.aka_agent_proxy_insert(bigint,bigint,jsonb)": "30a93ff66230f4925dd67d183b6c4828",
+      "private.aka_agent_proxy_list_json(bigint,bigint,boolean,bigint[])": "132946b2620d2503bcc81dee8e54f03a",
+      "private.aka_agent_proxy_next_daily(bigint,timestamp with time zone)": "d66904e19a9a4c4931015213be39172f",
+      "private.aka_agent_proxy_parse_date(jsonb,text)": "04443d72c17f16a899744ffeba6b9daa",
+      "private.aka_agent_proxy_positive_id(jsonb)": "4dfe017429245b4b19d710ef44e1b9cd",
+      "private.aka_agent_proxy_shared_runtime_ready(bigint,boolean)": "5c25d073f3a9ee1859dccf6cc4f45fff"
+    },
+    "functionDefMd5MatchesLocalTest": "13/13 (PG16, bash scripts/test-v511-web-proxy-management.sh sau khi apply ba bản dán)",
+    "rpcCalls": [
+      "aka_agent_proxy_check_worker('claim', {limit:5}) -> {mode:off, items:[]}, auto_proxy_checks vẫn 0 dòng",
+      "aka_agent_control_proxies(578, 557, 'list') -> P0001 proxy_management_disabled (đúng: chưa bật cờ tổ chức nào)"
+    ],
+    "postgrestSchemaReload": [
+      { "atUtc": "15:12:59", "queriedMs": 3497.7 },
+      { "atUtc": "15:20:33", "queriedMs": 2381.9 },
+      { "atUtc": "15:23:46", "queriedMs": 1951.5 }
+    ],
+    "edgeLogsRest15h05to15h24Utc": { "e5xx": 0, "e503": 0, "p50MsPerMinute": "45–48", "over1sAtP1": "56 (15:12) + 26 (15:13), các phút khác 0–7" },
+    "desktopReadsAutoProxies": "GET /rest/v1/auto_proxies sau p1: 17/17 HTTP 200 (4 IP); trước p1 trong 1 giờ: 108/108",
+    "postgresLogsProxyErrors": 0,
+    "pgrstPoolOrSchemaErrors": 0
+  },
+  "localTests": {
+    "command": "bash scripts/test-v511-web-proxy-management.sh",
+    "postgres": "16",
+    "assertions": 120,
+    "covers": "apply ba phần, quyền, mọi lệnh RPC, trigger, Desktop đọc cả tổ chức/chỉ ghi của mình, bộ kiểm tra, chạy lại bị từ chối, rollback và apply lại, script dán guarded, bản dán gọn (chép sai một ký tự bị từ chối trước khi chạy)"
+  },
+  "notDone": [
+    "Chưa bật cờ tổ chức nào (theo yêu cầu người dùng 12/11).",
+    "proxies.check_mode vẫn off; proxies.shared_runtime chưa cho phép.",
+    "Code WebApp/Desktop nhánh claude/beautiful-ride-u2f98b chưa merge, chưa deploy API/Web, chưa phát hành Desktop/App Server."
+  ],
+  "rollback": "migrations/rollback_v511_web_proxy_management.sql"
+}

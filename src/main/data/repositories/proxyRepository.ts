@@ -5,6 +5,7 @@ import { requireCurrentUser } from '../currentUser'
 
 const client = () => getSupabaseClient()
 const PROTOCOLS: ProxyProtocol[] = ['http', 'https', 'socks5']
+const PROXY_NOT_OWNED_MESSAGE = 'Proxy này do đồng nghiệp thêm. Chỉ người thêm hoặc quản trị tổ chức (trên Web) mới sửa hoặc xoá được.'
 
 function sanitizeProxy(proxy: AutoProxy): AutoProxy {
   return { ...proxy, password: null }
@@ -70,12 +71,14 @@ async function countProxyUsage(proxyId: number, staffId: number): Promise<number
   return count || 0
 }
 
+// Từ V511 proxy dùng chung trong tổ chức: đọc theo organization_id (RLS cho Desktop đọc cả tổ chức, chỉ ghi proxy của
+// mình). DB chưa có V511 thì RLS vẫn chỉ trả proxy của nhân viên nên kết quả như bản cũ.
 export async function listProxies(): Promise<AutoProxy[]> {
   const u = requireCurrentUser()
   const { data, error } = await client()
     .from('auto_proxies')
     .select('*')
-    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
     .order('created_at', { ascending: false })
 
@@ -107,11 +110,12 @@ export async function listProxies(): Promise<AutoProxy[]> {
 export async function getProxy(id: number, signal?: AbortSignal): Promise<AutoProxy | null> {
   signal?.throwIfAborted()
   const u = requireCurrentUser()
+  // Bộ chạy đọc proxy theo tổ chức: tài khoản có thể gắn proxy do đồng nghiệp thêm (Web, V511).
   const query = client()
     .from('auto_proxies')
     .select('*')
     .eq('id', id)
-    .eq('staff_id', u.staffId)
+    .eq('organization_id', u.organizationId)
     .eq('is_delete', false)
   if (signal) query.abortSignal(signal)
   const { data, error } = await query.maybeSingle()
@@ -142,6 +146,7 @@ export async function updateProxy(id: number, updates: Partial<AutoProxy>): Prom
   const u = requireCurrentUser()
   const existing = await getProxy(id)
   if (!existing) throw new Error('Không tìm thấy proxy')
+  if (existing.staffId !== undefined && existing.staffId !== u.staffId) throw new Error(PROXY_NOT_OWNED_MESSAGE)
 
   const payload = {
     ...buildProxyPayload(updates, existing),
@@ -163,6 +168,8 @@ export async function updateProxy(id: number, updates: Partial<AutoProxy>): Prom
 
 export async function deleteProxy(id: number): Promise<void> {
   const u = requireCurrentUser()
+  const existing = await getProxy(id)
+  if (existing && existing.staffId !== undefined && existing.staffId !== u.staffId) throw new Error(PROXY_NOT_OWNED_MESSAGE)
   const usageCount = await countProxyUsage(id, u.staffId)
   if (usageCount > 0) {
     throw new Error('Không thể xoá proxy khi còn tài khoản đang dùng proxy này')

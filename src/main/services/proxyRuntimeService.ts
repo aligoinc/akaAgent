@@ -2,6 +2,7 @@ import { app, session, type Session } from 'electron'
 import { createHash } from 'node:crypto'
 import { AutoAccount, AutoProxy, ProxyProtocol, ProxyTestResult } from '../../shared/types'
 import { preemptWebEnrichment, webEnrichmentSnapshot } from './webEnrichmentControl'
+import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
 
 type ProxyCredential = {
   host: string
@@ -40,6 +41,8 @@ export class ProxyRuntimeService {
   async prepareAccountSession(account: AutoAccount, options: { reuseApplied?: boolean } = {}): Promise<void> {
     const revision = this.preparationRevision
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
+    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không âm thầm chạy bằng mạng của máy (V511).
+    if (account.proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
     await this.applyProxyToPartition(this.getAccountPartition(account.id), proxy, options)
     if (revision === this.preparationRevision) this.preparedAccounts.set(account.id, account.proxyId ?? null)
   }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Loader2, Plus, Save, TestTube2, Trash2, X } from 'lucide-react'
 import { AutoAccount, AutoProxy, ProxyProtocol, ProxyTestResult } from '../../../../shared/types'
+import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 
 interface ProxyManagerModalProps {
@@ -89,6 +90,11 @@ export default function ProxyManagerModal({
     [proxies, selectedProxyId]
   )
   const isEditing = Boolean(selectedProxy)
+  // V511: proxy dùng chung trong tổ chức; phần mềm chỉ sửa/xoá proxy do chính mình thêm.
+  const currentStaffId = useAuthStore(state => state.user?.staffId)
+  const isColleagueProxy = (proxy: AutoProxy | null) =>
+    !!proxy && proxy.staffId !== undefined && currentStaffId !== undefined && proxy.staffId !== currentStaffId
+  const selectedReadOnly = isColleagueProxy(selectedProxy)
 
   const usageByProxyId = useMemo(() => {
     const map = new Map<number, number>()
@@ -276,9 +282,9 @@ export default function ProxyManagerModal({
                     >
                       <span>
                         <strong>{proxy.name}</strong>
-                        <em>{proxy.protocol}://{proxy.host}:{proxy.port} - {usageCount} tài khoản</em>
+                        <em>{proxy.protocol}://{proxy.host}:{proxy.port} - {usageCount} tài khoản{isColleagueProxy(proxy) ? ' - đồng nghiệp thêm' : ''}</em>
                       </span>
-                      <Trash2
+                      {!isColleagueProxy(proxy) && <Trash2
                         size={14}
                         role="button"
                         tabIndex={0}
@@ -286,7 +292,7 @@ export default function ProxyManagerModal({
                           event.stopPropagation()
                           handleDelete(proxy)
                         }}
-                      />
+                      />}
                     </button>
                   )
                 })
@@ -297,7 +303,7 @@ export default function ProxyManagerModal({
           <div className="proxy-editor">
             <div className={`account-group-editor-heading ${isEditing ? 'is-editing' : 'is-creating'}`}>
               <div>
-                <strong>{isEditing ? `Đang sửa proxy: ${selectedProxy?.name}` : 'Đang tạo proxy mới'}</strong>
+                <strong>{isEditing ? (selectedReadOnly ? `Proxy do đồng nghiệp thêm: ${selectedProxy?.name}` : `Đang sửa proxy: ${selectedProxy?.name}`) : 'Đang tạo proxy mới'}</strong>
                 <span>{isEditing ? 'Thay đổi proxy chỉ lưu vào kho proxy; tab Trình duyệt đang mở cần tự tải lại để áp dụng.' : 'Nhập thông tin proxy hoặc paste chuỗi proxy.'}</span>
               </div>
               <em>{isEditing ? 'Sửa proxy' : 'Tạo mới'}</em>
@@ -400,7 +406,8 @@ export default function ProxyManagerModal({
 
         <div className="modal-footer">
           <button className="btn btn-ghost" onClick={onClose}>Đóng</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+          {selectedReadOnly && <span className="text-muted">Chỉ người thêm hoặc quản trị tổ chức (trên Web) mới sửa được proxy này.</span>}
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving || selectedReadOnly}>
             {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
             {saving ? 'Đang lưu...' : (isEditing ? 'Lưu thay đổi' : 'Tạo proxy')}
           </button>

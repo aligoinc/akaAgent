@@ -14,6 +14,7 @@ import type { ZaloAccountRuntimeTarget } from '../data/repositories/accountRepos
 import type { ZaloOutgoingText } from './zaloFormattedContent'
 import { buildZaloForwardMessageInfo } from '../../shared/zaloForwardMessage'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
+import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
 
@@ -3022,6 +3023,8 @@ export class ZaloRuntimeService {
 
   private async createZaloClient(account: AutoAccount): Promise<Zalo> {
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
+    // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không âm thầm chạy bằng IP của máy (V511).
+    if (account.proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
     const agent = proxy && proxy.isActive !== false
       ? await this.createProxyAgent(proxy)
       : undefined
