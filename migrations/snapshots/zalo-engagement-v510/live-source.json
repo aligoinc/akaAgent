@@ -1,0 +1,23 @@
+{
+  "capturedAt": "2026-11-12 17:45:39 VN",
+  "engagementRows": 89663,
+  "function": {
+    "acl": "{postgres=X/postgres}",
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "defMd5": "2bacb504c895ea6efd6a1d9b68d6e213",
+    "owner": "postgres",
+    "prosrcMd5": "7f0995827e94bd53fd95206331680c8b",
+    "securityDefiner": true,
+    "signature": "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+    "volatility": "v"
+  },
+  "ledgerLatest": "20261112104442",
+  "ownerStatsExists": false,
+  "switch": {
+    "updatedAt": "2026-10-06T08:44:01.031799+00:00",
+    "value": "false"
+  }
+}

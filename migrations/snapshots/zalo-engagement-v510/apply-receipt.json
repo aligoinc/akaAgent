@@ -1,0 +1,113 @@
+{
+  "project": "akachat / cgjbsmqtfhqvttudyjzq",
+  "appliedAtVN": "2026-11-12 17:46:02–17:46:05",
+  "method": "supabase db query --linked -f <file sinh bởi .claude/worktrees/campaign-engine-v2/scripts/make-migration-ledger-apply.cjs> (migration + dòng sổ migration trong cùng giao dịch)",
+  "ledger": {
+    "name": "migration_v510_zalo_engagement_id_driven_lookups",
+    "statementsMd5": "c818811191d0cf4d4ae534ad97e06574",
+    "version": "20261112104557"
+  },
+  "fileMd5": "c818811191d0cf4d4ae534ad97e06574",
+  "rollbackFileMd5": "3dcc5ec12e32cf4475607048c6d8de85",
+  "before": {
+    "defMd5": "2bacb504c895ea6efd6a1d9b68d6e213",
+    "prosrcMd5": "7f0995827e94bd53fd95206331680c8b",
+    "ownerStatsExists": false,
+    "snapshot": "live-source.json"
+  },
+  "after": {
+    "defMd5": "6b40a8b7b51490287f7b39cb6b3c62ba",
+    "prosrcMd5": "dd6cf2bd1f75998521d98ee46d8fff0e",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "wrapperAcl": [
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+        "fn": "aka_agent_read_campaign_engagement"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+        "fn": "aka_agent_record_campaign_engagement"
+      },
+      {
+        "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+        "fn": "aka_agent_register_campaign_engagement"
+      }
+    ],
+    "ownerStats": {
+      "columns": [
+        "organization_id",
+        "staff_id",
+        "account_id",
+        "account_zalo_uid"
+      ],
+      "dependencies": "{\"2 => 3\": 0.969300, \"2 => 4\": 0.186600, \"2 => 5\": 0.189067, \"3 => 2\": 1.000000, \"3 => 4\": 0.194033, \"3 => 5\": 0.197600, \"4 => 2\": 1.000000, \"4 => 3\": 1.000000, \"4 => 5\": 0.996467, \"5 => 2\": 1.000000, \"5 => 3\": 1.000000, \"5 => 4\": 0.988867, \"2, 3 => 4\": 0.194033, \"2, 3 => 5\": 0.197600, \"2, 4 => 3\": 1.000000, \"2, 4 => 5\": 0.996467, \"2, 5 => 3\": 1.000000, \"2, 5 => 4\": 0.988867, \"3, 4 => 2\": 1.000000, \"3, 4 => 5\": 0.996467, \"3, 5 => 2\": 1.000000, \"3, 5 => 4\": 0.988867, \"4, 5 => 2\": 1.000000, \"4, 5 => 3\": 1.000000, \"2, 3, 4 => 5\": 0.996467, \"2, 3, 5 => 4\": 0.988867, \"2, 4, 5 => 3\": 1.000000, \"3, 4, 5 => 2\": 1.000000}",
+      "kind": [
+        "f"
+      ]
+    }
+  },
+  "switchAfterApply": "false",
+  "verification": {
+    "localSmoke": "node scripts/run-zalo-engagement-v510-smoke.cjs: OK (đăng ký 140.013→17 dòng kết quả, 50.008→7 dòng tương tác, 60.061→9 chiến dịch; ghi sự kiện 50.006→2; 203 dòng assertions; race smoke; chạy lại bị từ chối; rollback hai chiều)",
+    "prodSourcesLookupBeforeApply": "generic plan, staff 1988: 4,248 ms, 59 buffer (thân cũ: 19,5 s, 346.587 buffer)",
+    "prodEventLookupAfterApply": "generic plan, staff 936: Index Scan auto_campaign_engagement_target với 6 điều kiện, 3 buffer (trước apply: index catalog, 688 buffer)",
+    "edgeLogs": "phút 17:46 VN p99 REST 1.519 ms lúc PostgREST nạp lại schema, 0 lỗi 5xx/503"
+  },
+  "notReapply": "Không apply lại V510; preflight từ chối khi thân hàm không còn là V341.",
+  "switchEnabled": {
+    "atVN": "2026-11-12 18:02:06.561720",
+    "revision": "2026-11-12 11:02:06.56172+00",
+    "statement": "UPDATE auto_system_settings SET value='true' WHERE id=60 AND value='false' (guard: md5(prosrc) V510)",
+    "before": {
+      "value": "false",
+      "updatedAt": "2026-10-06T08:44:01.031799+00:00"
+    },
+    "dbActiveBackendsBefore": 2
+  },
+  "firstMinutesAfterEnable": {
+    "windowVN": "18:02:06–18:04:50",
+    "newEngagementRows": 21,
+    "byType": {
+      "message": 18,
+      "friend_request": 3
+    },
+    "staffs": 9,
+    "pgssDelta": {
+      "desktop.register": "13 lượt, TB 13,5 ms, 890 buffer/lượt",
+      "desktop.read": "14 lượt, TB 24,6 ms, 1.081 buffer/lượt",
+      "chat.register": "4 lượt, TB 13,5 ms, 314 buffer/lượt",
+      "chat.read": "29 lượt, TB 6,6 ms, 1.928 buffer/lượt"
+    },
+    "october_register_anon": "TB 169,6 ms, 44.095 buffer/lượt",
+    "vps": "chưa gọi hàm nào (App Server chưa khởi động lại)",
+    "non200": 0
+  },
+  "appServerRestart": {
+    "atVN": "~18:06 (người dùng khởi động lại App Server trên VPS)",
+    "vpsAfterRestart": "đọc công tắc 1 lần/phút từ 18:07; 18:06–18:09: read 126 lượt TB 60 ms (max 127), register 54 lượt TB 78 ms (max 164) ở edge, tất cả 200",
+    "restartSideEffects": "8 lỗi 406 auto_campaigns lúc 18:06 (có sẵn mỗi lần khởi động lại, 10/11 có 97); REST toàn hệ p50 44–48 ms, p99 ≤389 ms, 0 lỗi 5xx",
+    "trackedRowsAt18_09": {
+      "vps": 58,
+      "chat": 14,
+      "desktop": 27,
+      "staffs": 54,
+      "seen": 2
+    },
+    "pgssDelta_18_01_56_to_18_09_21": {
+      "service_role.register": "93 lượt, TB 18,5 ms, 572 buffer",
+      "service_role.read": "147 lượt, TB 5,6 ms, 1.480 buffer",
+      "desktop.register": "22 lượt, TB 12,0 ms, 767 buffer",
+      "desktop.read": "25 lượt, TB 16,0 ms",
+      "chat.register": "13 lượt, TB 11,3 ms, 278 buffer",
+      "chat.read": "82 lượt, TB 6,7 ms",
+      "totalExecMs": 3919
+    }
+  }
+}
