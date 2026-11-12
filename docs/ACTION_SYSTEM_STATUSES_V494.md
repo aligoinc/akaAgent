@@ -148,8 +148,10 @@ V494 sau khi chỉnh:
   kiểm cả 30 trạng thái kết quả có `auto_status.report_group` trùng nhóm của trạng thái hệ thống.
 - Rollback từ chối thêm khi luật sự kiện, chính sách engine hoặc `parent_status_id` đã trỏ tới 8 trạng thái mới.
 
-Hai cột `report_group` và `system_status_code` cùng nằm trên một dòng và phải khớp nhau; hiện mới có postflight của V494
-kiểm, chưa có ràng buộc ép lúc ghi. Ai sửa `report_group` của một trạng thái về sau phải sửa cả trạng thái hệ thống.
+Hai cột `report_group` và `system_status_code` cùng nằm trên một dòng và phải khớp nhau. **Từ V514** (apply akachat 12/11/2026 23:03:46 VN, `20261112160346`) trigger
+`auto_status_system_group_guard_v514` ép lúc ghi: nhóm báo cáo hiệu lực (của dòng, không có thì của trạng thái gốc) phải có và trùng
+nhóm của trạng thái hệ thống, trạng thái gốc phải cùng nhóm hệ thống với dòng con; view `aka_agent_engine_policy_lint` báo
+`status_group_mismatch` cho dòng lệch có sẵn.
 
 Chưa đọc được tài liệu thiết kế của V495 (`docs/CAMPAIGN_OUTCOME_ENGINE.md` chưa có trên nhánh nào đã đẩy lên của repo
 này lúc 17:10 VN 11/11); phần trên rút từ nguyên văn migration trong sổ và trạng thái production.
@@ -230,6 +232,12 @@ theo chữ đó, không làm bằng dữ liệu đơn thuần:
 2. **Nơi ghi**: thêm policy mặc định cho trạng thái, đặt `is_active=true`, rồi trỏ `auto_error` bằng
    `detail_mode='override'` + `detail_status_id` (giữ `detail_status` dạng chữ cho app cũ). Thiếu policy thì mọi chiến
    dịch của hành động đó báo lỗi ngay khi bắt đầu.
+   **Engine v2 không đọc `auto_error.detail_status`**: trạng thái lịch sử theo mã của engine nằm ở
+   `auto_outcome_policies.detail_status_id` (chép lúc seed V495/V500). Bật trạng thái mới cho một mã thì sửa cả dòng chính sách
+   engine của mã đó, nếu không bộ chạy cũ và engine ghi hai trạng thái khác nhau cho cùng một lỗi. Đặt thêm `parent_status_id` của
+   trạng thái mới về trạng thái gốc cùng nhóm hệ thống (người nhận chặn tin → thất bại 21; lỗi kết nối, chưa rõ kết quả → lỗi 22)
+   để engine kế thừa chính sách theo trạng thái. Xong thì `SELECT * FROM aka_agent_engine_policy_lint` phải rỗng (V514 báo
+   `detail_status_differs_from_auto_error` khi hai bên lệch).
 3. **Nhóm Dừng** (120, 802, 223, 224, 600…): hiện không ghi dòng và trả mục tiêu về hàng đợi. Muốn có dòng kết quả cần
    sửa code để ghi mà vẫn giữ mục tiêu trong hàng đợi; bản app cũ sẽ đánh `hoàn thành` nếu chỉ đổi dữ liệu.
 4. **Lỗi mạng**: cần chốt có tính vào chuỗi lỗi liên tiếp không (proxy chết phải dừng chiến dịch) và có trả mục tiêu về

@@ -208,6 +208,13 @@ Lỗi DB, mạng, Supabase sập:
   - Hàm `aka_agent_engine_apply_status_event_v1(detail, event)` đặt `sub_status_id` khi `progress_rank` mới cao hơn trạng thái đang có.
   - Không áp lại hạn mức.
 - **Bảo vệ bản cũ:** trạng thái mới không được trùng `status_value`, vì bản 8.2+ báo `status_value_ambiguous` (`src/shared/actionStatusPolicy.ts:132-137`).
+- **Đi cùng V494 (trạng thái hệ thống, phiên khác, apply 11/11 sau V495):** mỗi trạng thái kết quả còn có `system_status_code`
+  (thành công / thất bại / bỏ qua / dừng / lỗi / chờ; CHECK bắt buộc). Thêm trạng thái mới phải chọn cả trạng thái hệ thống lẫn
+  trạng thái gốc, cùng nhóm báo cáo. V514 có trigger `auto_status_system_group_guard_v514` ép điều đó lúc ghi.
+- **Trạng thái theo mã lỗi nằm ở hai chỗ:** bộ chạy cũ đọc `auto_error.detail_status` (hoặc `detail_mode='override'` +
+  `detail_status_id`), engine đọc `auto_outcome_policies.detail_status_id` và không đọc `auto_error`. Đổi trạng thái của một
+  mã thì sửa cả hai; `aka_agent_engine_policy_lint` báo `detail_status_differs_from_auto_error` khi hai bên lệch (V514; 12/11 trên
+  akachat 21/21 cặp mã × hành động khớp).
 
 ## 6. Mã công khai và tiến trình cho khách
 
