@@ -1,0 +1,51 @@
+{
+  "operation": "Deploy ChatApi (Fly app aka-agent-chat-api) chỉ nhóm api: cấp phiên Desktop (/api/chat/desktop/session, scope zalo_qr_login) cho tổ chức không Chat có tài khoản Zalo Server chạy trên Fly theo cờ, để Desktop nghe tiến trình chiến dịch",
+  "requested_by_user": "11/11/2026 ~20:52 VN, \"Deploy ChatApi api\"",
+  "source": {
+    "worktree": "/Users/lequangnhut/Repos/akaAgentChatApi-deploy-v2",
+    "branch": "deploy/campaign-engine-v2-e16725c (chưa commit)",
+    "base": "e16725ca05cef21d70f884285fb57a17c7dee502",
+    "vs_previous_deploy": "Bản 17:03 (worker-api-e16725c-v2-20261111) cộng đúng phần cấp phiên Desktop: apps/chat-api/src/desktopAuthRoutes.ts (organizationAllowed: tổ chức Chat như cũ, hoặc scope zalo_qr_login khi isServerOnFlyOrganization), apps/chat-api/src/main.ts (nối isServerOnFlyOrganization = chatEntitlementRepository.isOrganizationServerEnabled), test mới apps/chat-api/src/desktopAuthRoutes.test.ts (4 ca); hai file giống hệt worktree akaAgentChatApi-campaign-engine-v2",
+    "staged_diff_md5": "8fe66fd3c8c15085ca5ea669b5f9eb32 (giống bản 17:03)",
+    "unstaged_diff_md5": "1ef5050c807cf4a6956899a70cbe9fa7 (Dockerfile + 2 file trên)",
+    "untracked_files": 42,
+    "verify": "npm run verify 20:53–20:57 VN: typecheck đạt, 165/165 file test, 2.300 test đạt, bỏ qua 2 (251 giây)"
+  },
+  "deploy": {
+    "command": "flyctl deploy --app aka-agent-chat-api --process-groups api --remote-only --image-label api-e16725c-v2-desktop-20261111",
+    "start_vn": "2026-11-11 20:57:34",
+    "end_vn": "2026-11-11 20:59:10",
+    "image": "registry.fly.io/aka-agent-chat-api:api-e16725c-v2-desktop-20261111 (118 MB)",
+    "machines_after": {
+      "api 7845747fe073e8": "v173, cập nhật 13:58:55Z, server nghe cổng 13:58:59Z, check /health/live đạt",
+      "worker 784574da214578": "v172, không đổi (image worker-api-e16725c-v2-20261111)",
+      "zalo_runtime 7817d7daee2d58": "v155, không đổi"
+    },
+    "rollback": "flyctl deploy --app aka-agent-chat-api --process-groups api --image registry.fly.io/aka-agent-chat-api:worker-api-e16725c-v2-20261111 (bỏ phần cấp phiên Desktop, giữ v2); bỏ cả v2: image worker-api-e16725c-20261108 cho api và worker"
+  },
+  "before": {
+    "read_at_vn": "2026-11-11 20:53:35",
+    "waiting_socket_total": 288,
+    "waiting_socket_2h": 0,
+    "fly_actions_3m": 26,
+    "engine_leases": 0,
+    "worker_leader_pid": 1971890
+  },
+  "after": {
+    "read_at_vn": "2026-11-11 20:59:53",
+    "waiting_socket_since_deploy": 0,
+    "waiting_socket_total": 288,
+    "fly_actions_since_13:59Z": 8,
+    "failed_since_13:57:30Z": "1 lệnh send_campaign_media (tổ chức 1596, chiến dịch 53475) mã 122 'chặn tin nhắn từ người lạ' — lỗi nghiệp vụ Zalo, không do deploy",
+    "runtime": "zalo_runtime xếp hàng 78 sự kiện lúc api khởi động lại (13:59:04Z) rồi đẩy bù: 505 sự kiện mới từ 13:59Z, tồn 4",
+    "campaign_log_listener": "LISTEN aka_agent_chat_campaign_log phát lại lúc 20:59:00 VN (query_start) bởi api mới",
+    "worker_leader_pid": "1971890, không đổi",
+    "api_logs": "Không lỗi sau khởi động; mã 200/201/400/401/404 (404 là các đường /health thử sai); dòng kernel 'I/O error, dev vdb … potential data loss' lúc 13:58:54Z là VM api cũ khi bị dừng (uptime 14.036 s khớp lần khởi động 10:04:58Z), api không có volume",
+    "http": {
+      "/health/live": 200,
+      "POST /api/chat/desktop/session (body rỗng)": 400
+    },
+    "edge_logs": "/rest/v1 13:56–14:00Z: 0 lỗi 5xx, p99 119–167 ms"
+  },
+  "not_verified": "Chưa gọi /api/chat/desktop/session bằng tài khoản thật của tổ chức 526 (cần đăng nhập của anh; tổ chức 526 chưa ai đăng nhập Desktop 9.x). Desktop có phần nghe kênh này chưa phát hành."
+}

@@ -1,0 +1,15 @@
+{
+  "source": "akachat cgjbsmqtfhqvttudyjzq, pg_get_functiondef chỉ đọc 11/11/2026 ~17:30 VN",
+  "functions": {
+    "private.aka_agent_desktop_data_context()": {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+      "md5": "1c661248ef952acb98ee2a2082cf8bf8",
+      "definition": "CREATE OR REPLACE FUNCTION private.aka_agent_desktop_data_context()\n RETURNS TABLE(staff_id bigint, organization_id bigint, system_admin boolean)\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT s.id, s.organization_id,\n   COALESCE(s.is_admin_akabiz AND s.is_active AND s.deleted_at IS NULL,false)\n FROM public.org_staff s\n WHERE current_setting('role',true)='aka_agent_desktop'\n   AND s.id=(SELECT private.aka_agent_staff_scope_for_request());\n$function$\n"
+    },
+    "private.aka_agent_staff_scope_for_request()": {
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres}",
+      "md5": "d417807fa9dc08cfecbd6cd0aab7df3e",
+      "definition": "CREATE OR REPLACE FUNCTION private.aka_agent_staff_scope_for_request()\n RETURNS bigint\n LANGUAGE plpgsql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog'\nAS $function$\nDECLARE v_claims jsonb; v_user uuid; v_staff bigint;\nBEGIN\n -- SET ROLE is retained across SECURITY DEFINER calls; current_user is not.\n IF current_setting('role',true) IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN NULL; END IF;\n BEGIN\n  v_claims := NULLIF(current_setting('request.jwt.claims',true),'')::jsonb;\n  IF v_claims->>'role' IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN 0; END IF;\n  v_user := NULLIF(v_claims->>'sub','')::uuid;\n EXCEPTION WHEN invalid_text_representation THEN RETURN 0;\n END;\n SELECT staff_id INTO v_staff FROM private.aka_agent_desktop_users WHERE auth_user_id=v_user;\n RETURN COALESCE(v_staff,0);\nEND;\n$function$\n"
+    }
+  }
+}

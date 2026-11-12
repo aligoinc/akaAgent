@@ -1,0 +1,53 @@
+{
+  "migration": "migration_v498_zalo_server_on_fly_desktop",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "11/11/2026 ~20:45 VN, \"Apply V498\"",
+  "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch; statements[1] = nguyên văn file",
+  "file_md5": "ec584e65e98c9d2b1afd392ee6733cb4",
+  "file_bytes": 4926,
+  "ledger": {
+    "version": "20261111134640",
+    "name": "migration_v498_zalo_server_on_fly_desktop",
+    "statements_md5": "ec584e65e98c9d2b1afd392ee6733cb4",
+    "created_by": null
+  },
+  "applied_at_vn": "2026-11-11 20:46:40 (lệnh chạy 20:46:39–20:46:41, exit 0)",
+  "precheck": {
+    "at_vn": "2026-11-11 20:46:25",
+    "number_free": "git fetch --all: không commit nào trên mọi nhánh có migrations/migration_v498*/v499*; sổ migration chưa có migration_v498_* (mới nhất: v494_action_system_statuses 20261111102305 của nhánh khác, v497, v495, v496)",
+    "objects": "public.aka_agent_zalo_server_on_fly_v1() chưa có; private.auto_zalo_server_session_handoff có (1 dòng: tổ chức 526 to_fly); aka_agent_app_access_chat_runtime(bigint,boolean) có; role aka_agent_desktop có",
+    "live_dependencies_md5": {
+      "private.aka_agent_desktop_data_context()": "1c661248ef952acb98ee2a2082cf8bf8",
+      "private.aka_agent_staff_scope_for_request()": "d417807fa9dc08cfecbd6cd0aab7df3e"
+    },
+    "matches_test_fixture": "khớp scripts/fixtures/zalo-server-flag-route/desktop-scope-functions-20261111.json dùng cho scripts/test-v498-zalo-server-on-fly-desktop.cjs (9 nhóm)",
+    "db_load": "2 backend đang chạy"
+  },
+  "verify": {
+    "at_vn": "2026-11-11 20:46:54",
+    "function": {
+      "signature": "public.aka_agent_zalo_server_on_fly_v1()",
+      "md5": "0e8f19b1cabf61598a08a818dfe20171",
+      "owner": "postgres",
+      "security_definer": true,
+      "volatility": "STABLE",
+      "config": [
+        "search_path=pg_catalog, public, private"
+      ],
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}"
+    },
+    "execute": {
+      "aka_agent_desktop": true,
+      "anon": false,
+      "authenticated": false,
+      "service_role": false,
+      "aka_agent_chat_api": false
+    },
+    "call_as_postgres": "false (không có phiên Desktop)"
+  },
+  "postgrest": "Nhận lệnh nạp lại schema lúc 13:46:40.119Z, truy vấn schema 4,6 s, nạp xong 13:46:45Z (792 hàm); không có PGRST002/PGRST003",
+  "edge_logs": "/rest/v1 phút 13:46Z: 23.895 request, 0 lỗi 5xx, p50 47 ms, p99 511 ms, chậm nhất 3,1 s (lúc nạp lại schema); 13:47Z: 0 lỗi 5xx, p99 115 ms",
+  "behavior_change": "Không với bản đang chạy: chỉ thêm một hàm, chỉ aka_agent_desktop gọi được, Desktop đang phát hành chưa gọi hàm này",
+  "do_not_reapply": "Preflight từ chối khi sổ migration đã có migration_v498_* hoặc hàm đã có",
+  "rollback": "migrations/rollback_v498_zalo_server_on_fly_desktop.sql (DROP FUNCTION); Desktop mới gặp PGRST202 thì coi như không chạy trên Fly, giữ hành vi cũ"
+}

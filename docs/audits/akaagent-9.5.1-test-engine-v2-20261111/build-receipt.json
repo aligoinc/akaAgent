@@ -1,0 +1,123 @@
+{
+  "kind": "internal_test_build",
+  "purpose": "Bản thử nội bộ để xem tiến trình chiến dịch của tổ chức không Chat chạy trên Fly (tổ chức 526) trên Desktop; KHÔNG phát hành",
+  "requested_by_user": "11/11/2026 ~21:05 VN, \"Dựng bản thử\" (bản Desktop thử nội bộ, không đưa lên kênh cập nhật)",
+  "version": "9.5.1 (version.txt sẵn có của worktree; feed hiện 9.5.0 nên bản thử không bị nhắc cập nhật)",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/campaign-engine-v2",
+  "source_branch": "feat/campaign-engine-v2 (chưa commit)",
+  "source_commit": "54cfde310b (dev_3 tại #636) + thay đổi chưa commit của engine v2 và phần nghe tiến trình (V498)",
+  "not_included": "dev_3 sau 54cfde31: #637–#643 (origin/dev_3 ad25d9e3)",
+  "platform": "macOS ARM64 only",
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "start": "2026-11-11T14:07:40Z",
+      "end": "2026-11-11T14:07:43Z",
+      "exit_code": 0
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "start": "2026-11-11T14:07:43Z",
+      "end": "2026-11-11T14:07:44Z",
+      "exit_code": 0
+    },
+    {
+      "label": "engine-check-all",
+      "command": "node scripts/campaign-outcome-engine-check-all.cjs",
+      "start": "2026-11-11T14:07:44Z",
+      "end": "2026-11-11T14:07:59Z",
+      "exit_code": 0
+    },
+    {
+      "label": "build-mac",
+      "command": "npm run build:mac",
+      "start": "2026-11-11T14:07:59Z",
+      "end": "2026-11-11T14:09:05Z",
+      "exit_code": 0
+    }
+  ],
+  "build_input_manifest": {
+    "paths": [
+      "src",
+      "build",
+      "packages/campaign-engine",
+      "package.json",
+      "package-lock.json",
+      "version.txt",
+      "electron.vite.config.ts",
+      "tsconfig*.json",
+      "scripts/sign-mac-adhoc.cjs"
+    ],
+    "count": 618,
+    "sha256_before": "3f88a4ec5d8b1eb27a2e26dc0ef02b470568b1cc18dcf52e3b75fad75eb38721",
+    "sha256_after": "3f88a4ec5d8b1eb27a2e26dc0ef02b470568b1cc18dcf52e3b75fad75eb38721",
+    "unchanged": true
+  },
+  "checks": {
+    "typecheck_node": "passed",
+    "typecheck_renderer": "passed",
+    "engine_check_all": "10/10 bước đạt: typecheck lõi, ranh giới, SQL V495 35, V496 6, V497 10, V498 9, Desktop nghe tiến trình 5, lõi 23, bộ chạy Desktop 6, danh mục bản cũ 3",
+    "version": {
+      "resources_version_txt": "9.5.1",
+      "info_plist": "9.5.1",
+      "bundle_id": "com.akabiz.auto",
+      "asar_package_json": "9.5.1",
+      "main": "./out/main/index.js"
+    },
+    "architecture": {
+      "executable": "arm64",
+      "better_sqlite3.node": "arm64",
+      "fsevents.node": "universal x86_64+arm64"
+    },
+    "new_code_in_out": [
+      "aka_agent_zalo_server_on_fly_v1",
+      "isServerOnFlyRealtimeUser",
+      "campaign_engine_journal",
+      "aka_agent_engine_claim_target_v1",
+      "api/chat/desktop/session"
+    ],
+    "secret_scan": {
+      "files_scanned": 12453,
+      "hits": 0,
+      "patterns": "JWT role service_role/anon, sb_secret_, supabase-server-secret.key"
+    },
+    "codesign_verify_deep_strict": "passed (ad-hoc)",
+    "hdiutil_verify": "VALID",
+    "dmg_mount_readonly_matches_app": {
+      "app.asar": true,
+      "MacOS/akaAgent": true,
+      "version.txt": true
+    },
+    "packaged_sqlite_probe": {
+      "arch": "arm64",
+      "electron": "33.4.11",
+      "sqlite": "3.53.1"
+    }
+  },
+  "artifacts": [
+    {
+      "path": "dist/build-9.5.1-test-engine-v2/akaAgent-9.5.1-test-engine-v2.dmg",
+      "bytes": 182834227,
+      "sha256": "b97b6c8bf17ad35836e67728341a2115657c35b9a0026de0a6edac372a473511"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "feed_changed": false,
+  "database_changed": false,
+  "app_server_built": false,
+  "behavior_notes": [
+    "Bản này chạy bộ mới (engine v2) cho tài khoản Zalo QR/Web của người đăng nhập, với chiến dịch 'Nhắn tin theo SĐT' chỉ chữ (phần lõi đã phủ); loại khác chạy bộ cũ.",
+    "Tổ chức không Chat có tài khoản Server chạy trên Fly (V498 trả đúng lúc đăng nhập) thì mở thêm kênh tiến trình của ChatApi.",
+    "Cài đè lên akaAgent hiện có (cùng com.akabiz.auto, cùng userData aka-biz-auto); quay lại thì cài lại DMG 9.5.0 (dist/build-9.5.0/akaAgent.dmg ở checkout chính).",
+    "Presence sẽ báo app_version 9.5.1 cho máy cài bản này."
+  ],
+  "limitations": [
+    "Mac ký ad-hoc, chưa notarize.",
+    "Chỉ ARM64; không có Windows/Intel.",
+    "Đã chạy đăng nhập và xem tiến trình của tổ chức 526; chưa chạy chiến dịch bằng tài khoản Zalo QR/Web trên bản thử (526 không có)."
+  ],
+  "used_for": "Chạy trực tiếp từ dist với --user-data-dir riêng lúc 21:14 VN (không cài); nhân viên 547 đăng nhập 21:14:55; ChatApi cấp phiên Desktop 200; chạy lại 32956 lúc 21:15:57 và anh thấy dòng tiến trình trên Desktop (engine-v2-org526-fourth-run-20261111). Tác dụng phụ: tài khoản Facebook 2509 bị AutoCheck hạ 'chưa đăng nhập'."
+}

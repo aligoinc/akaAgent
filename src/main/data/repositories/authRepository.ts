@@ -26,6 +26,7 @@ import { isRenewalPortalUrl, type RenewalRequirement } from '../../../shared/ren
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
+import { loadZaloServerOnFly } from './zaloServerOnFlyRepository'
 
 const client = () => getSupabaseClient()
 
@@ -171,6 +172,11 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   ])
   const { entitlements, zaloAccountCapabilities, chatSyncEnabled } = entitlementAccess
   const appAccess = await loadAppAccessForStaff(staffRow.id, staffRow.username, staffRow.password)
+  const isChatSync = appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled
+  // V498: chỉ hỏi khi tổ chức không Chat có quyền Server (thêm một lượt gọi lúc đăng nhập).
+  const zaloServerOnFly = !isChatSync && !appAccess.separateAccess && entitlements.zalo === true && zaloAccountCapabilities.server === true
+    ? await loadZaloServerOnFly()
+    : false
 
   return {
     staffId: staffRow.id,
@@ -187,7 +193,8 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     zaloAccountCapabilities,
     entitlements,
     accountProducts,
-    isChatSync: appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled,
+    isChatSync,
+    zaloServerOnFly,
     appAccess,
     chatSyncProducts,
     deviceLabel: deviceRecord.device_label || null,

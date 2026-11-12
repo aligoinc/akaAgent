@@ -1566,6 +1566,21 @@ export class ZaloRuntimeService {
     )
   }
 
+  /**
+   * Một lần tra SĐT với reqSrc, cho bộ chạy chiến dịch v2: lõi (packages/campaign-engine) tự quyết thử reqSrc 40
+   * bằng đúng searchZaloPhone của findUserByPhone. Không có hồ sơ có UID thì null.
+   */
+  async findUserByPhoneOnce(
+    accountId: number,
+    phone: string,
+    reqSrc: ZaloPhoneSearchReqSrc,
+    signal?: AbortSignal
+  ): Promise<ZaloFoundUser | null> {
+    signal?.throwIfAborted()
+    const api = await this.ensureApi(accountId)
+    return normalizeFoundUser(await this.findUserByPhoneWithReqSrc(api, phone, reqSrc, signal))
+  }
+
   private async findUserByPhoneWithReqSrc(
     api: API,
     phone: string,

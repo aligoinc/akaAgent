@@ -1,0 +1,62 @@
+{
+  "operation": "Deploy ChatApi (Fly app aka-agent-chat-api) nhóm api và worker có engine v2 và định tuyến tổ chức không Chat theo cờ (kế hoạch mục 16)",
+  "requested_by_user": "11/11/2026 ~17:01 VN, \"Tiếp tục\" (các bước thử còn lại: V497, deploy ChatApi)",
+  "source": {
+    "worktree": "/Users/lequangnhut/Repos/akaAgentChatApi-deploy-v2",
+    "branch": "deploy/campaign-engine-v2-e16725c (chưa commit)",
+    "base": "e16725ca05cef21d70f884285fb57a17c7dee502 (commit đang chạy trên Fly từ 08/11)",
+    "applied": "toàn bộ thay đổi của worktree akaAgentChatApi-campaign-engine-v2 (git apply --3way, không xung đột) + 1 dòng Dockerfile chép packages/campaign-engine/package.json",
+    "staged_diff_md5": "8fe66fd3c8c15085ca5ea669b5f9eb32",
+    "unstaged_diff_md5": "ca0d1fd29870333e5fa408cb977661e2 (Dockerfile)",
+    "untracked_files": 41,
+    "untracked_files_md5_of_md5s": "2e793b4fc5b8d845e9c82d8547e15e94",
+    "verify": "typecheck đạt; 164/164 file test (2.296 test, bỏ qua 2); bản chép lõi khớp nguồn 23 file; stage build Dockerfile chạy lại ở thư mục sạch bằng npm 10.9.2 và 11 đạt"
+  },
+  "deploy": {
+    "command": "flyctl deploy --app aka-agent-chat-api --process-groups api,worker --remote-only --image-label worker-api-e16725c-v2-20261111",
+    "start_vn": "2026-11-11 17:03:26",
+    "end_vn": "2026-11-11 17:05:15",
+    "image": "registry.fly.io/aka-agent-chat-api:worker-api-e16725c-v2-20261111 (118 MB)",
+    "machines_after": {
+      "api 7845747fe073e8": "v172, started 10:04:58Z, health check đạt",
+      "worker 784574da214578": "v172, started 10:04:59Z",
+      "zalo_runtime 7817d7daee2d58": "v155, không đổi"
+    },
+    "rollback": "flyctl deploy --app aka-agent-chat-api --process-groups api,worker --image registry.fly.io/aka-agent-chat-api:worker-api-e16725c-20261108"
+  },
+  "before": {
+    "read_at_vn": "2026-11-11 17:03:02",
+    "leader_lock": "pid 3962944 (Supavisor, backend_start 08/11 08:20:25 VN, idle)",
+    "waiting_socket_2h": 2,
+    "waiting_socket_total": 288,
+    "server_campaigns_running": 148,
+    "fly_actions_3m": 74
+  },
+  "after": {
+    "leader_lock": "pid 1971890 (Supavisor, backend_start 11/11 13:15:08 VN): worker mới đã lên leader, không phải gỡ khoá tay",
+    "waiting_socket_since_deploy": 0,
+    "fly_actions_3m": "67–70, chiến dịch chat-sync chạy tiếp",
+    "edge_logs_5xx": "10:03–10:05 UTC 0 lỗi. 10:06:49–10:08:15 UTC ~15 lỗi quá giờ 3 giây (aka_agent_claim_account_operation, PATCH auto_campaign_input_data, contacts của cổng chat cũ), trùng lúc một câu đếm dữ liệu Chat của chính mình quét bảng lớn (parallel seq scan chat_zalo_message) trong 2 phút rồi bị huỷ; không chiến dịch nào bị dừng vì các lỗi này"
+  },
+  "handoff_org_526": {
+    "account": 2445,
+    "staff": 547,
+    "to_fly_requested_vn": "17:05:04",
+    "vps_released_vn": "17:05:44",
+    "completed_vn": "17:05:49",
+    "attempts": 1,
+    "binding": "chat_zalo_account_organization 625, có phiên mã hoá (format 1), generation 1",
+    "runtime": "connecting 17:05:49 → ready 17:05:50; socket nối 10:05:50Z, có sự kiện 10:05:54Z",
+    "account_log": "Đã chuyển phiên Zalo Server từ App Server sang Fly.",
+    "login_status": "đã đăng nhập (không quét QR lại)",
+    "app_server": "aka_agent_app_access_chat_organizations([526]) = [526] nên VPS bỏ qua tổ chức 526"
+  },
+  "chat_data_for_526": {
+    "read_at_vn": "2026-11-11 17:09:40",
+    "conversations": 0, "contacts": 0, "friend_entries": 0, "friend_events": 0, "group_events": 0, "reactions": 0, "actions": 0,
+    "runtime_events": { "account_groups_snapshot": 60, "account_tags_snapshot": 1, "account_users_snapshot": 3, "reaction": 1, "all": "processed (bỏ qua theo chat_data_allowed), 0 failed" },
+    "messages": "không đếm trực tiếp (chat_zalo_message không có chỉ mục theo binding); 0 hội thoại nên 0 tin nhắn"
+  },
+  "unrelated_same_window": "Chiến dịch 42418, 51920 (tổ chức 289, Desktop Windows 9.5.0 của khách) tạm dừng 17:05:40 vì 'TypeError: fetch failed' phía máy khách, không liên quan",
+  "next": "Chạy một chiến dịch 'Nhắn tin theo SĐT' chỉ chữ của 526 (4 chiến dịch đang tạm dừng đều đủ điều kiện bộ mới: không media, không tag, không chống gửi lặp, không SMS, nguồn trực tiếp)"
+}

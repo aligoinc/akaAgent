@@ -1,0 +1,69 @@
+{
+  "operation": "Chạy lại chiến dịch 32956 (tổ chức 526, nhắn tin + kết bạn theo SĐT) bằng engine v2 trên Fly, để anh xem tiến trình trên Web sau bản deploy v104 (20:37 VN)",
+  "requested_by_user": "11/11/2026 ~20:40 VN, \"Chạy lại 32956\" (2 số đuôi 455, 704, nằm trong nhóm số anh đã đồng ý)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "precheck_vn": "20:40:33: 32956 hoàn thành, không token, không cooldown (recentDeliveryCooldownEnabled=false), không nhiều khung giờ; 2 data hoàn thành (8478863 note NULL, 8478864 note 'Đã là bạn bè (Z225)'); tài khoản 2445 chờ xử lý, đã đăng nhập, không khoá thao tác, không lease; đếm hôm nay: tra số 4, nhắn người lạ 4, kết bạn 1 (giới hạn ngày 30); cờ 526 bật",
+  "writes": {
+    "at_utc": "2026-11-11T13:42:24.097253+00:00",
+    "transaction": "một giao dịch, có khối kiểm trước (đúng tổ chức/nhân viên/tài khoản/loại, chiến dịch hoàn thành, không token, không lease, không data đang chạy, đủ 2 data hoàn thành)",
+    "input_data": "UPDATE auto_campaign_input_data SET status='chờ xử lý' WHERE campaign_id=32956 AND is_delete=false AND status IN ('tạm dừng','hoàn thành') AND id IN (8478863,8478864) — như Desktop 'Chạy lại' data (bulkUpdateCampaignInputDataStatus, chỉ đổi trạng thái)",
+    "campaign": "UPDATE auto_campaigns SET status='chờ xử lý', note=NULL, completed_at=NULL, updated_at=now() WHERE id=32956 AND staff_id=547 AND action_id='zalo_message_phone' AND is_delete=false AND status='hoàn thành' — như reopenCompletedCampaignAfterInputInsert",
+    "why_not_rpc": "aka_agent_set_zalo_server_campaign_status chỉ cho tạm dừng → chờ xử lý; không có RPC mở lại chiến dịch đã hoàn thành ngoài đường cập nhật trực tiếp của Desktop"
+  },
+  "run": {
+    "runner": "fly:784574da214578:640",
+    "targets": [
+      {
+        "run": 5,
+        "input": 8478863,
+        "phone_tail": "455",
+        "started_vn": "20:42:24",
+        "completed_vn": "20:42:25",
+        "final": "hoàn thành",
+        "outcomes": [
+          "v2:5:lookup ok",
+          "v2:5:message ok delivered",
+          "v2:5:friend ok delivered"
+        ]
+      },
+      {
+        "run": 6,
+        "input": 8478864,
+        "phone_tail": "704",
+        "started_vn": "20:42:55",
+        "completed_vn": "20:42:57",
+        "final": "hoàn thành",
+        "outcomes": [
+          "v2:6:lookup ok",
+          "v2:6:message ok delivered",
+          "v2:6:friend err_zalo_already_friend not_delivered"
+        ]
+      }
+    ],
+    "campaign_log": [
+      "🚀 Bắt đầu chiến dịch",
+      "▶️ Xử lý - <SĐT 455>",
+      "Tìm SĐT: Đã tìm thấy …",
+      "Nhắn tin người lạ: Đã gửi tin nhắn …",
+      "Kết bạn: Đã gửi lời mời kết bạn …",
+      "✅ Hoàn thành - <SĐT 455>",
+      "⏳ Nghỉ 30s trước khi xử lý mục tiếp theo...",
+      "▶️ Xử lý - <SĐT 704>",
+      "Tìm SĐT: …",
+      "Nhắn tin người lạ: …",
+      "Kết bạn: Đã là bạn bè (Z225)",
+      "✅ Hoàn thành - <SĐT 704>",
+      "✅ Hoàn thành chiến dịch"
+    ],
+    "campaign_after": "hoàn thành lúc 20:42:57 VN",
+    "notes": [
+      "Bộ chạy nhận chiến dịch ngay trong giây mở lại (20:42:24), số 455 xong trong 1 giây, nghỉ 30 giây rồi tới số 704.",
+      "Số 455 nhận lời mời kết bạn lần thứ hai (lần đầu 20:17); Zalo vẫn nhận. Cả hai số nhận tin lần thứ ba trong ngày (9150 lúc 17:16, 32956 lúc 20:17 và 20:42) vì chiến dịch không bật chống gửi lặp."
+    ]
+  },
+  "web_progress": {
+    "server_path": "Dòng tiến trình đi runtime.appendLog → appendCampaignLogWithRealtime (pg_notify aka_agent_chat_campaign_log) → ChatApi api → client Web của nhân viên 547/tổ chức 526. Kênh Web chỉ phát trực tiếp, không phát lại dòng cũ.",
+    "web_log": "Log Web có 2 lượt POST /realtime-ticket 200 lúc 20:42:33 và 20:42:35 VN (không phân biệt được phiên); nếu đó là lúc trang của anh nối kênh thì anh thấy các dòng của số 704 (20:42:55–57), không thấy các dòng của số 455 (20:42:24–25).",
+    "confirmed_by_user": "11/11/2026 sau 20:43 VN: anh báo \"Đã thấy\" dòng tiến trình trên Web (tổ chức 526, bản Web v104)"
+  }
+}

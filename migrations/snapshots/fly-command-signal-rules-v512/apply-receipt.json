@@ -1,0 +1,74 @@
+{
+ "migration": "migration_v512_fly_command_signal_rules",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "12/11/2026 ~21:47 VN, \"Apply V512\" (câu hỏi: Apply V512 lên akachat bây giờ không?)",
+ "tool": "supabase db query --linked -f, chạy nguyên văn file; dòng sổ migration chèn ngay trước COMMIT của file, cùng một giao dịch (scripts/make-migration-ledger-apply.cjs); statements[1] = nguyên văn file",
+ "file_md5": "afaf9540c37476b4d4f5bd05fdb10b0d",
+ "file_bytes": 9800,
+ "generated_by": "scripts/build-v512-sql.cjs (câu ghi chú 2 luật phiên tag sửa 21:40 VN theo quyết định 'phiên tag theo Desktop')",
+ "rollback_file_md5": "88d7d5d53054f18443f810d7a38c53ad",
+ "ledger": {
+  "version": "20261112144814",
+  "name": "migration_v512_fly_command_signal_rules",
+  "statements_md5": "afaf9540c37476b4d4f5bd05fdb10b0d",
+  "created_by": null
+ },
+ "applied_at_vn": "2026-11-12 21:48:24–21:48:28 (exit 0, không lỗi; câu lệnh vào postgres_logs 14:48:25 UTC)",
+ "what": "Chỉ dữ liệu của engine v2: 9 dòng auto_outcome_signal_rules (source v512, signal_kind fly_command, id 94–102). Lệnh đọc không có kết quả / giao runtime lỗi ở pha before_send → NET03; runtime_payload_invalid → NET03; runtime_label_session_reset before_send → NET03, in_flight → UNK01; command_result_unknown / command_dispatch_failed × zalo_tag_contact / zalo_change_alias → NET01 (như Desktop treo tới hạn bước). Không đổi chính sách, mã lỗi hay hàm.",
+ "precheck": {
+  "at_vn": "2026-11-12 21:48:04",
+  "ledger_tail": [
+   "20261112104442 migration_v509_zalo_personal_112_too_long",
+   "20261112104557 migration_v510_zalo_engagement_id_driven_lookups",
+   "20261112111812 migration_v502_campaign_limit_progress"
+  ],
+  "ledger_v512": 0,
+  "git_all_branches": "không nhánh nào khác dùng V512 (V511 thuộc claude/beautiful-ride-u2f98b, chưa apply)",
+  "codes_active": 3,
+  "v512_rules": 0,
+  "fly_command_rules_active": 12,
+  "rules_total": 93,
+  "classify_before": {
+   "command_result_unknown × zalo_find_phone_user × before_send": "err_engine_unknown_delivery",
+   "command_result_unknown × zalo_tag_contact × in_flight": "err_engine_unknown_delivery",
+   "runtime_label_session_reset × zalo_message_stranger × before_send": "err_network_offline"
+  },
+  "lint_rows": 0,
+  "flagged_orgs": 0,
+  "engine_leases_live": 0,
+  "db_load": "2 truy vấn client đang chạy, 0 chờ khoá"
+ },
+ "verify": {
+  "at_vn": "21:48:55",
+  "ledger_statements_md5_equal_file": true,
+  "v512_rules": [
+   "94:*:before_send:command_result_unknown:err_engine_runtime_unavailable",
+   "95:*:before_send:command_dispatch_failed:err_engine_runtime_unavailable",
+   "96:*:*:runtime_payload_invalid:err_engine_runtime_unavailable",
+   "97:*:before_send:runtime_label_session_reset:err_engine_runtime_unavailable",
+   "98:*:in_flight:runtime_label_session_reset:err_engine_unknown_delivery",
+   "99:zalo_tag_contact:*:command_result_unknown:err_network_offline",
+   "100:zalo_tag_contact:*:command_dispatch_failed:err_network_offline",
+   "101:zalo_change_alias:*:command_result_unknown:err_network_offline",
+   "102:zalo_change_alias:*:command_dispatch_failed:err_network_offline"
+  ],
+  "rules_total": 102,
+  "classify_cells_ok": "16/16 (15 ô của smoke V512 + quá giờ của Desktop ở bước gắn tag = NET01)",
+  "desktop_signals_unchanged": {
+   "zalo_code 122 × zalo_message_stranger × after_send": "err_zalo_receiver_blocks_stranger_message",
+   "message_like 'fetch failed' × zalo_message_stranger × in_flight": "err_engine_unknown_delivery",
+   "errno ECONNREFUSED × zalo_find_phone_user × before_send": "err_network_offline"
+  },
+  "aux_policy_fly_equals_desktop": "NET01 của zalo_tag_contact / zalo_change_alias: Fly (in_flight) = Desktop (before_send): end_unit, requeue, no_count, streak ignore, khoá 11 thao tác Zalo 5 phút",
+  "net03_message_stranger_before_send": "requeue, no_count, end_unit",
+  "lint_rows": 0,
+  "flagged_orgs": 0,
+  "postgrest": "không nạp lại schema (không DDL; bảng tạm pg_temp); không có dòng postgrest_logs nào 14:47:30–14:51 UTC",
+  "edge_logs_rest": "14:45–14:49 UTC: 0 lỗi 5xx, 0 lỗi 503, p50 45 ms. Trong lúc và sau apply (14:48:25–14:49) p99 98–124 ms. Đợt chậm 14:48:13–14:48:16 UTC (107 request > 1 giây, chủ yếu auto_accounts / auto_campaigns / vòng automation) xảy ra trước câu lệnh V512 12 giây và là đợt lặp lại mỗi 30 phút (13:48 184 request > 1 giây, 14:18 63, 14:48 107), không do V512",
+  "postgres_logs": "chỉ dòng câu lệnh V512 và lỗi quyền quen thuộc của máy Desktop < 9.1.0; không lỗi của V512",
+  "tests_local": "smoke V512 3 nhóm (PG17: 8/15 ô đổi, postflight giữ nguyên mọi ô khác, chính sách và lint; chạy lại bị chặn; gỡ rồi apply lại); campaign-outcome-engine-check-all.cjs 26/26; ChatApi npm run verify 184 file / 2.647 test; 2 file test dùng V512 mới 19/19"
+ },
+ "scope": "Chỉ engine v2 đọc. Hiện không tổ chức nào bật cờ, ChatApi production chạy dev không có v2, Desktop bản mới chưa phát hành ⇒ hành vi production không đổi. Bộ chạy cũ không đọc auto_outcome_signal_rules; Desktop không phát tín hiệu fly_command.",
+ "rollback": "migrations/rollback_v512_fly_command_signal_rules.sql (md5 88d7d5d53054f18443f810d7a38c53ad): xoá 9 luật source 'v512'; postflight kiểm command_result_unknown về lại UNK01, mọi ô ngoài V512 và chính sách không đổi.",
+ "do_not_reapply": "Preflight từ chối khi sổ đã có migration_v512_* hoặc đã có luật source v512 / luật trùng"
+}
