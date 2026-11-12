@@ -31,7 +31,7 @@ import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandom
 import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, type WebEnrichmentState } from '../shared/facebookWebEnrichment'
 import type { BrowserPreview } from '../shared/browserPreview'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
-import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot } from '../shared/desktopUiReads'
+import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignPageReadOptions, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot, type DesktopUiAttention } from '../shared/desktopUiReads'
 import type { AuthRenewalRecheckResult, AuthRenewalRequired, ChatWebState, CrmWebDescriptor, LoginScreenContent, RenewalWebDescriptor, RenewalWebState } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
@@ -638,7 +638,14 @@ const electronAPI = {
     day: (accountId: number, query: FacebookRandomReadQuery): Promise<FacebookRandomDay> => ipcRenderer.invoke(FACEBOOK_RANDOM_RUN_IPC, 'day', accountId, query)
   },
   getDesktopPollingSettings: (): Promise<DesktopPollingSettings> => ipcRenderer.invoke(DESKTOP_UI_IPC.settings),
-  getDesktopCampaignPage: (query: DesktopCampaignPageQuery): Promise<DesktopCampaignPage> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignPage, query),
+  getDesktopCampaignPage: (query: DesktopCampaignPageQuery, options?: DesktopCampaignPageReadOptions): Promise<DesktopCampaignPage> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignPage, query, options),
+  // Trạng thái cửa sổ/máy cho bộ điều phối đọc (docs/DESKTOP_UI_IDLE_READS.md): lệnh nội bộ, không đọc DB.
+  getDesktopUiAttention: (): Promise<DesktopUiAttention> => ipcRenderer.invoke(DESKTOP_UI_IPC.attention),
+  onDesktopUiAttentionChanged: (callback: () => void): () => void => {
+    const handler = () => callback()
+    ipcRenderer.on(DESKTOP_UI_IPC.attentionChanged, handler)
+    return () => ipcRenderer.removeListener(DESKTOP_UI_IPC.attentionChanged, handler)
+  },
   getDesktopCampaignSelection: (query: DesktopCampaignSelectionQuery): Promise<DesktopCampaignSelection[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignSelection, query),
   getDesktopAccountSnapshot: (version?: string): Promise<DesktopAccountSnapshot> => ipcRenderer.invoke(DESKTOP_UI_IPC.accountSnapshot, version),
   getDesktopCampaignSources: (id: number): Promise<number[]> => ipcRenderer.invoke(DESKTOP_UI_IPC.campaignSources, id),

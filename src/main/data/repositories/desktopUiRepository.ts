@@ -6,7 +6,8 @@ import type { CampaignConfig, CampaignLogSnapshot } from '../../../shared/types'
 import { validateHistoryQuery, type CampaignHistoryQuery, type CampaignHistoryPage } from '../../../shared/campaignHistory'
 import { listCampaignSummariesForPage, attachCampaignSecondaryAccountNames, attachCampaignDataGroupSourceSummaries } from './campaignRepository'
 import {
-  DEFAULT_DESKTOP_POLLING, DESKTOP_POLL_KEYS, parseDesktopPollSeconds,
+  DEFAULT_DESKTOP_POLLING, DESKTOP_POLL_KEYS, DESKTOP_UI_TUNING_KEYS, DESKTOP_UI_TUNING_RANGES,
+  normalizeDesktopCampaignPageReadOptions, parseDesktopPollSeconds, parseDesktopUiFlag, parseDesktopUiSeconds,
   type DesktopAccountSnapshot, type DesktopCampaignPage, type DesktopCampaignPageQuery,
   type DesktopCampaignSelection, type DesktopCampaignSelectionQuery, type DesktopPollingSettings
 } from '../../../shared/desktopUiReads'
@@ -27,14 +28,19 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
     return {
       campaigns: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.campaigns)),
       accounts: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.accounts)),
-      zaloShareRepeatEnabled: parseZaloShareRepeatSetting(values.get(ZALO_SHARE_REPEAT_SETTING_KEY))
+      zaloShareRepeatEnabled: parseZaloShareRepeatSetting(values.get(ZALO_SHARE_REPEAT_SETTING_KEY)),
+      // Giảm đọc khi không ai nhìn/khi số không đổi: cùng câu đọc này, thiếu dòng hoặc sai = tắt (như trước).
+      hiddenPauseEnabled: parseDesktopUiFlag(values.get(DESKTOP_UI_TUNING_KEYS.hiddenPauseEnabled)),
+      idleAfterSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idleAfterSeconds), DESKTOP_UI_TUNING_RANGES.idleAfterSeconds),
+      idlePollSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idlePollSeconds), DESKTOP_UI_TUNING_RANGES.idlePollSeconds),
+      progressRecountSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.progressRecountSeconds), DESKTOP_UI_TUNING_RANGES.progressRecountSeconds)
     }
   } catch { return { ...DEFAULT_DESKTOP_POLLING } }
 }
@@ -53,7 +59,9 @@ function validateFilters(filters: DesktopCampaignPageQuery['filters']) {
   return filters
 }
 
-export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery): Promise<DesktopCampaignPage> {
+export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery, readOptions?: unknown): Promise<DesktopCampaignPage> {
+  // Không gửi/không hợp lệ = null = đếm tiến độ mọi chiến dịch của trang như trước.
+  const progress = normalizeDesktopCampaignPageReadOptions(readOptions)
   if (!Number.isInteger(query.page) || query.page < 1 || query.page > 100_000) throw new Error('Trang không hợp lệ.')
   if (query.drafts && (!Array.isArray(query.drafts) || query.drafts.length > 10_000)) throw new Error('Danh sách bản nháp quá lớn.')
   const { data, error } = await getSupabaseClient().rpc('aka_agent_desktop_campaign_page', {
@@ -66,7 +74,9 @@ export async function getDesktopCampaignPage(query: DesktopCampaignPageQuery): P
   if (error) throw new Error(`Không thể tải trang chiến dịch: ${error.message}`)
   const result = data as Omit<DesktopCampaignPage, 'items' | 'selected'> & { ids: number[]; selectedId: number | null }
   const ids = [...new Set([...result.ids, ...(result.selectedId ? [result.selectedId] : [])])]
-  const rows = await listCampaignSummariesForPage(ids, result.extraAccounts)
+  const rows = await listCampaignSummariesForPage(ids, result.extraAccounts, progress
+    ? { mode: progress.progress, recountSeconds: progress.recountSeconds, selectedId: result.selectedId }
+    : undefined)
   const byId = new Map(rows.map(row => [row.id, row]))
   return {
     displaySettings: result.displaySettings,
