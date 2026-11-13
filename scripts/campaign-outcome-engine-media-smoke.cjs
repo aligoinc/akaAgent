@@ -179,6 +179,17 @@ async function main() {
     assert.equal(Number(await used(m2.account)), 2, 'giao một phần vẫn tính lượt')
     pass('album + chữ: gửi album rồi chữ; chữ lỗi → "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không đổi chuỗi lỗi, không gửi lại')
 
+    // M2b: album đã tới, lần gửi chữ hỏng ngay ở bước chuẩn bị của Desktop (zaloRuntimeService gắn dấu "trước khi gọi Zalo", cổng
+    // Desktop đổi thành pha before_send như dưới). Phần chữ chưa gửi nhưng album đã tới: vẫn là giao một phần, data hoàn thành,
+    // không về hàng đợi (nếu về hàng đợi thì lần sau gửi lại album).
+    const m2b = await make({ images: ['/x/a.jpg', '/x/b.mp4'], phones: ['0912000019'] })
+    const r2b = await run(m2b, { text: E.zaloPortErrorFrom(err('Failed to get account Zalo session: TypeError: fetch failed'), { phase: 'before_send' }) })
+    assert.deepEqual(r2b.calls.filter(x => !x.startsWith('prepare')), ['media:send_media:a.jpg,b.mp4:', 'text:uid-0912000019:Chào Lan'])
+    const d2b = await detail(m2b.ids[0])
+    assert.deepEqual([d2b.length, d2b[0].status, d2b[0].counts_toward_limit, d2b[0].data.partialSend.stage], [1, 'thất bại', true, 'content_after_media'])
+    assert.equal((await input(m2b.ids[0])).status, 'hoàn thành', 'album đã tới: không gửi lại')
+    pass('album đã tới rồi lần gửi chữ hỏng trước khi gọi Zalo (before_send): vẫn là giao một phần, data hoàn thành, không gửi lại album')
+
     // M3: quá giờ gửi media (lần gửi đầu) → không rõ đã tới (UNK01), không gửi lại, không ✅.
     const m3 = await make({ images: ['/x/a.png'], phones: ['0912000004'] })
     const r3 = await run(m3, { media: E.mediaFenceError(err('Gửi media quá thời gian chờ (180 giây). Đã đóng tác vụ; kết quả gửi chưa xác định, không tự gửi lại người nhận này.', 'campaign_media_timeout')) })

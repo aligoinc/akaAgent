@@ -15,6 +15,7 @@ import type { ZaloOutgoingText } from './zaloFormattedContent'
 import { buildZaloForwardMessageInfo } from '../../shared/zaloForwardMessage'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
+import { markZaloPreCallError, zaloPreCall } from './zaloPreCallError'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
 
@@ -599,6 +600,12 @@ export class ZaloRuntimeService {
   }
 
   async ensureApi(accountId: number): Promise<API> {
+    // Mọi lỗi ở đây xảy ra trước khi gọi Zalo cho thao tác của nơi gọi (đọc DB, kiểm gói, đăng nhập lại bằng phiên):
+    // gắn dấu để cổng engine v2 xếp "chưa gửi" thay vì "không rõ đã tới". Câu, mã, lớp lỗi giữ nguyên cho bộ chạy cũ.
+    return zaloPreCall(() => this.resolveApi(accountId))
+  }
+
+  private async resolveApi(accountId: number): Promise<API> {
     const account = await this.supabase.getAccountForZaloRuntime(accountId)
     if (!account) throw new Error('Không tìm thấy tài khoản')
     if (account.flatformType !== 'zalo') throw new Error('Tài khoản không phải nền tảng Zalo')
@@ -1896,8 +1903,9 @@ export class ZaloRuntimeService {
       ? { ...outgoing, attachments: safeAttachments }
       : outgoing
     const needsUploadCallback = safeAttachments.some(item => requiresZaloUploadCallback(String(item || '')))
-    const account = await this.supabase.getAccountForZaloRuntime(accountId)
-    if (!account || account.flatformType !== 'zalo') throw new Error('Không tìm thấy tài khoản Zalo')
+    // Đọc lại tài khoản và mở listener tải tệp đều trước khi gọi Zalo: lỗi ở đây chắc chắn chưa gửi gì (zaloPreCallError).
+    const account = await zaloPreCall(() => this.supabase.getAccountForZaloRuntime(accountId))
+    if (!account || account.flatformType !== 'zalo') throw markZaloPreCallError(new Error('Không tìm thấy tài khoản Zalo'))
     const isWebRuntime = account.isZaloShowWeb === true
     if (isWebRuntime && safeAttachments.some(item => !isZaloWebSupportedAttachment(String(item || '')))) {
       throw new Error('Zalo Web hiện chỉ hỗ trợ ảnh JPG, JPEG, PNG, WEBP hoặc GIF')
@@ -1921,7 +1929,7 @@ export class ZaloRuntimeService {
     })
 
     if (needsUploadCallback) {
-      await listenerPromise
+      await zaloPreCall(() => listenerPromise)
     } else {
       void listenerPromise.catch((err) => {
         console.warn('[ZaloRuntime] Failed to prepare Zalo listener for message send', {
