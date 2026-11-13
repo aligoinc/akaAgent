@@ -21,7 +21,8 @@
 }
 .campaign-import-dedup-option.active { border-color: var(--accent-primary); background: var(--bg-accent-subtle); }
 .campaign-import-dedup-option > label { display: flex; align-items: flex-start; gap: 10px; min-width: 0; cursor: pointer; }
-.campaign-import-dedup-option input[type="radio"] { flex-shrink: 0; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent-primary); }
+.campaign-import-dedup-option input[type="radio"],
+.campaign-import-dedup-option input[type="checkbox"] { flex-shrink: 0; width: 16px; height: 16px; margin: 2px 0 0; accent-color: var(--accent-primary); }
 .campaign-import-dedup-option-text { display: grid; gap: 2px; min-width: 0; }
 .campaign-import-dedup-option-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-weight: 600; color: var(--text-primary); }
 .campaign-import-dedup-option-desc { color: var(--text-secondary); }
@@ -62,6 +63,21 @@
 .campaign-import-dedup-days input { width: 76px; }
 .campaign-import-dedup-days input[aria-invalid="true"] { border-color: var(--accent-error); }
 .campaign-import-dedup-note { color: var(--text-secondary); font-size: 12px; }
+/* Khung có cả đối chiếu Nhóm data (V519/V522) lẫn chiến dịch (V491/V493): tên từng phần. */
+.campaign-import-dedup-section { color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+/* Nhóm data không có khung lọc trùng (loại data chưa đối chiếu được): một dòng nói hệ thống vẫn lọc gì. */
+.campaign-import-dedup-info {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.campaign-import-dedup-info svg { margin-top: 2px; color: var(--text-secondary); }
 .campaign-import-dedup-field-error { color: var(--accent-error); font-size: 12px; }
 .campaign-import-dedup-progress {
   display: grid;
@@ -86,9 +102,17 @@
 .campaign-import-dedup-error strong { color: var(--text-primary); }
 .campaign-import-dedup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .campaign-import-result-groups.has-existing { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+/* Nhóm data có thể có 5–6 nhóm kết quả: ba cột hai hàng để tên nhóm không bị cắt. */
+.campaign-import-result-groups.has-many { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .campaign-import-result-group.existing > button:first-child strong { color: var(--accent-warning); }
-@media (max-width: 900px) { .campaign-import-result-groups.has-existing { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 540px) { .campaign-import-result-groups.has-existing { grid-template-columns: 1fr; } }
+@media (max-width: 900px) {
+  .campaign-import-result-groups.has-existing,
+  .campaign-import-result-groups.has-many { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 540px) {
+  .campaign-import-result-groups.has-existing,
+  .campaign-import-result-groups.has-many { grid-template-columns: 1fr; }
+}
 .campaign-import-status-pill {
   display: inline-block;
   padding: 0 8px;
@@ -117,6 +141,21 @@
 .campaign-import-confirm-list li { display: grid; gap: 2px; padding: 10px 12px; border-bottom: 1px solid var(--border-default); }
 .campaign-import-confirm-list li:last-child { border-bottom: 0; }
 .campaign-import-confirm-list span { color: var(--text-secondary); }
+/* Nhóm data: có dòng bị lọc thì lưu thành danh sách mới, data cũ trong nhóm không bị gỡ. */
+.campaign-import-confirm-keep {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--accent-info) 40%, var(--border-default));
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--accent-info) 8%, transparent);
+  font-size: 13px;
+}
+.campaign-import-confirm-keep svg { margin-top: 1px; color: var(--accent-info); }
+.campaign-import-confirm-keep > div { display: grid; gap: 2px; min-width: 0; }
+.campaign-import-confirm-keep span { color: var(--text-secondary); }
+.campaign-import-confirm-keep .campaign-import-confirm-keep-name { color: var(--text-primary); overflow-wrap: anywhere; }
 
 /* Chọn tài khoản để đối chiếu. */
 .input-dup-picker { display: flex; flex-direction: column; width: min(680px, calc(100vw - 32px)); max-height: min(760px, calc(100vh - 32px)); }

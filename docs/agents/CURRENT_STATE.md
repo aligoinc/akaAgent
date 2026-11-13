@@ -1,5 +1,13 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
+[Lọc trùng khi thêm data vào Nhóm data trên Desktop + V522](../DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md):
+Code trên nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` (13/11/2026), **chưa merge, chưa build/phát hành; V522 chưa apply**.
+Cửa sổ "Thêm data từ file" của Nhóm data có hai ô "Bỏ data đã có trong nhóm này" (bật sẵn) và "Bỏ data đã có ở nhóm data khác",
+cộng khung lọc với chiến dịch (V491/V493) cho nhóm loại SĐT; gọi hàm đọc V519 bằng token Desktop qua IPC `data-group:member-matches`.
+V522 chỉ `GRANT EXECUTE` hàm V519 cho `aka_agent_desktop` (số 520/521 là nhắc gia hạn, đã apply 13/11; sổ migration chưa đọc lại được vì Supabase MCP
+mất kết nối, phải kiểm trước khi apply). Chưa có quyền thì Desktop ẩn hai ô và thêm data như trước, không báo lỗi.
+Kiểm thử: SQL 27/27, service 12/12, giao diện Electron 13/13, hai typecheck sạch. Chưa gọi thật qua PostgREST bằng token Desktop.
+
 [V519 đối chiếu khách đã có khi nhập vào Nhóm data](../DATA_GROUP_MEMBER_MATCHES_V519.md):
 **Đã apply akachat lúc 19:57:24 VN, 13/11/2026** (`20261113125724 / migration_v519_data_group_member_matches`;
 md5 sổ = md5 tệp `2e561485…`; không apply lại). Chỉ thêm hàm đọc `aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb)`
