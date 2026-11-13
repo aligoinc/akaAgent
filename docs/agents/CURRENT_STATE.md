@@ -36,6 +36,16 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop và App Server 9.7.0](../audits/akaagent-9.7.0-20261114/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 01:07:02–01:11:11 VN và App Server Windows x64 nội bộ lúc
+01:11:21–01:12:10 VN, 14/11/2026. Feed Windows, Mac, Mac Intel trả 9.7.0 từ 01:24–01:25 VN 14/11 (bộ cài trên akabiz.net cùng số byte với bản build); App Server chưa xác nhận đã cài lên VPS.** Nguồn worktree `release-9.7.0`,
+nhánh `codex/release-9.7.0` `17d94bde` (nền `origin/dev_3` `ca2b779c` sau PR #673, commit chỉ đổi version). Mới so với 9.6.0: dừng
+listener zca-js không để lại kết nối ma (#673, cả App Server), gia hạn phiên Desktop không phụ thuộc giờ máy (#658, #660), nhắc gia hạn
+trong phần mềm (#668; `renewal.reminder` lúc build là `audience: all` nên phát hành là mọi khách thấy), lọc trùng thêm data vào Nhóm
+data (#670), engine v2 Desktop #659/#666, đồng bộ trạng thái tin nhắn #672 (đang tắt). App Server build lại vì #673 và #672 chạy trên
+đường Zalo Server (26/223 file trong gói Server đổi từ 9.6.0). Smoke `zalo-message-status-sync` hỏng sẵn từ nhánh #672. Không DB/deploy
+service. [Receipt](../audits/akaagent-9.7.0-20261114/build-receipt.json).
+
 [Build akaAgent Desktop và App Server 9.6.0](../audits/akaagent-9.6.0-20261113/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 00:43:39–00:47:07 VN và App Server Windows x64 nội bộ lúc
 00:47:24–00:48:13 VN, 13/11/2026. Chưa upload/phát hành/feed; App Server chưa cài VPS.** Nguồn worktree `release-9.6.0`,

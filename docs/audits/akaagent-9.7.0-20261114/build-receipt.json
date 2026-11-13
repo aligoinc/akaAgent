@@ -1,0 +1,340 @@
+{
+  "version": "9.7.0",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.7.0",
+  "worktree_used": true,
+  "source_branch": "codex/release-9.7.0",
+  "source_commit": "17d94bde48246525afe0875d36cfadc85d45f79b",
+  "source_base_commit": "ca2b779cd82016bb4d1b926cef81b9ead25b0cf6",
+  "source_base_ref": "origin/dev_3 (sau PR #673)",
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "dependencies": "npm ci trong worktree 01:00–01:01 VN 14/11; better-sqlite3 dựng lại cho Electron arm64, checksum ced697fc… như repo chính",
+  "build_window_vn": {
+    "desktop": "2026-11-14 01:07:02 - 01:11:11",
+    "server": "2026-11-14 01:11:21 - 01:12:10"
+  },
+  "build_input_manifest": {
+    "files": 1464,
+    "scope": "file Git theo dõi dưới src/, scripts/, build/, packages/ và 9 file cấu hình gốc",
+    "sha256_before": "e95ada05d6851af80d139735f033e2360bf7e8e773f032719e320c54a95cc99b",
+    "sha256_after": "e95ada05d6851af80d139735f033e2360bf7e8e773f032719e320c54a95cc99b",
+    "identical": true
+  },
+  "smokes": {
+    "desktop_runtime_snapshot": "12 checks",
+    "desktop_ui_idle_reads_logic": "13 nhóm",
+    "zalo_share_repeat": "42 ca",
+    "server_rest_request_reduction": "19/19",
+    "zalo_listener_stop_retry": "12/12 (lớp Listener thật, có đối chứng)",
+    "desktop_session_clock_skew": "15 checks",
+    "campaign_media_timeout": "PASS",
+    "campaign_engine_desktop": "10 nhóm",
+    "renewal_reminder_desktop": "14 nhóm",
+    "data_group_member_matches_service": "12/12",
+    "campaign_outcome_engine_check_all": "30 bước OK",
+    "zalo_message_status_sync": "FAIL 24 nhóm đạt rồi hỏng ở \"file nối DB, Desktop\": \"phải có hẹn giờ gửi lô\". Có sẵn trước bản build: hỏng giống hệt ở f4632806 (nhánh #672 trước khi gộp dev_3), 23b38d58 và 2e144ba6; không phụ thuộc giờ chạy. Tính năng đang tắt (chưa có dòng zalo.message_status_sync.enabled), SQL V525/V526 chưa apply."
+  },
+  "desktop": {
+    "checks": {
+      "typecheck_node": "passed",
+      "typecheck_renderer": "passed",
+      "packaged_output_parity": "passed",
+      "desktop_secret_absence": "passed",
+      "existing_installers_preserved": true,
+      "host_native_restored": true
+    },
+    "listener_fix_markers_in_main": [
+      "startZaloListenerGuarded",
+      "stopZaloListenerGuarded"
+    ],
+    "artifacts": [
+      {
+        "id": "win",
+        "platform": "Windows x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgent-Setup-9.7.0.exe",
+        "version": "9.7.0",
+        "resource_version": "9.7.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 627,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "pe_versions": {
+          "installer": {
+            "version": "9.7.0",
+            "machine": "14c",
+            "authenticode_present": false
+          },
+          "app": {
+            "version": "9.7.0",
+            "machine": "8664",
+            "authenticode_present": false
+          }
+        },
+        "installer_payload_parity": true,
+        "bytes": 153293083,
+        "sha256": "a84fb74518eabee5d69b1ed8b85faedd89b0c68b901fb3f322cb438ba8c069da",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgent-Setup-9.7.0.exe"
+      },
+      {
+        "id": "arm",
+        "platform": "macOS ARM64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgent.dmg",
+        "version": "9.7.0",
+        "resource_version": "9.7.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "arm64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 182972142,
+        "sha256": "a787aa27e16140172c720ebedf0c3698ea17fbbc40d957fed90da1f1d99a82cb",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgent.dmg"
+      },
+      {
+        "id": "intel",
+        "platform": "macOS Intel x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgentIntel.dmg",
+        "version": "9.7.0",
+        "resource_version": "9.7.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "x86_64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 190141668,
+        "sha256": "76df2aab955e3b2f9052a3f354c8b93886d8b986dd5b113293e8f099755d320e",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.7.0/akaAgentIntel.dmg"
+      }
+    ]
+  },
+  "app_server": {
+    "built": true,
+    "reason": "26/223 file trong gói Server đổi từ Server 9.6.0 (3c59c5cd); chạy trên đường Zalo Server: 8b0d5e94 dừng listener zca-js không để lại kết nối ma (#673), 626551cb/2d2a7cc7 đồng bộ trạng thái tin nhắn (#672, đang tắt)",
+    "graph_files": 223,
+    "changed_files": [
+      "packages/campaign-engine/src/runUnit.ts",
+      "packages/campaign-engine/src/zalo/engagement.ts",
+      "packages/campaign-engine/src/zalo/messagePhone.ts",
+      "packages/campaign-engine/src/zalo/share.ts",
+      "packages/campaign-engine/src/zalo/smsPush.ts",
+      "src/main/data/desktopSession.ts",
+      "src/main/data/repositories/appNotificationRepository.ts",
+      "src/main/data/repositories/desktopUiRepository.ts",
+      "src/main/data/repositories/entitlementRepository.ts",
+      "src/main/data/repositories/renewalReminderRepository.ts",
+      "src/main/data/supabaseClient.ts",
+      "src/main/engineAdapters/desktopEngineRunner.ts",
+      "src/main/engineAdapters/desktopZaloPort.ts",
+      "src/main/services/campaignScheduler.ts",
+      "src/main/services/renewalReminderService.ts",
+      "src/main/services/runtimeCleanupRetry.ts",
+      "src/main/services/zaloListenerStopGuard.ts",
+      "src/main/services/zaloMessageStatusRuntime.ts",
+      "src/main/services/zaloMessageStatusSync.ts",
+      "src/main/services/zaloPreCallError.ts",
+      "src/main/services/zaloRuntimeService.ts",
+      "src/shared/desktopUiReads.ts",
+      "src/shared/renewalReminder.ts",
+      "src/shared/renewalReminderDesktop.ts",
+      "src/shared/types.ts",
+      "src/shared/zaloMessageStatusSync.ts"
+    ],
+    "command": "npm run build:server:win:private",
+    "time_vn": "2026-11-14 01:11:21 / 2026-11-14 01:12:10",
+    "verification": {
+      "verified_at": "2026-11-13T18:12:19.289Z",
+      "version": "9.7.0",
+      "installer": "dist-server/private/2026-11-13T18-11-21-466Z/akaAgent-Zalo-Server-Internal-Setup-9.7.0.exe",
+      "installer_bytes": 140479036,
+      "installer_sha256": "40468c9f5a6940f2028e5d52880ede774cc39bac1e4c3a7e4e1704211bf19161",
+      "checks": {
+        "windows_x64": true,
+        "installer_payload_parity": true,
+        "clean_host_credential_loading": true,
+        "server_main_parity": true,
+        "credential_absent_from_source_desktop_and_js": true,
+        "source_and_output_files_scanned": 4471,
+        "git_ignored": true,
+        "existing_server_installers_unchanged": true,
+        "host_native_restored": true
+      },
+      "windows_runtime_tested": false,
+      "published": false,
+      "rls_activation_applied": false
+    },
+    "copied_to": {
+      "installer": "/Users/lequangnhut/Repos/akaAgent/dist-server/akaAgent-Zalo-Server-Internal-Setup-9.7.0.exe",
+      "mode": "600",
+      "private_build_dir": "/Users/lequangnhut/Repos/akaAgent/dist-server/private/2026-11-13T18-11-21-466Z"
+    }
+  },
+  "existing_installers": {
+    "checked_unchanged": 52,
+    "note": "Bộ cài .exe/.dmg trong dist/ và dist-server/ của repo chính giữ nguyên checksum sau build"
+  },
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "time_vn": "01:02:05-01:02:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "time_vn": "01:02:12-01:02:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "snapshot-smoke",
+      "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+      "time_vn": "01:02:43-01:02:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "idle-reads-smoke",
+      "command": "node scripts/desktop-ui-idle-reads-logic-smoke.cjs",
+      "time_vn": "01:02:43-01:02:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "share-repeat-smoke",
+      "command": "node scripts/zalo-share-repeat-smoke-test.cjs",
+      "time_vn": "01:02:43-01:02:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "time_vn": "01:02:44-01:02:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "listener-stop-smoke",
+      "command": "node scripts/zalo-listener-stop-retry-smoke.cjs",
+      "time_vn": "01:02:44-01:02:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "session-clock-skew-smoke",
+      "command": "node scripts/desktop-session-rls/session-clock-skew-smoke.cjs",
+      "time_vn": "01:02:55-01:02:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "media-timeout-smoke",
+      "command": "node scripts/campaign-media-timeout-smoke-test.cjs",
+      "time_vn": "01:02:55-01:02:56",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-desktop-smoke",
+      "command": "node scripts/campaign-engine-desktop-smoke.cjs",
+      "time_vn": "01:02:56-01:03:03",
+      "result": "exit=0"
+    },
+    {
+      "label": "renewal-reminder-smoke",
+      "command": "node scripts/renewal-reminder-desktop-smoke.cjs",
+      "time_vn": "01:03:03-01:03:03",
+      "result": "exit=0"
+    },
+    {
+      "label": "member-matches-smoke",
+      "command": "node scripts/data-group-member-matches-service-smoke.cjs",
+      "time_vn": "01:03:03-01:03:03",
+      "result": "exit=0"
+    },
+    {
+      "label": "message-status-sync-smoke",
+      "command": "node scripts/zalo-message-status-sync-smoke.cjs",
+      "time_vn": "01:03:03-01:03:04",
+      "result": "exit=1"
+    },
+    {
+      "label": "engine-check-all",
+      "command": "env CHAT_REPO=/Users/lequangnhut/Repos/akaAgentChatApi node scripts/campaign-outcome-engine-check-all.cjs",
+      "time_vn": "01:03:04-01:04:18",
+      "result": "exit=0"
+    },
+    {
+      "label": "win",
+      "command": "npm run build:win",
+      "time_vn": "2026-11-14 01:07:02 - 2026-11-14 01:08:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "arm",
+      "command": "npm run build:mac",
+      "time_vn": "2026-11-14 01:08:45 - 2026-11-14 01:10:00",
+      "result": "exit=0"
+    },
+    {
+      "label": "intel",
+      "command": "npm run build:mac:intel",
+      "time_vn": "2026-11-14 01:10:00 - 2026-11-14 01:11:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "build-server",
+      "command": "npm run build:server:win:private",
+      "time_vn": "2026-11-14 01:11:21 / 2026-11-14 01:12:10",
+      "result": "exit=0"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "feed_changed": false,
+  "app_server_installed_on_vps": false,
+  "database_changed": false,
+  "services_deployed": false,
+  "settings_read_at_build": {
+    "renewal.reminder": "{\"audience\":\"all\",\"bell\":true,\"legacyBanner\":true} (phát hành là mọi khách dùng 9.7.0 thấy nhắc gia hạn; tắt khẩn cấp {\"audience\":\"off\"})",
+    "desktop.updates.startup_prompt_max_version": "NULL (mở hộp cập nhật khi khởi động cho mọi phiên bản)",
+    "zalo.message_status_sync.enabled": "chưa có dòng (tắt)"
+  },
+  "limitations": [
+    "Windows chưa ký Authenticode, chưa cài/chạy trên Windows thật.",
+    "Mac ký ad-hoc, chưa notarize; Intel chỉ thử SQLite qua Rosetta.",
+    "Chưa chạy luồng đăng nhập, chiến dịch hay Zalo thật trên bộ cài.",
+    "App Server chưa cài lên VPS.",
+    "Smoke zalo-message-status-sync hỏng sẵn từ nhánh #672 (xem smokes)."
+  ]
+}

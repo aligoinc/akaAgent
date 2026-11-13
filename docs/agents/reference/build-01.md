@@ -40,6 +40,14 @@ origin/dev_3`, commit version, rồi `npm ci` (~15 giây; postinstall dựng `be
 của 9.4.0 (`~/.codex/builds/akaagent-9.4.0-*/verify-build.cjs`) dùng lại được: đổi `root`, số bản, `(9<<16)+<minor>`, và dùng
 `path.resolve` cho file nằm ngoài worktree. Script, log, manifest của 9.6.0 ở `dist/build-9.6.0-work/` của repo chính.
 
+**Bộ script dùng lại (14/11/2026, 9.7.0).** `dist/build-9.7.0-work/` của repo chính có đủ một lượt build, chạy trong worktree
+release: `snapshot.cjs before` (manifest đầu vào, checksum bộ cài cũ của repo chính, `before.json`) → `run-checks.sh` (typecheck +
+smoke, gồm smoke của các PR mới phải tự thêm) → `run-builds.sh` → chụp `dist-server/private/verification-before.json` →
+`build:server:win:private` → `verify-private-server-build.cjs <thư mục private>` → `verify-build.cjs` (sinh từ bản trước bằng sed:
+đường dẫn worktree, số bản, `(9<<16)+<minor>`, tiền tố thư mục tạm) → `snapshot.cjs after` → `server-graph.cjs` (đồ thị App Server
+giao diff từ Server lần trước) → `make-receipt.cjs` (receipt JSON từ các file kiểm). Đổi số bản trong các script rồi chạy đúng thứ tự.
+Smoke hỏng thì chạy lại ở commit trước PR liên quan (worktree tạm, `node_modules` symlink) để biết lỗi có sẵn hay do bản build.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
