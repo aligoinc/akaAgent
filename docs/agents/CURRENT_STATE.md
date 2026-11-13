@@ -7,8 +7,8 @@ SECURITY DEFINER, `search_path` giữ nguyên): claim token bộ cũ trên chi�
 `runtime_claimed_at` và `updated_at` cũ hơn `engine.legacy_stale_claim_minutes` (mặc định 30, chưa có dòng thiết lập) không còn trả
 `legacy_busy`; token thao tác tài khoản, unit lease, claim trên chiến dịch chờ / đang chạy vẫn chặn; hàm không xoá token. Trước apply 437 tài
 khoản Zalo Server của tổ chức chưa bật cờ sẽ đứng khi bật cờ, sau apply 0 (453 tổ chức đã bật cờ lúc apply). Smoke tự huỷ trên production đạt;
-0 lỗi 5xx/503, PostgREST nạp lại schema 1,8 s. Migration, smoke, script quét chỉ đọc `scripts/engine-v2-legacy-busy-scan.cjs` ở PR #674,
-**chưa merge `dev_3`**. [Receipt](../../migrations/snapshots/engine-claim-stale-legacy-token-v527/apply-receipt.json).
+0 lỗi 5xx/503, PostgREST nạp lại schema 1,8 s. Migration, smoke, script quét chỉ đọc `scripts/engine-v2-legacy-busy-scan.cjs` đã merge
+`dev_3` qua #674 (02:05 VN, trước khi apply). [Receipt](../../migrations/snapshots/engine-claim-stale-legacy-token-v527/apply-receipt.json).
 
 [Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
 **Mã đã merge `dev_3` qua #672 (13/11/2026; WebApp `dev_1` qua #226), chưa build/phát hành,

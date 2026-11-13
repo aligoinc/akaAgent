@@ -6,7 +6,7 @@
  "file_md5": "40f62f5f6a6466de90c7dd481d95d7d8",
  "file_bytes": 38763,
  "rollback_file_md5": "cbc7e5dc0ba48772af0e56692f14c5e4",
- "source_commit": "f30b2941 (nhánh claude/engine-claim-stale-legacy-token, PR aligoinc/akaAgent#674, chưa merge)",
+ "source_commit": "f30b2941 (nhánh claude/engine-claim-stale-legacy-token, PR aligoinc/akaAgent#674, đã merge dev_3 lúc 02:05:47 VN 14/11/2026, merge b19ddd87, trước khi apply)",
  "ledger": {
   "version": "20261113190717",
   "name": "migration_v527_engine_claim_skip_stale_legacy_token",
