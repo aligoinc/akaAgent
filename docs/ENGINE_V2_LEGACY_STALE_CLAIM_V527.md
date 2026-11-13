@@ -1,7 +1,9 @@
 # Engine v2: claim token bộ cũ treo trên chiến dịch tạm dừng / đã xoá (V527)
 
-> 14/11/2026. **V527 là migration ứng viên, CHƯA apply production.** Không đổi bảng, dữ liệu, thiết lập; không đổi bộ chạy cũ.
-> Production chỉ được đọc (akachat `cgjbsmqtfhqvttudyjzq`): định nghĩa hàm, sổ migration, số đo bên dưới.
+> **V527 đã apply akachat 14/11/2026 02:07:26 VN** (`20261113190717 / migration_v527_engine_claim_skip_stale_legacy_token`; anh: "Apply V527
+> lên akachat luôn đi"; md5 sổ = md5 tệp `40f62f5f…`; **không apply lại**;
+> [biên nhận](../migrations/snapshots/engine-claim-stale-legacy-token-v527/apply-receipt.json)). Không đổi bảng, dữ liệu, thiết lập; không
+> đổi bộ chạy cũ. Kết quả ở mục "Apply" cuối tài liệu.
 
 ## Sự cố
 
@@ -45,7 +47,7 @@ thời gian là chốt thêm cho lượt vừa bị tạm dừng giữa chừng 
 Không đổi: đếm giới hạn tài khoản Zalo Web chạy đồng thời (Desktop) vẫn đếm chiến dịch giữ token như `aka_agent_claim_campaign_runtime_checked`
 (hai bộ dùng chung giới hạn); `finish_campaign_v2` / `materialize_v1` chỉ kiểm chính chiến dịch đang chạy (phải "chờ xử lý" / "đang chạy").
 
-### Ngưỡng đề xuất: 30 phút
+### Ngưỡng: 30 phút (mặc định đang dùng, chưa có dòng thiết lập)
 
 Thiết lập `engine.legacy_stale_claim_minutes` trong `auto_system_settings` (chưa có dòng nào; đổi không cần migration): mặc định **30**,
 sàn **10**, giá trị sai định dạng / tắt dùng 30, bỏ khoảng trắng. 30 phút = 3 lần `engine.stale_target_minutes` (10, mốc engine coi một
@@ -89,18 +91,28 @@ và lý do. Tham số: `--org 526,557`, `--enabled`, `--all-orgs`, `--all-zalo`,
 Chạy được từ worktree (tự tìm checkout chính đã link). Trước V527, mọi tài khoản trong danh sách "Bị chặn theo V507" sẽ đứng sau khi bật cờ;
 sau V527, tài khoản còn trong danh sách là đang bị bộ cũ giữ thật (chờ bộ cũ nhả, không gỡ tay).
 
-## Kế hoạch apply (chờ anh bảo)
+## Apply (đã làm 14/11/2026 02:07:25–02:07:27 VN)
 
-Thời điểm đề xuất: ngoài giờ cao điểm (trước 09:30, 12:00–13:30 hoặc sau 17:00 VN), **trước đợt bật cờ hàng loạt**; DDL làm PostgREST
-nạp lại schema một lần (các lần trước 2–8 giây, không lỗi 5xx). Nếu bật cờ trước khi apply: quét rồi gỡ tay từng đợt như 01:28.
+- Kiểm ngay trước (02:06 VN, chỉ đọc): sổ chưa có V527; hàm đúng `e09100fd…` / `f33e534e…`, quyền như trên; DB 0 truy vấn đang chạy,
+  0 chờ khoá; 453 tổ chức đã bật cờ. Quét: tổ chức chưa bật cờ 437 tài khoản Server bị chặn, tổ chức đã bật cờ 0.
+- Apply qua tệp bọc sổ (exit 0). Hậu kiểm 02:08 VN: sổ `20261113190717`, md5 statements = tệp; hàm `f8935a5a…` / `43e14ce4…`, chủ sở
+  hữu, SECURITY DEFINER, `search_path`, ACL giữ nguyên, `anon` / `authenticated` không có EXECUTE.
+- Smoke tự huỷ trên production (khối DO kết thúc bằng RAISE): hai tài khoản Server có 7 và 6 chiến dịch giữ claim treo đi qua đoạn kiểm
+  token (`runtime_not_owner` với runtime desktop, trước V527 là `legacy_busy`); tài khoản QR đang bị Desktop bản cũ giữ vẫn `legacy_busy`
+  scope account; không lease nào được ghi, token giữ nguyên.
+- Quét sau apply (02:09 VN): "Hàm claim đang chạy: V527", 0 tài khoản Server bị chặn; 84 tài khoản QR / Web còn chặn đều do bộ cũ đang
+  giữ token thao tác (như trước). Engine v2 vẫn nhận lượt (18 lượt Fly trong 3 phút sau apply).
+- PostgREST nạp lại schema 1,8 giây; REST 0 lỗi 5xx / 503, p99 109 ms trong 30 giây nạp lại rồi về 91–93 ms; lỗi Postgres giữ mức nền.
+
+Cách đã làm (giữ để tra; thời điểm chọn: ngoài giờ cao điểm, trước đợt bật cờ hàng loạt):
 
 1. Chỉ đọc ngay trước: sổ chưa có `migration_v527_%`; md5 thân / định nghĩa hàm claim `e09100fd…` / `f33e534e…`; chạy script quét, giữ kết quả.
-   Nếu anh muốn, chạy thử tệp với `COMMIT;` cuối thay bằng `ROLLBACK;` (như V502) trong cùng lần được duyệt apply.
+   Không chạy thử riêng trên production: preflight / hậu kiểm nằm trong cùng giao dịch, lỗi là huỷ cả giao dịch.
 2. `node scripts/make-migration-ledger-apply.cjs migrations/migration_v527_engine_claim_skip_stale_legacy_token.sql migration_v527_engine_claim_skip_stale_legacy_token <tệp ra>`
    rồi `supabase db query --linked --workdir /Users/lequangnhut/Repos/akaAgent -f <tệp ra>`; lỗi bất kỳ thì cả giao dịch huỷ, sổ không ghi.
-3. Hậu kiểm: `md5(statements[1])` của sổ = md5 tệp; hàm `f8935a5a…` / `43e14ce4…`, ACL như trước; script quét in "Hàm claim đang chạy:
-   V527"; log worker Fly bớt `legacy_busy`; `edge_logs` không 5xx / 503 quanh phút apply.
-4. Gỡ: `migrations/rollback_v527_engine_claim_skip_stale_legacy_token.sql` (trả thân V507).
+3. Hậu kiểm: `md5(statements[1])` của sổ = md5 tệp; hàm `f8935a5a…` / `43e14ce4…`, ACL như trước; smoke tự huỷ; script quét in "Hàm
+   claim đang chạy: V527"; `edge_logs`, `postgrest_logs`, `postgres_logs` quanh phút apply.
+4. Gỡ (khi cần, phải được duyệt): `migrations/rollback_v527_engine_claim_skip_stale_legacy_token.sql` (trả thân V507, không xoá dòng sổ).
 
 ## Chưa làm
 
