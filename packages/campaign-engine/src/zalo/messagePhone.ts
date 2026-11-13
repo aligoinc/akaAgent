@@ -229,7 +229,7 @@ export function zaloMessagePhoneV2Support(campaign: ZaloMessagePhoneCampaign, en
   const messageOn = uidType?.friendMessage === true || extra.enableMessage === true
   if (!messageOn && extra.enableAddFriend !== true) return no('no_send_step')
   // Bạn bè "toàn bộ / theo tag", sinh nhật, đề xuất Zalo: lấy data đầu lượt (materialize.ts, V505).
-  // Kiêm SMS (smsPush.ts): nội bộ chạy cả hai nơi (RPC V506); akaBiz Sms chỉ nơi có tích hợp (Desktop).
+  // Kiêm SMS (smsPush.ts): nội bộ chạy cả hai nơi (RPC V506); akaBiz Sms chỉ nơi cổng có pushExternalSms (env.externalSmsPush).
   if (extra.internalSmsEnabled !== true && extra.externalSmsEnabled === true && (!uidType || uidType.smsPush) && env.externalSmsPush !== true) {
     return no('sms_push_external')
   }
