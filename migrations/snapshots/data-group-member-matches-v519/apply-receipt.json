@@ -1,0 +1,72 @@
+{
+  "migration": "migration_v519_data_group_member_matches",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261113125724",
+  "applied_at_vn": "2026-11-13T19:57:24+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user answer 'Áp ngay' to the question 'Có áp hàm V518 lên DB thật (akachat) ngay bây giờ không?' (13/11/2026, WebApp session); renumbered to V519 before apply because the ledger already held migration_v518_renewal_reminder_state",
+  "file_md5": "2e5614851b0ed0e239972b254463a72d",
+  "ledger_statements_md5": "2e5614851b0ed0e239972b254463a72d",
+  "ledger_statement_count": 1,
+  "ledger_statement_octets": 15438,
+  "ledger_rows_named_v519": 1,
+  "rollback_file": "migrations/rollback_v519_data_group_member_matches.sql",
+  "rollback_md5": "ed27b0d520a44fd03e9b0ec586afaef7",
+  "preflight_read_only_at_vn": "2026-11-13T19:49:01+07:00",
+  "preflight": {
+    "target_existed": false,
+    "functions_with_same_name": 0,
+    "ledger_had_v519": false,
+    "ledger_last_version": "20261113124622 (aka_promotion_min_days_before_expiry); 20261113124537 = migration_v518_renewal_reminder_state",
+    "dependencies": {
+      "public.aka_agent_internal_normalize_phone(text)": { "functiondef_md5": "b3ad52bceed9a68a6648956fbc622629", "security_definer": false, "volatility": "immutable" },
+      "public.auto_assert_automation_identity(bigint,bigint,text,text)": { "functiondef_md5": "f50796438b0e90ef184fa25cc4043e98", "security_definer": true, "volatility": "stable" }
+    },
+    "contact_index": "uq_auto_account_contacts_account_type_uid UNIQUE btree (account_id, contact_type, uid)",
+    "member_index": "idx_auto_account_contact_group_members_contact btree (contact_id)"
+  },
+  "dry_run": {
+    "method": "One DO block on production right before apply: every statement of the file (without BEGIN/COMMIT/NOTIFY) ran through EXECUTE, then behaviour checks as service_role, then a final RAISE aborted the statement. Afterwards the function was absent and the ledger unchanged.",
+    "preflight_create_acl_postflight": "passed",
+    "functiondef_md5": "8770c4dd7dab238fbc499c85e9cc942b",
+    "known_phone_stored_form_and_plus84_form": "both reported in the group",
+    "impossible_number_and_empty_string": "not reported",
+    "other_staff_other_organization": "42501 data_group_matches_group_denied",
+    "contact_type_email": "22023 data_group_matches_invalid_contact_type"
+  },
+  "postflight": {
+    "checked_at_vn": "2026-11-13T19:57:43+07:00",
+    "signature": "public.aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb) returns jsonb",
+    "functiondef_md5": "8770c4dd7dab238fbc499c85e9cc942b",
+    "owner": "postgres",
+    "security_definer": true,
+    "volatility": "stable",
+    "config": ["search_path=pg_catalog, public", "statement_timeout=15s"],
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "execute": { "service_role": true, "anon": false, "authenticated": false, "aka_agent_desktop": false, "aka_agent_chat_api": false },
+    "dependencies_unchanged": {
+      "aka_agent_internal_normalize_phone": "b3ad52bceed9a68a6648956fbc622629",
+      "auto_assert_automation_identity": "f50796438b0e90ef184fa25cc4043e98"
+    }
+  },
+  "behaviour_smoke_read_only": {
+    "method": "One DO block on production after apply, reads only, final RAISE carries the numbers. No identity or phone left the database.",
+    "group": "a real data group of an active staff, 9,878 members, staff has 2 accounts",
+    "values": 1000,
+    "known_phones_of_the_group": 500,
+    "synthetic_phones_starting_000": 500,
+    "reported_in_group": 500,
+    "highest_reported_index": 499,
+    "same_500_written_as_plus84": 500,
+    "other_groups_all_mode_in_group": 500,
+    "other_groups_all_mode_with_other_group": 0,
+    "milliseconds": { "this_group_only": 139.4, "all_other_groups": 78.3, "plus84_form": 67.8 },
+    "anon_call": "42501 permission denied for function"
+  },
+  "edge_logs_around_apply": "19:52-19:59 VN: 21,600-24,400 requests per minute, 0 responses with status 5xx/503",
+  "callers": "akaAgentWebApp API (branch dev_1, commit 71633b7 and later; not deployed at apply time). No caller existed when the function was created.",
+  "not_verified": [
+    "No call through PostgREST with the real service_role key (the WebApp API is not deployed yet)",
+    "Staff with the most accounts (86) was not measured after apply"
+  ]
+}
