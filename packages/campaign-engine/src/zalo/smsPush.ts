@@ -8,6 +8,12 @@
  *   client akaBiz). Cổng không có thì chiến dịch chạy bộ cũ (zaloCampaignV2Support: sms_push_external).
  * Mỗi data chỉ đẩy một lần trong một lượt (khoá theo data như getExternalSmsPushKey). Câu tiến trình như Desktop; lỗi chỉ cảnh báo,
  * không đổi kết quả của data.
+ *
+ * Không bao giờ đẩy chồng cho cùng một data. Desktop gọi pushZaloMilestoneToSms tuần tự ngay trong bước nên lần đẩy của dòng kết bạn chỉ
+ * bắt đầu sau khi lần đẩy của dòng nhắn tin xong. Ở lõi, bước kiêm SMS có hạn (afterReport của runUnit) mà cổng không huỷ lời gọi đã gửi
+ * (akaBiz hạn 30 giây mỗi shop, chạy tiếp sau khi hết hạn): akaBiz treo với từ 2 shop thì bước kế tiếp của data chạy khi lần đẩy cũ còn bay.
+ * Khi đó bước sau không đẩy (trace sms_push_in_flight), kể cả nếu lần cũ rốt cuộc lỗi hết: không biết akaBiz đã ghi hay chưa, đẩy lại có
+ * thể thành hai tin SMS. Lần đẩy cũ đã xong thì như Desktop: có shop thành công thì thôi, lỗi hết thì dòng sau thử lại.
  */
 import type { AfterReportInfo } from '../runUnit.js'
 import type { OutcomeDecision, TargetRow } from '../contracts.js'
@@ -134,6 +140,8 @@ export function buildZaloSmsPush(campaign: SmsCampaign, port: ZaloSmsPushPort, o
   const ids = positiveIds(mode === 'internal' ? extra.internalSmsAccountIds : extra.externalSmsShopIds)
   // Mỗi data đẩy một lần trong lượt (internalSmsPushedDetailKeys / externalSmsPushedDetailKeys, xoá khi lượt kết thúc).
   const pushed = new Set<string>()
+  // Data đang có lần đẩy chưa xong (kể cả lần đã bị hạn của bước kiêm SMS cắt mà lời gọi vẫn chạy): không đẩy chồng.
+  const inFlight = new Set<string>()
 
   const pushOne = async (info: AfterReportInfo, decision: OutcomeDecision): Promise<void> => {
     const status = STATUS_VALUE_BY_CODE[String(decision.statusCode ?? '')] ?? ''
@@ -150,6 +158,21 @@ export function buildZaloSmsPush(campaign: SmsCampaign, port: ZaloSmsPushPort, o
     const id = Number(input.id)
     const key = Number.isFinite(id) && id > 0 ? `input:${id}` : `phone:${phone}`
     if (pushed.has(key)) return
+    if (inFlight.has(key)) {
+      info.trace?.({ type: 'sms_push_in_flight', mode, actionCode: decision.actionCode, inputDataId: Number.isFinite(id) && id > 0 ? id : null })
+      return
+    }
+    inFlight.add(key)
+    try {
+      await deliver(info, decision, key, phone, input, data)
+    } finally {
+      inFlight.delete(key)
+    }
+  }
+
+  /** Đẩy SĐT của một data (đã qua kiểm điều kiện, chưa đẩy, không có lần đẩy nào đang chạy). */
+  const deliver = async (info: AfterReportInfo, decision: OutcomeDecision, key: string, phone: string, input: JsonObject,
+    data: JsonObject): Promise<void> => {
     const ctx: SmsPushContext = { targetRunId: info.targetRunId, leaseToken: info.leaseToken, signal: info.signal }
 
     if (mode === 'internal') {
