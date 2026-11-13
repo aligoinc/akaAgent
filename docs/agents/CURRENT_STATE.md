@@ -28,7 +28,7 @@ Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có
 
 [Build akaAgent Desktop và App Server 9.7.0](../audits/akaagent-9.7.0-20261114/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 01:07:02–01:11:11 VN và App Server Windows x64 nội bộ lúc
-01:11:21–01:12:10 VN, 14/11/2026. Chưa upload/phát hành/feed; App Server chưa cài VPS.** Nguồn worktree `release-9.7.0`,
+01:11:21–01:12:10 VN, 14/11/2026. Feed Windows, Mac, Mac Intel trả 9.7.0 từ 01:24–01:25 VN 14/11 (bộ cài trên akabiz.net cùng số byte với bản build); App Server chưa xác nhận đã cài lên VPS.** Nguồn worktree `release-9.7.0`,
 nhánh `codex/release-9.7.0` `17d94bde` (nền `origin/dev_3` `ca2b779c` sau PR #673, commit chỉ đổi version). Mới so với 9.6.0: dừng
 listener zca-js không để lại kết nối ma (#673, cả App Server), gia hạn phiên Desktop không phụ thuộc giờ máy (#658, #660), nhắc gia hạn
 trong phần mềm (#668; `renewal.reminder` lúc build là `audience: all` nên phát hành là mọi khách thấy), lọc trùng thêm data vào Nhóm

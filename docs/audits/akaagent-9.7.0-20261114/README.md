@@ -12,7 +12,7 @@ Thời điểm build (14/11/2026):
 - Desktop **01:07:02–01:11:11 VN**: Windows 103 giây, Mac ARM64 75 giây, Mac Intel 71 giây.
 - App Server **01:11:21–01:12:10 VN**: 49 giây.
 
-**Chưa upload, phát hành hay đổi feed; App Server chưa cài lên VPS.** Không đổi DB, không deploy service.
+**Phát hành:** feed Windows, Mac, Mac Intel trả 9.7.0 từ 01:24–01:25 VN 14/11. Bộ cài trên `akabiz.net/UpdateAutoSqlite/akaAgent/` có cùng số byte với bảng dưới (kiểm 02:30 VN, `Last-Modified` 18:24:49 / 18:25:11 UTC). App Server: VPS khởi động lại 02:14:18 VN, chưa xác nhận đã cài bản 9.7.0. Lúc build không đổi DB, không deploy service.
 
 ## Có gì mới
 
