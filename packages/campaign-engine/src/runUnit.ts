@@ -136,6 +136,8 @@ export interface AfterReportInfo {
   signal: AbortSignal
   /** Một dòng tiến trình gắn với data này. */
   progress(text: string, level?: ProgressLevel): void
+  /** Vết cho người vận hành (không hiện cho khách); runUnit gắn targetRunId. */
+  trace?(event: TraceEvent): void
 }
 
 export type PrepareTargetsResult =
@@ -505,12 +507,14 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       reported++
       const afterReport = cfg.afterReport
       if (afterReport && !unit.signal.aborted) {
-        // Như pushZaloMilestoneToSms của Desktop: ngay sau dòng lịch sử của bước, trước "✅ Hoàn thành" của data.
+        // Như pushZaloMilestoneToSms của Desktop: ngay sau dòng lịch sử của bước, trước "✅ Hoàn thành" của data. Hết hạn thì lõi đi tiếp
+        // nhưng lời gọi cổng đã gửi (akaBiz) vẫn chạy: việc sau của cùng data phải tự tránh làm chồng (smsPush.ts).
         try {
           await withDeadline('after_report', retry.callTimeoutMs * 2, unit.signal, s => afterReport({ targetRunId: claim.targetRunId,
-            leaseToken: claim.leaseToken, target: claim.target, actionCode: step.actionCode, raw, decisions: res.outcomes, signal: s, progress }))
+            leaseToken: claim.leaseToken, target: claim.target, actionCode: step.actionCode, raw, decisions: res.outcomes, signal: s, progress,
+            trace: event => deps.events.trace({ ...event, targetRunId: claim.targetRunId }) }))
         } catch (err) {
-          deps.events.trace({ type: 'after_report_failed', targetRunId: claim.targetRunId, error: errorMessage(err) })
+          deps.events.trace({ type: 'after_report_failed', targetRunId: claim.targetRunId, actionCode: step.actionCode, error: errorMessage(err) })
         }
       }
       // Bước bị bỏ qua do cổng (mục tiêu đã biết là hỏng) không tạo đầu ra: bước phụ thuộc cũng bỏ qua.
