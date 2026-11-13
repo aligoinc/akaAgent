@@ -295,7 +295,7 @@ Nguồn, theo thứ tự thời gian:
 - **Chính sách Facebook / Email** mới seed 1:1. Riêng hành vi "bỏ qua cột đếm của `auto_error` với Facebook trừ `fb_add_friend`" (`src/main/services/actionResultRuntime.ts:151`) sẽ khớp ở giai đoạn mở rộng.
 - **Hoàn tất chiến dịch:** chiến dịch "Nhắn tin theo SĐT" không có khung giờ, lặp lại hay realtime nên `aka_agent_engine_finish_campaign_v1` (hẹn lại theo data đến lịch sau, không thì "hoàn thành") khớp `handleCampaignCompletion` của Desktop; ngày kết thúc chỉ đổi câu tiến trình ("(hết ngày kết thúc)"). Loại có khung giờ / lặp lại / realtime phải tách logic hoàn tất trước khi chạy bộ mới.
 - **Trigger thật trên bảng nóng:** đã đọc (06/11, mục 14.7). Đọc lại trước khi apply nếu production đổi schema.
-- **Chưa có job dọn bảng vận hành** (`auto_engine_target_runs`, `auto_engine_outcomes`, `auto_engine_target_events`, dòng hết hạn của `auto_target_memory`, `auto_outcome_unmatched`): mỗi data sinh 1 dòng lượt + 1–4 dòng kết quả (JSON quyết định vài KB). Đề xuất giữ 30 ngày (dòng thời gian đọc từ đây); thêm trước khi chạy thật (11/11/2026, chờ anh quyết).
+- **Job dọn bảng vận hành:** anh chốt giữ 30 ngày (13/11/2026), làm ở V517 (mục 14.12, chưa apply). `auto_target_memory` đã bỏ ở V507; `auto_outcome_unmatched` giữ lại (mỗi mẫu lỗi lạ một dòng, có đếm số lần gặp).
 
 ## 12. Lõi `packages/campaign-engine`
 
@@ -632,3 +632,25 @@ Kiểm: `node scripts/campaign-outcome-engine-v515-smoke.cjs`, 6 nhóm, có tron
 - Mỗi lỗi chạy trước V515 (phải tái hiện được) và sau V515 (phải hết).
 - Thêm ca lease hết hạn, ca gửi chia sẻ theo lô, ca lượt đã có kết quả.
 - Gỡ ra thì lỗi quay lại.
+
+### 14.12 V517: dọn bảng vận hành (giữ 30 ngày) và decision gọn (anh chốt 13/11 "Làm, giữ 30 ngày"; chưa apply)
+
+Đo production 13/11/2026 (chỉ đọc):
+- Mỗi dòng `auto_engine_outcomes` trung bình 1.627 byte. `decision` chiếm 1.434 byte, gồm `contrib` 522, `policy` 506, `result` 427.
+- Lịch sử ghi trung bình 237 nghìn dòng mỗi ngày, Zalo chiếm 94% (20.000 dòng gần nhất).
+- Không dọn thì khi toàn bộ Zalo chạy bộ mới, các bảng engine tăng khoảng 0,4–0,5 GB mỗi ngày.
+
+[V517](../migrations/migration_v517_engine_retention.sql), sinh bằng `scripts/build-v517-sql.cjs`:
+- **Hàm `aka_agent_engine_retention_v1(p_max_runs = 20000, p_budget_ms = 20000)`** (chỉ `service_role`):
+  - xoá lượt data **đã đóng** có `started_at` cũ hơn `engine.retention_days` ngày (thiết lập mới, mặc định 30; hợp lệ 1–3650, sai định dạng thì 30);
+  - kết quả và sự kiện của lượt bị xoá theo qua FK `ON DELETE CASCADE`; sự kiện không gắn lượt xoá theo `created_at` (chỉ mục mới `auto_engine_target_events_created_v517`);
+  - lượt còn mở không bao giờ bị xoá; lô 1.000 dòng, `FOR UPDATE SKIP LOCKED`, dừng khi đủ số lượt hoặc hết giờ (`stoppedEarly`).
+- **Job pg_cron `aka-agent-engine-retention`**, `23 * * * *`: tránh giây :00 của các job mỗi phút và các mốc */15, */30. Mỗi lần tối đa 20 giây, dưới trần `statement_timeout` 120 giây của pg_cron.
+- **`report_v1` (thân V515):** `decision` chỉ còn `result` (gọi lại lần báo) và `contrib` (gộp lượt). Bỏ chính sách đã gộp vì không hàm nào đọc lại, và lịch sử đã có `policyIds`/`revisions`. Trong smoke, mỗi dòng giảm từ 1.457 xuống 997 byte.
+- Đổi số ngày giữ bằng `UPDATE auto_system_settings SET value = '<n>' WHERE key = 'engine.retention_days'`, không cần migration.
+
+Phải apply **sau V515**: preflight đòi `report_v1` là bản V515 (md5 `49cbb00b…`). Có DDL (thay hàm, thêm hàm và chỉ mục), PostgREST nạp lại schema, nên apply ngoài giờ cao điểm.
+
+Gỡ: [rollback](../migrations/rollback_v517_engine_retention.sql) bỏ job, hàm, thiết lập, chỉ mục và trả `report_v1` về bản V515. Dòng đã bị xoá không lấy lại được.
+
+Kiểm: `node scripts/campaign-outcome-engine-v517-smoke.cjs`, 7 nhóm, có trong `campaign-outcome-engine-check-all.cjs`. Smoke dùng pg_cron giả (schema `cron` tối thiểu) để kiểm phần tạo và gỡ job.
