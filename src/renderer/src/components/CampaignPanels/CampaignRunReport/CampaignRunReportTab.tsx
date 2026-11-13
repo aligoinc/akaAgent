@@ -268,7 +268,7 @@ function EngagementSection({ report }: { report: CampaignRunReport }) {
   if (!engagement || (engagement.message.tracked === 0 && engagement.friend.tracked === 0)) return null
   const { message, friend } = engagement
   return <Section id="rpt-engagement-title" title="Tương tác Zalo" className="rpt-engagement"
-    meta="Lượt thành công được theo dõi trong 48 giờ sau khi gửi">
+    meta="Tính trên các lượt gửi thành công">
     <div className="rpt-funnels">
       {message.tracked > 0 && <div><h4>Tin nhắn</h4><ul className="rpt-funnel">
         <FunnelRow label="Được theo dõi" value={message.tracked} base={null} tone={1} />

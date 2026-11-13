@@ -46,7 +46,7 @@ export function campaignReportSheets(report: CampaignRunReport, campaign: Pick<C
     ['Tỷ lệ thành công (%)', ratePercent(results.successRate), 'Hành động chính; không tính bỏ qua, chờ xác nhận, khác'],
     ...(report.engagement ? [
       [],
-      ['Tương tác Zalo (lượt thành công được theo dõi 48 giờ)', 'Số lượt', ''],
+      ['Tương tác Zalo (lượt gửi thành công)', 'Số lượt', ''],
       ['Tin nhắn đã gửi', report.engagement.message.sent, ''],
       ['  được theo dõi', report.engagement.message.tracked, ''],
       ['  đã xem', report.engagement.message.seen, ''],
