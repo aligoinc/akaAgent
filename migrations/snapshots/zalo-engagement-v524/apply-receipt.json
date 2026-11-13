@@ -1,0 +1,110 @@
+{
+  "project": "akachat / cgjbsmqtfhqvttudyjzq",
+  "appliedAtVN": "2026-11-13 22:24:09–22:24:11",
+  "requestedBy": "anh: \"apply đi\" (13/11/2026 ~22:20 VN)",
+  "method": "node scripts/make-migration-ledger-apply.cjs migrations/migration_v524_zalo_engagement_catalog_ordered_walk.sql migration_v524_zalo_engagement_catalog_ordered_walk <file> ; supabase db query --linked -f <file> (migration + dòng sổ cùng một giao dịch; exit 0)",
+  "ledger": {
+    "name": "migration_v524_zalo_engagement_catalog_ordered_walk",
+    "version": "20261113152357",
+    "statementsMd5": "1fbbdab87987b2137cec5d2d67ff11b1"
+  },
+  "fileMd5": "1fbbdab87987b2137cec5d2d67ff11b1",
+  "rollbackFileMd5": "5ecd43f4b414dbe8c2d4c536e8bb6a4a",
+  "renumbered": "Đầu tiên mang số V522 (PR #669). Kiểm sổ chung ngay trước apply: nhánh claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11 đẩy migration_v522_zalo_message_status_sync.sql lúc 21:50:56 VN (sớm hơn 6 phút) và giữ V523; 22:23:07 VN sổ nhận migration_v522_data_group_member_matches_desktop (nhánh claude_loc-trung-nhom-data-desktop_from_dev_3_13_11). Bản này đổi thành V524 (commit 7219ede5, đẩy 22:22:25 VN).",
+  "before": {
+    "prosrcMd5": "dd6cf2bd1f75998521d98ee46d8fff0e",
+    "defMd5": "6b40a8b7b51490287f7b39cb6b3c62ba",
+    "ledgerLatest": {
+      "version": "20261113152307",
+      "name": "migration_v522_data_group_member_matches_desktop"
+    },
+    "load": {
+      "activeBackends": 3,
+      "waitingLocks": 0
+    },
+    "rest10min": "22:14–22:23 VN: ~16,2–18,7 nghìn request/phút, p50 44–45 ms, p99 111–123 ms, 0 lỗi 5xx/503"
+  },
+  "after": {
+    "prosrcMd5": "167571de84782301ddd8bcd1ad3b2f89",
+    "defMd5": "e5b4431626d8d205b1883b2b92545253",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "acl": "{postgres=X/postgres}",
+    "wrappers": {
+      "unchanged": true,
+      "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+      "prosrcMd5": {
+        "aka_agent_read_campaign_engagement": "1b06def87dd0809ee77c8857d2ed6874",
+        "aka_agent_record_campaign_engagement": "444daec0d9278147b49538d4f6dde587",
+        "aka_agent_register_campaign_engagement": "892b96b56196aa77267f2daa2d76d3fc"
+      }
+    },
+    "switch": {
+      "key": "zalo.campaign_engagement.enabled",
+      "value": "true",
+      "updatedAt": "2026-11-12T11:02:06.56172+00:00"
+    }
+  },
+  "restImpact": "edge_logs theo khung 10 s: 22:24:10 VN p50 50 ms, p99 536 ms, chậm nhất 960 ms (PostgREST nạp lại schema), 0 request >1 s; các khung khác 22:22:50–22:25:00 p99 98–137 ms; 0 lỗi 5xx/503 cả cửa sổ.",
+  "liveCheck": {
+    "atVN": "22:25:02",
+    "what": "Gọi hàm thật aka_agent_read_campaign_engagement(1988,1765,…,[{catalog:…}]) (giao dịch chỉ đọc, claim service_role), đi hết các trang từ {} và so từng trang với câu SELECT của V510 (PREPARE) tại cùng con trỏ",
+    "pages": 16,
+    "items": 7814,
+    "identical": "items, catalogCursor, catalogDone giống ở mọi trang",
+    "functionMs": 232.7,
+    "maxPageMs": 19.3
+  },
+  "explainAfter": {
+    "atVN": "22:25:18",
+    "staff": "1988/1765",
+    "live": 8353,
+    "returned": 7814,
+    "pages": 16,
+    "q524Custom": {
+      "ms": 249.9,
+      "buffers": 100016,
+      "read": 0,
+      "watchRows": 8353,
+      "sortedPages": 0,
+      "indexes": [
+        "auto_campaign_engagement_catalog"
+      ],
+      "maxPageBuffers": 9238,
+      "page1": {
+        "ms": 17.5,
+        "read": 0,
+        "sort": false,
+        "index": "auto_campaign_engagement_catalog",
+        "buffers": 2872,
+        "watchRows": 500
+      }
+    },
+    "q524Generic": {
+      "ms": 210.3,
+      "buffers": 106562,
+      "read": 0,
+      "watchRows": 8353,
+      "sortedPages": 0,
+      "indexes": [
+        "auto_campaign_engagement_catalog"
+      ],
+      "maxPageBuffers": 9238,
+      "page1": {
+        "ms": 13.7,
+        "read": 0,
+        "sort": false,
+        "index": "auto_campaign_engagement_catalog",
+        "buffers": 6864,
+        "watchRows": 500
+      }
+    }
+  },
+  "organicCalls": "pg_stat_statements 22:23:56 và 22:25:33: chưa có lượt gọi aka_agent_read_campaign_engagement nào mới (nhánh catalog chỉ chạy khi worker ChatApi khởi động/đổi revision hoặc Desktop đăng nhập).",
+  "rollback": "supabase db query --linked -f migrations/rollback_v524_zalo_engagement_catalog_ordered_walk.sql (trả đúng V510; dòng sổ V524 ở lại)"
+}

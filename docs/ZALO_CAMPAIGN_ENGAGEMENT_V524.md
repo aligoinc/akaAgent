@@ -1,6 +1,6 @@
 # V524: nạp danh mục tương tác Zalo theo chỉ mục có thứ tự
 
-Trạng thái 13/11/2026: **chưa apply** (chỉ đo chỉ đọc trên production), không cần phát hành Desktop/App Server/Chat. Nhánh `perf/engagement-catalog-ordered-scan`. Nền: [V510](ZALO_CAMPAIGN_ENGAGEMENT_V510.md). Bản này đầu tiên mang số V522; trước khi apply đổi thành V524 vì nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11` đã đẩy `migration_v522_*` lúc 21:50:56 VN (sớm hơn 6 phút) và giữ cả V523. Số đo bên dưới đo khi còn tên V522; câu SELECT không đổi.
+Trạng thái 13/11/2026: **V524 đã apply akachat lúc 22:24:09 VN** (`20261113152357 / migration_v524_zalo_engagement_catalog_ordered_walk`; không apply lại; md5 sổ = file `1fbbdab8…`; [biên nhận](../migrations/snapshots/zalo-engagement-v524/apply-receipt.json)), không cần phát hành Desktop/App Server/Chat. Nhánh `perf/engagement-catalog-ordered-scan`. Nền: [V510](ZALO_CAMPAIGN_ENGAGEMENT_V510.md). Bản này đầu tiên mang số V522; trước khi apply đổi thành V524 vì nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11` đã đẩy `migration_v522_*` lúc 21:50:56 VN (sớm hơn 6 phút) và giữ cả V523. Số đo bên dưới đo khi còn tên V522; câu SELECT không đổi.
 
 ## Vấn đề
 
@@ -57,11 +57,15 @@ Staff 1988 / tổ chức 1765 (8.353 lượt còn hạn, 7.814 hợp lệ, 16 tr
 
 Lần đầu còn nguội (22:11): V524 trang đầu 97,8 ms (206 trang đọc đĩa), cả lượt 1,68 s (3.945 trang) — V510 tốn 6,0 s chỉ cho trang đầu. Ba chủ khác (2061: 1.953 lượt; 385: 62 tài khoản; 1576: 811 lượt UID cũ, trang đầu đọc 1.311 lượt để có 500 hợp lệ): 0 trang Sort, chỉ chỉ mục catalog, mỗi lượt đọc đúng một lần, generic 30–56 ms cả lượt.
 
-## Apply (chưa làm, chờ anh duyệt)
+## Apply (đã làm 22:24:09–22:24:11 VN 13/11/2026, anh bảo "apply đi")
 
-1. Ngoài giờ cao điểm: `CREATE OR REPLACE FUNCTION` là DDL ⇒ PostgREST nạp lại schema (V510: 8 s, p99 REST ~1 s, 0 lỗi). Nên apply **trước** lần deploy worker ChatApi nạp hết danh mục.
-2. `node scripts/make-migration-ledger-apply.cjs migrations/migration_v524_zalo_engagement_catalog_ordered_walk.sql migration_v524_zalo_engagement_catalog_ordered_walk <file ra>` rồi `supabase db query --linked -f <file ra>` (akachat; migration + dòng sổ cùng một giao dịch, `lock_timeout` 3 s).
-3. Kiểm sau apply: sổ `md5(statements[1])` = md5 file `1fbbdab87987b2137cec5d2d67ff11b1`; `md5(prosrc)=167571de…`, owner/ACL/cấu hình như cũ; `scripts/zalo-engagement-v524-catalog-explain.cjs 1988 1765` cho 0 Sort và chỉ mục catalog; `pg_stat_statements` của `aka_agent_read_campaign_engagement`.
+Cách làm (đã dùng): `node scripts/make-migration-ledger-apply.cjs migrations/migration_v524_zalo_engagement_catalog_ordered_walk.sql migration_v524_zalo_engagement_catalog_ordered_walk <file ra>` rồi `supabase db query --linked -f <file ra>` (migration + dòng sổ cùng một giao dịch, `lock_timeout` 3 s). [Biên nhận](../migrations/snapshots/zalo-engagement-v524/apply-receipt.json).
+
+- Trước: thân V510 (`dd6cf2bd…`), sổ tới `20261113152307 / migration_v522_data_group_member_matches_desktop`, 3 backend đang chạy, 0 khoá chờ; REST 10 phút trước p50 44–45 ms, p99 111–123 ms, 0 lỗi 5xx.
+- Hậu kiểm đạt: sổ `20261113152357 / migration_v524_zalo_engagement_catalog_ordered_walk`, `md5(statements[1])` = md5 file `1fbbdab87987b2137cec5d2d67ff11b1`; `md5(prosrc)=167571de84782301ddd8bcd1ad3b2f89` (`pg_get_functiondef` `e5b4431626d8d205b1883b2b92545253`); owner/SECURITY DEFINER/cấu hình/ACL và thân + quyền 3 hàm bọc như cũ; công tắc vẫn bật.
+- REST: khung 10 s lúc 22:24:10 p99 536 ms, chậm nhất 960 ms (PostgREST nạp lại schema), 0 request quá 1 s, 0 lỗi 5xx/503.
+- Hàm thật (giao dịch chỉ đọc, claim service_role) đi hết 16 trang của staff 1988 từ `{}`: `items`, `catalogCursor`, `catalogDone` giống câu V510 ở mọi trang; 7.814 lượt, 233 ms cả lượt, trang chậm nhất 19 ms. `scripts/zalo-engagement-v524-catalog-explain.cjs 1988 1765` sau apply: 0 trang Sort, chỉ mục catalog, custom 100.016 / generic 106.562 buffer cả lượt.
+- Còn theo dõi: chưa có lượt gọi tự nhiên của nhánh catalog ngay sau apply (chỉ chạy khi worker ChatApi khởi động/đổi revision hoặc Desktop đăng nhập) ⇒ xem `pg_stat_statements` của `aka_agent_read_campaign_engagement` và câu `WITH owner AS …` của worker sau lần deploy worker kế tiếp.
 
 ## Rollback
 
