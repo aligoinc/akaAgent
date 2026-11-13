@@ -4,7 +4,8 @@
  * SĐT" / "Nhắn tin thành viên nhóm" (EXTERNAL_SMS_ZALO_ACTION_IDS), nếu dòng thuộc thao tác và trạng thái đã chọn thì đẩy SĐT sang SMS:
  * - nội bộ: một data vào chiến dịch SMS con của từng tài khoản SMS đã chọn (tạo chiến dịch con lần đầu, mở lại khi đã hoàn thành), qua
  *   RPC V506 aka_agent_engine_sms_push_v1;
- * - akaBiz Sms (bên ngoài): một dòng vào chiến dịch SMS của từng shop đã chọn (chỉ Desktop có tích hợp; Fly không hỗ trợ, như bộ cũ của Fly).
+ * - akaBiz Sms (bên ngoài): một dòng vào chiến dịch SMS của từng shop đã chọn, chỉ khi cổng có pushExternalSms (Desktop; Fly khi worker có
+ *   client akaBiz). Cổng không có thì chiến dịch chạy bộ cũ (zaloCampaignV2Support: sms_push_external).
  * Mỗi data chỉ đẩy một lần trong một lượt (khoá theo data như getExternalSmsPushKey). Câu tiến trình như Desktop; lỗi chỉ cảnh báo,
  * không đổi kết quả của data.
  */
@@ -53,7 +54,7 @@ export interface ZaloSmsPushPort {
   /** V506: thêm data vào chiến dịch SMS con của từng tài khoản SMS (tạo / mở lại chiến dịch con). Kết quả theo từng tài khoản. */
   pushInternalSms(ctx: SmsPushContext, input: { accountIds: readonly number[]; row: SmsSnapshotRow; content: string }):
     Promise<Array<{ accountId: number; ok: boolean; error?: string | null }>>
-  /** akaBiz Sms: chỉ Desktop có (addSmsCampaignDetail). integrationMissing: chưa tích hợp akaBiz Sms. */
+  /** akaBiz Sms (addSmsCampaignDetail): Desktop; Fly khi worker có client akaBiz. integrationMissing: chưa tích hợp akaBiz Sms. */
   pushExternalSms?(ctx: SmsPushContext, input: { shopIds: readonly number[]; phone: string; name: string; content: string }):
     Promise<{ integrationMissing?: boolean; integrationError?: string | null; results: Array<{ shopId: number; ok: boolean; error?: string | null }> }>
   /** Giờ nghiệp vụ từ DB (getDatabaseBusinessNow). */

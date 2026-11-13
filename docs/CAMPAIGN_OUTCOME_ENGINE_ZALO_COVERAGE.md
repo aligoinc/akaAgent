@@ -483,8 +483,9 @@ Biên nhận: `migrations/snapshots/db-readonly-incident-20261112/receipt.json`.
     `sms`, cùng nhân viên và tổ chức): dùng lại chiến dịch SMS con theo `internalSmsCreatedCampaignIdsByAccount` (mở lại nếu đã hoàn thành)
     hoặc tạo mới như `createCampaign`; thêm một data; mở lại chiến dịch con nếu đã hoàn thành. Mỗi tài khoản một giao dịch con; khoá chiến
     dịch nguồn nên hai nơi chạy không tạo trùng chiến dịch con.
-  - **akaBiz Sms** (bên ngoài): chỉ Desktop, qua tích hợp akaBiz như bộ cũ (`getAkaBizIntegrationsForStaff` + `addSmsCampaignDetail`). Trên
-    Fly, chiến dịch chỉ bật akaBiz Sms chạy bộ cũ của Fly (`sms_push_external`); bộ cũ của Fly vốn không đọc cấu hình kiêm SMS nào.
+  - **akaBiz Sms** (bên ngoài): qua tích hợp akaBiz như bộ cũ (`getAkaBizIntegrationsForStaff` + `addSmsCampaignDetail`). Lúc làm V506 chỉ
+    Desktop có; trên Fly, chiến dịch chỉ bật akaBiz Sms chạy bộ cũ của Fly (`sms_push_external`), mà bộ cũ của Fly không đọc cấu hình kiêm
+    SMS nào. Fly làm sau, mục 13/11 bên dưới (chưa deploy).
 - **Khác Desktop:** khoá chống đẩy trùng theo lượt chạy (Desktop giữ trong RAM của tiến trình). **Khác bộ cũ của Fly:** Fly nay kiêm SMS
   nội bộ như Desktop/VPS, nên tổ chức chuyển từ VPS sang Fly giữ được tính năng này.
 - **V506** (`scripts/build-v506-sql.cjs`, chưa apply): sửa thân `finish_campaign_v2` của V501 (preflight md5 `534ca511…`, thân mới
@@ -918,6 +919,26 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
 - **V513 đã apply akachat 12/11 22:30:48 VN** theo yêu cầu "Apply V513" (`20261112153048`, md5 sổ = file `15d206f3…`, không apply lại): chỉ
   `aka_agent_desktop` gọi được; gọi bằng phiên Desktop thật ra đúng cờ (false) và ngữ cảnh nhận đúng tổ chức; PostgREST nạp lại schema 1,6 giây,
   0 lỗi 5xx/503 (20 request chậm 1–1,3 giây đúng giây nạp lại); [biên nhận](../migrations/snapshots/engine-desktop-flag-v513/apply-receipt.json).
+
+### 13/11 ~10:30–11:30 VN: kiêm akaBiz Sms trên Fly (anh: "làm đi nhưng chưa cần deploy"; ChatApi nhánh `feat/engine-v2-akabiz-sms`, chưa commit, chưa deploy)
+
+- Trước đó, chiến dịch Server bật akaBiz Sms (không bật SMS nội bộ) chạy bộ cũ của Fly (`sms_push_external`), mà bộ cũ của Fly không đẩy SMS
+  nào: tổ chức bật cờ mất tính năng này. Đếm production 13/11 (chỉ đọc): 8 nhân viên có tích hợp akaBiz Sms, 0 chiến dịch Server từng bật nó.
+- ChatApi làm theo đường máy chủ của Desktop/VPS (`getAkaBizIntegrationsForStaff` + `normalizeIntegration`, `addSmsCampaignDetail`):
+  - `CampaignEngineRepository.akaBizSmsIntegration`: đọc `org_staff.akabiz_integrations->'sms'` theo nhân viên, tổ chức, đang hoạt động; không
+    thấy nhân viên thì lỗi "Không thể tải tích hợp akaBiz."; hợp lệ khi `staffId` (hoặc `id`) > 0 và có `username`. `aka_agent_chat_api` đã
+    có quyền đọc cột này (kiểm production chỉ đọc), không cần migration.
+  - `apps/system-worker/src/campaignEngine/akaBizSmsClient.ts`: POST `https://app.akabiz.net/api/Campaign/addDetailToSendSms`
+    `{shopId, campaignId, phone, content}`, không xác thực, hạn 30 giây, không huỷ theo lượt chạy (như Desktop: đã gửi thì chờ xong để SMS
+    không rơi vào trạng thái không rõ); thành công khi HTTP ok và `status = 1`, câu lỗi như `requestJson` của Desktop.
+  - Cổng Fly có `pushExternalSms` khi worker có client (`main.ts` luôn truyền); `FlyEngineRunner.accepts` báo `externalSmsPush` cho lõi nên
+    chiến dịch đó chạy bộ mới. Lõi không đổi hành vi (chỉ sửa chú thích): đẩy sau dòng lịch sử đủ điều kiện, mỗi data một lần trong lượt, lỗi
+    chỉ cảnh báo, không đổi kết quả của data.
+- Worker Fly thêm một đích gọi ra ngoài: `app.akabiz.net` (Desktop đã gọi đích này).
+- **Kiểm:** ca mới ở ChatApi: client (đường dẫn, thân, câu lỗi, hạn giờ); cổng (đẩy từng shop, shop lỗi, chưa tích hợp, không đọc được tích
+  hợp, worker không có client); repository (8 dạng dữ liệu tích hợp; sai tổ chức, đã nghỉ, không có nhân viên); bộ chạy trên RPC thật (data
+  nhắn thành công đẩy một lần sang 2 shop, shop lỗi chỉ cảnh báo, kết quả data không đổi; data "không tồn tại" không được chọn thì không đẩy).
+  ChatApi `npm run verify` 187 file, 2.687 test đạt (2 bỏ qua vì phải bật tay); bản chép lõi khớp nguồn 63 file; ranh giới lõi akaAgent sạch.
 
 ## 5. Phủ hiện tại và phần còn lại (12/11 ~04:10 VN)
 
