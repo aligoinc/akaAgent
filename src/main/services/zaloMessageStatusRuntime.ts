@@ -19,7 +19,7 @@ import {
   DEFAULT_MESSAGE_STATUS_SYNC_CONFIG, MessageStatusEventBuffer, ZALO_STATUS_REF_KEY, makeZaloStatusRef,
   messageStatusSyncCoversOrganization, normalizeMessageStatusEvents, parseMessageStatusIngestResult,
   parseMessageStatusSyncConfig, toMessageStatusIngestItems,
-  type MessageStatusIngestItem, type MessageStatusSyncConfig, type MessageStatusSyncSettingRow, type ZaloStatusRef
+  type MessageStatusEvent, type MessageStatusIngestItem, type MessageStatusSyncConfig, type MessageStatusSyncSettingRow, type ZaloStatusRef
 } from '../../shared/zaloMessageStatusSync'
 
 export interface ZaloMessageStatusRuntimeDeps {
@@ -58,17 +58,27 @@ export interface ZaloMessageStatusSend {
 export interface ZaloMessageStatusMetrics {
   received: number; buffered: number; refs: number; flushes: number; sent: number; matched: number; rejected: number
   failures: number; settingsReads: number
+  /** Sự kiện bị bỏ vì bộ đệm đầy. */
+  dropped: number
 }
 
-/** Tuổi tối đa của cấu hình đã đọc. Bật công tắc có hiệu lực trong chừng này; tắt thì lô kế tiếp báo ngay. */
+/** Tuổi tối đa của cấu hình đã đọc khi tính năng đang BẬT. Tắt công tắc: lô kế tiếp báo ngay, không thì tối đa chừng này. */
 export const CONFIG_MAX_AGE_MS = 5 * 60_000
+/** Khi tính năng đang TẮT thì đọc lại thưa hơn: bật công tắc có hiệu lực trong tối đa chừng này. */
+export const CONFIG_MAX_AGE_OFF_MS = 15 * 60_000
 const CONFIG_RETRY_MS = 60_000
 /** Tài khoản bị DB từ chối (có akaChat, ngoài phạm vi): ngừng thu 10 phút, mỗi lần bị từ chối tiếp thì gấp đôi, tối đa 2 giờ. */
 const REJECT_BLOCK_MS = 10 * 60_000
 const REJECT_BLOCK_MAX_MS = 2 * 60 * 60_000
 const INGEST_BACKOFF_MS = [60_000, 120_000, 300_000] as const
-/** DB chưa có hàm nhận lô (migration chưa apply hoặc đã gỡ): không gọi lại trong 30 phút. */
-const MISSING_FUNCTION_PAUSE_MS = 30 * 60_000
+/**
+ * Ngừng thu và không gọi hàm nhận lô trong chừng này khi: DB chưa có hàm (migration chưa apply hoặc đã gỡ), DB từ chối kiểu
+ * gửi lại cũng không khác (thiếu quyền, sai định danh, sai dữ liệu), DB báo đang tạm ngừng nhận (chạm trần trong ngày), hoặc
+ * lô đã lỗi liên tiếp quá số lần cho phép.
+ */
+export const LONG_PAUSE_MS = 30 * 60_000
+/** Một lô lỗi liên tiếp chừng này lần thì bỏ, không giữ mãi ("cố gắng hết mức"). */
+const MAX_INGEST_ATTEMPTS = 6
 const BUFFER_MAX_ROWS = 5000
 /** Còn đầy bộ đệm sau một lô thì gửi lô kế tiếp sau khoảng ngắn này, không chờ hết chu kỳ. */
 const DRAIN_DELAY_MS = 2_000
@@ -89,10 +99,10 @@ export class ZaloMessageStatusRuntime {
   private retryNotBefore = 0
   /** Tăng mỗi lần `reset`: lô đang gửi dở của người đăng nhập trước không được đưa trở lại bộ đệm. */
   private generation = 0
-  /** DB báo đang tắt / tạm ngừng nhận: không thu cho tới mốc này (cấu hình được đọc lại ngay). */
+  /** Không thu cho tới mốc này: DB báo đang tắt / tạm ngừng nhận, DB từ chối, hoặc lô lỗi quá nhiều lần. */
   private captureSuspendedUntil = 0
   readonly metrics: ZaloMessageStatusMetrics = {
-    received: 0, buffered: 0, refs: 0, flushes: 0, sent: 0, matched: 0, rejected: 0, failures: 0, settingsReads: 0
+    received: 0, buffered: 0, refs: 0, flushes: 0, sent: 0, matched: 0, rejected: 0, failures: 0, settingsReads: 0, dropped: 0
   }
 
   constructor(private readonly deps: ZaloMessageStatusRuntimeDeps) {
@@ -104,7 +114,8 @@ export class ZaloMessageStatusRuntime {
   /** Đọc lại cấu hình ở nền khi bản đang giữ đã cũ. Không bao giờ chờ: nơi gọi dùng bản đang có. */
   private touchConfig(): void {
     const now = this.now()
-    if (this.refreshing || now - this.configAt < CONFIG_MAX_AGE_MS || now < this.configRetryAt) return
+    const maxAge = this.config.enabled ? CONFIG_MAX_AGE_MS : CONFIG_MAX_AGE_OFF_MS
+    if (this.refreshing || now - this.configAt < maxAge || now < this.configRetryAt) return
     this.metrics.settingsReads += 1
     let pending: Promise<readonly MessageStatusSyncSettingRow[]>
     try { pending = this.deps.loadSettings() } catch (error) { pending = Promise.reject(error) }
@@ -186,11 +197,22 @@ export class ZaloMessageStatusRuntime {
         replyIgnoredKinds: this.config.replyIgnoredKinds, trackFriendAccept: this.config.trackFriendAccept
       })
       if (!events.length) return
-      this.buffer.push(events)
-      this.metrics.buffered = this.buffer.size
+      this.pushEvents(events)
       this.schedule(this.config.flushIntervalSeconds * 1000)
     } catch {
       this.deps.warn?.('event_unreadable')
+    }
+  }
+
+  /** Đưa sự kiện vào bộ đệm; đầy thì phần thừa bị bỏ và được đếm, có cảnh báo. */
+  private pushEvents(events: readonly MessageStatusEvent[]): void {
+    const before = this.buffer.dropped
+    this.buffer.push(events)
+    const lost = this.buffer.dropped - before
+    this.metrics.buffered = this.buffer.size
+    if (lost > 0) {
+      this.metrics.dropped += lost
+      this.deps.warn?.('buffer_full', { dropped: this.metrics.dropped })
     }
   }
 
@@ -255,16 +277,19 @@ export class ZaloMessageStatusRuntime {
       } catch (error) {
         this.metrics.failures += 1
         if (generation !== this.generation) return // đã đổi người đăng nhập trong lúc gửi: bỏ lô cũ
-        if (isMissingFunction(error)) {
-          // DB chưa có hàm nhận lô: coi như đang tắt một thời gian, không giữ lô.
-          this.captureSuspendedUntil = this.now() + MISSING_FUNCTION_PAUSE_MS
+        const permanent = permanentErrorKind(error)
+        if (permanent || this.ingestFailures + 1 >= MAX_INGEST_ATTEMPTS) {
+          // Gửi lại cũng không khác (DB chưa có hàm, thiếu quyền, sai dữ liệu), hoặc đã lỗi liên tiếp quá nhiều lần: bỏ lô,
+          // ngừng thu một thời gian rồi mới thử lại.
+          this.captureSuspendedUntil = this.now() + LONG_PAUSE_MS
+          this.ingestFailures = 0
+          this.retryNotBefore = 0
           this.dropBuffered()
-          this.deps.warn?.('ingest_function_missing')
+          this.deps.warn?.(permanent ?? 'ingest_given_up')
           return
         }
         // Giữ lô để gửi lại (ghi lại không đổi kết quả); thưa dần khi lỗi liên tiếp.
-        this.buffer.push(events)
-        this.metrics.buffered = this.buffer.size
+        this.pushEvents(events)
         const delay = INGEST_BACKOFF_MS[Math.min(this.ingestFailures, INGEST_BACKOFF_MS.length - 1)]
         this.ingestFailures += 1
         this.retryNotBefore = this.now() + delay
@@ -279,9 +304,14 @@ export class ZaloMessageStatusRuntime {
       this.retryNotBefore = 0
       const result = parseMessageStatusIngestResult(raw)
       if (!result.enabled) {
-        // DB đang tắt hoặc tạm ngừng nhận: ngừng thu, bỏ phần đang đệm và đọc lại cấu hình ngay ở lần dùng kế tiếp.
-        this.captureSuspendedUntil = this.now() + CONFIG_MAX_AGE_MS
-        this.configAt = Number.NEGATIVE_INFINITY
+        if (result.paused) {
+          // DB tạm ngừng nhận (chạm trần trong ngày, job phụ lỗi): công tắc không đổi, nên không đọc lại cấu hình; nghỉ dài.
+          this.captureSuspendedUntil = this.now() + LONG_PAUSE_MS
+        } else {
+          // Công tắc vừa bị tắt: ngừng thu và đọc lại cấu hình ngay ở lần dùng kế tiếp.
+          this.captureSuspendedUntil = this.now() + CONFIG_MAX_AGE_MS
+          this.configAt = Number.NEGATIVE_INFINITY
+        }
         this.dropBuffered()
         return
       }
@@ -316,8 +346,14 @@ export class ZaloMessageStatusRuntime {
   }
 }
 
-/** PostgREST báo không tìm thấy hàm (PGRST202), hoặc PostgreSQL báo hàm không tồn tại (42883). */
-function isMissingFunction(error: unknown): boolean {
+/**
+ * Lỗi mà gửi lại cũng không khác; trả tên cảnh báo, hoặc null với lỗi có thể tự hết (mạng, quá giờ, khoá, phiên hết hạn).
+ * - PGRST202 / 42883: DB chưa có hàm nhận lô;
+ * - 42xxx (thiếu quyền, sai định danh phiên Desktop), 22xxx / 23xxx (dữ liệu bị từ chối), PGRST1xx / PGRST2xx (lời gọi sai dạng).
+ */
+function permanentErrorKind(error: unknown): string | null {
   const code = String((error as { code?: unknown } | null)?.code ?? '')
-  return code === 'PGRST202' || code === '42883'
+  if (code === 'PGRST202' || code === '42883') return 'ingest_function_missing'
+  if (/^(22|23|42)[0-9A-Z]{3}$/.test(code) || /^PGRST[12][0-9]{2}$/.test(code)) return 'ingest_rejected'
+  return null
 }

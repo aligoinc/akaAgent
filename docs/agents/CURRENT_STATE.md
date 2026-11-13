@@ -6,7 +6,7 @@ App Server chưa cài VPS. `migration_v522_zalo_message_status_sync.sql` và `mi
 CHƯA apply** (số 522/523 được giữ ngày 13/11, số lớn nhất trên mọi nhánh lúc đó là 521; kiểm lại sổ trước khi apply). Chưa có dòng
 `zalo.message_status_sync.*` nào trong DB nên tính năng đang tắt với mọi tiến trình. Hàm mới khi apply: `aka_agent_ingest_zalo_message_status(text,jsonb)`
 (EXECUTE `service_role`, `aka_agent_chat_api`) và `aka_agent_desktop_ingest_zalo_message_status(jsonb)` (EXECUTE chỉ `aka_agent_desktop`,
-lấy nhân viên từ phiên Desktop). Kiểm cục bộ: smoke 21 nhóm, ba typecheck 0 lỗi, bộ kiểm SQL 233 bước (PostgreSQL 16, chạy ở akaAgentWebApp).
+lấy nhân viên từ phiên Desktop). Kiểm cục bộ: smoke 29 nhóm, ba typecheck 0 lỗi, bộ kiểm SQL 239 bước (PostgreSQL 16, chạy ở akaAgentWebApp).
 Chưa chạy trên Electron/App Server thật, chưa kiểm trên PostgreSQL 17.
 
 [V519 đối chiếu khách đã có khi nhập vào Nhóm data](../DATA_GROUP_MEMBER_MATCHES_V519.md):

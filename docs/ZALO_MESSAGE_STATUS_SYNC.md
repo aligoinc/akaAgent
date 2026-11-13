@@ -15,8 +15,8 @@ Web và iOS: akaAgentWebApp `docs/ZALO_MESSAGE_STATUS_SYNC.md` (phần đã làm
 | Runtime Chat trên Fly (akaAgentChatApi) | Chưa làm (dưới 1% lượt gửi thuộc phạm vi) |
 
 Khi SQL chưa apply hoặc công tắc đang tắt, bản mã này **không đổi hành vi nào**: không ghi thêm gì vào kết quả gửi, không gọi
-hàm DB nào của tính năng. Việc duy nhất nó làm thêm là một lượt đọc nhỏ bảng cấu hình, tối đa 5 phút một lần cho mỗi tiến trình,
-và chỉ khi tiến trình đang gửi tin Zalo 1-1 hoặc đang nhận sự kiện Zalo.
+hàm DB nào của tính năng. Việc duy nhất nó làm thêm là một lượt đọc nhỏ bảng cấu hình, tối đa 15 phút một lần cho mỗi tiến trình
+(tối đa 4 lượt mỗi giờ), và chỉ khi tiến trình đang gửi tin Zalo 1-1 hoặc đang có bộ nghe Zalo hoạt động.
 
 Số 522 và 523 được giữ ngày 13/11/2026 (số lớn nhất trên mọi nhánh của repo lúc đó là 521). **Trước khi apply phải kiểm lại sổ
 migration của DB**: migration 522 tự dừng nếu sổ đã có một `migration_v522_*` khác.
@@ -96,13 +96,17 @@ Lô chia sẻ tạo `statusSend` cho cả lô rồi gọi `statusSend.markSendin
 | Quyền DB | Khoá máy chủ (`service_role`) | Phiên đăng nhập của nhân viên (`aka_agent_desktop`) |
 | Hàm nhận lô | `aka_agent_ingest_zalo_message_status('server', lô)` | `aka_agent_desktop_ingest_zalo_message_status(lô)` |
 | Ai được nhận | Mọi tài khoản, DB xét phạm vi akaChat | Chỉ tài khoản do chính nhân viên đang đăng nhập phụ trách; tài khoản khác bị trả về `rejectedAccountIds` |
-| Trần | Trần chung `max_events_per_day` | Thêm trần theo nhân viên mỗi ngày: 1/20 trần chung, tối thiểu 1.000 sự kiện |
+| Trần trong ngày | Trần chung `max_events_per_day` | Thêm hai trần: mỗi nhân viên 1/20 trần chung (tối thiểu 1.000 sự kiện); mọi app Desktop cộng lại 1/2 trần chung, phần còn lại luôn dành cho App Server |
+| Hạn giờ của hàm | Theo vai trò máy chủ | 15 giây, đặt ngay trên hàm (vai trò Desktop mặc định chỉ có 3 giây) |
 | Đổi người đăng nhập | Không có | Bỏ phần đang đệm |
 
 App Desktop chạy trên máy của khách nên không được gọi thẳng hàm nhận lô. Hàm bọc của Desktop lấy nhân viên từ phiên
-(`private.aka_agent_desktop_data_context()`, V436), không nhận từ tham số. Chạm trần theo nhân viên thì hàm trả
-`enabled = false, paused = true`: app ngừng thu 5 phút rồi hỏi lại. Hàm chạy dưới trần 3 giây của vai trò Desktop; lô lỗi được
-giữ và gửi lại.
+(`private.aka_agent_desktop_data_context()`, V436), không nhận từ tham số. Chỗ của lô được giữ trước khi nhận, bằng một lệnh ghi
+có điều kiện trên dòng của nhân viên, nên nhiều lần gọi đồng thời của cùng một nhân viên không thể cùng lọt dưới trần. Chạm một
+trong hai trần thì hàm trả `enabled = false, paused = true`: app bỏ bộ đệm, ngừng thu 30 phút rồi thử lại.
+
+Phạm vi thí điểm (`organization_ids`) được xét theo tổ chức của **nhân viên phụ trách** tài khoản, ở cả ba nơi: lúc ghi dấu tham
+chiếu, lúc thu sự kiện và trong DB. Cột tổ chức của tài khoản chỉ dùng khi không biết nhân viên.
 
 Tài khoản Zalo đăng nhập bằng trình duyệt (`is_zalo_show_web`) không có bộ nghe nên nằm ngoài phạm vi, như cơ chế cũ.
 
@@ -112,7 +116,8 @@ Mọi công tắc là dòng trong `auto_system_settings`, tiền tố `zalo.mess
 Chương trình gửi đọc: `enabled`, `capture_enabled`, `organization_ids`, `flush_interval_seconds`, `flush_max_rows`,
 `track_friend_accept`, `reply_ignored_kinds`.
 
-- **Bật** `enabled = true`: mỗi tiến trình nhận ra trong tối đa 5 phút (lần đọc cấu hình kế tiếp), không cần khởi động lại.
+- **Bật** `enabled = true`: mỗi tiến trình nhận ra trong tối đa 15 phút (lần đọc cấu hình kế tiếp), không cần khởi động lại.
+  Khởi động lại tiến trình thì nhận ra ngay.
 - **Tắt** `enabled = false`: lô kế tiếp (tối đa `flush_interval_seconds`) được DB báo "đang tắt", chương trình bỏ bộ đệm và ngừng
   thu ngay; tiến trình không có sự kiện nào thì nhận ra trong tối đa 5 phút. Dấu tham chiếu ghi trong quãng đó vô hại: trigger
   của DB đọc công tắc trước tiên và bỏ qua.
@@ -129,12 +134,14 @@ Không thêm kết nối, không thêm vòng hỏi định kỳ.
 
 | Lúc | Thêm vào DB |
 |---|---|
-| SQL chưa apply, hoặc công tắc tắt | 1 lượt đọc `auto_system_settings` (18 khoá của tính năng, hạn 5 giây) mỗi 5 phút cho mỗi tiến trình đang gửi tin 1-1 hoặc đang nhận sự kiện Zalo |
-| Đang bật | Như trên, cộng 1 lần gọi hàm nhận lô mỗi `flush_interval_seconds` cho mỗi tiến trình **khi bộ đệm có sự kiện** (hạn 20 giây) |
-| Lỗi gọi hàm | Giữ lô, thử lại sau 1, 2 rồi 5 phút |
-| DB chưa có hàm nhận lô (`PGRST202`) | Bỏ lô, không gọi lại trong 30 phút |
+| SQL chưa apply, hoặc công tắc tắt | 1 lượt đọc `auto_system_settings` (18 khoá của tính năng, hạn 5 giây) mỗi 15 phút cho mỗi tiến trình đang gửi tin 1-1 hoặc đang có bộ nghe Zalo hoạt động. Không gọi hàm nào |
+| Đang bật | Lượt đọc cấu hình mỗi 5 phút, cộng 1 lần gọi hàm nhận lô mỗi `flush_interval_seconds` cho mỗi tiến trình **khi bộ đệm có sự kiện** (hạn 20 giây) |
+| Lỗi tạm thời khi gọi hàm (mạng, quá giờ, khoá) | Giữ lô, thử lại sau 1, 2 rồi 5 phút, kể cả khi sự kiện mới vẫn tới đều. Lỗi liên tiếp 6 lần thì bỏ lô và nghỉ 30 phút |
+| DB từ chối kiểu gửi lại cũng không khác (chưa có hàm `PGRST202`, thiếu quyền `42xxx`, sai dữ liệu `22xxx`) | Bỏ lô, không gọi lại trong 30 phút |
+| DB báo tạm ngừng nhận (chạm trần trong ngày, job phụ lỗi) | Bỏ bộ đệm, nghỉ 30 phút rồi thử lại: khoảng 2 lần gọi mỗi giờ |
 
 Đọc cấu hình lỗi thì giữ trạng thái đang có và thử lại thưa dần (1 tới 5 phút). Chưa từng đọc được thì coi như tắt.
+Bộ đệm đầy (5.000 dòng) thì sự kiện mới bị bỏ; số bị bỏ được đếm (`dropped`) và có cảnh báo trong log của tiến trình.
 
 ## 8. Quy tắc khi sửa tiếp
 
@@ -153,11 +160,12 @@ Không thêm kết nối, không thêm vòng hỏi định kỳ.
 
 | Bài kiểm | Kết quả 13/11/2026 |
 |---|---|
-| `node scripts/zalo-message-status-sync-smoke.cjs` | 21 nhóm đạt |
+| `node scripts/zalo-message-status-sync-smoke.cjs` | 29 nhóm đạt. Chạy mã thật của phần chạy, của file nối DB (IO giả) và của hàm lõi `beginZaloEngagement`; khi máy có repo akaAgentWebApp bên cạnh thì so từng byte hợp đồng và bốn file SQL với bản gốc |
 | `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `packages/campaign-engine` `tsc --noEmit` | 0 lỗi |
 | `npm run build` (Desktop) và `npm run build:server` (App Server), chỉ dựng gói mã, không đóng bộ cài | Đạt; cả hai gói đều chứa mã của tính năng |
 | `node scripts/campaign-engine-boundary-check.cjs` (ranh giới lõi bộ chạy mới) | Không có vi phạm |
-| akaAgentWebApp `scripts/test-zalo-message-status-sql.sh` (PostgreSQL 16, bốn file SQL trên) | 233 bước đạt, gồm 21 bước cho hàm của Desktop |
+| akaAgentWebApp `scripts/test-zalo-message-status-sql.sh` (PostgreSQL 16, bốn file SQL trên) | 239 bước đạt, gồm 27 bước cho hàm của Desktop (có bước hai lần gọi đồng thời) |
+| Rà soát độc lập toàn bộ thay đổi (13/11) | Không có lỗi nặng; 7 điểm đã sửa: trần theo nhân viên giữ chỗ trước khi nhận, thêm trần chung cho Desktop, hạn giờ riêng của hàm Desktop, không thử lại mãi, giãn nhịp khi DB tạm ngừng, giờ gửi theo từng người ở bộ chạy mới, phạm vi thí điểm theo nhân viên |
 | akaAgentWebApp `packages/control-api/src/zaloMessageStatusSync.test.ts` | 36 bài đạt |
 
 Chưa làm: đóng bộ cài; chạy thử trên Electron thật và trên App Server thật với một tài khoản Zalo; chạy bộ kiểm SQL trên

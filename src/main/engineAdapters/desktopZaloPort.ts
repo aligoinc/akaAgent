@@ -222,7 +222,7 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
     messageStatusBegin: (_ctx, targetUid, actionType) => {
       const send = beginZaloMessageStatusSend({ id: host.accountId, zaloUid: host.account.zaloUid, isZaloShowWeb: host.account.isZaloShowWeb,
         organizationId: host.account.organizationId }, host.zaloRuntime.getCachedOwnUid?.(host.accountId), targetUid, actionType)
-      return send ? responses => send.detailData(responses) : null
+      return send
     },
     forwardMessage: async (_ctx, input) => {
       try {

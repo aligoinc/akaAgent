@@ -37,6 +37,14 @@ export interface ZaloEngagementSendContext {
   detailData?: Record<string, unknown>
 }
 
+/** Một lần gửi của tính năng đồng bộ trạng thái tin nhắn Zalo, do cổng của nơi chạy giữ. */
+export interface ZaloMessageStatusPortSend {
+  /** Ghi lại giờ gửi; lô chia sẻ bắt đầu cho cả lô rồi gọi hàm này ngay trước khi gửi cho từng người. */
+  markSending?(): void
+  /** Các trường ghi cùng dòng lịch sử của lượt gửi THÀNH CÔNG (dấu tham chiếu zaloStatusRef); rỗng khi tính năng tắt. */
+  detailData(responses: unknown): Record<string, unknown>
+}
+
 export interface ZaloEngagementPort {
   /** Bắt đầu một lần gửi tới người nhận (giữ chỗ cho sự kiện đến trước khi có dòng lịch sử); null = không theo dõi. */
   engagementBegin?(ctx: StepContext, targetUid: string): ZaloEngagementSendContext | null
@@ -47,12 +55,10 @@ export interface ZaloEngagementPort {
   /** Sau khi DB ghi dòng lịch sử có nguồn: đăng ký (Desktop: hàng đăng ký; Fly: đánh thức bộ ghi tương tác). */
   engagementRegister?(detailId: number, source: ZaloEngagementSource): void
   /**
-   * Đồng bộ trạng thái tin nhắn Zalo (tính năng riêng, không dùng công tắc hay dữ liệu của theo dõi tương tác): gọi ngay trước khi gửi
-   * tới một người. Trả hàm nhận phản hồi gửi và dựng các trường ghi cùng dòng lịch sử của lượt gửi THÀNH CÔNG, hoặc null khi nơi chạy
-   * không theo dõi lượt này. Cổng không có hàm này thì không ghi gì.
+   * Đồng bộ trạng thái tin nhắn Zalo (tính năng riêng, không dùng công tắc hay dữ liệu của theo dõi tương tác): bắt đầu một lần gửi
+   * tới một người; null khi nơi chạy không theo dõi lượt này. Cổng không có hàm này thì không ghi gì.
    */
-  messageStatusBegin?(ctx: StepContext, targetUid: string, actionType: ZaloEngagementSource['actionType']):
-    ((responses: unknown) => Record<string, unknown>) | null
+  messageStatusBegin?(ctx: StepContext, targetUid: string, actionType: ZaloEngagementSource['actionType']): ZaloMessageStatusPortSend | null
   trace?(event: { type: string; [key: string]: unknown }): void
 }
 
@@ -107,7 +113,7 @@ export function beginZaloEngagement(port: ZaloEngagementPort, ctx: StepContext, 
     port.trace?.({ type: 'engagement_begin_failed', error: error instanceof Error ? error.message : String(error) })
   }
   // Đồng bộ trạng thái tin nhắn Zalo: lần gửi riêng của tính năng đó, không liên quan tới `send` ở trên.
-  let messageStatus: ((responses: unknown) => Record<string, unknown>) | null = null
+  let messageStatus: ZaloMessageStatusPortSend | null = null
   try {
     messageStatus = port.messageStatusBegin?.(ctx, targetUid, actionType) ?? null
   } catch (error) {
@@ -115,7 +121,7 @@ export function beginZaloEngagement(port: ZaloEngagementPort, ctx: StepContext, 
   }
   const messageStatusData = (responses: unknown): Record<string, unknown> => {
     if (!messageStatus) return {}
-    try { return messageStatus(responses) ?? {} } catch { return {} }
+    try { return messageStatus.detailData(responses) ?? {} } catch { return {} }
   }
   let settled = false
   const abandon = (): void => {
@@ -126,10 +132,15 @@ export function beginZaloEngagement(port: ZaloEngagementPort, ctx: StepContext, 
   }
   return {
     active: send !== null,
+    /** Ngay trước lệnh gửi tới người này (lô chia sẻ): giờ gửi của tính năng đồng bộ trạng thái. Theo dõi tương tác không dùng. */
+    markSending(): void {
+      try { messageStatus?.markSending?.() } catch { /* giữ giờ lúc bắt đầu */ }
+    },
     /** Gửi được: nguồn + trường cho dòng lịch sử (rỗng khi không tính năng nào theo dõi). */
     finish(responses: unknown): Record<string, unknown> {
-      if (settled) return {}
+      // Dấu tham chiếu của đồng bộ trạng thái không phụ thuộc trạng thái của theo dõi tương tác (settled / nguồn có hay không).
       const statusData = messageStatusData(responses)
+      if (settled) return statusData
       const source = makeZaloEngagementSource(send, targetUid, actionType, responses)
       if (!source || !send) { abandon(); return statusData }
       settled = true

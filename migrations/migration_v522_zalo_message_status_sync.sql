@@ -203,7 +203,8 @@ CREATE TABLE private.auto_zalo_status_counters (
 );
 
 -- Số sự kiện app Desktop đã gửi, theo nhân viên và theo ngày. App Desktop chạy trên máy của khách (máy khách không tin cậy):
--- mỗi nhân viên có một trần riêng trong ngày, để một máy không thể làm cạn trần chung max_events_per_day của cả hệ thống.
+-- mỗi nhân viên có một trần riêng trong ngày và mọi app Desktop cộng lại có một trần chung, để máy khách không thể làm cạn
+-- trần max_events_per_day của cả hệ thống. Mỗi ngày một dòng cho mỗi nhân viên có dùng Desktop (vài trăm dòng).
 CREATE TABLE private.auto_zalo_status_desktop_usage (
   day date NOT NULL,
   staff_id bigint NOT NULL,
@@ -1115,17 +1116,28 @@ $$;
 --     V436), không nhận từ tham số; không có phiên thì lỗi 42501;
 --   * chỉ chuyển tiếp sự kiện của tài khoản do chính nhân viên đó phụ trách. Tài khoản khác bị trả về trong
 --     rejectedAccountIds, như tài khoản ngoài phạm vi;
---   * giới hạn số sự kiện mỗi nhân viên mỗi ngày ở 1/20 trần chung max_events_per_day (tối thiểu 1.000). Chạm trần thì trả
---     enabled = false, paused = true: app ngừng thu và hỏi lại sau, như khi cả hệ thống tạm ngừng nhận.
+--   * giữ hai trần trong ngày, để máy khách không thể làm cạn trần chung max_events_per_day của cả hệ thống:
+--       - mỗi nhân viên: 1/20 trần chung (tối thiểu 1.000 sự kiện);
+--       - mọi app Desktop cộng lại: 1/2 trần chung, nên phần còn lại luôn dành cho App Server.
+--     Chạm một trong hai trần thì trả enabled = false, paused = true: app ngừng thu và hỏi lại sau, như khi cả hệ thống tạm
+--     ngừng nhận.
+-- Chỗ của lô được giữ TRƯỚC khi nhận (một lệnh ghi có điều kiện trên dòng của nhân viên): các lần gọi đồng thời của cùng một
+-- nhân viên xếp hàng trên dòng đó, không thể cùng đọc "còn dưới trần" rồi cùng vượt. Vượt tối đa một lô (2.000 sự kiện).
 -- Phạm vi akaChat, khớp và lưu vẫn do hàm nhận lô chung quyết định; nguồn ghi là 'desktop'.
+-- statement_timeout 15 giây đặt ngay trên hàm (PostgREST áp cho lượt gọi): vai trò Desktop mặc định chỉ có 3 giây, không đủ
+-- chắc cho một lô khi bộ đệm phạm vi tài khoản còn nguội, và ngắn hơn cả lock_timeout 5 giây của chính hàm.
 CREATE FUNCTION public.aka_agent_desktop_ingest_zalo_message_status(p_events jsonb) RETURNS jsonb
-LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, pg_temp SET lock_timeout = '5s' AS $$
+LANGUAGE plpgsql VOLATILE SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp SET lock_timeout = '5s' SET statement_timeout = '15s' AS $$
 DECLARE
   cfg jsonb;
   v_staff bigint;
   v_day date := (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
   v_limit bigint;
-  v_used bigint;
+  v_total_limit bigint;
+  v_total bigint;
+  v_state jsonb;
+  v_paused jsonb;
   v_own jsonb;
   v_foreign jsonb;
   v_count integer;
@@ -1136,18 +1148,13 @@ BEGIN
     RAISE EXCEPTION USING ERRCODE = '42501', MESSAGE = 'zalo_message_status_desktop_identity_required';
   END IF;
 
-  -- Mảng rỗng: chỉ hỏi cấu hình hiện hành, như hàm nhận lô chung.
-  IF p_events IS NULL OR jsonb_typeof(p_events) <> 'array' OR jsonb_array_length(p_events) = 0 THEN
-    RETURN public.aka_agent_ingest_zalo_message_status('desktop', '[]'::jsonb);
+  -- Trạng thái hiện hành (đang bật, tạm ngừng, cấu hình cho app), không ghi gì. Mảng rỗng, đang tắt hoặc tạm ngừng: trả luôn.
+  v_state := public.aka_agent_ingest_zalo_message_status('desktop', '[]'::jsonb);
+  IF NOT COALESCE((v_state->>'enabled')::boolean, false)
+     OR p_events IS NULL OR jsonb_typeof(p_events) <> 'array' OR jsonb_array_length(p_events) = 0 THEN
+    RETURN v_state;
   END IF;
-
-  cfg := private.auto_zalo_status_config();
-  v_limit := GREATEST(1000, (cfg->>'maxEventsPerDay')::bigint / 20);
-  SELECT u.events INTO v_used FROM private.auto_zalo_status_desktop_usage u WHERE u.day = v_day AND u.staff_id = v_staff;
-  IF COALESCE(v_used, 0) >= v_limit THEN
-    RETURN public.aka_agent_ingest_zalo_message_status('desktop', '[]'::jsonb)
-      || jsonb_build_object('enabled', false, 'paused', true);
-  END IF;
+  v_paused := v_state || jsonb_build_object('enabled', false, 'paused', true);
 
   -- Cùng giới hạn 2.000 phần tử và cùng cách đọc mã tài khoản với hàm nhận lô chung. Phần tử hỏng bị bỏ ở đây.
   WITH items AS MATERIALIZED (
@@ -1167,15 +1174,26 @@ BEGIN
                            AND NOT EXISTS (SELECT 1 FROM owned o WHERE o.id = i.account_id)) f), '[]'::jsonb)
     INTO v_own, v_foreign;
   v_count := jsonb_array_length(v_own);
-
-  v_result := public.aka_agent_ingest_zalo_message_status('desktop', v_own);
-  -- Đang tắt hoặc tạm ngừng thì không ghi gì thêm. Đếm theo số sự kiện đã chuyển tiếp, kể cả sự kiện không khớp.
-  IF (v_result->>'enabled')::boolean AND v_count > 0 THEN
-    INSERT INTO private.auto_zalo_status_desktop_usage AS u (day, staff_id, calls, events)
-    VALUES (v_day, v_staff, 1, v_count)
-    ON CONFLICT (day, staff_id) DO UPDATE SET calls = u.calls + 1, events = u.events + EXCLUDED.events;
+  -- Không có sự kiện nào của tài khoản mình: không giữ chỗ, không gọi hàm chung.
+  IF v_count = 0 THEN
+    RETURN v_state || jsonb_build_object('rejectedAccountIds', v_foreign);
   END IF;
 
+  cfg := private.auto_zalo_status_config();
+  v_limit := GREATEST(1000, (cfg->>'maxEventsPerDay')::bigint / 20);
+  v_total_limit := GREATEST(1000, (cfg->>'maxEventsPerDay')::bigint / 2);
+  SELECT COALESCE(sum(u.events), 0) INTO v_total FROM private.auto_zalo_status_desktop_usage u WHERE u.day = v_day;
+  IF v_total >= v_total_limit THEN RETURN v_paused; END IF;
+
+  -- Giữ chỗ cho lô. Dòng đã chạm trần thì không được cập nhật (không có dòng trả về); lần gọi đồng thời của cùng nhân viên
+  -- chờ khoá dòng này rồi xét lại điều kiện trên số đã cộng.
+  INSERT INTO private.auto_zalo_status_desktop_usage AS u (day, staff_id, calls, events)
+  VALUES (v_day, v_staff, 1, v_count)
+  ON CONFLICT (day, staff_id) DO UPDATE SET calls = u.calls + 1, events = u.events + EXCLUDED.events
+    WHERE u.events < v_limit;
+  IF NOT FOUND THEN RETURN v_paused; END IF;
+
+  v_result := public.aka_agent_ingest_zalo_message_status('desktop', v_own);
   IF jsonb_array_length(v_foreign) = 0 THEN RETURN v_result; END IF;
   RETURN v_result || jsonb_build_object('rejectedAccountIds',
     COALESCE(v_result->'rejectedAccountIds', '[]'::jsonb) || v_foreign);

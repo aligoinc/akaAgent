@@ -68,9 +68,11 @@ export function beginZaloMessageStatusSend(
   kind: ZaloStatusRef['k']
 ): ZaloMessageStatusSend | null {
   try {
+    // Phạm vi thí điểm tính theo tổ chức của nhân viên phụ trách, như DB và như đường thu sự kiện; cột tổ chức của tài khoản
+    // chỉ dùng khi không biết nhân viên.
     return runtime.beginSend({
       id: account.id, zaloUid: ownUid || account.zaloUid, isZaloShowWeb: account.isZaloShowWeb,
-      organizationId: account.organizationId ?? getCurrentUser()?.organizationId
+      organizationId: getCurrentUser()?.organizationId ?? account.organizationId
     }, targetUid, kind)
   } catch {
     return null

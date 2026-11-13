@@ -21,16 +21,48 @@ const SHARED_CONTRACT_SHA256 = '72673f207f35e91c4c1d0ceb08cd7ba0e525964867d20d6d
 // Nạp mã thật: dịch hai file TypeScript sang CommonJS vào thư mục tạm, giữ nguyên đường dẫn tương đối giữa chúng.
 // ---------------------------------------------------------------------------------------------------------------------
 const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zalo-message-status-smoke-'))
-for (const file of ['src/shared/zaloMessageStatusSync.ts', 'src/main/services/zaloMessageStatusRuntime.ts']) {
-  const js = ts.transpileModule(read(file), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
-  }).outputText
+const emit = (file, js) => {
   const target = path.join(outDir, file.replace(/\.ts$/, '.js'))
   fs.mkdirSync(path.dirname(target), { recursive: true })
   fs.writeFileSync(target, js)
 }
+for (const file of ['src/shared/zaloMessageStatusSync.ts', 'src/main/services/zaloMessageStatusRuntime.ts',
+  'src/main/services/zaloMessageStatusSync.ts', 'packages/campaign-engine/src/zalo/engagement.ts']) {
+  emit(file, ts.transpileModule(read(file), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  }).outputText)
+}
+// File nối DB (zaloMessageStatusSync.ts) import ba module có IO thật. Ở đây chúng là đồ giả, điều khiển qua `wiringWorld`,
+// để chính mã của file nối được chạy: chọn hàm DB theo loại tiến trình, tổ chức dùng để xét phạm vi, bỏ bộ đệm khi đổi người.
+const wiringWorld = { server: false, user: null, settings: {}, rpcCalls: [], settingsQueries: [], sessionListeners: [],
+  rpcResult: () => ({ enabled: true, accepted: 0, matched: 0, stored: 0, rejectedAccountIds: [] }) }
+global.__zaloMessageStatusSmoke = wiringWorld
+emit('src/main/data/currentUser.ts', `
+  const world = global.__zaloMessageStatusSmoke
+  exports.getCurrentUser = () => world.user
+  exports.onCurrentUserSessionChanged = listener => { world.sessionListeners.push(listener); return () => {} }
+`)
+emit('src/main/data/supabaseClient.ts', `
+  const world = global.__zaloMessageStatusSmoke
+  exports.isTrustedServerSupabaseConfigured = () => world.server
+  exports.getSupabaseClient = () => ({
+    from: table => ({ select: columns => ({ in: (column, keys) => ({ abortSignal: async () => {
+      world.settingsQueries.push({ table, columns, column, keys })
+      return { data: Object.entries(world.settings).map(([key, value]) => ({ key, value })), error: null }
+    } }) }) }),
+    rpc: (name, args) => ({ abortSignal: async () => {
+      world.rpcCalls.push({ name, args })
+      return { data: world.rpcResult(name, args), error: null }
+    } })
+  })
+`)
+emit('src/main/data/repositories/runtimeClockRepository.ts', `
+  exports.peekDatabaseRuntimeClock = () => ({ dbNow: '2026-11-13T03:00:00.000Z' })
+`)
 const contract = require(path.join(outDir, 'src/shared/zaloMessageStatusSync.js'))
-const { ZaloMessageStatusRuntime, CONFIG_MAX_AGE_MS } = require(path.join(outDir, 'src/main/services/zaloMessageStatusRuntime.js'))
+const { ZaloMessageStatusRuntime, CONFIG_MAX_AGE_MS, CONFIG_MAX_AGE_OFF_MS, LONG_PAUSE_MS } =
+  require(path.join(outDir, 'src/main/services/zaloMessageStatusRuntime.js'))
+const engineEngagement = require(path.join(outDir, 'packages/campaign-engine/src/zalo/engagement.js'))
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Đồ giả: đồng hồ, hẹn giờ, bảng cấu hình, hàm nhận lô.
@@ -101,9 +133,24 @@ async function main() {
     const actual = crypto.createHash('sha256').update(read('src/shared/zaloMessageStatusSync.ts')).digest('hex')
     assert.equal(actual, SHARED_CONTRACT_SHA256,
       'src/shared/zaloMessageStatusSync.ts khác bản đã ghi nhận: chép lại từ akaAgentWebApp rồi cập nhật SHARED_CONTRACT_SHA256')
+    // Mã băm chỉ giữ bản ở đây không bị sửa tay. Khi máy có sẵn repo akaAgentWebApp (AKA_WEBAPP_REPO hoặc thư mục bên cạnh)
+    // thì so thẳng với bản gốc, kèm bốn file SQL.
+    const webApp = process.env.AKA_WEBAPP_REPO || path.resolve(root, '..', 'akaAgentWebApp')
+    const original = path.join(webApp, 'packages/control-api/src/zaloMessageStatusSync.ts')
+    if (fs.existsSync(original)) {
+      assert.equal(read('src/shared/zaloMessageStatusSync.ts'), fs.readFileSync(original, 'utf8'), 'hợp đồng lệch so với bản gốc ở akaAgentWebApp')
+      for (const [here, there] of [['migration_v522_zalo_message_status_sync.sql', 'migration_zalo_message_status_sync.sql'],
+        ['rollback_v522_zalo_message_status_sync.sql', 'rollback_zalo_message_status_sync.sql'],
+        ['migration_v523_zalo_message_status_statuses.sql', 'catalog_zalo_message_status_statuses.sql'],
+        ['rollback_v523_zalo_message_status_statuses.sql', 'catalog_rollback_zalo_message_status_statuses.sql']]) {
+        assert.equal(read(`migrations/${here}`), fs.readFileSync(path.join(webApp, 'scripts/sql/zalo-message-status-sync', there), 'utf8'),
+          `migrations/${here} lệch so với akaAgentWebApp ${there}`)
+      }
+      console.log('   (đã so với bản gốc ở akaAgentWebApp: hợp đồng và bốn file SQL giống từng byte)')
+    }
   })
 
-  await check('chưa có dòng cấu hình: tắt hẳn, không gọi hàm nhận lô, chỉ đọc cấu hình 5 phút một lần', async () => {
+  await check('chưa có dòng cấu hình: tắt hẳn, không gọi hàm nhận lô, chỉ đọc cấu hình 15 phút một lần', async () => {
     const { runtime, state, advance, ready } = harness()
     await ready()
     assert.equal(runtime.enabled(7), false)
@@ -112,12 +159,17 @@ async function main() {
     for (let i = 0; i < 200; i += 1) runtime.receive('message', message('U1', `r${i}`, START), 501, 'acc501', 7)
     assert.equal(runtime.pending, 0)
     assert.equal(state.timers.length, 0)
-    await advance(4 * MINUTE)
-    runtime.enabled(); await runtime.settled()
-    assert.equal(state.settingsReads, 1, 'trong 5 phút chỉ một lượt đọc')
+    for (let minute = 1; minute <= 14; minute += 1) { await advance(MINUTE); runtime.enabled(7); await runtime.settled() }
+    assert.equal(state.settingsReads, 1, 'đang tắt: trong 15 phút chỉ một lượt đọc')
     await advance(2 * MINUTE)
     runtime.enabled(); await runtime.settled()
-    assert.equal(state.settingsReads, 2, 'quá 5 phút thì đọc lại một lượt')
+    assert.equal(state.settingsReads, 2, 'quá 15 phút thì đọc lại một lượt')
+    assert.equal(CONFIG_MAX_AGE_OFF_MS, 15 * MINUTE)
+    assert.equal(state.ingestCalls.length, 0)
+    // Một giờ có sự kiện tới liên tục khi đang tắt: tổng cộng không quá 4 lượt đọc nữa, không lần gọi hàm nào.
+    const before = state.settingsReads
+    for (let i = 0; i < 360; i += 1) { await advance(10_000); runtime.receive('message', message('U1', `x${i}`, START), 501, 'acc501', 7); await runtime.settled() }
+    assert.ok(state.settingsReads - before <= 4, `đọc ${state.settingsReads - before} lượt trong một giờ`)
     assert.equal(state.ingestCalls.length, 0)
   })
 
@@ -298,6 +350,39 @@ async function main() {
     assert.equal(state.timers.length, 0)
   })
 
+  await check('DB từ chối kiểu gửi lại cũng không khác (thiếu quyền, sai dữ liệu): bỏ lô, nghỉ 30 phút', async () => {
+    for (const code of ['42501', '22P02', 'PGRST203']) {
+      const { runtime, state, advance, ready } = harness({ settings: { enabled: 'true' },
+        ingest: () => { throw Object.assign(new Error('từ chối'), { code }) } })
+      await ready()
+      runtime.receive('message', message('U1', 'r1', START), 501, 'acc501', 7)
+      await advance(61_000)
+      assert.equal(state.ingestCalls.length, 1, code)
+      assert.equal(runtime.pending, 0, `${code}: lô bị bỏ, không giữ lại`)
+      await advance(LONG_PAUSE_MS - 2 * MINUTE)
+      runtime.receive('message', message('U1', 'r2', START), 501, 'acc501', 7)
+      assert.equal(runtime.pending, 0, `${code}: đang nghỉ thì không thu`)
+      assert.equal(state.ingestCalls.length, 1, `${code}: không gọi lại trong lúc nghỉ`)
+      assert.ok(state.warnings.includes('ingest_rejected'))
+    }
+  })
+
+  await check('lỗi tạm thời kéo dài (quá giờ, mạng): sau 6 lần liên tiếp thì bỏ lô và nghỉ 30 phút, không giữ mãi', async () => {
+    const { runtime, state, advance, ready } = harness({ settings: { enabled: 'true' },
+      ingest: () => { throw Object.assign(new Error('canceling statement due to statement timeout'), { code: '57014' }) } })
+    await ready()
+    runtime.receive('message', message('U1', 'r1', START), 501, 'acc501', 7)
+    await advance(30 * MINUTE)
+    assert.equal(state.ingestCalls.length, 6, 'các lần gọi ở phút 1, 2, 4, 9, 14, 19')
+    assert.equal(runtime.pending, 0)
+    assert.ok(state.warnings.includes('ingest_given_up'))
+    runtime.receive('message', message('U1', 'r2', START), 501, 'acc501', 7)
+    assert.equal(runtime.pending, 0, 'đang nghỉ')
+    await advance(20 * MINUTE)
+    runtime.receive('message', message('U1', 'r3', START), 501, 'acc501', 7)
+    assert.equal(runtime.pending, 1, 'hết 30 phút thì thu lại')
+  })
+
   await check('DB chưa có hàm nhận lô: bỏ lô, không gọi lại trong 30 phút', async () => {
     const { runtime, state, advance, ready } = harness({ settings: { enabled: 'true' },
       ingest: () => { throw Object.assign(new Error('Could not find the function'), { code: 'PGRST202' }) } })
@@ -318,9 +403,9 @@ async function main() {
     assert.ok(runtime.beginSend(account, 'U1', 'message').detailData({ msgId: 'm1' }).zaloStatusRef)
   })
 
-  await check('DB báo đang tắt hoặc tạm ngừng: bỏ bộ đệm, ngừng thu, đọc lại cấu hình ngay', async () => {
+  await check('DB báo công tắc đã tắt: bỏ bộ đệm, ngừng thu, đọc lại cấu hình ngay', async () => {
     const { runtime, state, advance, ready } = harness({ settings: { enabled: 'true' },
-      ingest: () => ({ enabled: false, paused: true, accepted: 0, matched: 0, stored: 0, rejectedAccountIds: [] }) })
+      ingest: () => ({ enabled: false, accepted: 0, matched: 0, stored: 0, rejectedAccountIds: [] }) })
     await ready()
     runtime.receive('message', message('U1', 'r1', START), 501, 'acc501', 7)
     runtime.receive('message', message('U1', 'r2', START), 501, 'acc501', 7)
@@ -331,10 +416,26 @@ async function main() {
     runtime.receive('message', message('U1', 'r3', START), 501, 'acc501', 7)
     await runtime.settled()
     assert.equal(state.settingsReads, readsBefore + 1, 'cấu hình được đọc lại ở lần dùng kế tiếp')
-    assert.equal(runtime.pending, 0, 'vẫn đang tạm ngừng thu')
+    assert.equal(runtime.pending, 0, 'vẫn đang ngừng thu')
     await advance(CONFIG_MAX_AGE_MS + 1000)
     runtime.receive('message', message('U1', 'r4', START), 501, 'acc501', 7)
-    assert.equal(runtime.pending, 1, 'hết thời gian tạm ngừng thì thu lại')
+    assert.equal(runtime.pending, 1, 'hết thời gian ngừng thì thu lại (bảng cấu hình vẫn ghi đang bật)')
+  })
+
+  await check('DB báo tạm ngừng nhận (chạm trần trong ngày): nghỉ 30 phút, không đọc lại cấu hình dồn dập', async () => {
+    const { runtime, state, advance, ready } = harness({ settings: { enabled: 'true' },
+      ingest: () => ({ enabled: false, paused: true, accepted: 0, matched: 0, stored: 0, rejectedAccountIds: [] }) })
+    await ready()
+    let n = 0
+    const feed = () => runtime.receive('message', message('U1', `r${n += 1}`, START), 501, 'acc501', 7)
+    feed()
+    const readsBefore = state.settingsReads
+    // Hai giờ có sự kiện tới đều mỗi 10 giây trong lúc DB tạm ngừng nhận.
+    for (let i = 0; i < 720; i += 1) { await advance(10_000); feed(); await runtime.settled() }
+    assert.ok(state.ingestCalls.length <= 4, `gọi hàm ${state.ingestCalls.length} lần trong hai giờ`)
+    assert.ok(state.settingsReads - readsBefore <= 24, 'chỉ các lượt đọc cấu hình theo nhịp thường')
+    // Dấu tham chiếu vẫn được ghi: tạm ngừng nhận sự kiện không phải là tắt tính năng.
+    assert.ok(runtime.beginSend(account, 'U1', 'message').detailData({ msgId: 'm1' }).zaloStatusRef)
   })
 
   await check('tắt công tắc: sau lượt đọc cấu hình kế tiếp thì ngừng ghi dấu, ngừng thu, bỏ bộ đệm', async () => {
@@ -386,6 +487,8 @@ async function main() {
     await ready()
     for (let i = 0; i < 5200; i += 1) runtime.receive('message', message(`U${i}`, `r${i}`, START), 501, 'acc501', 7)
     assert.equal(runtime.pending, 5000)
+    assert.equal(runtime.metrics.dropped, 200, 'sự kiện bị bỏ vì đầy được đếm')
+    assert.ok(state.warnings.includes('buffer_full'))
     runtime.reset()
     assert.equal(runtime.pending, 0)
     assert.equal(state.timers.length, 0)
@@ -402,6 +505,159 @@ async function main() {
     assert.equal(runtime.pending, 0)
   })
 
+  // -------------------------------------------------------------------------------------------------------------------
+  // File nối DB chạy thật (IO là đồ giả): hẹn giờ của tiến trình được bắt lại để tự cho chạy.
+  // -------------------------------------------------------------------------------------------------------------------
+  const wiringPath = path.join(outDir, 'src/main/services/zaloMessageStatusSync.js')
+  const withWiring = async (world, run) => {
+    Object.assign(wiringWorld, { server: false, user: null, settings: {}, rpcCalls: [], settingsQueries: [], sessionListeners: [] }, world)
+    const realSetTimeout = global.setTimeout, realClearTimeout = global.clearTimeout
+    const timers = []
+    global.setTimeout = (fn, ms) => { const timer = { fn, ms, unref() {} }; timers.push(timer); return timer }
+    global.clearTimeout = timer => { const index = timers.indexOf(timer); if (index >= 0) timers.splice(index, 1) }
+    try {
+      delete require.cache[wiringPath] // mỗi lần một bộ chạy mới, như một tiến trình vừa khởi động
+      const wiring = require(wiringPath)
+      wiring.zaloMessageStatusSyncEnabled() // lượt dùng đầu tiên kích hoạt đọc cấu hình
+      await tick(); await tick()
+      await run(wiring, { timers, fire: async () => { const timer = timers.shift(); assert.ok(timer, 'phải có hẹn giờ gửi lô'); timer.fn(); await tick(); await tick() } })
+    } finally {
+      global.setTimeout = realSetTimeout; global.clearTimeout = realClearTimeout
+    }
+  }
+  const ON = { 'zalo.message_status_sync.enabled': 'true' }
+
+  await check('file nối DB, App Server: đọc đúng 18 khoá cấu hình, gọi hàm nhận lô chung với nguồn "server"', async () => {
+    await withWiring({ server: true, user: { staffId: 11, organizationId: 7 }, settings: ON }, async (wiring, clock) => {
+      assert.deepEqual(wiringWorld.settingsQueries, [{ table: 'auto_system_settings', columns: 'key,value,is_active,is_secret',
+        column: 'key', keys: [...contract.MESSAGE_STATUS_SYNC_KEYS] }])
+      assert.equal(wiringWorld.settingsQueries[0].keys.length, 18)
+      assert.equal(wiring.zaloMessageStatusSyncEnabled(), true)
+      // UID lấy từ phiên Zalo đang chạy được ưu tiên hơn cột trong DB; giờ gửi theo đồng hồ DB.
+      const send = wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'uidTrongDb', isZaloShowWeb: false }, 'acc501', 'U1', 'message')
+      assert.deepEqual(send.detailData({ msgId: 'm1' }),
+        { zaloStatusRef: { v: 1, a: 'acc501', t: 'U1', s: '2026-11-13T03:00:00.000Z', m: ['m1'], k: 'message' } })
+      assert.equal(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: null }, undefined, 'U1', 'message'), null)
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r1', START), 501, 'acc501')
+      assert.equal(clock.timers.length, 1)
+      assert.equal(clock.timers[0].ms, 60_000)
+      await clock.fire()
+      assert.deepEqual(wiringWorld.rpcCalls, [{ name: 'aka_agent_ingest_zalo_message_status',
+        args: { p_source: 'server', p_events: [{ a: '501', p: 'U1', k: 'reply', t: new Date(START).toISOString(), m: 'r1' }] } }])
+      // App Server không có "người đăng nhập": tín hiệu đổi phiên không được xoá bộ đệm dùng chung của mọi nhân viên.
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r2', START), 501, 'acc501')
+      for (const listener of wiringWorld.sessionListeners) listener()
+      assert.equal(clock.timers.length, 1, 'lô đang chờ vẫn còn')
+    })
+  })
+
+  await check('file nối DB, Desktop: gọi hàm bọc theo phiên (chỉ p_events); đổi người đăng nhập thì bỏ bộ đệm', async () => {
+    await withWiring({ server: false, user: { staffId: 11, organizationId: 7 }, settings: ON }, async (wiring, clock) => {
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r1', START), 501, 'acc501')
+      await clock.fire()
+      assert.deepEqual(wiringWorld.rpcCalls, [{ name: 'aka_agent_desktop_ingest_zalo_message_status',
+        args: { p_events: [{ a: '501', p: 'U1', k: 'reply', t: new Date(START).toISOString(), m: 'r1' }] } }])
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r2', START), 501, 'acc501')
+      assert.equal(clock.timers.length, 1)
+      assert.equal(wiringWorld.sessionListeners.length, 1)
+      wiringWorld.sessionListeners[0]()
+      assert.equal(clock.timers.length, 0, 'đổi người đăng nhập: lô đang chờ bị bỏ')
+      assert.equal(wiringWorld.rpcCalls.length, 1)
+    })
+  })
+
+  await check('file nối DB: phạm vi thí điểm xét theo tổ chức của nhân viên phụ trách, như DB', async () => {
+    const pilot = { ...ON, 'zalo.message_status_sync.organization_ids': '[7]' }
+    // Nhân viên thuộc tổ chức 7 (trong phạm vi), cột tổ chức của tài khoản ghi 99: vẫn ghi dấu và thu sự kiện.
+    await withWiring({ server: true, user: { staffId: 11, organizationId: 7 }, settings: pilot }, async (wiring, clock) => {
+      assert.ok(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'acc501', organizationId: 99 }, 'acc501', 'U1', 'message').detailData({ msgId: 'm1' }).zaloStatusRef)
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r1', START), 501, 'acc501')
+      assert.equal(clock.timers.length, 1)
+    })
+    // Nhân viên thuộc tổ chức 8 (ngoài phạm vi), cột tổ chức của tài khoản ghi 7: không ghi dấu, không thu.
+    await withWiring({ server: true, user: { staffId: 12, organizationId: 8 }, settings: pilot }, async (wiring, clock) => {
+      assert.equal(wiring.zaloMessageStatusSyncEnabled(), false)
+      assert.deepEqual(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'acc501', organizationId: 7 }, 'acc501', 'U1', 'message').detailData({ msgId: 'm1' }), {})
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r1', START), 501, 'acc501')
+      assert.equal(clock.timers.length, 0)
+    })
+    // Không biết nhân viên (sự kiện tới ngoài ngữ cảnh): dùng cột tổ chức của tài khoản cho dấu tham chiếu, sự kiện thì cứ thu.
+    await withWiring({ server: true, user: null, settings: pilot }, async (wiring, clock) => {
+      assert.ok(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'acc501', organizationId: 7 }, 'acc501', 'U1', 'message').detailData({ msgId: 'm1' }).zaloStatusRef)
+      assert.deepEqual(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'acc501', organizationId: 99 }, 'acc501', 'U1', 'message').detailData({ msgId: 'm1' }), {})
+      wiring.receiveZaloMessageStatus('message', message('U1', 'r1', START), 501, 'acc501')
+      assert.equal(clock.timers.length, 1)
+    })
+  })
+
+  await check('file nối DB: chưa có dòng cấu hình thì không ghi dấu, không thu, không gọi hàm nào', async () => {
+    await withWiring({ server: true, user: { staffId: 11, organizationId: 7 }, settings: {} }, async (wiring, clock) => {
+      assert.equal(wiring.zaloMessageStatusSyncEnabled(), false)
+      assert.deepEqual(wiring.beginZaloMessageStatusSend({ id: 501, zaloUid: 'acc501' }, 'acc501', 'U1', 'message').detailData({ msgId: 'm1' }), {})
+      for (let i = 0; i < 50; i += 1) wiring.receiveZaloMessageStatus('message', message('U1', `r${i}`, START), 501, 'acc501')
+      assert.equal(clock.timers.length, 0)
+      assert.equal(wiringWorld.rpcCalls.length, 0)
+      assert.equal(wiringWorld.settingsQueries.length, 1, 'chỉ một lượt đọc cấu hình')
+    })
+  })
+
+  // -------------------------------------------------------------------------------------------------------------------
+  // Lõi bộ chạy mới (packages/campaign-engine): hàm thật beginZaloEngagement với cổng giả.
+  // -------------------------------------------------------------------------------------------------------------------
+  await check('lõi bộ chạy mới: hai tính năng độc lập trong cùng một lần gửi', async () => {
+    const { beginZaloEngagement } = engineEngagement
+    const ctx = {}
+    let marks = 0
+    const statusPort = { messageStatusBegin: (_ctx, uid, kind) => ({ markSending: () => { marks += 1 },
+      detailData: responses => ({ zaloStatusRef: { t: uid, k: kind, r: responses } }) }) }
+    const oldSend = { revision: 'rev1', sentAt: '2026-11-13T03:00:00.000Z', accountZaloUid: 'acc501', operationId: 'op1' }
+    const staged = []
+    let abandoned = 0
+    const oldPort = { engagementBegin: () => ({ ...oldSend }), engagementStage: (_ctx, source) => staged.push(source),
+      engagementAbandon: () => { abandoned += 1 } }
+
+    // Chỉ tính năng mới (theo dõi tương tác tắt): vẫn có dấu tham chiếu.
+    const onlyNew = beginZaloEngagement(statusPort, ctx, 'U1', 'message')
+    assert.equal(onlyNew.active, false)
+    onlyNew.markSending()
+    assert.equal(marks, 1)
+    assert.deepEqual(onlyNew.finish('resp'), { zaloStatusRef: { t: 'U1', k: 'message', r: 'resp' } })
+
+    // Chỉ cơ chế cũ: dữ liệu như trước khi có tính năng mới, không thêm khoá nào.
+    const onlyOld = beginZaloEngagement(oldPort, ctx, 'U1', 'message').finish({ msgId: 'm1' })
+    assert.deepEqual(Object.keys(onlyOld).sort(), ['zaloEngagementPending', 'zaloEngagementSource'])
+    assert.equal(staged.length, 1)
+
+    // Cả hai: đủ khoá của cả hai bên.
+    const both = beginZaloEngagement({ ...oldPort, ...statusPort }, ctx, 'U1', 'friend_request').finish(null)
+    assert.deepEqual(Object.keys(both).sort(), ['zaloEngagementPending', 'zaloEngagementSource', 'zaloStatusRef'])
+    assert.equal(both.zaloStatusRef.k, 'friend_request')
+
+    // Không cổng nào: rỗng, markSending không lỗi.
+    const none = beginZaloEngagement({}, ctx, 'U1', 'message')
+    none.markSending()
+    assert.deepEqual(none.finish('resp'), {})
+
+    // Bên mới lỗi (lúc bắt đầu, lúc đánh dấu, lúc dựng dữ liệu): bên cũ vẫn nguyên.
+    const traces = []
+    const brokenBegin = beginZaloEngagement({ ...oldPort, trace: event => traces.push(event.type),
+      messageStatusBegin: () => { throw new Error('hỏng') } }, ctx, 'U1', 'message').finish({ msgId: 'm1' })
+    assert.deepEqual(Object.keys(brokenBegin).sort(), ['zaloEngagementPending', 'zaloEngagementSource'])
+    assert.deepEqual(traces, ['message_status_begin_failed'])
+    const brokenData = beginZaloEngagement({ ...oldPort, messageStatusBegin: () => ({
+      markSending: () => { throw new Error('hỏng') }, detailData: () => { throw new Error('hỏng') } }) }, ctx, 'U1', 'message')
+    brokenData.markSending()
+    assert.deepEqual(Object.keys(brokenData.finish({ msgId: 'm1' })).sort(), ['zaloEngagementPending', 'zaloEngagementSource'])
+
+    // Bên cũ lỗi hoặc đã bỏ giữ chỗ: bên mới vẫn có dấu tham chiếu.
+    const oldBroken = beginZaloEngagement({ ...statusPort, engagementBegin: () => { throw new Error('hỏng') } }, ctx, 'U1', 'message')
+    assert.deepEqual(Object.keys(oldBroken.finish('resp')), ['zaloStatusRef'])
+    const abandonedFirst = beginZaloEngagement({ ...oldPort, ...statusPort }, ctx, 'U1', 'message')
+    abandonedFirst.abandon()
+    assert.equal(abandoned, 1)
+    assert.deepEqual(Object.keys(abandonedFirst.finish('resp')), ['zaloStatusRef'])
+  })
+
   await check('độc lập với theo dõi tương tác cũ và được gắn đủ các điểm gửi / bộ nghe', async () => {
     const importsOf = file => [...read(file).matchAll(/^\s*(?:import|export)[^'"]*from\s+['"]([^'"]+)['"]/gm)].map(match => match[1])
     for (const file of ['src/shared/zaloMessageStatusSync.ts', 'src/main/services/zaloMessageStatusRuntime.ts', 'src/main/services/zaloMessageStatusSync.ts']) {
@@ -409,22 +665,48 @@ async function main() {
       assert.ok(!/campaign_engagement|zaloEngagementSource|zaloEngagementPending|auto_campaign_detail_zalo_engagement/.test(
         read(file).replace(/\/\*[\s\S]*?\*\/|\/\/.*$/gm, '')), `${file} không được dùng khoá hay bảng của cơ chế cũ`)
     }
+    assert.ok(!/zaloMessageStatus|zaloStatusRef|message_status_sync/.test(read('src/main/services/zaloCampaignEngagement.ts')),
+      'cơ chế cũ không được biết gì về tính năng mới')
     assert.deepEqual(importsOf('src/shared/zaloMessageStatusSync.ts'), [], 'hợp đồng dùng chung không import gì')
     assert.deepEqual(importsOf('src/main/services/zaloMessageStatusRuntime.ts'), ['../../shared/zaloMessageStatusSync'])
+
+    // Bộ chạy cũ: bốn điểm gửi, mỗi điểm bắt đầu trước lệnh gửi và trải dữ liệu vào kết quả gửi thành công với đúng phản hồi.
     const scheduler = read('src/main/services/campaignScheduler.ts')
-    assert.equal((scheduler.match(/beginZaloMessageStatusSend\(account, /g) || []).length, 4,
-      'bộ chạy cũ: nhắn người lạ, nhắn bạn bè, kết bạn, chia sẻ cho bạn bè')
-    assert.equal((scheduler.match(/statusSend\?\.detailData\(/g) || []).length, 4)
-    const zaloRuntime = read('src/main/services/zaloRuntimeService.ts')
-    for (const type of ['message', 'reaction', 'friend_event', 'seen_messages', 'delivered_messages']) {
-      assert.ok(zaloRuntime.includes(`receiveStatus('${type}'`), `bộ nghe phải chuyển sự kiện ${type}`)
+    const count = pattern => (scheduler.match(pattern) || []).length
+    assert.equal(count(/beginZaloMessageStatusSend\(account, this\.zaloRuntime\.getCachedOwnUid\?\.\(account\.id\), /g), 4)
+    assert.equal(count(/beginZaloMessageStatusSend\([^\n]*, 'message'\)/g), 3, 'nhắn người lạ, nhắn bạn bè, chia sẻ cho bạn bè')
+    assert.equal(count(/beginZaloMessageStatusSend\([^\n]*target\.uid, 'friend_request'\)/g), 1, 'kết bạn')
+    assert.equal(count(/\.\.\.\(statusSend\?\.detailData\(response\) \?\? \{\}\)/g), 2, 'tin 1-1: phản hồi của lệnh gửi')
+    assert.equal(count(/\.\.\.\(statusSend\?\.detailData\(null\) \?\? \{\}\)/g), 1, 'kết bạn: không có mã tin')
+    assert.equal(count(/\.\.\.\(isGroup \? \{\} : statusSend\?\.detailData\(\[mediaResponse, mappedForwardResponse\]\) \?\? \{\}\)/g), 1, 'chia sẻ: không áp cho group')
+    assert.equal(count(/statusSendByInput\.get\(item\.detail\.id\)\?\.markSending\(\)/g), 2, 'chia sẻ: giờ gửi theo từng người')
+    for (const site of scheduler.split('beginZaloMessageStatusSend(account, ').slice(1)) {
+      const upToCatch = site.slice(0, site.indexOf('} catch (err)') > 0 ? site.indexOf('} catch (err)') : 4000)
+      assert.ok(/detailData\(|statusSendByInput\.set\(/.test(upToCatch), 'dấu tham chiếu chỉ nằm ở nhánh gửi thành công, trước khối xử lý lỗi')
     }
-    assert.ok(/campaignEngagementEnabled\(\) \|\| zaloMessageStatusSyncEnabled\(\)/.test(zaloRuntime), 'bộ nghe được mở khi một trong hai tính năng bật')
-    assert.ok(read('src/main/engineAdapters/desktopZaloPort.ts').includes('messageStatusBegin:'), 'bộ chạy mới của Desktop')
-    assert.ok(read('packages/campaign-engine/src/zalo/engagement.ts').includes('port.messageStatusBegin?.('), 'lõi gọi cổng')
-    const wiring = read('src/main/services/zaloMessageStatusSync.ts')
-    assert.ok(wiring.includes("MESSAGE_STATUS_INGEST_RPC, { p_source: 'server', p_events: items }"), 'App Server gọi hàm nhận lô chung')
-    assert.ok(wiring.includes('MESSAGE_STATUS_DESKTOP_INGEST_RPC, { p_events: items }'), 'Desktop gọi hàm bọc theo phiên')
+
+    // Bộ nghe: khối của tính năng mới đứng SAU khối của cơ chế cũ, ngoài try/catch của nó, và chỉ theo công tắc của chính mình.
+    const zaloRuntime = read('src/main/services/zaloRuntimeService.ts')
+    const from = zaloRuntime.indexOf('private notifyRealtimeSubscribers(')
+    const body = zaloRuntime.slice(from, zaloRuntime.indexOf('const subscribers = this.realtimeListenerSubscribers.get(accountId)', from))
+    const oldCatch = body.indexOf("catch { console.warn('[ZaloEngagement] Event metadata unavailable'")
+    const gate = body.indexOf('if (zaloMessageStatusSyncEnabled()) {')
+    assert.ok(from > 0 && oldCatch > 0 && gate > oldCatch, 'khối mới nằm sau khối cũ đã đóng try/catch')
+    const oldBlock = body.slice(0, oldCatch), newBlock = body.slice(gate)
+    assert.ok(!/receiveZaloMessageStatus|zaloMessageStatusSyncEnabled/.test(oldBlock), 'khối cũ không gọi tính năng mới')
+    assert.ok(!/campaignEngagementEnabled|receiveCampaignEngagement/.test(newBlock), 'khối mới không phụ thuộc công tắc hay hàm của cơ chế cũ')
+    for (const type of ['message', 'reaction', 'friend_event', 'seen_messages', 'delivered_messages']) {
+      assert.ok(newBlock.includes(`receiveStatus('${type}'`), `bộ nghe phải chuyển sự kiện ${type}`)
+    }
+    assert.ok(newBlock.includes("catch { console.warn('[ZaloMessageStatus] Event metadata unavailable'"), 'khối mới có try/catch riêng')
+    assert.ok(/return campaignEngagementEnabled\(\) \|\| zaloMessageStatusSyncEnabled\(\)/.test(zaloRuntime), 'bộ nghe được mở khi một trong hai tính năng bật')
+    assert.equal((zaloRuntime.match(/this\.optionalTrackingWantsListener\(\)/g) || []).length, 2, 'cả hai chỗ mở bộ nghe dùng điều kiện chung')
+
+    // Bộ chạy mới: cổng Desktop trả nguyên lần gửi (có markSending); lõi gọi markSending ở hai điểm gửi của lô chia sẻ.
+    const port = read('src/main/engineAdapters/desktopZaloPort.ts')
+    assert.ok(/messageStatusBegin: \(_ctx, targetUid, actionType\) => \{\s*const send = beginZaloMessageStatusSend\(/.test(port))
+    const share = read('packages/campaign-engine/src/zalo/share.ts')
+    assert.equal((share.match(/engagements\.get\(v\.item\.targetRunId\)\?\.markSending\(\)/g) || []).length, 2)
     assert.equal(contract.MESSAGE_STATUS_INGEST_RPC, 'aka_agent_ingest_zalo_message_status')
     assert.equal(contract.MESSAGE_STATUS_DESKTOP_INGEST_RPC, 'aka_agent_desktop_ingest_zalo_message_status')
   })
