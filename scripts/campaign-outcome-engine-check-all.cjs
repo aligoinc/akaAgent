@@ -26,6 +26,7 @@ const steps = [
   ['Smoke V509 (112 nhắn người lạ / bạn bè: xử lý như 118 "Nội dung quá dài")', ['scripts/campaign-outcome-engine-v509-smoke.cjs']],
   ['Smoke V512 (luật tín hiệu lệnh Fly: lệnh đọc chưa gửi, tag / đổi tên như Desktop, tham số sai, phiên tag)', ['scripts/campaign-outcome-engine-v512-smoke.cjs']],
   ['Smoke V515 (mất câu trả lời của lần chốt data / của claim, ghi chú cũ sau khi gửi thành công)', ['scripts/campaign-outcome-engine-v515-smoke.cjs']],
+  ['Smoke V517 (dọn bảng vận hành engine v2 giữ 30 ngày, decision gọn)', ['scripts/campaign-outcome-engine-v517-smoke.cjs']],
   ['Smoke lõi: Fly ra cùng kết quả với Desktop (đọc hồ sơ treo, câu lỗi rỗng)', ['scripts/campaign-engine-fly-parity-smoke.cjs']],
   ['Smoke theo dõi tương tác (nguồn, cờ chờ đăng ký, đăng ký đúng dòng, kết bạn, group không theo dõi)', ['scripts/campaign-outcome-engine-engagement-smoke.cjs']],
   ['Smoke lõi + tích hợp', ['scripts/campaign-outcome-engine-core-smoke.cjs']],

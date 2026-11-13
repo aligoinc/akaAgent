@@ -940,6 +940,14 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   nhắn thành công đẩy một lần sang 2 shop, shop lỗi chỉ cảnh báo, kết quả data không đổi; data "không tồn tại" không được chọn thì không đẩy).
   ChatApi `npm run verify` 187 file, 2.687 test đạt (2 bỏ qua vì phải bật tay); bản chép lõi khớp nguồn 63 file; ranh giới lõi akaAgent sạch.
 
+### 13/11 ~11:30–12:30 VN: V517 dọn bảng vận hành, giữ 30 ngày (anh: "Làm, giữ 30 ngày"; chưa apply)
+
+- Đo tải các câu mới của #143 và V515: không cần chỉ mục mới. Riêng các bảng vận hành của engine chưa có job dọn: mỗi dòng kết quả nặng 1.627
+  byte, nên khi toàn bộ Zalo chạy bộ mới, các bảng này tăng khoảng 0,4–0,5 GB/ngày.
+- V517 thêm job pg_cron mỗi giờ để xoá lượt data đã đóng cũ hơn 30 ngày (kèm kết quả và sự kiện), và bỏ `policy` khỏi `decision`. Phải apply
+  sau V515. Chi tiết, số đo và cách gỡ: [thiết kế §14.12](CAMPAIGN_OUTCOME_ENGINE.md).
+- Kiểm: smoke V517 đạt 7/7 nhóm.
+
 ## 5. Phủ hiện tại và phần còn lại (12/11 ~04:10 VN)
 
 **Phủ ước tính trên chiến dịch chạy 30 ngày** (đếm production 12/11, chỉ đọc; có chồng lấn nên là ước tính):
