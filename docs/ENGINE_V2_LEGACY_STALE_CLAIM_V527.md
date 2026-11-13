@@ -74,6 +74,9 @@ Production 14/11 (EXPLAIN ANALYZE chỉ đọc, tài khoản có 7 chiến dịc
   9 ca nhận được cộng chính chiến dịch treo → `campaign_paused`, 15 ca vẫn chặn, 10 ca thiết lập, gỡ / apply lại). 7 đột biến (bỏ kiểm unit
   lease / data "đang chạy" / `runtime_claimed_at` / `updated_at`, bỏ sàn, nới điều kiện tạm dừng / xoá, đếm cả data đã xoá) đều bị bắt đúng ca.
   `node scripts/campaign-outcome-engine-check-all.cjs`: 31/31.
+- Bộ kịch bản engine v2 (`scripts/engine-v2-scenarios/run.cjs --rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`) nay apply V527
+  sau V517 (`SCENARIO_SKIP_MIGRATIONS=527` để chạy như production): có và không có V527 đều 702 lượt, 5.194 lần gửi, 0 vi phạm mới (chỉ I1b
+  đã biết), 0 kịch bản sự cố lỗi. Bộ này không có token bộ cũ nên chỉ kiểm V527 không làm hỏng luồng khác.
 
 ## Quét trước khi bật cờ
 
