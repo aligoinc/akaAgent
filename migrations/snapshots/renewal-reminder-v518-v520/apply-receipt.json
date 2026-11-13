@@ -86,5 +86,21 @@
     "to": "migration_v521_renewal_link_tickets",
     "atVn": "2026-11-13 ~20:02",
     "reason": "Kiểm sổ trước khi gửi lại thì thấy phiên khác đã ghi migration_v519_data_group_member_matches (version 20261113125724, 19:57:24 VN; không có trên nhánh nào của repo akaAgent). Preflight của bản vé (name LIKE 'migration_v519_%') sẽ từ chối, nên đổi số trong file, rollback, bài thử và tài liệu ở cả ba repo. Nội dung SQL không đổi ngoài số; bài thử 40 khẳng định đạt lại."
+  },
+  "merged": {
+    "atVn": "2026-11-13 tối",
+    "akaAgent": "dev_3 qua #668",
+    "akaAgentWebApp": "dev_1 qua #225",
+    "SqlServerDashboard": "dev qua #28"
+  },
+  "settingsChange": {
+    "requestedAtVn": "2026-11-13 ~21:35",
+    "request": "bật chuông (bell: true), mở cho mọi khách (audience: all), bật dải nhắc cho bản app cũ (legacyBanner)",
+    "row": "auto_system_settings id 115, key renewal.reminder",
+    "from": "{\"audience\":\"admin_akabiz\"}",
+    "to": "{\"audience\":\"all\",\"bell\":true,\"legacyBanner\":true}",
+    "status": "Connector Supabase của phiên rớt nên SQL được gửi để người dùng tự chạy trong SQL Editor; trạng thái DB chưa xác nhận lại.",
+    "effect": "Chưa có hiệu lực với khách tới khi deploy API/Web (Web, job chuông, job dải nhắc bản app cũ) hoặc phát hành Desktop có tính năng.",
+    "rollback": "{\"audience\":\"admin_akabiz\"} (chỉ admin akaBiz) hoặc {\"audience\":\"off\"} (tắt hẳn; job tự gỡ thông báo ở lượt kế tiếp)"
   }
 }

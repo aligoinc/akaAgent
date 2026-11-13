@@ -1,10 +1,10 @@
 # Nhắc gia hạn trong phần mềm — Desktop
 
-13/11/2026. **Mã nhánh `claude/exciting-archimedes-wu7hz6`, chưa merge, chưa build/phát hành. V518 (hàm trạng thái + dòng cài
+13/11/2026. **Đã merge `dev_3` qua [#668](https://github.com/aligoinc/akaAgent/pull/668) ngày 13/11 (WebApp `dev_1` qua #225, CRM `dev` qua #28), chưa build/phát hành. V518 (hàm trạng thái + dòng cài
 đặt) đã apply akachat 13/11 19:45:37 VN (`20261113124537`, không apply lại; md5 sổ = file); cột ưu đãi gia hạn sớm của CRM đã
 apply 19:46:22 VN; V520 (chuông "Gói sắp hết hạn") đã apply 20:01:04 VN (`20261113130104`, không apply lại; `bell` chưa
 bật). V521 (vé gia hạn dùng một lần) đã apply, không apply lại: người dùng tự chạy bằng SQL Editor tối 13/11 trong khoảng 20:27–21:19 VN (hộp xác nhận MCP hết hạn 2 lần, sau đó connector Supabase của phiên rớt); 21:19 VN kiểm qua REST: ba hàm public có mặt và từ chối khoá công khai (42501); giờ chính xác, md5 dòng sổ và md5 thân hàm chưa đọc được vì connector chưa lên lại; bản dán ở
-[bản gọn](../migrations/tests/migration_v521_renewal_link_tickets_paste.sql) và [bản đầy đủ](../migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql). Dòng `renewal.reminder` đang là `{"audience":"admin_akabiz"}`: chỉ admin akaBiz thấy, và chỉ trên bản app có
+[bản gọn](../migrations/tests/migration_v521_renewal_link_tickets_paste.sql) và [bản đầy đủ](../migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql). Dòng `renewal.reminder` do V518 đặt `{"audience":"admin_akabiz"}`; 13/11 ~21:35 VN người dùng yêu cầu đổi thành `{"audience":"all","bell":true,"legacyBanner":true}` (mở cho mọi khách, bật chuông, bật dải nhắc cho bản app cũ); connector Supabase của phiên rớt nên SQL được gửi để người dùng tự chạy, **trạng thái DB chưa xác nhận lại**; khi dòng đã đổi thì deploy API/Web hoặc phát hành Desktop xong là mọi khách thấy ngay, tắt khẩn cấp bằng `{"audience":"off"}`. Lời nhắc chỉ hiện trên bản app có
 tính năng này (chưa phát hành). [Biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json).** Phương án và quy tắc:
 [RENEWAL_REMINDER_PLAN.md](RENEWAL_REMINDER_PLAN.md) (mục 3, 4, 5, 7.5). Màn Gia hạn sau khi hết hạn (không đổi):
 [RENEWAL_PORTAL_DESKTOP.md](RENEWAL_PORTAL_DESKTOP.md). Web, API, iOS và bảng cài đặt `renewal.reminder`: akaAgentWebApp
