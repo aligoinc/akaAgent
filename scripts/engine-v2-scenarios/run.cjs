@@ -76,7 +76,7 @@ async function bootstrap(db, notes) {
     }
   }
   // Theo thứ tự production: V515 (sửa B, C, D của bộ thử 13/11) rồi V517 (dọn bảng, decision chỉ còn result + contrib); V527 (claim bỏ
-  // qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng; chưa apply production 14/11, không phụ thuộc V515 / V517).
+  // qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng; apply production 14/11 02:07 VN, không phụ thuộc V515 / V517).
   // SCENARIO_SKIP_MIGRATIONS=515,517,527 để chạy trên DB trước các bản đó (so trước / sau); bỏ V515 thì phải bỏ cả V517.
   const skip = new Set(String(process.env.SCENARIO_SKIP_MIGRATIONS || '').split(',').map(s => s.trim()).filter(Boolean).map(Number))
   if (skip.has(515) && !skip.has(517)) throw new Error('SCENARIO_SKIP_MIGRATIONS: V517 dựng trên V515, bỏ V515 thì bỏ cả 517')

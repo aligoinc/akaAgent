@@ -1,4 +1,14 @@
-# Trạng thái đã xác nhận — cập nhật 13/11/2026
+# Trạng thái đã xác nhận — cập nhật 14/11/2026
+
+[Engine v2 bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng (V527)](../ENGINE_V2_LEGACY_STALE_CLAIM_V527.md):
+**V527 đã apply akachat 14/11/2026 02:07:26 VN** (`20261113190717 / migration_v527_engine_claim_skip_stale_legacy_token`; md5 sổ = md5 tệp
+`40f62f5f…`; không apply lại). Chỉ thay thân `aka_agent_engine_claim_target_v1(jsonb)` (V507 `e09100fd…` → `f8935a5a…`; chủ sở hữu, quyền,
+SECURITY DEFINER, `search_path` giữ nguyên): claim token bộ cũ trên chiến dịch đã xoá / "tạm dừng", không unit lease, không data "đang chạy",
+`runtime_claimed_at` và `updated_at` cũ hơn `engine.legacy_stale_claim_minutes` (mặc định 30, chưa có dòng thiết lập) không còn trả
+`legacy_busy`; token thao tác tài khoản, unit lease, claim trên chiến dịch chờ / đang chạy vẫn chặn; hàm không xoá token. Trước apply 437 tài
+khoản Zalo Server của tổ chức chưa bật cờ sẽ đứng khi bật cờ, sau apply 0 (453 tổ chức đã bật cờ lúc apply). Smoke tự huỷ trên production đạt;
+0 lỗi 5xx/503, PostgREST nạp lại schema 1,8 s. Migration, smoke, script quét chỉ đọc `scripts/engine-v2-legacy-busy-scan.cjs` đã merge
+`dev_3` qua #674 (02:05 VN, trước khi apply). [Receipt](../../migrations/snapshots/engine-claim-stale-legacy-token-v527/apply-receipt.json).
 
 [Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
 **Mã đã merge `dev_3` qua #672 (13/11/2026; WebApp `dev_1` qua #226), chưa build/phát hành,
