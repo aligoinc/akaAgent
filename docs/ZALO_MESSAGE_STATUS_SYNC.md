@@ -8,7 +8,7 @@ Web và iOS: akaAgentWebApp `docs/ZALO_MESSAGE_STATUS_SYNC.md` (phần đã làm
 
 | Phần | Trạng thái |
 |---|---|
-| Mã chương trình gửi (App Server, Desktop bộ chạy cũ, Desktop bộ chạy mới) | Trên nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11`, **chưa merge `dev_3`, chưa build, chưa phát hành, App Server chưa cài VPS** |
+| Mã chương trình gửi (App Server, Desktop bộ chạy cũ, Desktop bộ chạy mới) | **Đã merge `dev_3` qua [#672](https://github.com/aligoinc/akaAgent/pull/672)** (13/11/2026; phần DB / API / Web / iOS: akaAgentWebApp `dev_1` qua #226), **chưa build, chưa phát hành, App Server chưa cài VPS** |
 | SQL `migrations/migration_v522_zalo_message_status_sync.sql` (bảng, hàm, trigger, lịch job, 18 dòng cấu hình) | **CHƯA apply** |
 | SQL `migrations/migration_v523_zalo_message_status_statuses.sql` (bật hai trạng thái 62, 63 và thêm quy tắc `zalo.*`) | **CHƯA apply**; chủ hệ thống đã duyệt nội dung ngày 13/11, chưa ra lệnh apply |
 | Công tắc `zalo.message_status_sync.enabled` | Chưa có dòng (migration chưa apply); sau khi apply mặc định `false` |
@@ -20,6 +20,15 @@ hàm DB nào của tính năng. Việc duy nhất nó làm thêm là một lư�
 
 Số 522 và 523 được giữ ngày 13/11/2026 (số lớn nhất trên mọi nhánh của repo lúc đó là 521). **Trước khi apply phải kiểm lại sổ
 migration của DB**: migration 522 tự dừng nếu sổ đã có một `migration_v522_*` khác.
+
+Kiểm lúc merge (13/11/2026, 22:40 VN, chỉ đọc): sổ DB thật mới tới `migration_v521_renewal_link_tickets`. Hai chỗ trùng số trong repo:
+
+- `dev_3` còn file `migration_v522_zalo_engagement_catalog_ordered_walk.sql` (PR #669, chưa apply). Chủ của bản đó đã đổi sang
+  **V524** ở nhánh `perf/engagement-catalog-ordered-scan` (`7219ede`, chưa merge) để nhường 522/523 cho tính năng này. Tới khi
+  bản đổi số đó vào `dev_3`, thư mục `migrations/` có hai file mang số 522; bản nào apply sau sẽ bị chính preflight của nó chặn
+  nếu chưa đổi số.
+- Nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` dùng 522 cho `data_group_member_matches_desktop` (chưa merge):
+  bản đó phải đổi số trước khi merge.
 
 ## 2. Chương trình gửi làm gì
 

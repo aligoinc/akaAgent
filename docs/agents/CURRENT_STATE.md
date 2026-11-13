@@ -1,9 +1,9 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
 [Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
-**Mã trên nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11` (13/11/2026), chưa merge `dev_3`, chưa build/phát hành,
+**Mã đã merge `dev_3` qua #672 (13/11/2026; WebApp `dev_1` qua #226), chưa build/phát hành,
 App Server chưa cài VPS. `migration_v522_zalo_message_status_sync.sql` và `migration_v523_zalo_message_status_statuses.sql`
-CHƯA apply** (số 522/523 được giữ ngày 13/11, số lớn nhất trên mọi nhánh lúc đó là 521; kiểm lại sổ trước khi apply). Chưa có dòng
+CHƯA apply** (số 522/523 được giữ ngày 13/11; sổ DB thật tới V521 lúc 22:40 VN 13/11; `dev_3` tạm còn `migration_v522_zalo_engagement_catalog_ordered_walk.sql` của #669, chủ của bản đó đã đổi sang V524 ở nhánh `perf/engagement-catalog-ordered-scan` `7219ede` (chưa merge) để nhường 522/523; nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` cũng đang dùng 522 và phải đổi số; kiểm lại sổ trước khi apply). Chưa có dòng
 `zalo.message_status_sync.*` nào trong DB nên tính năng đang tắt với mọi tiến trình. Hàm mới khi apply: `aka_agent_ingest_zalo_message_status(text,jsonb)`
 (EXECUTE `service_role`, `aka_agent_chat_api`) và `aka_agent_desktop_ingest_zalo_message_status(jsonb)` (EXECUTE chỉ `aka_agent_desktop`,
 lấy nhân viên từ phiên Desktop). Kiểm cục bộ: smoke 29 nhóm, ba typecheck 0 lỗi, bộ kiểm SQL 239 bước (PostgreSQL 16, chạy ở akaAgentWebApp).
