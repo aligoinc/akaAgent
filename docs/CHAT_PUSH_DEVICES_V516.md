@@ -80,6 +80,6 @@ Chưa chạy trên production (kể cả phép thử tự huỷ). Chưa đo th�
   (số `vN` dùng chung mọi nhánh): nếu V516 đã thuộc bản khác thì đổi số file này trước.
 - `CREATE FUNCTION` làm PostgREST nạp lại schema: apply ngoài giờ cao điểm, một giao dịch, `lock_timeout` 2 giây.
 - Thứ tự với các phần khác không bắt buộc: Chat API có hay chưa có mã bộ phát, Chat đang ở chế độ `off` hay `live`, hàm có
-  trước hay sau đều chạy được. iPhone chỉ nhận tin chat khi đủ cả: V516, migration `20261113120000` của Chat, secret `APNS_*`
+  trước hay sau đều chạy được. iPhone chỉ nhận tin chat khi đủ cả: V516, migration `20261113150000` của Chat, secret `APNS_*`
   ở Chat API, chế độ `live` cho tổ chức, và bản iOS có đăng ký thiết bị.
 - Gỡ: [rollback](../migrations/rollback_v516_chat_push_devices.sql) xoá hai hàm; không có dữ liệu nào để khôi phục.
