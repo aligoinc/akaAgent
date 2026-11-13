@@ -183,7 +183,7 @@ pg_cron gọi `aka_agent_engine_close_stale_v1`. Data "đang chạy" có lease h
 | Dấu "sắp gửi" | Kết quả |
 |---|---|
 | Có, chưa giải quyết | "hoàn thành" + SYS02 "Bị ngắt khi đang gửi, không rõ kết quả; không gửi lại để tránh trùng" |
-| Không có | Theo `engine.stale_unsent_target_action`, mặc định `complete`: "hoàn thành" + SYS01 "Bị ngắt trước khi gửi". Đặt `requeue` thì trả về hàng đợi |
+| Không có | Theo `engine.stale_unsent_target_action`, mặc định `complete`: "hoàn thành" + SYS01 "Bị ngắt trước khi gửi". Đặt `requeue` thì trả về hàng đợi. Từ V515 có thêm `requeue_unstarted`: chỉ trả về hàng đợi lượt data chưa có kết quả nào, lượt đã có kết quả thì đóng (mục 14.11) |
 
 Cùng lúc, chiến dịch "đang chạy" không còn lease được trả về "chờ xử lý". Không ai phải gỡ token.
 
@@ -284,7 +284,7 @@ Nguồn, theo thứ tự thời gian:
 |---|---|---|
 | `engine.lease_seconds` | 180 | hạn lease, heartbeat mỗi 60 giây |
 | `engine.stale_target_minutes` | 10 | lease hết hạn bao lâu thì đóng data dở |
-| `engine.stale_unsent_target_action` | `complete` | `complete` / `requeue` cho data dở chưa có dấu |
+| `engine.stale_unsent_target_action` | `complete` (V515 đổi sang `requeue_unstarted`) | `complete` / `requeue` / `requeue_unstarted` cho data dở chưa có dấu (mục 14.11) |
 | `engine.timeline_min_wait_seconds` | 30 | chỉ ghi sự kiện chờ dài hơn mức này |
 | `engine.bad_target_guard_error_code` | `err_undefined` | mã canh chuỗi data lỗi chung (ngưỡng + hiệu ứng lấy từ chính sách của mã này) |
 
@@ -574,6 +574,23 @@ Bảng duyệt và quyết định: [CAMPAIGN_OUTCOME_ENGINE_ZALO_FULL_REVIEW.md
   - `ZaloPortError.code` giữ mã của lỗi gốc (bước tra số dùng để quyết định thử reqSrc 40 như Desktop);
   - Fly: `zalo_command_failed` của runtime chỉ mang câu lỗi ("fetch failed", "terminated", "Request failed with status code …"), cổng Fly đọc câu theo loại lệnh, không cần deploy `zalo_runtime`;
   - Desktop: lỗi `ensureApi` ("Chưa có session Zalo"…) ở bước gửi là before_send.
+  - **Sửa 13/11 (chưa phát hành; Desktop 9.6.0 chưa có):** trước đó cổng Desktop chỉ nhận ra vài câu cố định. Lỗi khác của bước chuẩn bị bị xếp sai:
+    - ở bước gửi thành in_flight (UNK01: đóng data, không gửi lại). Ví dụ đọc phiên từ DB lỗi khi Supabase chập chờn ("Failed to get account Zalo session: TypeError: fetch failed").
+    - ở bước tra số thành after_send ("thất bại") khi Zalo từ chối lúc đăng nhập lại bằng phiên (`ZaloApiError`).
+
+    Cách sửa:
+    - `zaloRuntimeService` gắn dấu symbol cho mọi lỗi của bước chuẩn bị (`src/main/services/zaloPreCallError.ts`): `ensureApi`, cộng đọc lại tài khoản và listener tải tệp trong `sendMessage`.
+    - Cổng đọc dấu và xếp before_send (NET01: data về hàng đợi, khoá tài khoản 5 phút).
+
+    Phạm vi:
+    - Lỗi của chính lệnh Zalo không có dấu.
+    - Lần gửi thứ hai lỗi sau khi phần đầu đã tới vẫn là giao một phần (DB xét `partialDelivery` trước pha).
+    - Bộ chạy cũ không đọc dấu. Fly không đổi, vì cổng Fly nhận mã có cấu trúc từ runtime.
+
+    Kiểm:
+    - `campaign-media-timeout-smoke-test.cjs` (dấu ở mức `zaloRuntimeService`);
+    - `campaign-engine-desktop-smoke.cjs` D2b/D2c;
+    - `campaign-outcome-engine-media-smoke.cjs` M2b.
 - **Nghỉ ngắn** (`pace_mode = short`) không bao giờ dài hơn "Nghỉ giữa 2 lần" của chiến dịch (chính sách hiện chưa dùng nghỉ ngắn).
 - **V499** (`scripts/build-v499-sql.cjs`, sinh từ thân hàm V495 đã kiểm khớp production): `auto_target_memory.account_id`, khoá duy nhất (tài khoản, mục tiêu, thao tác); claim chỉ bỏ qua mục tiêu đã nhớ của đúng tài khoản đang chạy, report ghi theo tài khoản. Bảng nhớ phải trống lúc apply (production 11/11: 0 dòng). Không đổi hành vi khi chưa có chính sách bật nhớ.
 - **V500** (`scripts/build-v500-sql.cjs`, đặc tả theo Q1–Q8): 109 dòng chính sách `v500_review` theo (mã, thao tác[, nơi chạy]), 14 luật, 7 mã mới `engine v2` không có mã Zalo. Dùng toàn cơ chế có sẵn của V495:
@@ -584,3 +601,34 @@ Bảng duyệt và quyết định: [CAMPAIGN_OUTCOME_ENGINE_ZALO_FULL_REVIEW.md
 - **Kiểm:** `test-v499-target-memory-per-account.cjs` 4/4, `test-v500-zalo-error-policies.cjs` 13/13 (216 cặp chính sách hiệu lực, 29 ca phân loại, chạy thật đủ Q1–Q6, gỡ xong 2.013 mô phỏng về đúng trước V500), bộ kiểm danh mục của Desktop 8.2.0/9.3.0/chat-sync đạt trên danh mục sau V499/V500; `campaign-outcome-engine-check-all.cjs` chạy cả hai.
 - **12/11 01:00–01:18 VN đã gỡ v2 khỏi production** (anh: "tính năng này bây giờ chưa cần test", "deploy nhánh dev đi"): tắt cờ 526 → ChatApi trả tài khoản 2445 (01:00:52) → VPS nhận lại, kiểm phiên đạt 01:02:09, không quét QR; ChatApi `api`+`worker` về `dev` `dbb38b7` (01:04, 423/423 file trùng archive); Web về `dev` `6cb64b4` (v107, 01:18; 154/154 file API và bundle trùng bản dựng lại). DB giữ V495–V500, không tổ chức nào bật cờ. [Biên nhận](../migrations/snapshots/engine-v2-revert-to-dev-20261112/receipt.json). Bước tiếp theo anh giao: code phủ đủ 11 loại chiến dịch Zalo tới mức cho khách dùng, thử bằng dữ liệu thật trên máy local, rồi mới deploy và thử thật.
 - **Còn lại** (mỗi bước khi anh bảo): phát hành Desktop. Lần deploy ChatApi sau dựng từ worktree `akaAgentChatApi-deploy-dbb38b7` (nhánh `deploy/campaign-engine-v2-dbb38b7`), **không** từ `akaAgentChatApi-deploy-v2` (e16725c, sẽ gỡ phần backend ChatWeb); trước khi dựng kiểm `flyctl image show` và md5 file trong máy.
+
+### 14.11 V515: mất câu trả lời của DB, ghi chú cũ (bộ kịch bản 13/11, lỗi B, C, D; chưa apply)
+
+Bộ kịch bản toàn diện (13/11) tìm ra ba lỗi khi câu trả lời của DB bị mất (mạng, hết giờ 20 giây của lõi). Không lỗi nào gây gửi trùng.
+Sửa bằng [V515](../migrations/migration_v515_engine_report_replay_note_requeue.sql), sinh bằng `scripts/build-v515-sql.cjs` từ thân đang
+chạy production: `report_v1` của V507 (md5 prosrc `4016395d…`) và `close_stale_v1` của V495 (`4a36295d…`), kiểm 13/11 09:3x VN.
+
+- **B, lần báo chốt data mất câu trả lời.**
+  - Lỗi: lõi gửi lại cùng `result_key`; lượt data đã đóng nên DB trả `ownership_lost`. Lượt dừng không nhả lease, tài khoản đứng tới khi lease hết hạn (~3 phút). Gửi chia sẻ theo lô cũng vậy.
+  - Sửa: `report_v1` lưu câu trả lời của lần chốt vào cột mới `auto_engine_target_runs.final_response`, không kèm danh sách kết quả.
+  - Lần gọi lại chỉ nhận lại đúng câu trả lời lần đầu khi đủ cả ba điều kiện: mọi `result_key` đã ghi cho lượt này, lease còn hạn, không phải mô phỏng.
+  - Không áp lại hiệu ứng. Danh sách kết quả dựng lại từ `auto_engine_outcomes`, có `replay: true`. Lease hết hạn thì vẫn trả `ownership_lost` như cũ.
+- **D, data thành công vẫn giữ ghi chú lỗi cũ** (ví dụ NET01 từ lần về hàng đợi trước).
+  - Lỗi: lúc chốt, `report_v1` chỉ ghi ghi chú khi có câu lỗi mới.
+  - Sửa: ghi chú là kết quả của lượt chốt, như bộ chạy Desktop (thành công thì `note = null`).
+- **C, claim mất câu trả lời: data bị đóng SYS01 dù chưa gửi.**
+  - Thêm giá trị `requeue_unstarted` cho `engine.stale_unsent_target_action`. Với giá trị này, `close_stale_v1` chỉ trả về hàng đợi lượt data chưa có kết quả nào, tức lượt mà bộ chạy chưa làm gì: claim mất câu trả lời, hoặc chết khi đang tra số.
+  - Lượt đã có kết quả vẫn đóng như `complete`. Lý do: kiêm SMS (V506) đẩy SĐT ngay sau mỗi lần báo kết quả mà không lọc trùng. Nếu trả về hàng đợi một lượt đã nhắn bị từ chối và đã kiêm SMS, lần chạy lại sẽ đẩy SMS lần hai.
+  - V515 đặt thiết lập sang `requeue_unstarted`. `requeue` và `complete` giữ nghĩa cũ.
+  - Chưa sửa gốc: claim gọi lại vẫn chưa idempotent, nên claim đầu lượt mất câu trả lời thì tài khoản vẫn "busy" tới khi lease hết hạn.
+
+Phạm vi: chỉ engine v2 dùng hai hàm, cột và thiết lập này; bộ chạy cũ không đổi; không đổi quyền.
+
+Apply: có DDL (thêm cột, thay hai hàm), PostgREST nạp lại schema, nên apply ngoài giờ cao điểm.
+
+Gỡ: [rollback](../migrations/rollback_v515_engine_report_replay_note_requeue.sql) trả hai hàm về thân cũ, thiết lập về `complete`, xoá cột.
+
+Kiểm: `node scripts/campaign-outcome-engine-v515-smoke.cjs`, 6 nhóm, có trong `campaign-outcome-engine-check-all.cjs`.
+- Mỗi lỗi chạy trước V515 (phải tái hiện được) và sau V515 (phải hết).
+- Thêm ca lease hết hạn, ca gửi chia sẻ theo lô, ca lượt đã có kết quả.
+- Gỡ ra thì lỗi quay lại.
