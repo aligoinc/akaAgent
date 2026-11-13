@@ -2,6 +2,8 @@
 
 Trạng thái 13/11/2026: **V524 đã apply akachat lúc 22:24:09 VN** (`20261113152357 / migration_v524_zalo_engagement_catalog_ordered_walk`; không apply lại; md5 sổ = file `1fbbdab8…`; [biên nhận](../migrations/snapshots/zalo-engagement-v524/apply-receipt.json)), không cần phát hành Desktop/App Server/Chat. Nhánh `perf/engagement-catalog-ordered-scan`. Nền: [V510](ZALO_CAMPAIGN_ENGAGEMENT_V510.md). Bản này đầu tiên mang số V522; trước khi apply đổi thành V524 vì nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11` đã đẩy `migration_v522_*` lúc 21:50:56 VN (sớm hơn 6 phút) và giữ cả V523. Số đo bên dưới đo khi còn tên V522; câu SELECT không đổi.
 
+**Trùng số V522 (đã xử lý):** sổ production nhận `migration_v522_data_group_member_matches_desktop` lúc 22:23:07 VN ([tài liệu](DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md)); bản này đã đổi tên/guard/script/tài liệu sang V524 (commit `7219ede5`, 22:22 VN) rồi mới apply lúc 22:24:09 VN. Cảnh báo "phải đổi số trước khi apply" mà phiên nhóm data ghi lúc 22:30 VN vào bản V522 của tài liệu này không còn việc gì phải làm.
+
 ## Vấn đề
 
 Nhánh `catalog` của `aka_agent_campaign_engagement_batch` (gọi qua `aka_agent_read_campaign_engagement` với `[{"catalog":{from,until,id}}]`) trả danh mục lượt theo dõi còn hạn của một (tổ chức, nhân viên), mỗi trang 500 dòng theo `(tracking_until, campaign_detail_id)`. Ai gọi:

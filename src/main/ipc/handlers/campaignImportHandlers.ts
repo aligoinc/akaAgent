@@ -16,6 +16,8 @@ import { imageImportRows, type ImportImageSource, type ImportTableSource } from 
 import { importWorkbookTables, readImportWorkbook } from '../../../shared/campaignImportWorkbook'
 import { CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest } from '../../../shared/campaignInputDuplicatesIpc'
 import { handleCampaignInputDuplicatesRequest } from '../../services/campaignInputDuplicatesService'
+import { DATA_GROUP_MEMBER_MATCHES_IPC, type DataGroupMemberMatchesIpcRequest } from '../../../shared/dataGroupMemberMatchesIpc'
+import { handleDataGroupMemberMatchesRequest } from '../../services/dataGroupMemberMatchesService'
 import { CAMPAIGN_ADD_DATA_PREVIEW_IPC } from '../../../shared/campaignAppendData'
 import { handleCampaignAddDataPreviewRequest } from '../../services/campaignAddDataPreviewService'
 
@@ -362,6 +364,8 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
 export function registerCampaignImportHandlers(): void {
   // "Lọc trùng dữ liệu" của cửa sổ Upload (V491/V493): công tắc + một lượt ≤ 2.000 SĐT; {ok,data}|{ok:false,code,message}, không ném lỗi.
   ipcMain.handle(CAMPAIGN_INPUT_DUPLICATES_IPC, (_, request: CampaignInputDuplicatesIpcRequest) => handleCampaignInputDuplicatesRequest(request))
+  // Nhóm data → "Bỏ data đã có trong nhóm này / ở nhóm data khác" (V519/V522): công tắc + một lượt ≤ 2.000 định danh; không ném lỗi.
+  ipcMain.handle(DATA_GROUP_MEMBER_MATCHES_IPC, (_, request: DataGroupMemberMatchesIpcRequest) => handleDataGroupMemberMatchesRequest(request))
   // "Thêm data" → xem trước data đã có trong chiến dịch này (chỉ đọc); {ok,data}|{ok:false,code,message}, không ném lỗi.
   ipcMain.handle(CAMPAIGN_ADD_DATA_PREVIEW_IPC, (_, request: unknown) => handleCampaignAddDataPreviewRequest(request))
   ipcMain.handle(IPC_EVENTS.CAMPAIGN_IMPORT_LOAD_SHEET, async (_, request: CampaignImportSheetRequest): Promise<CampaignImportDataRow[] | ImportTableSource> => {
