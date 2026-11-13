@@ -108,5 +108,13 @@ Dữ liệu thật 13/11 (chỉ đọc): mọi dòng gói akaAgent còn hạn đ
 (38 dòng) nên quy tắc "loại trống = dùng thử" hiện không gắn nhầm gói trả phí nào. Sổ migration mới tới V514; V515–V517 đã
 có chủ ở các nhánh khác, V518 chưa ai dùng (kiểm lại ngay trước khi apply).
 
-Chưa làm: chạy Electron (không có binary trong container), DB thật, apply V518, deploy Edge `renewal_link`, thanh toán thật,
-smoke giao diện. Chưa kiểm bằng mắt màu/tương phản trên app thật (đã tính tay ≥ 4.5:1 cho chữ và nút ở hai giao diện).
+Giao diện: `node scripts/run-renewal-reminder-ui-smoke.cjs` (10 nhóm) dựng các component và `global.css` thật bằng esbuild
+rồi mở bằng Chromium của Playwright với IPC giả lập (cùng nhân với Electron, không cần binary Electron; container cloud tự
+dùng `/opt/pw-browsers/chromium`, máy khác đặt `RENEWAL_UI_CHROMIUM` nếu Playwright không tìm thấy trình duyệt). Kiểm: không
+có gì để nhắc thì không hiện gì; mức nhẹ/vừa/mạnh/ngày cuối đúng cách ẩn dải và hộp thoại; dùng thử có bảng đếm ngược; ưu
+đãi; Thông tin tài khoản; bấm Gia hạn mở cửa sổ và gọi main đúng một lần; giao diện tối; không có chữ nào nhắc thói quen
+đăng nhập; không lỗi console. `RENEWAL_UI_SHOTS=<thư mục>` để chụp màn hình từng bước (đã xem bằng mắt 13/11, sáng và tối).
+
+Chưa làm: chạy trong Electron thật (không có binary trong container) nên trang CRM bên trong `<webview>` của cửa sổ "Gia
+hạn gói", việc đóng/xoá phân vùng và luồng thanh toán xong → đọc lại gói chưa được chạy thật; DB thật, apply V518, deploy
+Edge `renewal_link`, thanh toán thật.
