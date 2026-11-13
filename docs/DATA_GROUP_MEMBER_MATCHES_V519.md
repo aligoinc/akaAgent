@@ -97,7 +97,7 @@ không) 139 ms; cùng danh sách với `otherGroups: 'all'` 78 ms.
 
 ## Triển khai và gỡ
 
-Thứ tự: DB (xong) → merge nhánh này vào `dev_3` → deploy API/Web của akaAgentWebApp (thứ tự nào so với DB cũng an
+Thứ tự: DB (xong) → merge vào `dev_3` qua [#667](https://github.com/aligoinc/akaAgent/pull/667) → deploy API/Web của akaAgentWebApp (thứ tự nào so với DB cũng an
 toàn) → theo dõi `edge_logs` của `rpc/aka_agent_read_data_group_member_matches` ở các lượt gọi đầu.
 Gỡ nhanh không DDL: thêm `"groupMatches": false` vào giá trị của `web.campaign_input_duplicates`. Gỡ hẳn:
 [rollback](../migrations/rollback_v519_data_group_member_matches.sql) (chỉ xóa hàm, không đụng dữ liệu).
