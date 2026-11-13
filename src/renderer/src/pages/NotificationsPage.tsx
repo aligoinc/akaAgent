@@ -20,10 +20,11 @@ import {
   type NotificationReadHandler
 } from '../components/Notifications/NotificationDetailView'
 import {
-  NOTIFICATION_TARGET_LABELS,
   notificationTarget,
+  notificationTargetLabel,
   type NotificationTarget
 } from '../components/Notifications/notificationTargets'
+import { useRenewalReminderStore } from '../stores/renewalReminderStore'
 import '../components/Settings/notificationCenter.css'
 import '../components/Notifications/notifications.css'
 
@@ -308,7 +309,9 @@ function NotificationDetailPanel({ selection, format, onRead, onOpenTarget }: {
   const { detail, loading, error, reload } = useNotificationDetail(selection.id, onRead)
   const title = notificationDisplayTitle(selection.item, detail)
   const source = detail ?? selection.item
-  const target = source ? notificationTarget(source) : null
+  // "Gói sắp hết hạn": nút Gia hạn chỉ khi đang có lời nhắc gia hạn (trạng thái do tiến trình chính tính).
+  const renewalState = useRenewalReminderStore(store => store.state)
+  const target = source ? notificationTarget(source, renewalState) : null
 
   // Bấm mở nhanh trước khi chi tiết tải xong thì lượt đánh dấu trong lúc tải bị hủy theo trang;
   // đánh dấu đã đọc ngay tại đây, kết quả cập nhật số trên chuông kể cả khi đã rời trang.
@@ -331,7 +334,7 @@ function NotificationDetailPanel({ selection, format, onRead, onOpenTarget }: {
         {target && (
           <button type="button" className="btn btn-primary btn-sm nc-open-target" onClick={() => openTarget(target)}>
             <ArrowUpRight size={14} />
-            <span>{NOTIFICATION_TARGET_LABELS[target.kind]}</span>
+            <span>{notificationTargetLabel(target)}</span>
           </button>
         )}
       </div>

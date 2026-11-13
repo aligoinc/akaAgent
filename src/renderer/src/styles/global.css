@@ -26436,3 +26436,344 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
 .campaign-limit-heading small { color: var(--text-tertiary); font-size: 9px; font-weight: 500; letter-spacing: 0; text-transform: none; }
 .campaign-table-row .col-limits { align-self: start; padding-top: 4px; }
 .campaign-table-row .col-limits.is-empty { align-self: center; padding-top: 0; }
+
+/* ===== Nhắc gia hạn trong phần mềm (docs/RENEWAL_REMINDER_DESKTOP.md) =====
+   Mức nhẹ/vừa/mạnh khác nhau cả màu, biểu tượng và câu chữ. Chữ dùng màu trộn với --text-primary, nút dùng màu trộn
+   với đen để đạt tương phản >= 4.5:1 ở cả giao diện sáng và tối. */
+.renewal-reminder-tone-mild { --rr-tone: var(--accent-primary); }
+.renewal-reminder-tone-medium { --rr-tone: var(--accent-warning); }
+.renewal-reminder-tone-strong { --rr-tone: var(--accent-error); }
+.renewal-reminder-tone-mild,
+.renewal-reminder-tone-medium,
+.renewal-reminder-tone-strong {
+  --rr-ink: color-mix(in srgb, var(--rr-tone) 60%, var(--text-primary));
+  --rr-soft: color-mix(in srgb, var(--rr-tone) 13%, var(--bg-secondary));
+  --rr-line: color-mix(in srgb, var(--rr-tone) 42%, transparent);
+  --rr-solid: color-mix(in srgb, var(--rr-tone) 55%, #000);
+}
+
+.renewal-reminder-primary {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--rr-solid, var(--accent-primary));
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.renewal-reminder-primary:hover { filter: brightness(1.12); }
+.renewal-reminder-primary:focus-visible,
+.renewal-reminder-secondary:focus-visible,
+.renewal-reminder-chip button:focus-visible { outline: 2px solid var(--rr-ink, var(--accent-primary)); outline-offset: 2px; }
+.renewal-reminder-primary-large { height: 42px; width: 100%; font-size: 14.5px; border-radius: var(--radius-md); }
+
+.renewal-reminder-secondary {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  -webkit-app-region: no-drag;
+}
+.renewal-reminder-secondary:hover:not(:disabled) { background: var(--bg-hover); }
+.renewal-reminder-secondary:disabled { opacity: 0.6; cursor: progress; }
+
+/* Nhãn trên thanh trên cùng */
+.renewal-reminder-chip {
+  position: relative;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 3px 0 4px;
+  border: 1px solid var(--rr-line);
+  border-radius: var(--radius-full);
+  background: var(--rr-soft);
+  color: var(--rr-ink);
+  font-size: 12px;
+  font-weight: 650;
+  -webkit-app-region: no-drag;
+}
+.renewal-reminder-chip-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 4px 0 6px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.renewal-reminder-chip-countdown { font-variant-numeric: tabular-nums; font-weight: 750; }
+.renewal-reminder-chip-action {
+  height: 22px;
+  padding: 0 11px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--rr-solid);
+  color: #fff;
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.renewal-reminder-chip-action:hover { filter: brightness(1.12); }
+.renewal-reminder-chip-success {
+  --rr-tone: var(--accent-success);
+  --rr-ink: color-mix(in srgb, var(--accent-success) 58%, var(--text-primary));
+  --rr-soft: color-mix(in srgb, var(--accent-success) 14%, var(--bg-secondary));
+  --rr-line: color-mix(in srgb, var(--accent-success) 42%, transparent);
+  padding: 0 11px;
+}
+
+/* Bảng nhỏ của bản dùng thử */
+.renewal-reminder-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 160;
+  width: 320px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.24);
+  font-weight: 400;
+}
+.renewal-reminder-popover h2 { margin: 0; font-size: 15px; font-weight: 700; line-height: 1.35; }
+.renewal-reminder-popover p { margin: 0; color: var(--text-secondary); font-size: 12.5px; line-height: 1.45; }
+.renewal-reminder-popover .renewal-reminder-primary { height: 34px; }
+
+.renewal-reminder-countdown { display: flex; gap: 8px; }
+.renewal-reminder-countdown-cell {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 4px;
+  border-radius: var(--radius-md);
+  background: var(--rr-soft, var(--bg-tertiary));
+}
+.renewal-reminder-countdown-cell strong { color: var(--rr-ink, var(--text-primary)); font-size: 22px; font-weight: 750; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.renewal-reminder-countdown-cell span { color: var(--text-secondary); font-size: 11.5px; }
+.renewal-reminder-countdown-large .renewal-reminder-countdown-cell strong { font-size: 28px; }
+
+.renewal-reminder-trial-days { display: flex; flex-direction: column; gap: 4px; }
+.renewal-reminder-trial-bars { display: flex; gap: 4px; }
+.renewal-reminder-trial-bars span { flex: 1; height: 6px; border-radius: var(--radius-full); background: var(--bg-tertiary); }
+.renewal-reminder-trial-bars span.is-used { background: var(--rr-solid); }
+.renewal-reminder-trial-labels { display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 11px; }
+
+/* Dải thông báo */
+.renewal-reminder-banner {
+  position: relative;
+  z-index: 124;
+  min-height: 44px;
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--rr-line);
+  background: var(--rr-soft);
+  color: var(--text-primary);
+  font-size: 12.5px;
+  line-height: 1.4;
+  -webkit-app-region: no-drag;
+}
+.renewal-reminder-banner-icon { flex: 0 0 auto; color: var(--rr-ink); }
+.renewal-reminder-banner-content { min-width: 0; flex: 1; display: flex; align-items: baseline; gap: 8px; }
+.renewal-reminder-banner-content strong { flex: 0 0 auto; color: var(--rr-ink); font-weight: 750; }
+.renewal-reminder-banner-content span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-secondary); }
+.renewal-reminder-offer {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-success) 16%, var(--bg-secondary));
+  color: color-mix(in srgb, var(--accent-success) 55%, var(--text-primary));
+  font-size: 12px;
+  font-weight: 650;
+}
+.renewal-reminder-banner-close,
+.renewal-reminder-banner-collapse {
+  flex: 0 0 auto;
+  height: 28px;
+  min-width: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 6px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.renewal-reminder-banner-close:hover,
+.renewal-reminder-banner-collapse:hover { background: color-mix(in srgb, var(--rr-tone) 16%, transparent); color: var(--text-primary); }
+
+/* Hộp thoại */
+.renewal-reminder-overlay { z-index: 1100; }
+.renewal-reminder-dialog {
+  width: min(500px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 18px 42px rgba(15, 23, 42, 0.28);
+}
+.renewal-reminder-dialog-head { display: flex; align-items: flex-start; gap: 12px; }
+.renewal-reminder-dialog-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-full);
+  background: var(--rr-soft);
+  color: var(--rr-ink);
+}
+.renewal-reminder-dialog-heading { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.renewal-reminder-dialog-heading h2 { margin: 0; font-size: 17px; font-weight: 700; line-height: 1.3; }
+.renewal-reminder-dialog-heading p { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.45; }
+.renewal-reminder-dialog-badge {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  background: var(--rr-solid);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+}
+.renewal-reminder-muted { font-size: 12px !important; }
+.renewal-reminder-product {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 13px 15px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+}
+.renewal-reminder-product-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.renewal-reminder-product-head strong { font-size: 13.5px; font-weight: 650; }
+.renewal-reminder-product-head span { flex: 0 0 auto; color: var(--rr-ink); font-size: 12.5px; font-weight: 650; }
+.renewal-reminder-progress { height: 8px; border-radius: var(--radius-full); background: var(--bg-tertiary); overflow: hidden; }
+.renewal-reminder-progress > div { height: 100%; border-radius: var(--radius-full); background: var(--rr-solid); }
+.renewal-reminder-progress-caption { display: flex; justify-content: space-between; color: var(--text-secondary); font-size: 12px; }
+.renewal-reminder-benefits { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 7px; font-size: 13px; line-height: 1.45; }
+.renewal-reminder-benefits li { display: flex; gap: 8px; }
+.renewal-reminder-benefits svg { flex: 0 0 16px; margin-top: 2px; color: color-mix(in srgb, var(--accent-success) 60%, var(--text-primary)); }
+.renewal-reminder-running {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  background: var(--rr-soft);
+  font-size: 12.5px;
+  line-height: 1.45;
+}
+.renewal-reminder-dialog-actions { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.renewal-reminder-dialog-actions .renewal-reminder-secondary { border-color: transparent; }
+
+/* Cửa sổ "Gia hạn gói" */
+.renewal-reminder-window {
+  width: min(1040px, calc(100vw - 48px));
+  height: min(760px, calc(100vh - 64px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  box-shadow: 0 22px 50px rgba(15, 23, 42, 0.32);
+}
+.renewal-reminder-window-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 18px;
+  border-bottom: 1px solid var(--border-default);
+}
+.renewal-reminder-window-head > strong { flex: 1; font-size: 14px; font-weight: 700; }
+.renewal-reminder-window-done {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: color-mix(in srgb, var(--accent-success) 58%, var(--text-primary));
+  font-size: 12.5px;
+  font-weight: 650;
+}
+.renewal-reminder-window-note {
+  margin: 0;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border-default);
+  background: color-mix(in srgb, var(--accent-info) 10%, var(--bg-secondary));
+  font-size: 12.5px;
+}
+.renewal-reminder-window-frame { position: relative; flex: 1; min-height: 0; display: flex; background: #fff; }
+.renewal-reminder-webview { display: flex; width: 100%; height: 100%; }
+.renewal-reminder-frame-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 13px;
+}
+.renewal-reminder-frame-loading { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); }
+
+/* Thông tin tài khoản: số ngày còn lại + nút Gia hạn của gói đang được nhắc */
+.account-profile-product-side { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+.account-profile-renewal-days {
+  padding: 1px 7px;
+  border-radius: var(--radius-full);
+  background: color-mix(in srgb, var(--accent-warning) 14%, transparent);
+  color: color-mix(in srgb, var(--accent-warning) 55%, var(--text-primary));
+  font-size: 11px;
+  font-weight: 700;
+}
