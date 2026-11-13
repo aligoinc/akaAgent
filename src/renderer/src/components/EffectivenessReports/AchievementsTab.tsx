@@ -128,7 +128,7 @@ export function AchievementsTab(props: EffectivenessTabProps) {
           <p className="eff-footnote">
             {showsMessageJourney && data.message.receivedIsMinimum ? '* Đã nhận tính theo khách đã xem hoặc tương tác. ' : ''}
             {data.totals.pending > 0 ? `${formatEffectivenessNumber(data.totals.pending)} lượt đang chờ gửi. ` : ''}
-            {showsMessageJourney && data.stillTrackingSince ? 'Tương tác của các tin gửi trong 48 giờ gần đây vẫn đang được cập nhật.' : ''}
+            {showsMessageJourney && data.stillTrackingSince ? 'Tương tác của các tin gửi gần đây vẫn đang được cập nhật.' : ''}
           </p>
         </section>
         <section className="eff-card" aria-labelledby="eff-trend-title">
