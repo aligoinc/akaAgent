@@ -1,0 +1,65 @@
+{
+ "migration": "migration_v527_engine_claim_skip_stale_legacy_token",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "14/11/2026 ~02:06 VN, \"Apply V527 lên akachat luôn đi\"",
+ "tool": "node scripts/make-migration-ledger-apply.cjs migrations/migration_v527_engine_claim_skip_stale_legacy_token.sql migration_v527_engine_claim_skip_stale_legacy_token <tệp ra>; supabase db query --linked --workdir /Users/lequangnhut/Repos/akaAgent -f <tệp ra> (migration + dòng sổ cùng một giao dịch; statements[1] = nguyên văn tệp)",
+ "file_md5": "40f62f5f6a6466de90c7dd481d95d7d8",
+ "file_bytes": 38763,
+ "rollback_file_md5": "cbc7e5dc0ba48772af0e56692f14c5e4",
+ "source_commit": "f30b2941 (nhánh claude/engine-claim-stale-legacy-token, PR aligoinc/akaAgent#674, đã merge dev_3 lúc 02:05:47 VN 14/11/2026, merge b19ddd87, trước khi apply)",
+ "ledger": {
+  "version": "20261113190717",
+  "name": "migration_v527_engine_claim_skip_stale_legacy_token",
+  "statements_md5": "40f62f5f6a6466de90c7dd481d95d7d8",
+  "statements_count": 1
+ },
+ "applied_at_vn": "2026-11-14 02:07:25–02:07:27 (exit 0, preflight / postflight trong tệp đạt; câu lệnh vào postgres_logs 19:07:26.567 UTC)",
+ "what": "Chỉ thay thân public.aka_agent_engine_claim_target_v1(jsonb): claim token bộ cũ trên chiến dịch đã xoá hoặc 'tạm dừng', không unit lease, không data 'đang chạy' (chưa xoá), runtime_claimed_at và updated_at cũ hơn engine.legacy_stale_claim_minutes (mặc định 30, sàn 10) không còn trả legacy_busy. Token thao tác tài khoản, unit lease, claim trên chiến dịch chờ / đang chạy, chiến dịch vừa tạm dừng vẫn chặn; hàm không xoá token. Không đổi bảng, dữ liệu, thiết lập (chưa có dòng engine.legacy_stale_claim_minutes).",
+ "precheck": {
+  "at_vn": "2026-11-14 02:06:42",
+  "ledger_v527": 0,
+  "ledger_tail": [
+   "20261113161644 migration_v515_engine_report_replay_note_requeue",
+   "20261113161709 migration_v517_engine_retention",
+   "20261113161742 chat_runtime_event_drop_raw_first_claim",
+   "20261113163247 chat_zalo_action_content_retention"
+  ],
+  "claim_before": {
+   "prosrc_md5": "e09100fd2b1fedfd951e22bfd4f8ab8a",
+   "def_md5": "f33e534e806885ce2bc4837d7ed7b330",
+   "owner": "postgres",
+   "secdef": true,
+   "volatile": "v",
+   "config": ["search_path=\"\""],
+   "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}"
+  },
+  "db_load": "0 truy vấn client đang chạy, 0 chờ khoá, 0 idle in transaction",
+  "flagged_orgs": 453,
+  "scan_before": "02:06–02:07 VN (scripts/engine-v2-legacy-busy-scan.cjs, chỉ đọc): tổ chức chưa bật cờ: 437 tài khoản Zalo Server bị chặn theo thân V507 (195 chiến dịch chờ / đang chạy; 626 chiến dịch giữ claim treo: 328 đã xoá, 298 tạm dừng), 0 theo luật V527; tổ chức đã bật cờ: 0 tài khoản Server bị chặn; tài khoản QR/Web bị chặn 82 (đã bật cờ) + 2 (chưa bật), cả 84 do bộ cũ đang giữ token thao tác tài khoản"
+ },
+ "verify": {
+  "at_vn": "2026-11-14 02:08:15",
+  "ledger_statements_md5_equal_file": true,
+  "claim_after": {
+   "prosrc_md5": "f8935a5a986f5ac4bcc1bde34284bbd6",
+   "def_md5": "43e14ce4f69832d374d19d7ea5a0b1d5",
+   "owner": "postgres",
+   "secdef": true,
+   "volatile": "v",
+   "config": ["search_path=\"\""],
+   "acl_unchanged": true,
+   "overloads": 1
+  },
+  "execute": {"postgres": true, "service_role": true, "aka_agent_chat_api": true, "aka_agent_desktop": true, "anon": false, "authenticated": false},
+  "public_grant": 0,
+  "setting_row_engine_legacy_stale_claim_minutes": 0,
+  "rollback_smoke": "02:08:59 VN, khối DO kết thúc bằng RAISE nên cả giao dịch ROLLBACK (lock_timeout 1 s): runtimeTarget desktop với tài khoản Server đi qua đoạn kiểm token rồi dừng ở runtime_not_owner trước mọi lệnh ghi. Tài khoản 7653 (7 chiến dịch tạm dừng giữ claim treo) → runtime_not_owner (16,1 ms, lần gọi đầu); tài khoản 3557 (6 chiến dịch treo, 5 đã xoá) → runtime_not_owner (1,8 ms); trước V527 cả hai trả legacy_busy. Tài khoản QR 8123 đang bị Desktop bản cũ giữ token thao tác → legacy_busy scope account (1,1 ms). Sau đó: 0 lease của runner thử, claim token của chiến dịch treo giữ nguyên.",
+  "scan_after": "02:09 VN: 'Hàm claim đang chạy: V527'; tài khoản Zalo Server bị chặn: 0 (cả tổ chức đã và chưa bật cờ); QR/Web: 82 + 2, cùng các tài khoản đang bị bộ cũ giữ như trước",
+  "engine_after_apply": "02:07:27–02:10:43 VN: 18 lượt data Fly mới của engine v2 (10 phút trước apply: 20)",
+  "edge_logs_rest": "19:03:00–19:09:30 UTC: 0 lỗi 5xx, 0 lỗi 503; ~4,8–5,3 nghìn request/phút, 401 74–84/phút như nền; REST p50 43–44 ms, p99 91–95 ms; riêng 19:07:00–19:07:30 (nạp lại schema) p99 109 ms, max 836 ms",
+  "postgrest_logs": "nhận lệnh nạp lại schema 19:07:26.601 UTC, truy vấn schema 1.812,9 ms, nạp xong 19:07:28.556 UTC",
+  "postgres_logs": "lỗi nền không đổi trước / sau apply (permission denied for table auto_campaigns 24–25 / 3 phút, lỗi khác 201–212 / 3 phút, chủ yếu permission denied for function recover_stale_auto_automation_details của máy cũ); thêm 1 lỗi V527_POSTCHECK của smoke tự huỷ"
+ },
+ "rollback": "migrations/rollback_v527_engine_claim_skip_stale_legacy_token.sql (md5 cbc7e5dc…): trả thân V507, preflight đòi đúng thân / định nghĩa V527; không xoá dòng sổ",
+ "do_not_reapply": true
+}
