@@ -1,5 +1,5 @@
--- V522 catalog scale data (committed into a dedicated database by
--- scripts/run-zalo-engagement-v522-smoke.cjs, then VACUUM ANALYZE, like production after
+-- V524 catalog scale data (committed into a dedicated database by
+-- scripts/run-zalo-engagement-v524-smoke.cjs, then VACUUM ANALYZE, like production after
 -- autovacuum): 600 owners (staff 2000000+s, organization 1000000+s), ~174k watches like
 -- akachat on 13/11/2026 (166k–171k). Owner s=0 sends ~22% of all Zalo results: ~38k watches,
 -- ~33.7k still inside the window, ~30k of them valid; the rest are rejected the way V510

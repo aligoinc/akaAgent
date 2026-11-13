@@ -1,5 +1,5 @@
 -- BƯỚC RIÊNG, chạy sau migration_zalo_message_status_sync.sql. KHÔNG apply khi chưa được chủ hệ thống duyệt.
--- Ở akaAgent file này là migrations/migration_v523_zalo_message_status_statuses.sql (giống nhau từng byte).
+-- Ở akaAgent file này là migrations/migration_v526_zalo_message_status_statuses.sql (giống nhau từng byte).
 --
 -- Nối "Đồng bộ trạng thái tin nhắn Zalo" vào các bảng quản lý trạng thái của hệ thống, để bậc đã đạt của một lượt gửi được
 -- đưa vào cột trạng thái (trạng thái phụ) của kết quả chiến dịch. Chưa chạy file này thì tính năng vẫn ghi đủ mốc thời gian ở

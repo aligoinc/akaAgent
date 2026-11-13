@@ -1,16 +1,16 @@
-// Read-only catalog measurement for one owner, on production or any copy (used 13/11/2026 for V522).
-// Prints SQL: BEGIN READ ONLY; PREPARE q522 (+ q510) = the catalog SELECT of each migration with the
+// Read-only catalog measurement for one owner, on production or any copy (used 13/11/2026 for V524).
+// Prints SQL: BEGIN READ ONLY; PREPARE q524 (+ q510) = the catalog SELECT of each migration with the
 // PL/pgSQL variables as parameters; a DO block that walks every page from cursor {} (from = now())
 // with EXPLAIN (ANALYZE, BUFFERS) in force_custom_plan and force_generic_plan, and with "v510" also
 // EXPLAINs the V510 SELECT (generic plan) at the same cursors. A read-only transaction cannot keep a
 // temp table, so the summary comes back as the error text "CATALOG_EXPLAIN {...}"; ROLLBACK.
-// Usage: node scripts/zalo-engagement-v522-catalog-explain.cjs <staff_id> <organization_id> [v510] > file.sql
+// Usage: node scripts/zalo-engagement-v524-catalog-explain.cjs <staff_id> <organization_id> [v510] > file.sql
 //        supabase db query --linked -f file.sql      (akachat; nothing is written)
 'use strict'
 const fs = require('node:fs'), path = require('node:path')
 const [staff, org, compare] = process.argv.slice(2)
 if (!/^\d+$/.test(staff || '') || !/^\d+$/.test(org || '') || (compare && compare !== 'v510')) {
-  console.error('usage: node scripts/zalo-engagement-v522-catalog-explain.cjs <staff_id> <organization_id> [v510]'); process.exit(2)
+  console.error('usage: node scripts/zalo-engagement-v524-catalog-explain.cjs <staff_id> <organization_id> [v510]'); process.exit(2)
 }
 const root = path.resolve(__dirname, '..')
 const prepare = (file, name) => {
@@ -32,14 +32,14 @@ const explain = (q, mode) => `
     'index',(SELECT string_agg(DISTINCT x->>'Index Name',',') FROM ${watchNodes} x),
     'watchRows',(SELECT sum((x->>'Actual Rows')::bigint*(x->>'Actual Loops')::bigint) FROM ${watchNodes} x))));`
 process.stdout.write(`BEGIN READ ONLY;
-${prepare('migrations/migration_v522_zalo_engagement_catalog_ordered_walk.sql', 'q522')}${compare ? prepare('migrations/migration_v510_zalo_engagement_id_driven_lookups.sql', 'q510') : ''}
+${prepare('migrations/migration_v524_zalo_engagement_catalog_ordered_walk.sql', 'q524')}${compare ? prepare('migrations/migration_v510_zalo_engagement_id_driven_lookups.sql', 'q510') : ''}
 DO $catalog_explain$
 DECLARE v_from timestamptz := now(); cur_until timestamptz := now(); cur_id bigint := 0; res jsonb; plan jsonb;
  n int := 0; items int := 0; pages jsonb := '{}'; k text; out jsonb := '{}';
 BEGIN
  LOOP
-  n := n+1;${explain('q522', 'force_custom_plan')}${explain('q522', 'force_generic_plan')}${compare ? explain('q510', 'force_generic_plan') : ''}
-  EXECUTE format('EXECUTE q522(${staff},${org},%L,%L,%s)',v_from,cur_until,cur_id) INTO res;
+  n := n+1;${explain('q524', 'force_custom_plan')}${explain('q524', 'force_generic_plan')}${compare ? explain('q510', 'force_generic_plan') : ''}
+  EXECUTE format('EXECUTE q524(${staff},${org},%L,%L,%s)',v_from,cur_until,cur_id) INTO res;
   items := items+jsonb_array_length(res);
   EXIT WHEN jsonb_array_length(res)<500 OR n>=200;
   cur_until := (res->-1->>'tracking_until')::timestamptz; cur_id := (res->-1->>'campaign_detail_id')::bigint;

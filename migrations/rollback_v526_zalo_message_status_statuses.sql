@@ -1,4 +1,4 @@
--- Ở akaAgent file này là migrations/rollback_v523_zalo_message_status_statuses.sql (giống nhau từng byte).
+-- Ở akaAgent file này là migrations/rollback_v526_zalo_message_status_statuses.sql (giống nhau từng byte).
 -- Gỡ đúng những gì catalog_zalo_message_status_statuses.sql đã làm trong các bảng quản lý trạng thái, không hơn:
 --   1. Xoá bốn quy tắc do bước đó thêm: zalo.delivered, zalo.seen, zalo.reaction, zalo.reply áp dụng cho mọi hành động
 --      (action_code NULL), kể cả khi về sau chúng đã được sửa. Quy tắc 'zalo.*' do nơi khác thêm (riêng cho một hành động, hay

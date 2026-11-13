@@ -2,12 +2,13 @@
 --
 -- KHÔNG apply khi chưa được chủ hệ thống duyệt. File này có ở hai repo, giống nhau từng byte (so md5 trước khi apply):
 --   akaAgentWebApp scripts/sql/zalo-message-status-sync/migration_zalo_message_status_sync.sql   (nơi chạy bộ kiểm)
---   akaAgent       migrations/migration_v522_zalo_message_status_sync.sql                         (nơi giữ migration)
--- Ba file đi cùng, cũng có ở cả hai repo: rollback_zalo_message_status_sync.sql = rollback_v522_zalo_message_status_sync.sql;
--- catalog_zalo_message_status_statuses.sql = migration_v523_zalo_message_status_statuses.sql;
--- catalog_rollback_zalo_message_status_statuses.sql = rollback_v523_zalo_message_status_statuses.sql.
--- Số 522 / 523 được giữ ngày 13/11/2026 (số lớn nhất trên mọi nhánh akaAgent lúc đó là 521); trước khi apply phải kiểm lại
--- sổ migration của DB xem hai số này còn trống.
+--   akaAgent       migrations/migration_v525_zalo_message_status_sync.sql                         (nơi giữ migration)
+-- Ba file đi cùng, cũng có ở cả hai repo: rollback_zalo_message_status_sync.sql = rollback_v525_zalo_message_status_sync.sql;
+-- catalog_zalo_message_status_statuses.sql = migration_v526_zalo_message_status_statuses.sql;
+-- catalog_rollback_zalo_message_status_statuses.sql = rollback_v526_zalo_message_status_statuses.sql.
+-- Số 525 / 526 (13/11/2026). Ban đầu giữ 522 / 523, nhưng sổ production nhận một migration_v522 khác lúc 22:23 VN và 524 cũng
+-- đã dùng, nên đổi số trước khi merge; lúc đổi, số lớn nhất trong sổ và trên mọi nhánh akaAgent là 524. Trước khi apply phải
+-- kiểm lại sổ migration của DB xem hai số này còn trống.
 -- Apply ngoài giờ cao điểm: lệnh CREATE TRIGGER (lệnh cuối cùng) cần khoá ngắn trên auto_campaign_details; không lấy được
 -- trong 2 giây thì cả migration bỏ cuộc và không để lại gì, chạy lại là được.
 --
@@ -36,10 +37,10 @@ DO $preflight$
 DECLARE
   v_missing text;
 BEGIN
-  -- Sổ migration của DB (không có ở DB dựng để kiểm): số 522 đã được một migration khác dùng thì dừng, phải đổi số trước.
+  -- Sổ migration của DB (không có ở DB dựng để kiểm): số 525 đã được một migration khác dùng thì dừng, phải đổi số trước.
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration\_v522\_%') THEN
-      RAISE EXCEPTION 'zalo_message_status_sync_migration_number_522_already_in_ledger';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration\_v525\_%') THEN
+      RAISE EXCEPTION 'zalo_message_status_sync_migration_number_525_already_in_ledger';
     END IF;
   END IF;
   IF to_regclass('public.auto_zalo_message_status') IS NOT NULL

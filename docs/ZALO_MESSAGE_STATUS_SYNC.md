@@ -9,8 +9,8 @@ Web và iOS: akaAgentWebApp `docs/ZALO_MESSAGE_STATUS_SYNC.md` (phần đã làm
 | Phần | Trạng thái |
 |---|---|
 | Mã chương trình gửi (App Server, Desktop bộ chạy cũ, Desktop bộ chạy mới) | **Đã merge `dev_3` qua [#672](https://github.com/aligoinc/akaAgent/pull/672)** (13/11/2026; phần DB / API / Web / iOS: akaAgentWebApp `dev_1` qua #226), **chưa build, chưa phát hành, App Server chưa cài VPS** |
-| SQL `migrations/migration_v522_zalo_message_status_sync.sql` (bảng, hàm, trigger, lịch job, 18 dòng cấu hình) | **CHƯA apply** |
-| SQL `migrations/migration_v523_zalo_message_status_statuses.sql` (bật hai trạng thái 62, 63 và thêm quy tắc `zalo.*`) | **CHƯA apply**; chủ hệ thống đã duyệt nội dung ngày 13/11, chưa ra lệnh apply |
+| SQL `migrations/migration_v525_zalo_message_status_sync.sql` (bảng, hàm, trigger, lịch job, 18 dòng cấu hình) | **CHƯA apply** |
+| SQL `migrations/migration_v526_zalo_message_status_statuses.sql` (bật hai trạng thái 62, 63 và thêm quy tắc `zalo.*`) | **CHƯA apply**; chủ hệ thống đã duyệt nội dung ngày 13/11, chưa ra lệnh apply |
 | Công tắc `zalo.message_status_sync.enabled` | Chưa có dòng (migration chưa apply); sau khi apply mặc định `false` |
 | Runtime Chat trên Fly (akaAgentChatApi) | Chưa làm (dưới 1% lượt gửi thuộc phạm vi) |
 
@@ -18,17 +18,13 @@ Khi SQL chưa apply hoặc công tắc đang tắt, bản mã này **không đ�
 hàm DB nào của tính năng. Việc duy nhất nó làm thêm là một lượt đọc nhỏ bảng cấu hình, tối đa 15 phút một lần cho mỗi tiến trình
 (tối đa 4 lượt mỗi giờ), và chỉ khi tiến trình đang gửi tin Zalo 1-1 hoặc đang có bộ nghe Zalo hoạt động.
 
-Số 522 và 523 được giữ ngày 13/11/2026 (số lớn nhất trên mọi nhánh của repo lúc đó là 521). **Trước khi apply phải kiểm lại sổ
-migration của DB**: migration 522 tự dừng nếu sổ đã có một `migration_v522_*` khác.
+Số **525** (migration chính) và **526** (bước trạng thái), đặt ngày 13/11/2026. **Trước khi apply phải kiểm lại sổ migration
+của DB**: migration 525 tự dừng nếu sổ đã có một `migration_v525_*` khác.
 
-Kiểm lúc merge (13/11/2026, 22:40 VN, chỉ đọc): sổ DB thật mới tới `migration_v521_renewal_link_tickets`. Hai chỗ trùng số trong repo:
-
-- `dev_3` còn file `migration_v522_zalo_engagement_catalog_ordered_walk.sql` (PR #669, chưa apply). Chủ của bản đó đã đổi sang
-  **V524** ở nhánh `perf/engagement-catalog-ordered-scan` (`7219ede`, chưa merge) để nhường 522/523 cho tính năng này. Tới khi
-  bản đổi số đó vào `dev_3`, thư mục `migrations/` có hai file mang số 522; bản nào apply sau sẽ bị chính preflight của nó chặn
-  nếu chưa đổi số.
-- Nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` dùng 522 cho `data_group_member_matches_desktop` (chưa merge):
-  bản đó phải đổi số trước khi merge.
+Lịch sử số: nhánh này đẩy lên GitHub lúc 21:50:56 VN với số 522 / 523. Trong giờ sau đó hai nhánh khác cũng lấy 522; bản
+`migration_v522_data_group_member_matches_desktop` vào sổ DB thật lúc 22:23:07 VN (#670) và bản danh mục tương tác Zalo đổi thành
+V524, vào sổ lúc 22:23:57 VN (#671). Sổ production là chốt cuối, nên hai file của tính năng này đổi thành 525 / 526 trước khi
+merge (kiểm chỉ đọc lúc 22:57 VN: số lớn nhất trong sổ và trên mọi nhánh của repo là 524).
 
 ## 2. Chương trình gửi làm gì
 
@@ -80,7 +76,7 @@ Quy tắc "đã cập nhật rồi thì bỏ qua" (hai hệ thống cùng ghi c�
 | `src/main/services/campaignScheduler.ts` | Bốn điểm gửi của bộ chạy cũ: nhắn người lạ, nhắn bạn bè, kết bạn, chia sẻ cho bạn bè (tìm `statusSend`) |
 | `packages/campaign-engine/src/zalo/engagement.ts` | Lõi bộ chạy mới: gọi hàm tuỳ chọn `messageStatusBegin` của cổng |
 | `src/main/engineAdapters/desktopZaloPort.ts` | Cổng Desktop của bộ chạy mới cài `messageStatusBegin` |
-| `migrations/migration_v522_…`, `rollback_v522_…`, `migration_v523_…`, `rollback_v523_…` | SQL, giống từng byte với akaAgentWebApp `scripts/sql/zalo-message-status-sync/` (bộ kiểm SQL chạy ở đó) |
+| `migrations/migration_v525_…`, `rollback_v525_…`, `migration_v526_…`, `rollback_v526_…` | SQL, giống từng byte với akaAgentWebApp `scripts/sql/zalo-message-status-sync/` (bộ kiểm SQL chạy ở đó) |
 | `scripts/zalo-message-status-sync-smoke.cjs` | Bài kiểm phần chạy (đồng hồ giả, DB giả) |
 
 Ba hàm của `zaloMessageStatusSync.ts`:
@@ -186,9 +182,9 @@ tin Zalo thật nào được gửi trong quá trình làm.
 
 1. Merge nhánh này vào `dev_3`; build và cài App Server trên VPS (ngoài giờ cao điểm); phát hành Desktop ở lần phát hành kế tiếp.
    Làm trước bước 2 cũng không sao: chưa có dòng cấu hình thì bản mới không làm gì thêm.
-2. Kiểm sổ migration, apply `migration_v522_zalo_message_status_sync.sql` ngoài giờ cao điểm. Công tắc vẫn tắt.
-3. Khi muốn cột trạng thái của kết quả được cập nhật: apply `migration_v523_zalo_message_status_statuses.sql`.
+2. Kiểm sổ migration, apply `migration_v525_zalo_message_status_sync.sql` ngoài giờ cao điểm. Công tắc vẫn tắt.
+3. Khi muốn cột trạng thái của kết quả được cập nhật: apply `migration_v526_zalo_message_status_statuses.sql`.
 4. Bật thí điểm: `organization_ids` = vài tổ chức, rồi `enabled = true`. Theo dõi bằng các câu truy vấn ở tài liệu WebApp, mục 10.
 5. Mở rộng: `organization_ids = all`.
 
-Gỡ: tắt công tắc là đủ để dừng. Gỡ hẳn phần DB bằng `rollback_v523_…` rồi `rollback_v522_…`; mã chương trình gửi không cần gỡ.
+Gỡ: tắt công tắc là đủ để dừng. Gỡ hẳn phần DB bằng `rollback_v526_…` rồi `rollback_v525_…`; mã chương trình gửi không cần gỡ.

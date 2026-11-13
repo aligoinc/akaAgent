@@ -104,7 +104,6 @@ Gỡ nhanh không DDL: thêm `"groupMatches": false` vào giá trị của `web.
 
 ## Desktop
 
-Chưa làm. Nếu Desktop cần cùng tính năng: chép nguyên văn akaAgentWebApp
-`packages/control-api/src/dataGroupMemberMatches.ts` sang `src/shared`, và thêm một migration chỉ
-`GRANT EXECUTE … TO aka_agent_desktop` (như V493 làm cho V491). Thân hàm đã kiểm danh tính bằng
-`auto_assert_automation_identity` nên không cần đổi.
+Code Desktop và migration cấp quyền V522 (chỉ `GRANT EXECUTE … TO aka_agent_desktop`, như V493 làm cho V491; thân hàm
+không đổi) nằm ở [DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md](DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md). 13/11/2026:
+đã merge `dev_3` qua #670, V522 đã apply akachat 22:23:07 VN (`20261113152307`), Desktop chưa phát hành.

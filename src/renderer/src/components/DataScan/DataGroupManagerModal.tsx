@@ -78,8 +78,11 @@ import DataGroupFormDialog from '../DataGroups/DataGroupFormDialog'
 import DataGroupWorkspace from '../DataGroups/DataGroupWorkspace'
 import DataGroupAccountSelect, { useDataGroupAccountOptions } from '../DataGroups/DataGroupAccountSelect'
 import CampaignDataUploadModal, {
-  type CampaignDataUploadSubmission
+  type CampaignDataUploadSubmission, type CampaignImportDestination, type CampaignImportDuplicateCheck, type CampaignImportMemberCheck
 } from '../CampaignPanels/CampaignDataUploadModal'
+import type { DataGroupMatchOptions } from '../CampaignPanels/DataGroupMatchPicker'
+import { dataGroupSkippedSummary } from '../../../../shared/dataGroupImport'
+import type { DataGroupMatchContactType } from '../../../../shared/dataGroupMemberMatches'
 import type { DataScanAction, DataScanSelectionContext } from './DataScanModal'
 
 const LazyDataScanModal = lazy(() => import('./DataScanModal'))
@@ -111,6 +114,39 @@ const IMPORT_TARGETS: ImportTarget[] = [
   { value: 'zalo_person_uid', label: 'Zalo · User theo UID', dataTypeCode: 'zalo_person', flatformType: 'zalo', contactType: 'person', importPlatform: 'zalo', actionId: 'data_group_zalo_person_uid' },
   { value: 'zalo_group', label: 'Zalo · Group/link', dataTypeCode: 'zalo_group', flatformType: 'zalo', contactType: 'group', importPlatform: 'zalo', actionId: 'zalo_join_group_link' }
 ]
+
+/**
+ * Loại data mà hàm đọc V519 đối chiếu được với data đã có trong nhóm: SĐT và danh sách Zalo (UID, link group), như Web.
+ * Email, Facebook và dữ liệu đầu vào chiến dịch chưa đối chiếu được.
+ */
+const MEMBER_MATCH_CONTACT_TYPES: Partial<Record<string, DataGroupMatchContactType>> = {
+  phone: 'phone', zalo_person_phone: 'phone', zalo_person_uid: 'person', zalo_group: 'group'
+}
+const OTHER_GROUPS_PAGE_SIZE = 100
+const OTHER_GROUPS_MAX = 500
+
+/**
+ * Các nhóm data khác của chính nhân viên, cho hộp "Chọn nhóm data để đối chiếu" của cửa sổ thêm data. Chỉ tải khi mở
+ * hộp (danh sách của cửa sổ này là một trang 50 nhóm theo ô tìm); quá 500 nhóm thì báo chưa đủ để hộp không coi "chọn
+ * hết" là "tất cả nhóm khác".
+ */
+async function loadOtherOwnedDataGroups(excludeGroupId: number): Promise<DataGroupMatchOptions> {
+  const api = getDataGroupApi()
+  if (!api) throw new Error('Không tải được danh sách nhóm data.')
+  const groups: DataGroupMatchOptions['groups'] = []
+  let total = Number.POSITIVE_INFINITY
+  let offset = 0
+  while (offset < total && offset < OTHER_GROUPS_MAX) {
+    const page = await api.listDataGroups({ ownedOnly: true, offset, limit: OTHER_GROUPS_PAGE_SIZE } as DataGroupListQuery)
+    total = page.total
+    if (page.groups.length === 0) break
+    offset += page.groups.length
+    for (const group of page.groups) {
+      if (group.id !== excludeGroupId && canManageGroup(group)) groups.push({ id: group.id, name: group.name, memberCount: group.activeMembershipCount })
+    }
+  }
+  return { groups, partial: offset < total }
+}
 
 const DATA_GROUP_SCAN_ACTIONS: DataScanAction[] = [
   'facebook_friends',
@@ -1632,7 +1668,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     datasetName?: string | null,
     datasetId?: number | null,
     targetGroupId?: number,
-    dataTypeCategoryItemId?: number | null
+    dataTypeCategoryItemId?: number | null,
+    /** Cụm "đã bỏ qua …" của các dòng cửa sổ nhập đã lọc trước khi gửi (đã có trong nhóm, ở nhóm khác, ở chiến dịch khác). */
+    filteredSummary?: string
   ) => {
     const api = getDataGroupApi()
     const destinationGroupId = targetGroupId || activeGroupId
@@ -1655,7 +1693,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       if (destinationGroupId === activeGroupId) adjustActiveGroupCount(added)
       const skipped = result.alreadyMemberCount + result.invalidCount + result.incompatibleCount + result.conflictCount
       const suffix = skipped > 0 ? ` · ${formatCount(skipped)} dòng không thêm mới` : ''
-      showAlert(`Đã thêm ${formatCount(added)} data vào nhóm${suffix}.`, 'success')
+      showAlert(`Đã thêm ${formatCount(added)} data vào nhóm${suffix}${filteredSummary ? ` · ${filteredSummary}` : ''}.`, 'success')
       await Promise.all([
         loadMembers({ silent: true }),
         loadGroups({ silent: true }),
@@ -1729,7 +1767,9 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
       submission.datasetName,
       undefined,
       undefined,
-      dataTypeCategoryItemId
+      dataTypeCategoryItemId,
+      // Tên danh sách đã do cửa sổ nhập đặt: có dòng bị lọc thì là danh sách mới, DB không gỡ data của lần nhập trước.
+      dataGroupSkippedSummary({ duplicates: submission.duplicates, members: submission.members })
     )
   }
 
@@ -1823,6 +1863,38 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const importTarget = availableImportTargets.find(item => item.value === importTargetValue)
     || availableImportTargets[0]
     || IMPORT_TARGETS[0]
+  // Cửa sổ "Thêm data từ file" → khung "Lọc trùng dữ liệu". Với chiến dịch (V491/V493, chỉ nhận SĐT): "tài khoản đang
+  // chọn" là tài khoản Zalo gắn với nhóm; nhóm không gắn tài khoản thì chỉ còn "Chỉ trong file này" và "Với các tài
+  // khoản Zalo bạn chọn". Cửa sổ tự đọc công tắc, không gọi thêm máy chủ ở đây.
+  const importDuplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => {
+    if (!canEditGroup || importTarget.contactType !== 'phone') return undefined
+    const boundId = activeGroup?.boundZaloAccountId
+    return { currentAccounts: boundId ? [{ id: boundId, name: activeGroup?.boundZaloAccountName || `Tài khoản ${boundId}` }] : [] }
+  }, [canEditGroup, importTarget.contactType, activeGroup?.boundZaloAccountId, activeGroup?.boundZaloAccountName])
+  // Với data đã có trong nhóm (V519/V522): máy chủ cho biết dòng nào đã có trong nhóm này và ở nhóm data khác của nhân
+  // viên. Chỉ chủ nhóm thêm được data, và chỉ loại data hàm đọc đối chiếu được.
+  const importMemberContactType = MEMBER_MATCH_CONTACT_TYPES[importTarget.value]
+  const importMemberCheck = useMemo<CampaignImportMemberCheck | undefined>(() => {
+    if (!canEditGroup || !activeGroupId || !importMemberContactType) return undefined
+    return { groupId: activeGroupId, contactType: importMemberContactType, loadOtherGroups: () => loadOtherOwnedDataGroups(activeGroupId) }
+  }, [canEditGroup, activeGroupId, importMemberContactType])
+  // Nhóm gắn tài khoản Zalo thì DB không thêm lại data đã có trong nhóm. Nhóm không gắn tài khoản chỉ nhận ra data trong
+  // cùng một danh sách, nên chữ trên cửa sổ nhập phải nói đúng điều đó khi chưa đối chiếu được.
+  const importDestination = useMemo<CampaignImportDestination | undefined>(() => {
+    if (!activeGroup) return undefined
+    const skipsExistingMembers = Boolean(activeGroup.boundZaloAccountId)
+    return {
+      kind: 'dataGroup',
+      name: activeGroup.name,
+      skipsExistingMembers,
+      memberCheck: importMemberCheck,
+      duplicateNote: !importMemberCheck
+        ? 'hệ thống bỏ dòng lặp trong file. Loại data này chưa đối chiếu được với data đã có trong nhóm.'
+        : skipsExistingMembers
+          ? 'hệ thống bỏ dòng lặp trong file và data đã có trong nhóm.'
+          : 'hệ thống bỏ dòng lặp trong file. Nhóm không gắn tài khoản Zalo nên data đã có trong nhóm từ lần nhập khác vẫn được thêm thành dòng mới.'
+    }
+  }, [activeGroup, importMemberCheck])
   const visiblePanelCampaigns = useMemo(() => {
     const campaigns = panelData?.campaigns || []
     if (campaignStatusFilter === 'running') return campaigns.filter(campaign => campaign.status === 'đang chạy')
@@ -2616,6 +2688,8 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               </label>
             </div>
           )}
+          duplicateCheck={importDuplicateCheck}
+          destination={importDestination}
           onClose={resetImportModal}
           onInsert={() => undefined}
           onSubmitRows={handleAdvancedImport}

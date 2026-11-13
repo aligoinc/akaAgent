@@ -1,6 +1,6 @@
 -- Gỡ bỏ "Đồng bộ trạng thái tin nhắn Zalo" (migration_zalo_message_status_sync.sql).
--- Ở akaAgent file này là migrations/rollback_v522_zalo_message_status_sync.sql (giống nhau từng byte). Sau khi gỡ, muốn cài lại
--- trên DB có sổ migration thì phải xoá dòng 'migration_v522_%' khỏi sổ hoặc cài bằng một số mới.
+-- Ở akaAgent file này là migrations/rollback_v525_zalo_message_status_sync.sql (giống nhau từng byte). Sau khi gỡ, muốn cài lại
+-- trên DB có sổ migration thì phải xoá dòng 'migration_v525_%' khỏi sổ hoặc cài bằng một số mới.
 -- Xoá trigger, hàm, lịch job, bảng của tính năng (KỂ CẢ kết quả đã ghi trong auto_zalo_message_status) và 18 dòng
 -- cấu hình. Không đụng dữ liệu nguồn hay cơ chế theo dõi tương tác V339. Muốn giữ kết quả thì sao lưu bảng trước.
 -- Trạng thái phụ đã ghi vào kết quả chiến dịch (auto_campaign_details.sub_status_id) được GIỮ NGUYÊN: đó là dữ liệu của

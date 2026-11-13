@@ -139,10 +139,10 @@ async function main() {
     const original = path.join(webApp, 'packages/control-api/src/zaloMessageStatusSync.ts')
     if (fs.existsSync(original)) {
       assert.equal(read('src/shared/zaloMessageStatusSync.ts'), fs.readFileSync(original, 'utf8'), 'hợp đồng lệch so với bản gốc ở akaAgentWebApp')
-      for (const [here, there] of [['migration_v522_zalo_message_status_sync.sql', 'migration_zalo_message_status_sync.sql'],
-        ['rollback_v522_zalo_message_status_sync.sql', 'rollback_zalo_message_status_sync.sql'],
-        ['migration_v523_zalo_message_status_statuses.sql', 'catalog_zalo_message_status_statuses.sql'],
-        ['rollback_v523_zalo_message_status_statuses.sql', 'catalog_rollback_zalo_message_status_statuses.sql']]) {
+      for (const [here, there] of [['migration_v525_zalo_message_status_sync.sql', 'migration_zalo_message_status_sync.sql'],
+        ['rollback_v525_zalo_message_status_sync.sql', 'rollback_zalo_message_status_sync.sql'],
+        ['migration_v526_zalo_message_status_statuses.sql', 'catalog_zalo_message_status_statuses.sql'],
+        ['rollback_v526_zalo_message_status_statuses.sql', 'catalog_rollback_zalo_message_status_statuses.sql']]) {
         assert.equal(read(`migrations/${here}`), fs.readFileSync(path.join(webApp, 'scripts/sql/zalo-message-status-sync', there), 'utf8'),
           `migrations/${here} lệch so với akaAgentWebApp ${there}`)
       }
