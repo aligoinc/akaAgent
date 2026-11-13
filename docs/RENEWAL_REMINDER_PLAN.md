@@ -54,6 +54,10 @@ Nếu bật hôm nay: 71 tổ chức ở mức đỏ (còn 0–3 ngày), 35 ở 
 4. **Có ưu đãi gia hạn sớm** (mục 6). Mức ưu đãi do người dùng đặt.
 5. **Thay đổi DB:** viết SQL gửi duyệt trước khi chạy (mục 8). Lưu ý: ưu đãi gia hạn sớm cần thêm **một cột** trên
    `aka_promotion`; các phần còn lại không thêm bảng hay cột.
+6. **Không cho khách thấy thói quen đăng nhập** (chốt thêm 13/11 khi xem bản thiết kế): quy tắc ở 4.4 chỉ dùng bên trong để
+   quyết định nhắc sớm hơn; trên màn hình chỉ có số ngày còn lại.
+
+Bản thiết kế giao diện: https://claude.ai/artifact/7cyq51CEWt2mgxNCKLMmoV (riêng tư, cần chia sẻ từ trang mới mở được).
 
 ## 4. Hành vi
 
@@ -106,6 +110,9 @@ Lý do: 56% tổ chức sắp hết hạn mở app không quá 5 ngày mỗi th�
 - Còn **3 lần trở xuống**: hiện thông báo ở mức giai đoạn 7 (dải vàng + hộp thoại một lần) dù chưa tới mốc ngày. Còn **1
   lần trở xuống**: mức giai đoạn 1 (dải đỏ, hộp thoại). Luôn lấy mức mạnh hơn giữa mốc ngày và thói quen.
 - Chỉ áp dụng khi gói còn từ 60 ngày trở xuống.
+- **Chỉ dùng bên trong, không hiện cho khách** (quyết định 6): thông báo nhắc sớm chỉ ghi số ngày còn lại và ngày hết hạn như
+  mọi thông báo khác. Không hiện chu kỳ đăng nhập, số lần đăng nhập còn lại, các ngày đã mở phần mềm, hay nút kiểu "nhắc tôi
+  lần đăng nhập sau" — khách sẽ thấy mình bị theo dõi.
 
 | Thói quen | Chu kỳ | Bắt đầu nhắc theo thói quen khi còn |
 |---|---|---|
@@ -126,8 +133,7 @@ khách.
 | Nhãn nhỏ | Còn 12 ngày | Gia hạn |
 | Mốc ngày | Gói akaAgent Zalo – 2 tháng còn 7 ngày (hết hạn 20/11/2026). Gia hạn hôm nay, hạn mới cộng tiếp từ 20/11 nên không mất ngày nào. | Gia hạn |
 | Có ưu đãi gia hạn sớm | …thêm dòng: Gia hạn trước 13/11 được tặng thêm N ngày. | Gia hạn |
-| Theo thói quen | Gói … còn 28 ngày. Bạn thường mở phần mềm khoảng 10 ngày một lần, nên chỉ còn khoảng 2 lần đăng nhập trước khi gói hết hạn. | Gia hạn |
-| Lần đăng nhập cuối | Gói … còn 6 ngày. Đây có thể là lần đăng nhập cuối của bạn trước khi gói hết hạn. | Gia hạn ngay |
+| Nhắc sớm cho khách ít mở phần mềm | Dùng đúng câu "Mốc ngày" theo số ngày còn lại (ví dụ "Gói … còn 28 ngày…"). Không nhắc tới thói quen đăng nhập. | Gia hạn |
 | Ngày hết hạn | Gói … hết hạn hôm nay. Sau 24:00 phần mềm sẽ ngừng chạy chiến dịch. | Gia hạn ngay |
 | Dùng thử | Bản dùng thử … còn 1 ngày 3 giờ. Nâng cấp để giữ nguyên tài khoản và chiến dịch đã tạo. | Nâng cấp |
 | Sau khi thanh toán | Đã gia hạn gói … tới 19/01/2027. | — |
@@ -158,7 +164,7 @@ Luồng đích: bấm **Gia hạn** → trang thanh toán nhanh đã chọn sẵ
   Luôn gửi `opid`: tổ chức nhiều sản phẩm mà thiếu `opid` thì cổng chọn sẵn mọi sản phẩm.
 - `next`: gói trả phí còn hạn → `/gia-han/het-han-goi`; dùng thử còn hạn → `/gia-han/het-han-dung-thu`. Hai trang này có
   thẻ thanh toán nhanh; nếu không gửi `next`, gói còn hạn rơi vào trang Nâng cấp (giỏ hàng đầy đủ, nhiều bước hơn).
-- `src`: nguồn và mốc để đo, dạng `desktop.d7`, `web.d3`, `web.u2` (`d` = mốc ngày, `u` = số lần đăng nhập còn lại),
+- `src`: nguồn và mốc để đo, dạng `desktop.d7`, `web.d3`, `web.e28` (`d` = mốc ngày, `e` = nhắc sớm kèm số ngày còn lại; link không mang số lần đăng nhập),
   `banner.d14` (kênh ở Đợt 0). Chỉ dùng để thống kê, không dùng để phân quyền.
 
 **Ký link:**
@@ -296,7 +302,7 @@ renewal_reminder` của Đợt 0 để không hiện hai dải.
 chưa cập nhật vẫn có kênh Đợt 0.
 
 **Đợt 3 — ngoài app và iOS:** thông báo chuông + email "Gói sắp hết hạn" cho khách ít mở app (email chỉ tới được khoảng
-150 tổ chức có email); đưa "số lần đăng nhập còn lại" vào ưu tiên việc gia hạn của CRM; iOS hiện số ngày.
+150 tổ chức có email); đưa "số lần đăng nhập còn lại" vào ưu tiên việc gia hạn của CRM (chỉ nhân viên thấy, không gửi cho khách); iOS hiện số ngày.
 
 Mở dần ở mỗi đợt: `admin_akabiz` → một nhóm tổ chức thử → `all`.
 
