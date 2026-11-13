@@ -948,7 +948,7 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   sau V515. Chi tiết, số đo và cách gỡ: [thiết kế §14.12](CAMPAIGN_OUTCOME_ENGINE.md).
 - Kiểm: smoke V517 đạt 7/7 nhóm.
 
-### 13/11 ~17:20–18:30 VN: kiêm SMS không đẩy chồng khi akaBiz treo; lỗi akaBiz lên log Fly (từ bộ test trước deploy 13/11; chưa merge, chưa deploy)
+### 13/11 ~17:20–18:30 VN: kiêm SMS không đẩy chồng khi akaBiz treo; lỗi akaBiz lên log Fly (từ bộ test trước deploy 13/11; [#666](https://github.com/aligoinc/akaAgent/pull/666), ChatApi [#151](https://github.com/aligoinc/akaAgentChatApi/pull/151), chưa merge, chưa deploy)
 
 - **Đẩy trùng:** hạn bước kiêm SMS của lõi (`afterReport` của `runUnit`, 2 × `callTimeoutMs` = 40 giây) cắt giữa chừng nhưng cổng không huỷ
   lời gọi akaBiz đã gửi (hạn client 30 giây mỗi shop, có chủ đích như Desktop). Từ 2 shop và akaBiz treo thì dòng kết bạn của cùng data đẩy
@@ -970,7 +970,7 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   (`--rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`) 702 lượt, 0 vi phạm mới; typecheck Desktop (`tsconfig.node.json`) sạch.
   ChatApi: ca mới của `FlyEngineRunner` (akaBiz chậm hơn hạn kiêm SMS: akaBiz nhận `[11, 12]`; trên lõi cũ `[11, 12, 11, 12]`) và ca lỗi
   akaBiz kiểm thêm log; `npm run verify` 195 file, 2.779 test đạt (2 bỏ qua vì phải bật tay). Repro K1, K2 của bộ test trước deploy
-  (`load-tests/predeploy-20261113/engine/known-issues.test.ts` ở worktree `akaAgentChatApi-predeploy-c`) xanh; trong bộ lỗi akaBiz của đợt đó,
+  (`load-tests/predeploy-20261113/engine/known-issues.test.ts` ở worktree `akaAgentChatApi-predeploy-c`) xanh trên chuỗi migration của `dev` lẫn chuỗi có V515/V517; trong bộ lỗi akaBiz của đợt đó,
   ca "trace akabiz_sms_push_failed KHÔNG tới log" giờ đỏ vì nó ghi lại đúng lỗi K1, 9 ca còn lại đạt (kể cả "lỗi hết thì thử lại ở dòng kết
   bạn" và "hết hạn client 300 ms thì akaBiz ghi 2 lần", như bộ cũ).
 
