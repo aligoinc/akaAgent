@@ -28,7 +28,8 @@ function decode(token) {
   return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8'))
 }
 
-async function simulate({ skewMs = 0, hours = 6, withIat = true, jumpBackEveryHourMs = 0, sleep = null, useExpireHook = true }) {
+async function simulate({ skewMs = 0, hours = 6, withIat = true, jumpBackEveryHourMs = 0, sleep = null, useExpireHook = true,
+  failRefreshFromSec = null, jumpBack = null }) {
   let server = 1_800_000_000_000
   let mono = 0
   let wallOffset = skewMs
@@ -52,7 +53,11 @@ async function simulate({ skewMs = 0, hours = 6, withIat = true, jumpBackEveryHo
       refreshToken: `refresh-${issued}`, expiresAt: exp, sessionId, staffId: 1, organizationId: 10 }
   }
   const wallNow = () => server + wallOffset
-  const manager = new exports.DesktopSessionManager(async () => issue(), wallNow, undefined, () => mono)
+  let failNextRefresh = false
+  const manager = new exports.DesktopSessionManager(async () => {
+    if (failNextRefresh) { failNextRefresh = false; throw new Error('network down') }
+    return issue()
+  }, wallNow, undefined, () => mono)
   const result = { loginRejected: false, rejected: 0, failedFast: 0, accepted: 0, renewals: 0 }
   try {
     const mark = typeof manager.clockMark === 'function' ? manager.clockMark() : undefined
@@ -67,6 +72,8 @@ async function simulate({ skewMs = 0, hours = 6, withIat = true, jumpBackEveryHo
     if (sleep && server - start === sleep.atMs + sleep.forMs) sleeping = false
     if (!sleeping) mono += 1000
     if (jumpBackEveryHourMs && server >= nextJump) { wallOffset -= jumpBackEveryHourMs; nextJump += HOUR }
+    if (failRefreshFromSec === second) failNextRefresh = true
+    if (jumpBack && jumpBack.atSec === second) wallOffset -= jumpBack.byMs
     if (!sleeping) {
       for (;;) {
         const due = [...timers].filter(timer => timer.at <= mono).sort((a, b) => a.at - b.at)[0]
@@ -100,6 +107,7 @@ const scenarios = [
   { name: 'nhanh 2 giờ', options: { skewMs: 2 * HOUR } },
   { name: 'chậm 28 giờ, bị kéo lùi 1 giờ mỗi giờ (staff 2214 ngày 12/11)', options: { skewMs: -28 * HOUR, jumpBackEveryHourMs: HOUR } },
   { name: 'máy ngủ 3 giờ giữa chừng', options: { sleep: { atMs: 1.5 * HOUR, forMs: 3 * HOUR } } },
+  { name: 'rớt mạng lúc gia hạn rồi giờ máy bị kéo lùi 1 giờ trong lúc chờ thử lại', options: { failRefreshFromSec: 3530, jumpBack: { atSec: 3550, byMs: HOUR } } },
   { name: 'chậm 104 giây và ngủ 3 giờ', options: { skewMs: -104_000, sleep: { atMs: 0.75 * HOUR, forMs: 3 * HOUR } } }
 ]
 
