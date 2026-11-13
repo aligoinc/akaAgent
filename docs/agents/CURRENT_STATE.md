@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
+[Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
+**Mã trên nhánh `claude_dong-bo-trang-thai-tin-nhan-zalo_from_dev_3_13_11` (13/11/2026), chưa merge `dev_3`, chưa build/phát hành,
+App Server chưa cài VPS. `migration_v522_zalo_message_status_sync.sql` và `migration_v523_zalo_message_status_statuses.sql`
+CHƯA apply** (số 522/523 được giữ ngày 13/11, số lớn nhất trên mọi nhánh lúc đó là 521; kiểm lại sổ trước khi apply). Chưa có dòng
+`zalo.message_status_sync.*` nào trong DB nên tính năng đang tắt với mọi tiến trình. Hàm mới khi apply: `aka_agent_ingest_zalo_message_status(text,jsonb)`
+(EXECUTE `service_role`, `aka_agent_chat_api`) và `aka_agent_desktop_ingest_zalo_message_status(jsonb)` (EXECUTE chỉ `aka_agent_desktop`,
+lấy nhân viên từ phiên Desktop). Kiểm cục bộ: smoke 21 nhóm, ba typecheck 0 lỗi, bộ kiểm SQL 233 bước (PostgreSQL 16, chạy ở akaAgentWebApp).
+Chưa chạy trên Electron/App Server thật, chưa kiểm trên PostgreSQL 17.
+
 [V519 đối chiếu khách đã có khi nhập vào Nhóm data](../DATA_GROUP_MEMBER_MATCHES_V519.md):
 **Đã apply akachat lúc 19:57:24 VN, 13/11/2026** (`20261113125724 / migration_v519_data_group_member_matches`;
 md5 sổ = md5 tệp `2e561485…`; không apply lại). Chỉ thêm hàm đọc `aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb)`

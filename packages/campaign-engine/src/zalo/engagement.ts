@@ -7,6 +7,10 @@
  *   tương tác của worker tự quét dòng chờ đăng ký.
  * Chỉ áp cho nhắn người lạ, nhắn bạn bè và kết bạn (engagementApplicable của Desktop), không áp cho group. Lõi chỉ dựng nguồn và gọi cổng;
  * cổng không có các hàm này thì không theo dõi (nơi chạy cũ).
+ *
+ * Cùng các điểm gửi này còn phục vụ một tính năng KHÁC, độc lập: đồng bộ trạng thái tin nhắn Zalo (đã nhận, đã xem, đã tương tác, đã
+ * phản hồi; công tắc zalo.message_status_sync.*). Lõi chỉ gọi messageStatusBegin của cổng và trải các trường cổng trả về (dấu tham chiếu
+ * zaloStatusRef) vào dòng lịch sử của lượt gửi thành công. Hai tính năng không phụ thuộc nhau: bên này tắt hay lỗi không ảnh hưởng bên kia.
  */
 import type { AfterReportInfo, StepContext } from '../runUnit.js'
 
@@ -42,6 +46,13 @@ export interface ZaloEngagementPort {
   engagementStage?(ctx: StepContext, source: ZaloEngagementSource): void
   /** Sau khi DB ghi dòng lịch sử có nguồn: đăng ký (Desktop: hàng đăng ký; Fly: đánh thức bộ ghi tương tác). */
   engagementRegister?(detailId: number, source: ZaloEngagementSource): void
+  /**
+   * Đồng bộ trạng thái tin nhắn Zalo (tính năng riêng, không dùng công tắc hay dữ liệu của theo dõi tương tác): gọi ngay trước khi gửi
+   * tới một người. Trả hàm nhận phản hồi gửi và dựng các trường ghi cùng dòng lịch sử của lượt gửi THÀNH CÔNG, hoặc null khi nơi chạy
+   * không theo dõi lượt này. Cổng không có hàm này thì không ghi gì.
+   */
+  messageStatusBegin?(ctx: StepContext, targetUid: string, actionType: ZaloEngagementSource['actionType']):
+    ((responses: unknown) => Record<string, unknown>) | null
   trace?(event: { type: string; [key: string]: unknown }): void
 }
 
@@ -95,6 +106,17 @@ export function beginZaloEngagement(port: ZaloEngagementPort, ctx: StepContext, 
   } catch (error) {
     port.trace?.({ type: 'engagement_begin_failed', error: error instanceof Error ? error.message : String(error) })
   }
+  // Đồng bộ trạng thái tin nhắn Zalo: lần gửi riêng của tính năng đó, không liên quan tới `send` ở trên.
+  let messageStatus: ((responses: unknown) => Record<string, unknown>) | null = null
+  try {
+    messageStatus = port.messageStatusBegin?.(ctx, targetUid, actionType) ?? null
+  } catch (error) {
+    port.trace?.({ type: 'message_status_begin_failed', error: error instanceof Error ? error.message : String(error) })
+  }
+  const messageStatusData = (responses: unknown): Record<string, unknown> => {
+    if (!messageStatus) return {}
+    try { return messageStatus(responses) ?? {} } catch { return {} }
+  }
   let settled = false
   const abandon = (): void => {
     if (settled) return
@@ -104,16 +126,17 @@ export function beginZaloEngagement(port: ZaloEngagementPort, ctx: StepContext, 
   }
   return {
     active: send !== null,
-    /** Gửi được: nguồn + trường cho dòng lịch sử (rỗng khi không theo dõi). */
+    /** Gửi được: nguồn + trường cho dòng lịch sử (rỗng khi không tính năng nào theo dõi). */
     finish(responses: unknown): Record<string, unknown> {
       if (settled) return {}
+      const statusData = messageStatusData(responses)
       const source = makeZaloEngagementSource(send, targetUid, actionType, responses)
-      if (!source || !send) { abandon(); return {} }
+      if (!source || !send) { abandon(); return statusData }
       settled = true
       try { port.engagementStage?.(ctx, source) } catch (error) {
         port.trace?.({ type: 'engagement_stage_failed', error: error instanceof Error ? error.message : String(error) })
       }
-      return zaloEngagementDetailData(source, send)
+      return { ...zaloEngagementDetailData(source, send), ...statusData }
     },
     abandon
   }
