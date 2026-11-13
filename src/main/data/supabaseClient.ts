@@ -2,6 +2,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { RealtimeClientOptions } from '@supabase/realtime-js'
 import * as dotenv from 'dotenv'
 import { join } from 'path'
+import { performance } from 'perf_hooks'
 import WebSocket from 'ws'
 import { DesktopSessionManager } from './desktopSession'
 import { createDesktopSessionTransport } from './desktopSessionTransport'
@@ -23,7 +24,8 @@ const bootstrapRpcs = new Set(['aka_agent_staff_client', 'aka_agent_staff_access
 
 export const desktopSessionTransport = createDesktopSessionTransport(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 export const callDesktopSessionEndpoint = desktopSessionTransport.endpoint
-export const desktopSession = new DesktopSessionManager(desktopSessionTransport.refresh, Date.now, desktopSessionTransport.revoke)
+export const desktopSession = new DesktopSessionManager(desktopSessionTransport.refresh, Date.now,
+  desktopSessionTransport.revoke, () => performance.now())
 
 async function desktopFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const request = new Request(input, init)
@@ -31,11 +33,24 @@ async function desktopFetch(input: string | URL | Request, init?: RequestInit): 
   if (url.origin !== new URL(SUPABASE_URL).origin) throw new Error('Địa chỉ truy cập DB không hợp lệ.')
   const rpc = url.pathname.startsWith('/rest/v1/rpc/') ? url.pathname.slice('/rest/v1/rpc/'.length) : ''
   const headers = new Headers(request.headers)
+  let token: string | null = null
   if (bootstrapRpcs.has(rpc)) headers.delete('Authorization')
-  else headers.set('Authorization', `Bearer ${await desktopSession.token(request.signal)}`)
+  else {
+    token = await desktopSession.token(request.signal)
+    headers.set('Authorization', `Bearer ${token}`)
+  }
   request.signal.throwIfAborted()
   // No retry/fallback: a failed/uncertain write is returned to its existing caller.
-  return fetch(new Request(request, { headers }))
+  const response = await fetch(new Request(request, { headers }))
+  if (token && response.status === 401) await noteExpiredToken(response, token)
+  return response
+}
+
+/** The caller still gets this 401; only the next request renews first. */
+async function noteExpiredToken(response: Response, token: string): Promise<void> {
+  try {
+    if (/\bJWT expired\b/i.test(await response.clone().text())) desktopSession.expire(token)
+  } catch { /* An unreadable body leaves renewal to the local deadline. */ }
 }
 
 /** Called only by the trusted, centrally operated App Server entry point.

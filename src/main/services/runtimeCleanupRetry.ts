@@ -4,6 +4,10 @@ export type RuntimeCleanupOutcome = 'cleaned' | 'not_owner' | 'recovery_required
 export function isTemporaryCleanupError(error: unknown): boolean {
   const e = error as { code?: string; status?: number; message?: string; cause?: { code?: string } }
   const code = String(e?.code || e?.cause?.code || '')
+  // An access token that expired before renewal is replaced by the session
+  // manager within seconds; the same cleanup then succeeds. Checked before the
+  // permanent codes because PostgREST may label it PGRST301 or PGRST303.
+  if (/\bJWT expired\b/i.test(String(e?.message || ''))) return true
   // Explicit permanent database/contract errors must win over message matching.
   if (/^(22|23|28|42|P0001)/.test(code) || ['PGRST202', 'PGRST301', 'PGRST302'].includes(code)) return false
   if (/^(08|53|57|58)/.test(code) || ['40001', '40P01', '55P03', 'PGRST000', 'PGRST001', 'PGRST002', 'PGRST003'].includes(code)) return true
