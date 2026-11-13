@@ -1,0 +1,54 @@
+{
+  "migration": "migration_v522_data_group_member_matches_desktop",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261113152307",
+  "applied_at_vn": "2026-11-13T22:23:07+07:00",
+  "applied_via": "Supabase SQL Editor, run by the user: migrations/tests/migration_v522_data_group_member_matches_desktop_paste.sql (one transaction; checks the pasted text md5 against the file, runs the file's preflight/postflight, writes the ledger row itself; ledger created_by is NULL)",
+  "authorized_by": "user: 'hiển thị sql để tôi tự run' then 'đã run' (13/11/2026)",
+  "file_md5": "a9d5a64b92affaf58ce264528c24c215",
+  "ledger_statements_md5": "a9d5a64b92affaf58ce264528c24c215",
+  "ledger_rows_named_v522": 1,
+  "paste_file_md5": "72efb9468c0d0548e253ef5933606cf8",
+  "rollback_file": "migrations/rollback_v522_data_group_member_matches_desktop.sql",
+  "rollback_md5": "6a0f6eaa8e79eae575db6a730c73ec1d",
+  "preflight_read_only_at_vn": "2026-11-13T22:20:11+07:00",
+  "preflight": {
+    "ledger_had_v522": false,
+    "ledger_last_version": "20261113141849 (migration_v521_renewal_link_tickets)",
+    "signature": "public.aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb) returns jsonb",
+    "prosrc_md5": "0fffb42b865b8be45bf5a7f2f4e2db17",
+    "grantees": ["postgres", "service_role"],
+    "config": ["search_path=pg_catalog, public", "statement_timeout=15s"],
+    "security_definer": true,
+    "volatility": "stable",
+    "owner": "postgres",
+    "switch_web_campaign_input_duplicates": "{\"audience\":\"all\",\"defaultDays\":30,\"maxDays\":365}"
+  },
+  "postflight_read_only_at_vn": "2026-11-13T22:23:46+07:00",
+  "postflight": {
+    "grantees": ["aka_agent_desktop", "postgres", "service_role"],
+    "execute": { "aka_agent_desktop": true, "service_role": true, "anon": false, "authenticated": false, "aka_agent_chat_api": false },
+    "prosrc_md5_unchanged": "0fffb42b865b8be45bf5a7f2f4e2db17",
+    "functiondef_md5_unchanged": "8770c4dd7dab238fbc499c85e9cc942b",
+    "config_unchanged": ["search_path=pg_catalog, public", "statement_timeout=15s"],
+    "desktop_role_smoke": "SET LOCAL ROLE aka_agent_desktop + claims {\"role\":\"aka_agent_desktop\"} without sub, valid phone query: the call enters the reader (line 17 PERFORM auto_assert_automation_identity) and is refused by private.aka_agent_assert_request_ownership with 42501 desktop_staff_scope_denied (not 'permission denied for function'); read only, transaction rolled back, nothing written",
+    "switch_unchanged": "{\"audience\":\"all\",\"defaultDays\":30,\"maxDays\":365} (no groupMatches field = on)"
+  },
+  "postgrest_reload": "none (GRANT does not fire pgrst_ddl_watch); postgrest_logs 15:20-15:27 UTC have no 'Schema cache' lines",
+  "edge_logs_15_20_15_24_utc": {
+    "requests_per_minute": "16,557-17,396 (15:24 partial when read)",
+    "apply_minute_15_23_utc": "16,557 requests, REST p50 46 ms",
+    "rest_p50_ms": "44-46",
+    "http_503": 0,
+    "http_5xx": 0
+  },
+  "not_verified": [
+    "A real PostgREST call with a Desktop staff token: no released Desktop build has the feature yet.",
+    "Callers of the reader: the WebApp API/Web with the feature is not deployed and Desktop is not released, so nobody calls rpc/aka_agent_read_data_group_member_matches yet."
+  ],
+  "compatibility": [
+    "Grant only: no function body, attribute, table, index, policy, setting, role/global timeout, pool or connection change.",
+    "Old Desktop builds do not have the two options and never call the reader.",
+    "Rollback revokes only the Desktop grant; the WebApp API (service_role) keeps working and Desktop hides the two options and adds data as before."
+  ]
+}
