@@ -3,12 +3,12 @@
 Ngày 13/11/2026. Người dùng đã duyệt hướng làm và các quyết định ở mục 3 cùng ngày, rồi yêu cầu làm toàn bộ.
 
 **Trạng thái 13/11 (tối): mã Đợt 0–2, phần iOS và chuông của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
-repo, chưa merge, chưa deploy/phát hành.** DB (cập nhật 19:52 VN 13/11): V518 và cột CRM đã apply lúc 19:45–19:46 VN theo yêu cầu "run sql luôn"; V521, V520 chưa apply vì hộp xác nhận của V521 hết hạn ([biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json)). Các file SQL: akaAgent
+repo, chưa merge, chưa deploy/phát hành.** DB (cập nhật 20:20 VN 13/11): V518 và cột CRM đã apply lúc 19:45–19:46 VN theo yêu cầu "run sql luôn", V520 (chuông) lúc 20:01 VN; V521 (vé gia hạn, ban đầu mang số V519) chưa apply vì hộp xác nhận của Supabase MCP hết hạn 2 lần, có sẵn bản dán SQL Editor `migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql` ([biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json)). Các file SQL: akaAgent
 [V518](../migrations/migration_v518_renewal_reminder_state.sql) (hàm cho Desktop + dòng cài đặt `renewal.reminder`) và
 SqlServerDashboard `supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql` (cột cho ưu đãi gia hạn
 sớm) — người dùng đã duyệt tối 13/11, chạy ngoài giờ cao điểm; [V521](../migrations/migration_v521_renewal_link_tickets.sql)
 (vé gia hạn dùng một lần) và [V520](../migrations/migration_v520_notification_package_expiring.sql) (chuông) — viết sau lần
-duyệt đó, cần duyệt riêng. **Đổi so với quyết định 1 (người dùng yêu cầu tối 13/11: không xử lý qua biến giá trị ở Fly, chỉ
+duyệt đó; người dùng bảo "Hãy run sql luôn" sau khi nhận hai file này. **Đổi so với quyết định 1 (người dùng yêu cầu tối 13/11: không xử lý qua biến giá trị ở Fly, chỉ
 qua DB):** link vào thẳng trang thanh toán không còn là JWT ký bằng khoá dùng chung ở Fly/Edge mà là vé dùng một lần do DB
 cấp (mục 5). Chưa làm: email "Gói sắp hết hạn" (người dùng để sau). Cách chạy, bật/tắt và kiểm chứng:
 [Desktop](RENEWAL_REMINDER_DESKTOP.md), akaAgentWebApp `docs/RENEWAL_REMINDER.md`, SqlServerDashboard

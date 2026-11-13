@@ -23,7 +23,9 @@
       "checks": {
         "functionProsrcMd5": "fa4340f5d2e0c2f6cde990ad4dadccf4 (bằng thân hàm trong file)",
         "securityDefinerStable": true,
-        "executeRoles": ["aka_agent_desktop"],
+        "executeRoles": [
+          "aka_agent_desktop"
+        ],
         "settingRow": "auto_system_settings id 115, renewal.reminder = {\"audience\":\"admin_akabiz\"}",
         "callOutsideDesktopSession": "{today: 2026-11-13, loginDays: [], offers: []}"
       },
@@ -42,18 +44,48 @@
         "rows": "3 chương trình, cả 3 vẫn NULL (không đổi dữ liệu)"
       },
       "restDuringMinute": "0 lỗi 5xx/503; 1 request quá 1 giây"
+    },
+    {
+      "name": "migration_v520_notification_package_expiring",
+      "version": "20261113130104",
+      "appliedAtVn": "2026-11-13 20:01:04",
+      "file": "migrations/migration_v520_notification_package_expiring.sql",
+      "fileMd5": "2539b28d7e9879bb72409fcf138957d9",
+      "ledgerMd5": "2539b28d7e9879bb72409fcf138957d9",
+      "checks": {
+        "functionProsrcMd5": "emit 3321a35f2837fe76b829c5108ad1408c, resolve 3855d5472fb2432dc00e46e0b17a6565 (bằng thân hàm trong file)",
+        "executeRoles": [
+          "service_role"
+        ],
+        "constraint": "auto_notifications.event_type nhận thêm package.expiring, đã validate",
+        "rows": "191 dòng auto_notifications giữ nguyên, 0 dòng package.expiring (bell chưa bật)"
+      },
+      "restDuringMinute": "chưa đo: query_logs của Supabase MCP hết giờ lúc 20:10 VN; REST của project trả lời bình thường khi thử trực tiếp 20:15 VN"
     }
   ],
   "notApplied": [
     {
-      "name": "migration_v519_renewal_link_tickets",
-      "fileMd5": "f12718ea84c8000b1d463a5f7e474f00",
-      "reason": "Đã gửi lệnh 19:47 VN; hộp xác nhận của Supabase MCP không được bấm trong 230 giây nên lệnh không chạy. Kiểm lại 19:51: chưa có bảng, chưa có hàm, không có giao dịch treo."
-    },
-    {
-      "name": "migration_v520_notification_package_expiring",
-      "fileMd5": "2539b28d7e9879bb72409fcf138957d9",
-      "reason": "Chưa gửi (chạy sau V519)."
+      "name": "migration_v521_renewal_link_tickets",
+      "file": "migrations/migration_v521_renewal_link_tickets.sql",
+      "fileMd5": "2b2c78fc24cdec9576e2edfe8c9f34b7",
+      "attempts": [
+        "19:47 VN (còn mang số V519, md5 f12718ea84c8000b1d463a5f7e474f00): hộp xác nhận của Supabase MCP không được bấm trong 230 giây, lệnh không chạy; kiểm 19:51: chưa có bảng, chưa có hàm.",
+        "20:05 VN (V521): hộp xác nhận lại hết hạn sau 230 giây, lệnh không chạy."
+      ],
+      "lastReadOnlyCheck": "20:02:55 VN: sổ chưa có migration_v521_%, chưa có bảng private.aka_renewal_link_tickets, chưa có hàm vé. Sau lần hết hạn thứ hai chưa kiểm lại được qua MCP (execute_sql trả Service Unavailable 20:10-20:16 VN).",
+      "pasteFallback": {
+        "file": "migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql",
+        "md5": "0384ceafd2f7c6980142a90fba37448c",
+        "how": "Dán nguyên file vào Supabase SQL Editor của project akachat rồi Run một lần. Một giao dịch, tự ghi sổ migration với md5 = file; dán lần hai bị từ chối vô hại.",
+        "test": "bash scripts/test-v521-guarded-apply.sh (15 khẳng định, PG16 cục bộ)"
+      },
+      "effectWhileMissing": "Nút Gia hạn mở link thường; khách đăng nhập cổng bằng mật khẩu. Các phần khác không phụ thuộc V521."
     }
-  ]
+  ],
+  "renumbered": {
+    "from": "migration_v519_renewal_link_tickets",
+    "to": "migration_v521_renewal_link_tickets",
+    "atVn": "2026-11-13 ~20:02",
+    "reason": "Kiểm sổ trước khi gửi lại thì thấy phiên khác đã ghi migration_v519_data_group_member_matches (version 20261113125724, 19:57:24 VN; không có trên nhánh nào của repo akaAgent). Preflight của bản vé (name LIKE 'migration_v519_%') sẽ từ chối, nên đổi số trong file, rollback, bài thử và tài liệu ở cả ba repo. Nội dung SQL không đổi ngoài số; bài thử 40 khẳng định đạt lại."
+  }
 }

@@ -2,8 +2,9 @@
 
 13/11/2026. **Mã nhánh `claude/exciting-archimedes-wu7hz6`, chưa merge, chưa build/phát hành. V518 (hàm trạng thái + dòng cài
 đặt) đã apply akachat 13/11 19:45:37 VN (`20261113124537`, không apply lại; md5 sổ = file); cột ưu đãi gia hạn sớm của CRM đã
-apply 19:46:22 VN. V521 (vé gia hạn dùng một lần) và V520 (chuông "Gói sắp hết hạn") chưa apply (hộp xác nhận của V521 hết
-hạn lúc 19:51). Dòng `renewal.reminder` đang là `{"audience":"admin_akabiz"}`: chỉ admin akaBiz thấy, và chỉ trên bản app có
+apply 19:46:22 VN; V520 (chuông "Gói sắp hết hạn") đã apply 20:01:04 VN (`20261113130104`, không apply lại; `bell` chưa
+bật). V521 (vé gia hạn dùng một lần) chưa apply: hộp xác nhận của Supabase MCP hết hạn 2 lần (19:47 và 20:05 VN) vì không
+ai bấm; bản dán SQL Editor chạy một lần ở [guarded apply](../migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql). Dòng `renewal.reminder` đang là `{"audience":"admin_akabiz"}`: chỉ admin akaBiz thấy, và chỉ trên bản app có
 tính năng này (chưa phát hành). [Biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json).** Phương án và quy tắc:
 [RENEWAL_REMINDER_PLAN.md](RENEWAL_REMINDER_PLAN.md) (mục 3, 4, 5, 7.5). Màn Gia hạn sau khi hết hạn (không đổi):
 [RENEWAL_PORTAL_DESKTOP.md](RENEWAL_PORTAL_DESKTOP.md). Web, API, iOS và bảng cài đặt `renewal.reminder`: akaAgentWebApp
@@ -77,7 +78,7 @@ tới lần kích hoạt sau. Lần đọc đầu chưa xong thì chưa hiện g
 - `RenewalWebService` chỉ thêm hai tuỳ chọn: `stateChannel` (mặc định kênh cũ `AUTH_RENEWAL_WEB_STATE`) và
   `onOrderCompleted`. Chặn điều hướng ngoài `https://crm.akabiz.net/gia-han*`, link ngoài/popup → trình duyệt, chặn tải
   file, chỉ cấp quyền ghi clipboard, xoá storage/cache/kết nối khi đóng: như cũ.
-- Link dùng **vé gia hạn một lần do DB cấp** ([V521](../migrations/migration_v521_renewal_link_tickets.sql), chưa apply):
+- Link dùng **vé gia hạn một lần do DB cấp** ([V521](../migrations/migration_v521_renewal_link_tickets.sql), chưa apply tới 20:20 VN 13/11):
   `issueRenewalLinkTicket(opid = reminder.product.organizationProductId)` gọi RPC `aka_agent_renewal_link_ticket` (chỉ
   `aka_agent_desktop`; nhân viên và tổ chức lấy từ phiên Desktop, không nhận từ tham số) → `{ ok, token }` →
   `renewalReminderTicketUrl(token, kind, src)` = `https://crm.akabiz.net/gia-han?t=<vé 64 hex>&next=…&src=…`. Cổng CRM đổi
@@ -103,7 +104,7 @@ tới lần kích hoạt sau. Lần đọc đầu chưa xong thì chưa hiện g
 ## Chuông "Gói sắp hết hạn"
 
 Job của API Web ghi thông báo loại `package.expiring` vào trung tâm thông báo
-([V520](../migrations/migration_v520_notification_package_expiring.sql), chưa apply; bật bằng `bell: true` trong
+([V520](../migrations/migration_v520_notification_package_expiring.sql), đã apply 13/11 20:01 VN; bật bằng `bell: true` trong
 `renewal.reminder`; chi tiết lượt chạy và câu chữ ở akaAgentWebApp `docs/RENEWAL_REMINDER.md`). Desktop chỉ hiển thị, không
 thêm lượt đọc nào: thông báo đi qua danh sách/chi tiết/số chưa đọc sẵn có của trung tâm thông báo (V457).
 
@@ -141,7 +142,9 @@ cục bộ. Tệp quy tắc trùng byte với bản WebApp (`cmp`).
 Dữ liệu thật 13/11 (chỉ đọc): mọi dòng gói akaAgent còn hạn đều có `package_type`; dùng thử chỉ có loại `demo`, 3 ngày
 (38 dòng) nên quy tắc "loại trống = dùng thử" hiện không gắn nhầm gói trả phí nào. `org_organization_product.expiration_date`
 là `timestamptz`; `auto_notifications` 189 dòng, ràng buộc loại thông báo đúng bản V457. Sổ migration mới tới V514 (18:58
-VN 13/11); V515–V517 đã có chủ ở các nhánh khác, V518–V520 chưa ai dùng (kiểm lại ngay trước khi apply).
+VN 13/11); V515–V517 đã có chủ ở các nhánh khác, V518–V520 chưa ai dùng (kiểm lại ngay trước khi apply). Kiểm lại lúc
+apply đã bắt được va chạm: 19:57 VN một phiên khác ghi `migration_v519_data_group_member_matches` vào sổ (không có trên
+nhánh nào của repo), nên bản vé gia hạn đổi từ V519 thành V521 trước khi gửi lại.
 
 Giao diện: `node scripts/run-renewal-reminder-ui-smoke.cjs` (11 nhóm) dựng các component và `global.css` thật bằng esbuild
 rồi mở bằng Chromium của Playwright với IPC giả lập (cùng nhân với Electron, không cần binary Electron; container cloud tự
@@ -153,6 +156,6 @@ một lần); giao diện tối; không có chữ nào nhắc thói quen đăng 
 màn hình từng bước (đã xem bằng mắt 13/11, sáng và tối; nhóm chuông chưa xem bằng mắt).
 
 Chưa làm: chạy trong Electron thật (không có binary trong container) nên trang CRM bên trong `<webview>` của cửa sổ "Gia
-hạn gói", việc đóng/xoá phân vùng và luồng thanh toán xong → đọc lại gói chưa được chạy thật; DB thật (apply V518–V520, gọi
-RPC vé bằng phiên Desktop thật, cổng CRM đổi vé thật), thanh toán thật. Bài smoke giao diện dùng bản sao nhánh `renewal` của
+hạn gói", việc đóng/xoá phân vùng và luồng thanh toán xong → đọc lại gói chưa được chạy thật; DB thật (apply V521, gọi
+RPC vé bằng phiên Desktop thật, cổng CRM đổi vé thật, job chuông ghi thông báo thật), thanh toán thật. Bài smoke giao diện dùng bản sao nhánh `renewal` của
 `openNotificationTarget`, không chạy chính `App.tsx`.
