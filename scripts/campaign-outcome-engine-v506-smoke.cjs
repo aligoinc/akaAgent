@@ -140,7 +140,7 @@ async function main() {
     }
     const portError = (code, message) => E.zaloPortErrorFrom(Object.assign(new Error(message), { code }))
     const run = async (c, b = {}) => {
-      const calls = [], lines = []
+      const calls = [], lines = [], traces = []
       const port = {
         findUser: async (_ctx, phone) => {
           calls.push(`find:${phone}`)
@@ -160,7 +160,7 @@ async function main() {
           if ((b.blocked ?? []).includes(uid)) throw portError('122', 'blocked stranger')
           return { response: { msgId: `m-${uid}` }, msgId: `m-${uid}` }
         },
-        sendFriendRequest: async () => ({}),
+        sendFriendRequest: async (_ctx, uid) => { calls.push(`friend:${uid}`); return {} },
         prepareMedia: async () => [], sendMedia: async () => { throw new Error('không có tệp') },
         friendStatus: async () => null, applyLabel: async () => ({ kind: 'applied', labelText: null }), mirrorLabel: async () => {},
         changeAlias: async () => '', applyAkaBizTags: async () => 1,
@@ -178,7 +178,7 @@ async function main() {
       const core = { id: c.campaign, actionId: c.actionId, accountId: c.account, content: c.content, extraSettings: camp.extra_settings, images: [], dataTargetSourceMode: null }
       const type = E.zaloCampaignType(c.actionId)
       const afterReport = type.afterReport?.(core, port, { targetLabel: type.targetLabel }) ?? null
-      const result = await E.runUnit({ data, journal: new E.MemoryJournal(), clock: testClock(), events: { progress: l => lines.push(l.text), trace: () => {} } }, {
+      const result = await E.runUnit({ data, journal: new E.MemoryJournal(), clock: testClock(), events: { progress: l => lines.push(l.text), trace: e => traces.push(e) } }, {
         runnerId: 'desktop:v506', runtimeTarget: 'desktop', staffId: STAFF, accountId: c.account, campaignId: c.campaign, actionId: c.actionId,
         campaignName: camp.name, accountName: 'Zalo', campaignNote: camp.note, targetLabel: type.targetLabel,
         actionName: code => type.actionNames[code] ?? code, ...type.claimPlan(core),
@@ -186,9 +186,9 @@ async function main() {
         validateCampaign: () => type.validate?.(core, { zaloWeb: false }) ?? [],
         ...(afterReport ? { afterReport } : {}),
         onNoTarget: async info => rpc('SELECT public.aka_agent_engine_finish_campaign_v2($1, $2, $3) AS r', [c.account, info.leaseToken, info.note ?? null]),
-        pacing: { fullSeconds: 0 }, stepTimeoutMs: 5000, heartbeatMs: HEARTBEAT_MS, retry: { callTimeoutMs: 5000, backoffMs: [5, 10] }
+        pacing: { fullSeconds: 0 }, stepTimeoutMs: 5000, heartbeatMs: HEARTBEAT_MS, retry: b.retry ?? { callTimeoutMs: 5000, backoffMs: [5, 10] }
       }, new AbortController().signal)
-      return { result, calls, lines }
+      return { result, calls, lines, traces }
     }
     const camp = c => one(`SELECT status, note, schedule, original_schedule, extra_settings FROM public.auto_campaigns WHERE id = $1`, [c.campaign])
     const children = c => rows(`SELECT id::integer AS id, name, action_id, account_id::integer AS account_id, status, content, extra_settings, schedule_type,
@@ -278,6 +278,54 @@ async function main() {
       assert.ok(k >= 0 && r3.lines[k + 1] === '⚠️ Chưa tích hợp akaBiz Sms nên không thể kiêm gửi SMS.', r3.lines.join('\n'))
     }
     pass('kiêm SMS: thiếu SĐT thì cảnh báo như Desktop; akaBiz Sms dựng nội dung (thẻ [fullname]/[phone]), lỗi từng shop, chưa tích hợp có câu')
+
+    // ---- 5b. akaBiz Sms nhắn tin + kết bạn: thử lại / không đẩy chồng ----------------------------------------------------
+    // Hạn bước kiêm SMS = 2 × callTimeoutMs (thật 40 giây; ở đây 2 giây). akaBiz treo thật: 2 shop × hạn client 30 giây.
+    {
+      const extra = { enableMessage: true, enableAddFriend: true, friendRequestMessage: 'Kết bạn nhé', externalSmsEnabled: true,
+        externalSmsShopIds: [11, 12], externalSmsStatuses: ['thành công'], externalSmsContent: 'SMS [phone]' }
+      const short = { callTimeoutMs: 1000, backoffMs: [5, 10] }
+      const results = (shopIds, ok) => ({ results: shopIds.map(shopId => ok ? { shopId, ok: true } : { shopId, ok: false, error: 'The operation was aborted due to timeout' }) })
+      const pushes = r => r.calls.filter(x => x.startsWith('ext:') || x.startsWith('friend:'))
+      const waitFor = async (check, label) => {
+        for (let i = 0; i < 100 && !check(); i++) await new Promise(resolve => setTimeout(resolve, 50))
+        assert.ok(check(), label)
+      }
+
+      // Không chồng (akaBiz trả ngay): như Desktop, thành công ở dòng nhắn tin thì dòng kết bạn không đẩy; lỗi hết thì dòng kết bạn thử lại.
+      const ok = await make({ actionId: PHONE, extra, targets: [{ name: 'Nhanh', phone: '0901000041' }] })
+      const rOk = await run(ok, { external: input => results(input.shopIds, true) })
+      assert.deepEqual(pushes(rOk), ['ext:0901000041:Zalo 041:SMS 0901000041', 'friend:u041'], rOk.calls.join('\n'))
+      const fail = await make({ actionId: PHONE, extra, targets: [{ name: 'Lỗi', phone: '0901000042' }] })
+      const rFail = await run(fail, { external: input => results(input.shopIds, false) })
+      assert.deepEqual(pushes(rFail), ['ext:0901000042:Zalo 042:SMS 0901000042', 'friend:u042', 'ext:0901000042:Zalo 042:SMS 0901000042'], rFail.calls.join('\n'))
+      assert.equal(rFail.lines.filter(x => x.startsWith('⚠️ Không thể kiêm gửi SMS sang tài khoản #')).length, 4, rFail.lines.join('\n'))
+
+      // Treo (lâu hơn hạn): lõi đi tiếp sau 2 giây, lời gọi cũ vẫn chạy. Dòng kết bạn không được đẩy lần hai khi lần đầu chưa xong,
+      // dù lần đầu rốt cuộc thành công (Desktop chờ rồi thấy đã đẩy) hay lỗi hết (không biết akaBiz đã ghi chưa: đẩy lại có thể trùng).
+      for (const [phone, slowOk] of [['0901000043', true], ['0901000044', false]]) {
+        const done = []
+        const c = await make({ actionId: PHONE, extra, targets: [{ name: 'Treo', phone }] })
+        const r = await run(c, { retry: short, external: input => new Promise(resolve => setTimeout(() => {
+          done.push(input.phone)
+          resolve(results(input.shopIds, slowOk))
+        }, 3500)) })
+        assert.equal(r.result.reason, 'no_target', JSON.stringify(r.result))
+        const tail = phone.slice(-3)
+        assert.deepEqual(pushes(r), [`ext:${phone}:Zalo ${tail}:SMS ${phone}`, `friend:u${tail}`], r.calls.join('\n'))
+        const cut = r.traces.find(t => t.type === 'after_report_failed')
+        assert.ok(cut && cut.actionCode === 'zalo_message_stranger' && /after_report: quá 2000 ms/.test(cut.error), JSON.stringify(r.traces))
+        const skipped = r.traces.find(t => t.type === 'sms_push_in_flight')
+        assert.deepEqual(skipped && { ...skipped, targetRunId: typeof skipped.targetRunId },
+          { type: 'sms_push_in_flight', mode: 'external', actionCode: 'zalo_add_friend', inputDataId: c.ids[0], targetRunId: 'number' }, JSON.stringify(r.traces))
+        assert.equal(done.length, 0, 'lượt kết thúc khi lời gọi cũ còn chạy')
+        assert.equal((await one(`SELECT status FROM public.auto_campaign_input_data WHERE id = $1`, [c.ids[0]])).status, 'hoàn thành')
+        await waitFor(() => done.length === 1, 'lời gọi akaBiz cũ chạy xong')
+        await waitFor(() => r.lines.some(x => x.startsWith(slowOk ? '✅ Đã kiêm gửi SMS' : '⚠️ Không thể kiêm gửi SMS sang tài khoản #12')), r.lines.join('\n'))
+        assert.equal(pushes(r).filter(x => x.startsWith('ext:')).length, 1, 'chỉ một lần đẩy cho data')
+      }
+    }
+    pass('kiêm akaBiz Sms nhắn tin + kết bạn: không chồng thì như Desktop (thành công thì thôi, lỗi hết thì dòng kết bạn thử lại); akaBiz treo quá hạn kiêm SMS thì dòng kết bạn không đẩy lần hai khi lần đầu còn chạy (trace sms_push_in_flight)')
 
     // ---- 6. Group thời gian thực: chờ data / tiếp tục chờ / hẹn data tương lai / hết ngày nhận -------------------------------
     {

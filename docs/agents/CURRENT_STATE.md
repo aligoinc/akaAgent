@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
+[V519 đối chiếu khách đã có khi nhập vào Nhóm data](../DATA_GROUP_MEMBER_MATCHES_V519.md):
+**Đã apply akachat lúc 19:57:24 VN, 13/11/2026** (`20261113125724 / migration_v519_data_group_member_matches`;
+md5 sổ = md5 tệp `2e561485…`; không apply lại). Chỉ thêm hàm đọc `aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb)`
+(STABLE, SECURITY DEFINER, 15 giây, EXECUTE chỉ `service_role`); hàm nạp và mọi bảng/index giữ nguyên. Mang số 519 vì sổ đã có
+`migration_v518_renewal_reminder_state` (apply 19:45 VN cùng ngày). Thử rồi hủy trên production trước apply; sau apply gọi thật trên
+nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa, 1.000 giá trị 139 ms; 0 lỗi 5xx/503 quanh phút apply.
+Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
+[Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
+
 [Build akaAgent Desktop và App Server 9.6.0](../audits/akaagent-9.6.0-20261113/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 00:43:39–00:47:07 VN và App Server Windows x64 nội bộ lúc
 00:47:24–00:48:13 VN, 13/11/2026. Chưa upload/phát hành/feed; App Server chưa cài VPS.** Nguồn worktree `release-9.6.0`,

@@ -948,6 +948,32 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   sau V515. Chi tiết, số đo và cách gỡ: [thiết kế §14.12](CAMPAIGN_OUTCOME_ENGINE.md).
 - Kiểm: smoke V517 đạt 7/7 nhóm.
 
+### 13/11 ~17:20–18:30 VN: kiêm SMS không đẩy chồng khi akaBiz treo; lỗi akaBiz lên log Fly (từ bộ test trước deploy 13/11; [#666](https://github.com/aligoinc/akaAgent/pull/666), ChatApi [#151](https://github.com/aligoinc/akaAgentChatApi/pull/151), chưa merge, chưa deploy)
+
+- **Đẩy trùng:** hạn bước kiêm SMS của lõi (`afterReport` của `runUnit`, 2 × `callTimeoutMs` = 40 giây) cắt giữa chừng nhưng cổng không huỷ
+  lời gọi akaBiz đã gửi (hạn client 30 giây mỗi shop, có chủ đích như Desktop). Từ 2 shop và akaBiz treo thì dòng kết bạn của cùng data đẩy
+  lại cùng SĐT khi lần đẩy của dòng nhắn tin còn chạy. Bộ test trước deploy đo được các lần gọi bắt đầu ở 0, 30, 40, 70 giây, akaBiz ghi 2 lần
+  mỗi shop, mỗi data mất ~80 giây. Bị ở bộ mới của cả Desktop lẫn Fly (cùng lõi, cùng `DEFAULT_RETRY`), kể cả khi akaBiz chậm mà vẫn thành
+  công (2 shop × 25 giây > 40 giây), trong khi bộ cũ chỉ đẩy một lần vì `pushZaloMilestoneToSms` chạy tuần tự ngay trong bước.
+- **Sửa lõi** (`zalo/smsPush.ts`): nhớ data đang có lần đẩy chưa xong; bước sau của data đó không đẩy (trace `sms_push_in_flight`), kể cả khi
+  lần cũ rốt cuộc lỗi hết, vì lúc đó không biết akaBiz đã ghi chưa. Lần cũ đã xong thì như bộ cũ: có shop thành công thì thôi, lỗi hết thì
+  dòng sau thử lại. Khác bộ cũ đúng một chỗ: lần đầu quá 40 giây rồi lỗi hết thì bộ cũ (đợi xong mới chạy kết bạn) thử lại, lõi thì không.
+  Áp dụng cho cả SMS nội bộ (RPC V506 không lọc trùng). `runUnit`: `AfterReportInfo.trace`, `after_report_failed` có thêm `actionCode`.
+  Còn lại, như bộ cũ: lần đẩy đã xong mà mọi shop lỗi vì hết hạn client (akaBiz trả sau 30 giây nhưng vẫn ghi) thì dòng kết bạn vẫn thử lại,
+  nên akaBiz vẫn có thể ghi 2 lần (1 shop: lần đẩy xong trong 30 giây, trước hạn 40 giây). Muốn bỏ hẳn thì phải đổi luật thử lại của bộ cũ.
+- **Log Fly** (ChatApi): `akabiz_sms_push_failed`, `after_report_failed`, `sms_push_in_flight` vào `NOTABLE_TRACES` của `FlyEngineRunner`
+  (trước đó lỗi akaBiz chỉ hiện cho khách, vận hành không thấy); `FlyEngineRunnerOptions.retry` để test rút ngắn hạn.
+- **Production 13/11 ~17:40 VN (chỉ đọc):** 0 chiến dịch "Nhắn tin theo SĐT" / "Nhắn tin thành viên nhóm" chờ, chạy hoặc tạm dừng bật akaBiz
+  Sms (3 chiến dịch đã hoàn thành của 1 tổ chức, sửa lần cuối 05/09; 1 đã xoá). SMS nội bộ: 4 chiến dịch tạm dừng (tổ chức 1525 và 2051,
+  tài khoản Server, cờ engine tắt). Bật cờ cho mọi tổ chức 14/11 chưa đụng tới lỗi này.
+- **Kiểm:** smoke V506 thêm nhóm 5b (đỏ trên lõi cũ: akaBiz chậm mà thành công vẫn bị đẩy 2 lần); check-all 30 bước đạt; bộ kịch bản
+  (`--rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`) 702 lượt, 0 vi phạm mới; typecheck Desktop (`tsconfig.node.json`) sạch.
+  ChatApi: ca mới của `FlyEngineRunner` (akaBiz chậm hơn hạn kiêm SMS: akaBiz nhận `[11, 12]`; trên lõi cũ `[11, 12, 11, 12]`) và ca lỗi
+  akaBiz kiểm thêm log; `npm run verify` 195 file, 2.779 test đạt (2 bỏ qua vì phải bật tay). Repro K1, K2 của bộ test trước deploy
+  (`load-tests/predeploy-20261113/engine/known-issues.test.ts` ở worktree `akaAgentChatApi-predeploy-c`) xanh trên chuỗi migration của `dev` lẫn chuỗi có V515/V517; trong bộ lỗi akaBiz của đợt đó,
+  ca "trace akabiz_sms_push_failed KHÔNG tới log" giờ đỏ vì nó ghi lại đúng lỗi K1, 9 ca còn lại đạt (kể cả "lỗi hết thì thử lại ở dòng kết
+  bạn" và "hết hạn client 300 ms thì akaBiz ghi 2 lần", như bộ cũ).
+
 ## 5. Phủ hiện tại và phần còn lại (12/11 ~04:10 VN)
 
 **Phủ ước tính trên chiến dịch chạy 30 ngày** (đếm production 12/11, chỉ đọc; có chồng lấn nên là ước tính):
