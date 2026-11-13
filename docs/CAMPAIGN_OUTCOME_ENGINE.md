@@ -14,7 +14,7 @@ Adapter (Zalo / Facebook / Email) ── tín hiệu thô ──▶ DB: phân lo
 
 - **Runtime không tự quyết.** Adapter chỉ thực hiện thao tác và trả tín hiệu thô. DB đổi tín hiệu thành mã lỗi, gộp chính sách, ghi lịch sử, áp hiệu ứng trong **một giao dịch**, rồi trả chỉ thị.
 - **Một lõi cho hai nơi chạy.** Lõi nằm ở `packages/campaign-engine/`, dùng chung cho Desktop (Electron) và Fly (`akaAgentChatApi/apps/system-worker`). Khác biệt giữa hai nơi chỉ nằm ở adapter (port).
-- **Chọn nơi chạy, không có công tắc nào khác** (11/11/2026). Desktop theo bản cài: bản mới chạy bộ mới cho các loại lõi đã phủ, bản cũ chạy bộ cũ. Tài khoản Server theo cờ `org_organization.use_new_zalo_runtime` (V371; trigger ép bật cho tổ chức tạo từ 10/10/2026; V496 đã apply 11/11 16:10:27 VN, tắt ép bật nên tổ chức mới mặc định `false`) và chỉ chạy bộ mới trên Fly; VPS giữ bộ cũ tới khi tắt. Apply migration không đổi hành vi code cũ.
+- **Chọn nơi chạy, không có công tắc nào khác** (11/11/2026). Desktop theo bản cài: bản mới chạy bộ mới cho các loại lõi đã phủ, bản cũ chạy bộ cũ. Tài khoản Server theo cờ `org_organization.use_new_zalo_runtime` (V371; trigger ép bật cho tổ chức tạo từ 10/10/2026; V496 đã apply 11/11 16:10:27 VN, tắt ép bật nên tổ chức mới mặc định `false`; V528 apply 14/11 02:14:25 VN bật lại ép bật cho tổ chức mới) và chỉ chạy bộ mới trên Fly; VPS giữ bộ cũ tới khi tắt. Apply migration không đổi hành vi code cũ.
 
 ## 2. Mô hình lỗi
 

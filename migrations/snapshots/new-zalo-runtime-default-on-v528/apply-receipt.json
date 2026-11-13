@@ -1,0 +1,67 @@
+{
+  "migration": "migration_v528_new_zalo_runtime_default_on",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "14/11/2026 ~02:10 VN, yêu cầu trực tiếp trong phiên (\"bật lại trigger khi có tổ chức mới sẽ bật luôn đi\")",
+  "tool": "supabase db query --linked -f, chạy nguyên văn file (BEGIN, lock_timeout 2s, LOCK ACCESS EXCLUSIVE, preflight, ALTER, postflight); dòng sổ migration chèn ngay trước COMMIT của file bằng scripts/make-migration-ledger-apply.cjs, cùng một giao dịch; statements[1] = nguyên văn file",
+  "file_md5": "c0599651b2fd81968964bd8fbfcdd635",
+  "ledger": {
+    "version": "20261113191417",
+    "name": "migration_v528_new_zalo_runtime_default_on",
+    "statements_md5": "c0599651b2fd81968964bd8fbfcdd635",
+    "created_by": null
+  },
+  "applied_at_vn": "2026-11-14 02:14:25",
+  "number_choice": "Đọc sổ 14/11 02:10 VN: số lớn nhất là migration_v527_engine_claim_skip_stale_legacy_token (02:07:17 VN); git fetch --all: không ref nào có migration_v528 trở lên",
+  "before": {
+    "read_at_vn": "2026-11-14 02:10:37",
+    "trigger": "trg_use_new_zalo_runtime_on_insert",
+    "trigger_enabled": "D",
+    "trigger_function": "private.aka_agent_org_default_new_zalo_runtime()",
+    "trigger_function_md5": "df3a75b16492ded9c413ef4db332dd9b",
+    "column_default": "false",
+    "column_comment": "ghi chú của V496",
+    "flag_true": 453,
+    "flag_false": 1592,
+    "organizations_total": 2045,
+    "created_while_v496_active": {
+      "window_vn": "2026-11-11 16:22 → 2026-11-13 17:44",
+      "organizations": 47,
+      "flag_true_from_manual_batches": 9,
+      "flag_false": 38,
+      "flag_false_detail": "21 có tài khoản Zalo: 16 có tài khoản Server (24 tài khoản, 18 đã đăng nhập), 5 chỉ Zalo Desktop; 9 có chiến dịch chờ/đang chạy. V528 không đổi các tổ chức này."
+    }
+  },
+  "after": {
+    "read_at_vn": "2026-11-14 02:14:35",
+    "trigger_enabled": "O",
+    "trigger_function_md5": "df3a75b16492ded9c413ef4db332dd9b",
+    "column_default": "true",
+    "column_comment": "Cờ chọn engine chiến dịch v2 (V371): … Từ V528 (14/11/2026) tổ chức mới lại được bật sẵn …",
+    "flag_true": 453,
+    "flag_false": 1592
+  },
+  "postgrest_reload": {
+    "reload_message_utc": "2026-11-13T19:14:25.428Z",
+    "schema_cache_queried_ms": 1223.2,
+    "schema_cache_loaded_utc": "2026-11-13T19:14:26.693Z",
+    "edge_logs_per_minute_utc": [
+      { "minute": "19:11", "req": 5014, "e5xx": 0, "p50_ms": 44, "p99_ms": 92 },
+      { "minute": "19:12", "req": 5073, "e5xx": 0, "p50_ms": 44, "p99_ms": 95 },
+      { "minute": "19:13", "req": 5366, "e5xx": 0, "p50_ms": 44, "p99_ms": 93 },
+      { "minute": "19:14", "req": 9131, "e5xx": 0, "p50_ms": 50, "p99_ms": 342 }
+    ],
+    "summary": "0 lỗi 5xx/503. Phút 19:14 UTC tăng request vì App Server trên VPS khởi động lại từ 19:14:18 UTC (xem vps_restart_observed), 7 giây trước lúc apply"
+  },
+  "vps_restart_observed": {
+    "first_request_utc": "2026-11-13T19:14:18.367Z",
+    "ip": "103.153.72.222",
+    "note": "App Server trên VPS (tắt từ 00:45:57 VN 14/11) chạy lại lúc 02:14:18 VN, không do phiên này. Đọc 02:16 VN:",
+    "flagged_orgs_with_server_accounts": 148,
+    "flagged_orgs_not_in_vps_skip_list": 0,
+    "vps_account_logs_19_14_to_19_16_utc": "chỉ tổ chức chưa bật cờ: 900 tài khoản đăng nhập lại (370 tổ chức), 344 'Đăng nhập thất bại' (205 tổ chức; 19 tài khoản có phiên xác thực trong 24 giờ, 69 có chiến dịch chờ/đang chạy); 0 dòng của tổ chức đã bật cờ"
+  },
+  "new_organizations_after_v528": "INSERT nào cũng ra use_new_zalo_runtime = true (trigger ép, kể cả khi ghi false). Tổ chức có gói 16/18 QR + Server thì tài khoản Server chạy trên Fly (V497): Desktop 9.6.0 tạo tài khoản rồi đăng nhập QR qua ChatApi; trong ~15 giây ChatApi ghi dòng to_fly cho tài khoản chưa có binding, nên App Server bỏ qua tổ chức (aka_agent_app_access_chat_organizations). Chép phiên VPS của tài khoản mới báo 'Tài khoản không có phiên Zalo trên App Server.' và không ghi đè binding QR. Desktop chạy engine v2 khi đăng nhập (V513).",
+  "local_test": "node scripts/test-v528-new-zalo-runtime-default-on.cjs: 8 nhóm đạt trên PG17 (dựng V371 với thân hàm trùng md5 production → apply V496 thật → V528 → apply lần hai bị chặn → gỡ → hàm bị sửa thì V528 từ chối → apply lại); node scripts/test-v496-new-zalo-runtime-default.cjs vẫn 6 nhóm đạt",
+  "do_not_reapply": "Preflight từ chối khi sổ migration đã có migration_v528_*, khi trigger không ở trạng thái tắt của V496, khi mặc định không còn false, hoặc khi thân hàm trigger khác bản V371",
+  "rollback": "migrations/rollback_v528_new_zalo_runtime_default_on.sql: về đúng trạng thái V496 (trigger tắt, mặc định false, ghi chú V496); không sửa dòng tổ chức, không xoá dòng sổ migration. Lệnh sửa schema: chạy ngoài giờ cao điểm."
+}
