@@ -57,6 +57,14 @@ và iOS chạy như trước. Chat API dò hai hàm tối đa một phút một 
 thu quyền lúc Chat API đang chạy cũng an toàn: lần gọi kế tiếp gặp lỗi "hàm không tồn tại"/"không đủ quyền" được coi như
 chưa có (không làm hỏng lượt đẩy tới trình duyệt), rồi Chat quay về dò mỗi phút.
 
+## Phía app iPhone và phiên đăng nhập
+
+Luật "phiên của thiết bị còn hạn" có nghĩa: iPhone ngừng nhận ngay khi phiên của app trên máy đó hết hạn. Phiên native
+dài 30 ngày; API của akaAgentWebApp (nhánh `claude/quirky-goodall-ndzp3q`, chưa deploy) gia hạn phiên native mỗi ngày một
+lần khi app còn được dùng, nên chỉ máy không mở app 30 ngày mới ngừng nhận. Cùng nhánh đó cho phiên chỉ dùng Hội thoại
+(V490) đăng ký được iPhone, và app mở đúng hội thoại khi bấm thông báo. Chi tiết: akaAgentWebApp
+`docs/MOBILE_CHAT_PUSH.md`.
+
 ## Kiểm thử
 
 `bash scripts/test-v516-chat-push-devices.sh` (PostgreSQL 16 cục bộ, bảng thiết bị lấy nguyên văn từ V457, quyền mặc định
