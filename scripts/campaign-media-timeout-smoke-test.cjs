@@ -42,6 +42,7 @@ function load(file, imports) {
   return exports
 }
 const media = load('src/main/services/campaignMediaExecution.ts', require)
+const preCall = load('src/main/services/zaloPreCallError.ts', require)
 const timeout = () => new media.CampaignMediaTimeoutError(180000)
 function harness(file, name, methods, globals) {
   const source = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), 'utf8'), ts.ScriptTarget.Latest, true)
@@ -63,7 +64,7 @@ async function runtimeCases(zca) {
   const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', [
     'sendMessageToUser', 'sendMessageToGroup', 'sendMessage', 'getCampaignMediaExecution',
     'invalidateAccount', 'clearQrAccountRuntimeCache'
-  ], { ...zca, ...media, requiresZaloUploadCallback: file => /\.mp4$/.test(file), isZaloWebSupportedAttachment: () => true,
+  ], { ...zca, ...media, ...preCall, requiresZaloUploadCallback: file => /\.mp4$/.test(file), isZaloWebSupportedAttachment: () => true,
     ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS: 180000, ZALO_MESSAGE_SEND_TIMEOUT_MS: 90000, ZALO_LISTENER_REFRESH_AFTER_MS: 1800000 })
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-media-fixture-'))
   const video = path.join(dir, 'video.mp4'); fs.writeFileSync(video, 'offline-video')
@@ -95,7 +96,7 @@ async function runtimeCases(zca) {
         campaignMediaExecutions: new WeakMap(), ensureApi: async () => api,
         apiCache: new Map([[1, { api }]]), apiLoginInflight: new Map(), verifyInflight: new Map(), accountCacheVersions: new Map(),
         getAccountCacheVersion: () => 0, webRuntime: { invalidateApi() {} }, stopZaloListener: () => { stopped++ },
-        supabase: { getAccount: async () => ({ flatformType: 'zalo' }) }, ensureZaloListenerReady: async () => {},
+        supabase: { getAccountForZaloRuntime: async () => ({ flatformType: 'zalo' }) }, ensureZaloListenerReady: async () => {},
         withTimeout: async promise => promise
       })
       const send = () => type === 'user' ? runtime.sendMessageToUser(1, 'recipient', '', [video], true)
@@ -137,7 +138,7 @@ async function runtimeCases(zca) {
     const runtime = Object.assign(new Runtime(), {
       campaignMediaExecutions: new WeakMap(), apiCache: new Map([[1, { api }]]),
       ensureApi: async () => api, ensureZaloListenerReady: async () => {},
-      supabase: { getAccount: async () => {
+      supabase: { getAccountForZaloRuntime: async () => {
         if (scenario === 'stale') runtime.apiCache.clear()
         return { flatformType: 'zalo', isZaloShowWeb: scenario === 'web' }
       } },
@@ -181,6 +182,63 @@ async function runtimeCases(zca) {
   ]), 180000), e => e === error)
   releaseSibling(); await flush(); assert.equal(siblingCalls, 0)
   assert.equal(clock.tasks.size, 0)
+}
+
+// Lỗi của bước chuẩn bị (ensureApi, đọc lại tài khoản, listener tải tệp) có dấu "trước khi gọi Zalo" (zaloPreCallError) để cổng
+// engine v2 xếp "chưa gửi"; lỗi từ chính lệnh gửi Zalo (mã Zalo, quá giờ) KHÔNG được có dấu, nếu không data đã gửi sẽ bị gửi lại.
+// Câu, mã và lớp lỗi giữ nguyên cho bộ chạy cũ.
+async function preCallCases(zca) {
+  const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', [
+    'ensureApi', 'sendMessageToUser', 'sendMessage'
+  ], { ...zca, ...media, ...preCall, requiresZaloUploadCallback: file => /\.mp4$/.test(file), isZaloWebSupportedAttachment: () => true,
+    ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS: 180000, ZALO_MESSAGE_SEND_TIMEOUT_MS: 90000, ZALO_LISTENER_REFRESH_AFTER_MS: 1800000 })
+  const fetchFailed = message => Object.assign(new Error(message), { cause: Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } }) })
+  const make = (overrides = () => ({})) => {
+    let sends = 0
+    const api = { sendMessage: async () => { sends++; return { message: { msgId: 'm1' }, attachment: [] } } }
+    const runtime = Object.assign(new Runtime(), {
+      resolveApi: async () => api, ensureZaloListenerReady: async () => {},
+      supabase: { getAccountForZaloRuntime: async () => ({ flatformType: 'zalo' }) },
+      withTimeout: promise => promise
+    }, overrides(api))
+    return { runtime, api, sends: () => sends }
+  }
+  const sendText = runtime => runtime.sendMessageToUser(1, 'recipient', 'Chào', [], false)
+  const marked = (expected, check = () => true) => error => {
+    assert.equal(preCall.isZaloPreCallError(error), true, `thiếu dấu: ${error?.message}`)
+    assert.equal(error.message, expected); return check(error)
+  }
+  const unmarked = error => { assert.equal(preCall.isZaloPreCallError(error), false, `không được có dấu: ${error?.message}`); return true }
+
+  // ensureApi: đọc tài khoản / phiên từ DB lỗi, chưa có phiên, Zalo từ chối lúc đăng nhập lại bằng phiên (ZaloApiError giữ lớp và mã).
+  for (const error of [fetchFailed('Failed to get account Zalo session: TypeError: fetch failed'), new Error('Chưa có session Zalo'),
+    new zca.ZaloApiError('Đăng nhập thất bại'), new zca.ZaloApiError('Phiên hết hạn', -1001)]) {
+    const t = make(() => ({ resolveApi: async () => { throw error } }))
+    await assert.rejects(sendText(t.runtime), marked(error.message, e => e === error && (!(error instanceof zca.ZaloApiError) || e.code === error.code)))
+    assert.equal(t.sends(), 0)
+  }
+  // Đọc lại tài khoản trong sendMessage lỗi / không thấy tài khoản.
+  const reread = make(() => ({ supabase: { getAccountForZaloRuntime: async () => { throw fetchFailed('Failed to get account: TypeError: fetch failed') } } }))
+  await assert.rejects(sendText(reread.runtime), marked('Failed to get account: TypeError: fetch failed'))
+  const missing = make(() => ({ supabase: { getAccountForZaloRuntime: async () => null } }))
+  await assert.rejects(sendText(missing.runtime), marked('Không tìm thấy tài khoản Zalo'))
+  // Listener tải tệp (video cần upload callback) lỗi: chưa gọi Zalo.
+  const listener = make(() => ({ ensureZaloListenerReady: async () => { throw new Error('Không mở được kết nối nhận sự kiện Zalo') } }))
+  await assert.rejects(listener.runtime.sendMessageToUser(1, 'recipient', 'Chào', ['/x/video.mp4'], false),
+    marked('Không mở được kết nối nhận sự kiện Zalo'))
+  assert.deepEqual([reread.sends(), missing.sends(), listener.sends()], [0, 0, 0])
+
+  // Lỗi của chính lệnh gửi: Zalo trả mã, lỗi mạng giữa chừng, quá giờ chờ: không có dấu (không rõ / đã bị từ chối, không gửi lại).
+  for (const failure of [new zca.ZaloApiError('Người nhận chặn', 122), Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })]) {
+    const t = make(api => { api.sendMessage = async () => { throw failure }; return {} })
+    await assert.rejects(sendText(t.runtime), error => error === failure && unmarked(error))
+  }
+  const slow = make(() => ({ withTimeout: async () => { throw new Error('Gửi tin nhắn Zalo đến người dùng quá thời gian chờ (90 giây)') } }))
+  await assert.rejects(sendText(slow.runtime), unmarked)
+  // Thành công vẫn trả nguyên phản hồi.
+  const ok = make(() => ({}))
+  assert.deepEqual(await sendText(ok.runtime), { message: { msgId: 'm1' }, attachment: [] })
+  assert.equal(ok.sends(), 1)
 }
 
 function schedulerClass(zca, imports = {}) {
@@ -406,10 +464,11 @@ async function sharePolicyStopCases(Scheduler) {
 async function main() {
   const zca = await import('zca-js')
   await runtimeCases(zca)
+  await preCallCases(zca)
   const Scheduler = schedulerClass(zca)
   await schedulerCases(Scheduler)
   await sharePolicyStopCases(Scheduler)
-  console.log('PASS: Desktop/Server media deadlines, real SDK late file_done fence, proxy transport, next send, invalidation, share thresholds/order/policy/DB failures, 20 share stop-policy regressions, normal downstream skip and partial rich text')
+  console.log('PASS: Desktop/Server media deadlines, real SDK late file_done fence, proxy transport, next send, invalidation, pre-call error marking (prepare marked, Zalo send errors unmarked), share thresholds/order/policy/DB failures, 20 share stop-policy regressions, normal downstream skip and partial rich text')
 }
 module.exports = { schedulerClass, fixture, timeout, media }
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })

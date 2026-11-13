@@ -23,6 +23,7 @@ import {
   type ZaloOutgoingText, type ZaloResolvedTarget
 } from '../../../packages/campaign-engine/src/index'
 import { cleanupCampaignMediaTempFiles, isCampaignMediaResolveError, resolveCampaignMediaSource } from '../services/campaignMediaSource'
+import { isZaloPreCallError } from '../services/zaloPreCallError'
 import { engineMaterialize, engineSendExclusion, engineSmsPush, takeEngineContentIndex } from './desktopEngineData'
 
 export interface DesktopZaloPortHost {
@@ -59,10 +60,15 @@ function zaloAnswered(error: unknown): boolean {
 }
 
 /**
- * Lỗi zaloRuntimeService ném TRƯỚC khi gọi Zalo (ensureApi, kiểm tài khoản): chắc chắn chưa gửi gì, kể cả ở bước gửi.
- * Câu lấy nguyên văn từ zaloRuntimeService (ensureApi, sendMessage).
+ * Lỗi zaloRuntimeService ném TRƯỚC khi gọi Zalo: chắc chắn chưa gửi gì, kể cả ở bước gửi. zaloRuntimeService gắn dấu cho mọi lỗi của
+ * bước chuẩn bị (zaloPreCallError: ensureApi đọc tài khoản / phiên từ DB, kiểm gói, đăng nhập lại bằng phiên; sendMessage đọc lại tài
+ * khoản, mở listener tải tệp), ví dụ "Failed to get account Zalo session: TypeError: fetch failed" khi Supabase chập chờn. Câu dưới đây
+ * (nguyên văn của zaloRuntimeService) giữ cho lỗi ném ngoài các bước đó.
  */
 const LOCAL_BEFORE_CALL = /^(?:Chưa có session Zalo|Không tìm thấy tài khoản(?: Zalo)?|Tài khoản không phải nền tảng Zalo)$/
+function preCallFailure(error: unknown): Error | null {
+  return isZaloPreCallError(error) ? zaloPortErrorFrom(error, { phase: 'before_send' }) : null
+}
 /** Lỗi kiểm đầu vào của applyLabelToUser (ZR:2225-2240): ném trước khi gọi Zalo. */
 const LOCAL_LABEL_INPUT = /^(?:UID Zalo không hợp lệ|Tag Zalo không hợp lệ)$/
 /** zaloRuntimeService.sendMessage (ZR:1900-1903): tài khoản Zalo Web gửi tệp không phải ảnh, ném trước mọi yêu cầu. */
@@ -77,6 +83,8 @@ function sendFailure(error: unknown): Error {
     return new ZaloPortError(message, { code: 'zalo_web_image_only', phase: 'before_send',
       signal: { kind: 'engine', code: 'zalo_web_image_only', errorCode: 'err_cfg_zalo_web_image_only', message } })
   }
+  const preCall = preCallFailure(error)
+  if (preCall) return preCall
   if (!zaloAnswered(error) && (LOCAL_BEFORE_CALL.test(message) || LOCAL_LABEL_INPUT.test(message))) {
     return zaloPortErrorFrom(error, { phase: 'before_send' })
   }
@@ -88,9 +96,12 @@ function sendFailure(error: unknown): Error {
  * lỗi Zalo không mã (createZaloErrorDetail), không phải "không rõ đã tới".
  */
 const ADD_MEMBER_LOCAL_FAILURE = /^(?:Group Zalo không hợp lệ|UID thành viên Zalo không hợp lệ|Không lấy được link group Zalo|Link group Zalo chưa được bật)$/
-/** Lỗi đọc danh sách từ Zalo (bạn bè, tag, đề xuất, lời mời đã gửi): pha theo thao tác đọc như tra số. */
+/**
+ * Lỗi đọc từ Zalo (tra số, hồ sơ, tag, trạng thái kết bạn, danh sách bạn bè / đề xuất / lời mời): pha theo thao tác đọc. Lỗi của bước
+ * chuẩn bị (kể cả Zalo từ chối lúc đăng nhập lại bằng phiên) không phải câu trả lời cho lệnh đọc: chưa gọi tới lệnh đó.
+ */
 function readFailure(error: unknown): Error {
-  return zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
+  return preCallFailure(error) ?? zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
 }
 
 function addMemberFailure(error: unknown): Error {
@@ -137,7 +148,7 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
       try {
         return await host.zaloRuntime.findUserByPhoneOnce(host.accountId, phone, reqSrc, ctx.signal)
       } catch (error) {
-        throw zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
+        throw readFailure(error)
       }
     },
     // Như resolveZaloPhoneSearchLimitScope: không đọc được chính sách thì coi như không có giới hạn tra số.
@@ -154,7 +165,7 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
       try {
         return await host.zaloRuntime.getUserProfile(host.accountId, uid)
       } catch (error) {
-        throw zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
+        throw readFailure(error)
       }
     },
     saveResolvedProfile: (_ctx, target) => host.saveResolvedProfile(target),
@@ -283,14 +294,14 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
       try {
         return await labelContextOf(contextRunId).ids(uid)
       } catch (error) {
-        throw zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
+        throw readFailure(error)
       }
     },
     friendRequestStatus: async (_ctx, uid) => {
       try {
         return (await host.zaloRuntime.getFriendRequestStatus(host.accountId, uid)).raw
       } catch (error) {
-        throw zaloPortErrorFrom(error, { operation: 'read', answered: zaloAnswered(error) })
+        throw readFailure(error)
       }
     },
     mirrorLabel: async (_ctx, uid, label) => {

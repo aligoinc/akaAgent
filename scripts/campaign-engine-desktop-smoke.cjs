@@ -104,6 +104,8 @@ async function main() {
       updateInput: async (id, updates) => { inputUpdates.push([id, updates]); await db.query(`UPDATE public.auto_campaign_input_data SET name = coalesce($2, name), uid = $3 WHERE id = $1`, [id, updates.name ?? null, updates.uid]) }
     }
     const { ZaloApiError } = { ZaloApiError: class extends Error { constructor(m, c) { super(m); this.name = 'ZaloApiError'; this.code = c ?? null } } }
+    // Dấu "lỗi trước khi gọi Zalo" mà zaloRuntimeService gắn (src/main/services/zaloPreCallError.ts, Symbol.for dùng chung giữa các bản dựng).
+    const markPreCall = error => Object.defineProperty(error, Symbol.for('aka-agent.zalo.preCall'), { value: true, configurable: true })
 
     let nextId = 900000
     const makeCampaign = async ({ phones, extra, content, server = false }) => {
@@ -135,7 +137,10 @@ async function main() {
         findUserByPhoneOnce: async (accountId, phone, reqSrc) => {
           sent.push(`find:${phone}:${reqSrc}`)
           const b = behaviors[phone] || {}
-          if (b.find?.[reqSrc]) throw new ZaloApiError(b.find[reqSrc].message, b.find[reqSrc].code)
+          if (b.find?.[reqSrc]) {
+            const error = new ZaloApiError(b.find[reqSrc].message, b.find[reqSrc].code)
+            throw b.find[reqSrc].preCall ? markPreCall(error) : error
+          }
           if (b.notFound) return null
           return { uid: `uid-${phone}`, displayName: b.name, originalName: b.name, globalId: `g-${phone}`, gender: 0, raw: {} }
         },
@@ -287,6 +292,36 @@ async function main() {
     assert.deepEqual([d5[1].status, d5[1].error_code], ['thất bại', 'err_engine_unknown_delivery'])
     assert.ok(r2.lines.includes('Nhắn tin người lạ: Không xác nhận được tin đã tới; không gửi lại để tránh trùng (UNK01)'), r2.lines.join('\n'))
     pass('Desktop: lỗi zca-js đổi thành tín hiệu như Desktop đọc mã (122, 221 → thử reqSrc 40, lỗi mạng khi gửi → không rõ kết quả UNK01)')
+
+    // D2b: lỗi của bước chuẩn bị trước khi gọi Zalo (zaloRuntimeService gắn dấu: ensureApi đọc tài khoản / phiên từ DB, đăng nhập lại bằng
+    // phiên). Chưa gửi gì nên là "chưa gửi" (NET01: data về hàng đợi, khoá tài khoản 5 phút), không phải "không rõ đã tới" (UNK01).
+    const f2b = await makeCampaign({ phones: ['0922000010'], extra, content: 'Chào #{FULL_NAME}' })
+    const r2b = await runWith(f2b, {
+      '0922000010': { name: 'Giang', textError: markPreCall(new Error('Failed to get account Zalo session: TypeError: fetch failed')) }
+    })
+    assert.equal((await r2b.run()).reason, 'end_unit')
+    assert.equal((await inputRow(f2b.ids['0922000010'])).status, 'chờ xử lý', 'data về hàng đợi, chạy lại sau khi hết khoá')
+    assert.deepEqual((await details(f2b.ids['0922000010'])).map(d => [d.action_code, d.status]), [['zalo_find_phone_user', 'thành công']],
+      'không ghi dòng "thất bại" cho lần chưa gửi')
+    const o2b = (await db.query(`SELECT phase, error_code, delivery_state FROM public.auto_engine_outcomes
+      WHERE input_data_id = $1 AND action_code = 'zalo_message_stranger'`, [f2b.ids['0922000010']])).rows
+    assert.deepEqual(o2b.map(o => [o.phase, o.error_code, o.delivery_state]), [['before_send', 'err_network_offline', 'not_delivered']])
+    assert.ok(r2b.lines.some(l => /Nhắn tin người lạ: .*\(NET01\)$/u.test(l)), r2b.lines.join('\n'))
+    assert.ok(!r2b.lines.some(l => /UNK01/.test(l)))
+    // Tra số: Zalo từ chối lúc đăng nhập lại bằng phiên (ZaloApiError có dấu) không phải câu trả lời của lệnh tra số. Lỗi không mã nên
+    // thử reqSrc 40 như Desktop (searchZaloPhone); cả hai lần đều hỏng thì data về hàng đợi, không ghi "thất bại", không nhắn.
+    const f2c = await makeCampaign({ phones: ['0922000011'], extra, content: 'Chào #{FULL_NAME}' })
+    const relogin = { message: 'Đăng nhập thất bại', code: null, preCall: true }
+    const r2c = await runWith(f2c, { '0922000011': { name: 'Hà', find: { 32: relogin, 40: relogin } } })
+    assert.equal((await r2c.run()).reason, 'end_unit')
+    assert.deepEqual(r2c.runtime.sent, ['find:0922000011:32', 'find:0922000011:40'], 'không nhắn khi chưa tra được số')
+    assert.equal((await inputRow(f2c.ids['0922000011'])).status, 'chờ xử lý')
+    assert.deepEqual(await details(f2c.ids['0922000011']), [], 'không ghi "thất bại" cho tra số chưa gọi tới')
+    const o2c = (await db.query(`SELECT action_code, phase, error_code FROM public.auto_engine_outcomes WHERE input_data_id = $1`,
+      [f2c.ids['0922000011']])).rows
+    assert.deepEqual(o2c.map(o => [o.action_code, o.phase, o.error_code]), [['zalo_find_phone_user', 'before_send', 'err_network_offline']])
+    assert.ok(r2c.lines.some(l => /Tìm SĐT: .*\(NET01\)$/u.test(l)), r2c.lines.join('\n'))
+    pass('Desktop: lỗi trước khi gọi Zalo (đọc tài khoản / phiên từ DB, đăng nhập lại bằng phiên) là "chưa gửi": data về hàng đợi (NET01), không đóng UNK01')
 
     // D3: tạm dừng từ Desktop khi đang chạy (yêu cầu còn trong RAM): xong data hiện tại thì dừng, hoàn tất tạm dừng, data sau giữ nguyên.
     const f3 = await makeCampaign({ phones: ['0922000006', '0922000007'], extra, content: 'Chào #{FULL_NAME}' })
