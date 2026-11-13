@@ -1,8 +1,10 @@
 # Nhắc gia hạn trong phần mềm — Desktop
 
-13/11/2026. **Mã nhánh `claude/exciting-archimedes-wu7hz6`, chưa merge, chưa build/phát hành; V518 (hàm trạng thái + dòng cài
-đặt), V519 (vé gia hạn dùng một lần) và V520 (chuông "Gói sắp hết hạn") đều chưa apply; chưa có dòng `renewal.reminder` nên
-đang tắt với mọi máy.** Phương án và quy tắc:
+13/11/2026. **Mã nhánh `claude/exciting-archimedes-wu7hz6`, chưa merge, chưa build/phát hành. V518 (hàm trạng thái + dòng cài
+đặt) đã apply akachat 13/11 19:45:37 VN (`20261113124537`, không apply lại; md5 sổ = file); cột ưu đãi gia hạn sớm của CRM đã
+apply 19:46:22 VN. V519 (vé gia hạn dùng một lần) và V520 (chuông "Gói sắp hết hạn") chưa apply (hộp xác nhận của V519 hết
+hạn lúc 19:51). Dòng `renewal.reminder` đang là `{"audience":"admin_akabiz"}`: chỉ admin akaBiz thấy, và chỉ trên bản app có
+tính năng này (chưa phát hành). [Biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json).** Phương án và quy tắc:
 [RENEWAL_REMINDER_PLAN.md](RENEWAL_REMINDER_PLAN.md) (mục 3, 4, 5, 7.5). Màn Gia hạn sau khi hết hạn (không đổi):
 [RENEWAL_PORTAL_DESKTOP.md](RENEWAL_PORTAL_DESKTOP.md). Web, API, iOS và bảng cài đặt `renewal.reminder`: akaAgentWebApp
 `docs/RENEWAL_REMINDER.md`.
@@ -41,7 +43,7 @@ Nhóm thấy: `renewalReminderEnabledFor(settings, { isAdminAkabiz, isAdmin })`,
 
 ## RPC và dự phòng
 
-`aka_agent_renewal_reminder_state()` ([V518](../migrations/migration_v518_renewal_reminder_state.sql), chưa apply; chỉ
+`aka_agent_renewal_reminder_state()` ([V518](../migrations/migration_v518_renewal_reminder_state.sql), đã apply 13/11; chỉ
 `aka_agent_desktop`, nhân viên lấy từ phiên Desktop; `bash scripts/test-v518-renewal-reminder-state.sh` 22 khẳng định trên
 PG16): `{ today, serverTime, loginDays[], offers[] }`. Ngày đăng nhập lấy từ `auto_staff_device_presence` và
 `auto_control_sessions` trong 60 ngày; ưu đãi chỉ có khi `aka_promotion` đã có cột `min_days_before_expiry` (file SQL của CRM).

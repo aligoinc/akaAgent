@@ -3,7 +3,7 @@
 Ngày 13/11/2026. Người dùng đã duyệt hướng làm và các quyết định ở mục 3 cùng ngày, rồi yêu cầu làm toàn bộ.
 
 **Trạng thái 13/11 (tối): mã Đợt 0–2, phần iOS và chuông của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
-repo, chưa merge, chưa deploy/phát hành; chưa đổi DB.** SQL chưa apply: akaAgent
+repo, chưa merge, chưa deploy/phát hành.** DB (cập nhật 19:52 VN 13/11): V518 và cột CRM đã apply lúc 19:45–19:46 VN theo yêu cầu "run sql luôn"; V519, V520 chưa apply vì hộp xác nhận của V519 hết hạn ([biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json)). Các file SQL: akaAgent
 [V518](../migrations/migration_v518_renewal_reminder_state.sql) (hàm cho Desktop + dòng cài đặt `renewal.reminder`) và
 SqlServerDashboard `supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql` (cột cho ưu đãi gia hạn
 sớm) — người dùng đã duyệt tối 13/11, chạy ngoài giờ cao điểm; [V519](../migrations/migration_v519_renewal_link_tickets.sql)

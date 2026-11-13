@@ -1,0 +1,59 @@
+{
+  "project": "akachat (cgjbsmqtfhqvttudyjzq)",
+  "appliedBy": "Supabase MCP apply_migration, người dùng bấm xác nhận từng bản",
+  "requestedByUser": "\"Hãy run sql luôn\" (13/11/2026 ~19:40 VN), sau khi đã duyệt V518 và cột CRM trong ngày",
+  "precheck": {
+    "atVn": "2026-11-13 19:44",
+    "restP50Ms": 45,
+    "restP99Ms": "113-181",
+    "rest5xx": 0,
+    "activeBackends": 0,
+    "waitingLocks": 0,
+    "ledgerHadV518toV520": false,
+    "otherBranchesHoldingV518toV520": "không có (git fetch --all, 19:43 VN)"
+  },
+  "applied": [
+    {
+      "name": "migration_v518_renewal_reminder_state",
+      "version": "20261113124537",
+      "appliedAtVn": "2026-11-13 19:45:37",
+      "file": "migrations/migration_v518_renewal_reminder_state.sql",
+      "fileMd5": "c122e0b5c3c626131b5c1fe01171b9a1",
+      "ledgerMd5": "c122e0b5c3c626131b5c1fe01171b9a1",
+      "checks": {
+        "functionProsrcMd5": "fa4340f5d2e0c2f6cde990ad4dadccf4 (bằng thân hàm trong file)",
+        "securityDefinerStable": true,
+        "executeRoles": ["aka_agent_desktop"],
+        "settingRow": "auto_system_settings id 115, renewal.reminder = {\"audience\":\"admin_akabiz\"}",
+        "callOutsideDesktopSession": "{today: 2026-11-13, loginDays: [], offers: []}"
+      },
+      "restDuringMinute": "0 lỗi 5xx/503; 85/22.207 request quá 1 giây (p99 641 ms) trong phút PostgREST nạp lại schema"
+    },
+    {
+      "name": "aka_promotion_min_days_before_expiry",
+      "version": "20261113124622",
+      "appliedAtVn": "2026-11-13 19:46:22",
+      "file": "SqlServerDashboard supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql",
+      "fileMd5": "d2343e62e3eb1b1655cb150fcdaf2bd5",
+      "ledgerMd5": "d2343e62e3eb1b1655cb150fcdaf2bd5",
+      "checks": {
+        "column": "aka_promotion.min_days_before_expiry integer, cho phép NULL",
+        "constraint": "aka_promotion_min_days_before_expiry_check (NULL hoặc 1..365)",
+        "rows": "3 chương trình, cả 3 vẫn NULL (không đổi dữ liệu)"
+      },
+      "restDuringMinute": "0 lỗi 5xx/503; 1 request quá 1 giây"
+    }
+  ],
+  "notApplied": [
+    {
+      "name": "migration_v519_renewal_link_tickets",
+      "fileMd5": "f12718ea84c8000b1d463a5f7e474f00",
+      "reason": "Đã gửi lệnh 19:47 VN; hộp xác nhận của Supabase MCP không được bấm trong 230 giây nên lệnh không chạy. Kiểm lại 19:51: chưa có bảng, chưa có hàm, không có giao dịch treo."
+    },
+    {
+      "name": "migration_v520_notification_package_expiring",
+      "fileMd5": "2539b28d7e9879bb72409fcf138957d9",
+      "reason": "Chưa gửi (chạy sau V519)."
+    }
+  ]
+}
