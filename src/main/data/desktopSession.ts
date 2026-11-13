@@ -43,7 +43,8 @@ export class DesktopSessionManager {
   private deadline: SessionDeadline | null = null
   private generation = 0
   private refreshing: Promise<void> | null = null
-  private refreshRetryAt = 0
+  // Set when a renewal fails; renewal waits REFRESH_RETRY_DELAY_MS after it.
+  private refreshFailedAt: DesktopSessionClockMark | null = null
   private timer: ReturnType<typeof setTimeout> | null = null
   private rejectedListener: (() => void) | null = null
 
@@ -73,7 +74,7 @@ export class DesktopSessionManager {
     const lifetimeMs = validateSession(session, this.now())
     this.generation++
     this.refreshing = null
-    this.refreshRetryAt = 0
+    this.refreshFailedAt = null
     this.session = { ...session }
     this.deadline = this.deadlineFor(session, lifetimeMs, requestedAt ?? this.clockMark())
     this.schedule()
@@ -85,7 +86,7 @@ export class DesktopSessionManager {
     this.session = null
     this.deadline = null
     this.refreshing = null
-    this.refreshRetryAt = 0
+    this.refreshFailedAt = null
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
   }
@@ -145,9 +146,18 @@ export class DesktopSessionManager {
 
   private ageMs(): number {
     if (!this.deadline) return Infinity
-    const wall = this.now() - this.deadline.issuedWallMs
-    if (this.deadline.issuedMonoMs === null || !this.monotonicNow) return wall
-    return Math.max(wall, this.monotonicNow() - this.deadline.issuedMonoMs)
+    return this.elapsedSince({ wallMs: this.deadline.issuedWallMs, monoMs: this.deadline.issuedMonoMs })
+  }
+
+  /** Time since a mark; the larger reading wins so a clock moved backward cannot stretch a wait. */
+  private elapsedSince(mark: DesktopSessionClockMark): number {
+    const wall = this.now() - mark.wallMs
+    if (mark.monoMs === null || !this.monotonicNow) return wall
+    return Math.max(wall, this.monotonicNow() - mark.monoMs)
+  }
+
+  private retryWaitMs(): number {
+    return this.refreshFailedAt ? Math.max(0, REFRESH_RETRY_DELAY_MS - this.elapsedSince(this.refreshFailedAt)) : 0
   }
 
   private deadlineFor(session: DesktopSession, lifetimeMs: number | null, mark: DesktopSessionClockMark): SessionDeadline {
@@ -168,7 +178,7 @@ export class DesktopSessionManager {
     if (!this.session) return Promise.reject(new Error('Không có phiên để gia hạn.'))
     // Both the timer and data requests must respect a failed renewal's backoff.
     // Callers may keep using a valid JWT, but token() still rejects expired JWTs.
-    if (this.now() < this.refreshRetryAt) {
+    if (this.retryWaitMs() > 0) {
       if (!this.timer) this.schedule()
       return Promise.resolve()
     }
@@ -184,12 +194,12 @@ export class DesktopSessionManager {
       }
       this.session = { ...next }
       this.deadline = this.deadlineFor(next, lifetimeMs, requestedAt)
-      this.refreshRetryAt = 0
+      this.refreshFailedAt = null
     })().catch(error => {
       if (revision === this.generation) {
         if (error instanceof DesktopSessionRejected) this.reject()
         else {
-          this.refreshRetryAt = this.now() + REFRESH_RETRY_DELAY_MS
+          this.refreshFailedAt = this.clockMark()
           // Match an ordinary failed data fetch; do not surface Auth-specific
           // login/rate-limit messages for a temporary renewal failure.
           throw new TypeError('fetch failed')
@@ -212,9 +222,9 @@ export class DesktopSessionManager {
     if (!this.session) return
     // Use the same retry deadline as request-triggered renewal, without pushing
     // it back on every request or adding a wait to database callers.
-    const now = this.now()
-    const delay = this.refreshRetryAt > now
-      ? this.refreshRetryAt - now
+    const retryWait = this.retryWaitMs()
+    const delay = retryWait > 0
+      ? retryWait
       : Math.max(REFRESH_RETRY_DELAY_MS, this.remainingMs() - 60_000)
     this.timer = setTimeout(() => { this.timer = null; void this.refresh().catch(() => {}) }, delay)
     this.timer.unref?.()
