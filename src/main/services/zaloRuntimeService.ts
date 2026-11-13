@@ -17,6 +17,7 @@ import { buildZaloForwardMessageInfo } from '../../shared/zaloForwardMessage'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
 import { markZaloPreCallError, zaloPreCall } from './zaloPreCallError'
+import { startZaloListenerGuarded, stopZaloListenerGuarded } from './zaloListenerStopGuard'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
 
@@ -2558,7 +2559,7 @@ export class ZaloRuntimeService {
       state.lastEventAt = Date.now()
       this.emitZaloListenerStatus(state)
       try {
-        api.listener.start({ retryOnClose: true })
+        startZaloListenerGuarded(api.listener, { retryOnClose: true })
       } catch (err) {
         if (this.isZaloListenerAlreadyStartedError(err)) {
           await this.waitForZaloListenerReady(accountId, state, ZALO_LISTENER_READY_TIMEOUT_MS)
@@ -2842,7 +2843,8 @@ export class ZaloRuntimeService {
     state.ready = false
     state.startPromise = undefined
     try {
-      state.api.listener.stop()
+      // Dừng hẳn: chặn cả lần nối lại zca-js đã hẹn (xem zaloListenerStopGuard.ts), không để lại kết nối "ma".
+      stopZaloListenerGuarded(state.api.listener)
     } catch (err) {
       console.warn('[ZaloRuntime] Failed to stop Zalo listener', {
         accountId,
