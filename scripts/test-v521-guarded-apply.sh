@@ -95,4 +95,41 @@ if out=$(psql_in half -f "$GUARDED" 2>&1); then fail "DB có sẵn bảng vé m�
 case "$out" in *"aka_renewal_link_tickets đã có"*) ok "DB có sẵn bảng vé: preflight chặn" ;; *) fail "thông báo khác: $out" ;; esac
 expect "preflight chặn thì không ghi sổ" "$(psql_in half -c "SELECT count(*) FROM supabase_migrations.schema_migrations")" "0"
 
+# --- bản gọn để chép từ khung chat (migrations/tests/..._paste.sql): nội dung một lần, kiểm md5 trước khi chạy ---
+PASTE="$ROOT/migrations/tests/${NAME}_paste.sql"
+before=$(md5sum "$PASTE" | cut -d' ' -f1)
+python3 "$ROOT/scripts/build-v521-paste-sql.py" >/dev/null
+expect "bản gọn khớp file migration hiện tại (sinh lại không đổi)" "$(md5sum "$PASTE" | cut -d' ' -f1)" "$before"
+fixture compact
+psql_in compact -c "INSERT INTO supabase_migrations.schema_migrations (version, name, statements) VALUES ('20261113130104', 'migration_v520_notification_package_expiring', ARRAY['x'])" >/dev/null
+out=$(psql_in compact -f "$PASTE" 2>&1) || fail "dán bản gọn lỗi: $out"
+case "$out" in applied\|*"|$NAME|t") ok "bản gọn: status applied, md5 sổ = file" ;; *) fail "kết quả bản gọn khác mong đợi: $out" ;; esac
+expect "bản gọn: sổ ghi nguyên văn file, version sau dòng mới nhất" \
+  "$(psql_in compact -c "SELECT md5(statements[1]) || ':' || (version > '20261113130104') || ':' || (version ~ '^[0-9]{14}\$') FROM supabase_migrations.schema_migrations WHERE name = '$NAME'")" "$FILE_MD5:true:true"
+expect "bản gọn: thân hàm và quyền giống hệt bản dán đầy đủ" "$(
+  a=$(psql_in compact -c "SELECT string_agg(p.oid::regprocedure::text || ':' || md5(p.prosrc) || ':' || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid::regprocedure::text) FROM pg_proc p WHERE p.proname LIKE '%renewal_link_ticket%'")
+  b=$(psql_in paste -c "SELECT string_agg(p.oid::regprocedure::text || ':' || md5(p.prosrc) || ':' || coalesce(p.proacl::text, ''), ',' ORDER BY p.oid::regprocedure::text) FROM pg_proc p WHERE p.proname LIKE '%renewal_link_ticket%'")
+  [ -n "$a" ] && [ "$a" = "$b" ] && echo same || echo differ)" "same"
+expect "bản gọn: bảng vé bật RLS, không role nào có quyền" "$(psql_in compact -c "SELECT relrowsecurity || ':' || (SELECT count(*) FROM pg_roles r WHERE r.rolname IN ('anon','authenticated','service_role','aka_agent_desktop','aka_agent_chat_api') AND has_table_privilege(r.rolname, 'private.aka_renewal_link_tickets', 'SELECT, INSERT, UPDATE, DELETE')) FROM pg_class WHERE oid = 'private.aka_renewal_link_tickets'::regclass")" "true:0"
+expect "bản gọn: API xin vé rồi cổng đổi vé đúng một lần" "$(psql_in compact -c "SET ROLE service_role; WITH t AS (SELECT public.aka_agent_control_renewal_link_ticket(7, 9, 501) ->> 'token' AS token) SELECT (public.aka_renewal_link_ticket_redeem(token) ->> 'ok') || ':' || (public.aka_renewal_link_ticket_redeem(token) ->> 'reason') FROM t")" "true:used"
+fp=$(fingerprint compact)
+if out=$(psql_in compact -f "$PASTE" 2>&1); then fail "dán bản gọn lần hai không bị từ chối"; fi
+case "$out" in *"V521 đã chạy rồi, không chạy lại"*) ok "bản gọn: dán lần hai bị từ chối" ;; *) fail "thông báo khác: $out" ;; esac
+psql_in compact -c "DELETE FROM private.aka_renewal_link_tickets" >/dev/null; fp=$(fingerprint compact)
+psql_in compact -f "$PASTE" >/dev/null 2>&1 || true
+expect "bản gọn: dán lần hai không đổi gì" "$(fingerprint compact)" "$fp"
+
+# chép thiếu/sai một ký tự: dừng trước khi chạy gì
+fixture broken
+sed '0,/Vì sao:/s//Vi sao:/' "$PASTE" > "$WORK/broken.sql"; chmod 644 "$WORK/broken.sql"
+if out=$(psql_in broken -f "$WORK/broken.sql" 2>&1); then fail "bản gọn sai một ký tự vẫn chạy"; fi
+case "$out" in *"Nội dung dán bị thiếu hoặc sai"*) ok "bản gọn sai một ký tự: bị từ chối" ;; *) fail "thông báo khác: $out" ;; esac
+expect "bản gọn sai một ký tự: chưa tạo gì, chưa ghi sổ" "$(psql_in broken -c "SELECT (to_regclass('private.aka_renewal_link_tickets') IS NULL) || ':' || (SELECT count(*) FROM supabase_migrations.schema_migrations) || ':' || (SELECT count(*) FROM pg_proc WHERE proname LIKE '%renewal_link_ticket%')")" "true:0:0"
+
+# xuống dòng kiểu Windows (trình soạn thảo đổi \n thành \r\n): vẫn chạy, sổ vẫn ghi nguyên văn file
+fixture crlf
+sed 's/$/\r/' "$PASTE" > "$WORK/crlf.sql"; chmod 644 "$WORK/crlf.sql"
+out=$(psql_in crlf -f "$WORK/crlf.sql" 2>&1 | tr -d '\r') || fail "bản gọn CRLF lỗi: $out"
+case "$out" in applied\|*"|$NAME|t") ok "bản gọn xuống dòng kiểu Windows: applied, md5 sổ = file" ;; *) fail "kết quả CRLF khác mong đợi: $out" ;; esac
+
 echo "PASS $pass"
