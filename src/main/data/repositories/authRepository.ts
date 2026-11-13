@@ -292,13 +292,16 @@ async function completeDeviceLogin(prepared: PreparedDeviceLogin, assertCurrent?
     catch { console.warn('[auth] Không đăng ký được khóa khôi phục trên máy; đăng nhập vẫn hợp lệ.') }
   }
   assertCurrent?.()
+  // Measure the token lifetime from before the request, so the local renewal
+  // deadline can only be early, never late.
+  const sessionRequestedAt = desktopSession.clockMark()
   const session = await desktopSessionTransport.login({
     username: staff.username, password: staff.password, fingerprintHash: device.fingerprintHash
   }, AbortSignal.timeout(45_000))
   try {
     assertCurrent?.()
     if (session.staffId !== staff.id || session.organizationId !== staff.organization_id) throw new Error('Danh tính phiên không khớp.')
-    desktopSession.install(session, sessionRevision)
+    desktopSession.install(session, sessionRevision, sessionRequestedAt)
   } catch (error) {
     void desktopSessionTransport.revoke(session.accessToken, AbortSignal.timeout(3_000)).catch(() => {})
     throw error
