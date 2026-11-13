@@ -61,25 +61,24 @@
         "rows": "191 dòng auto_notifications giữ nguyên, 0 dòng package.expiring (bell chưa bật)"
       },
       "restDuringMinute": "chưa đo: query_logs của Supabase MCP hết giờ lúc 20:10 VN; REST của project trả lời bình thường khi thử trực tiếp 20:15 VN"
-    }
-  ],
-  "notApplied": [
+    },
     {
       "name": "migration_v521_renewal_link_tickets",
+      "version": "chưa đọc được (connector Supabase của phiên rớt từ ~20:10 VN)",
+      "appliedAtVn": "2026-11-13, trong khoảng 20:27–21:19",
+      "appliedBy": "Người dùng tự dán vào Supabase SQL Editor (nhắn \"ok rồi\" ~21:18 VN) sau khi yêu cầu \"cho tôi sql để tôi tự run\"; đã gửi hai bản: bản đầy đủ migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql (20:27 VN) và bản gọn migrations/tests/migration_v521_renewal_link_tickets_paste.sql (~20:50 VN). Cả hai chạy một giao dịch, tự ghi sổ với statements[1] = nguyên văn file và dừng nếu nội dung lệch md5.",
       "file": "migrations/migration_v521_renewal_link_tickets.sql",
       "fileMd5": "2b2c78fc24cdec9576e2edfe8c9f34b7",
-      "attempts": [
+      "earlierMcpAttempts": [
         "19:47 VN (còn mang số V519, md5 f12718ea84c8000b1d463a5f7e474f00): hộp xác nhận của Supabase MCP không được bấm trong 230 giây, lệnh không chạy; kiểm 19:51: chưa có bảng, chưa có hàm.",
         "20:05 VN (V521): hộp xác nhận lại hết hạn sau 230 giây, lệnh không chạy."
       ],
-      "lastReadOnlyCheck": "20:02:55 VN: sổ chưa có migration_v521_%, chưa có bảng private.aka_renewal_link_tickets, chưa có hàm vé. Sau lần hết hạn thứ hai chưa kiểm lại được qua MCP (execute_sql trả Service Unavailable 20:10-20:16 VN).",
-      "pasteFallback": {
-        "file": "migrations/tests/migration_v521_renewal_link_tickets_guarded_apply.sql",
-        "md5": "0384ceafd2f7c6980142a90fba37448c",
-        "how": "Dán nguyên file vào Supabase SQL Editor của project akachat rồi Run một lần. Một giao dịch, tự ghi sổ migration với md5 = file; dán lần hai bị từ chối vô hại.",
-        "test": "bash scripts/test-v521-guarded-apply.sh (15 khẳng định, PG16 cục bộ)"
+      "checks": {
+        "restProbe2119Vn": "POST /rest/v1/rpc bằng khoá công khai của app: aka_agent_renewal_link_ticket, aka_agent_control_renewal_link_ticket, aka_renewal_link_ticket_redeem đều trả 42501 permission denied (hàm có mặt, anon không gọi được); đối chứng hàm không tồn tại trả PGRST202.",
+        "inTransaction": "Postflight của migration (quyền gọi từng hàm, bảng vé bật RLS và không role nào có quyền) chạy trong cùng giao dịch; giao dịch đã commit nên các kiểm này đã đạt.",
+        "pending": "Chưa đối chiếu: version và md5(statements[1]) của dòng sổ, md5(prosrc) bốn hàm (issue f4e186ef7653bfcd94626ad26850ca8d, desktop 230442b611b721f1ba9faae4b1e8b942, control c650b20b348f476aacc84f5c4f63460c, redeem 9a7f442fb0fb0034bc0c98fb2dfd2368), edge_logs 5xx/503 phút apply. Làm khi connector Supabase lên lại."
       },
-      "effectWhileMissing": "Nút Gia hạn mở link thường; khách đăng nhập cổng bằng mật khẩu. Các phần khác không phụ thuộc V521."
+      "tests": "bash scripts/test-v521-renewal-link-tickets.sh (40 khẳng định), bash scripts/test-v521-guarded-apply.sh (26 khẳng định, cả hai bản dán), PG16 cục bộ"
     }
   ],
   "renumbered": {
