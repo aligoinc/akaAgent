@@ -1,0 +1,280 @@
+{
+  "project": "akachat / cgjbsmqtfhqvttudyjzq",
+  "status": "CHƯA apply. Chỉ đọc: mọi lệnh chạy trong BEGIN READ ONLY … ROLLBACK qua supabase db query --linked.",
+  "capturedAtVN": "2026-11-13 21:50–22:15",
+  "ledgerLatest": {
+    "version": "20261113141849",
+    "name": "migration_v521_renewal_link_tickets"
+  },
+  "function": {
+    "signature": "aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+    "prosrcMd5": "dd6cf2bd1f75998521d98ee46d8fff0e",
+    "defMd5": "6b40a8b7b51490287f7b39cb6b3c62ba",
+    "owner": "postgres",
+    "securityDefiner": true,
+    "volatility": "v",
+    "config": [
+      "search_path=pg_catalog, public",
+      "statement_timeout=15s"
+    ],
+    "acl": "{postgres=X/postgres}"
+  },
+  "migration": {
+    "fileMd5": "abd67653a4d9278633bdc7c5d3c26f25",
+    "rollbackFileMd5": "82812524c7ac7eed016c4f93ff9e2944",
+    "newProsrcMd5": "1d663e8e9a9203d3726a5892fceddda4",
+    "preflightReadOnly": "đạt 22:13 VN (khối DO $preflight$ chạy riêng trong giao dịch chỉ đọc)"
+  },
+  "uniqueKeys": [
+    "auto_campaign_details(id) PK",
+    "auto_campaigns(id) PK",
+    "auto_accounts(id) PK",
+    "zalo_accounts(id) PK",
+    "chat_zalo_account(id) PK",
+    "chat_zalo_account_organization UNIQUE(auto_account_id)"
+  ],
+  "watchTable": {
+    "reltuples": 165823,
+    "relpages": 4969,
+    "relallvisible": 4961,
+    "nLive": 170955,
+    "liveWatches": 88286,
+    "liveOnInvalidAccount": 0,
+    "liveWithChangedUid": 946,
+    "changedUidOwners": {
+      "1576/1463": 811,
+      "1563/1451": 135
+    },
+    "trackingWindowHours": 168,
+    "planner": {
+      "random_page_cost": "1.1",
+      "effective_cache_size": "24GB",
+      "work_mem": "20MB",
+      "jit": "off",
+      "plan_cache_mode": "auto"
+    }
+  },
+  "owners": {
+    "1988/1765": {
+      "note": "8.353 lượt còn hạn, 1 tài khoản; số dưới đây đo lúc trang đã nóng (22:14:54 VN), lần nguội đầu ở coldFirstRun",
+      "v510GenericSameCursors": {
+        "ms": 777.4,
+        "buffers": 730339,
+        "read": 0,
+        "watchRows": 71480,
+        "sortedPages": 16,
+        "indexes": [
+          "auto_campaign_engagement_deadline"
+        ],
+        "maxPageBuffers": 85803,
+        "page1": {
+          "ms": 116.0,
+          "read": 0,
+          "sort": true,
+          "index": "auto_campaign_engagement_deadline",
+          "buffers": 85803,
+          "watchRows": 8352
+        }
+      },
+      "v522Custom": {
+        "ms": 220.2,
+        "buffers": 100014,
+        "read": 0,
+        "watchRows": 8353,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 9238,
+        "page1": {
+          "ms": 17.5,
+          "read": 0,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "buffers": 2872,
+          "watchRows": 500
+        }
+      },
+      "v522Generic": {
+        "ms": 214.5,
+        "buffers": 106560,
+        "read": 0,
+        "watchRows": 8353,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 9238,
+        "page1": {
+          "ms": 13.9,
+          "read": 0,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "buffers": 6864,
+          "watchRows": 500
+        }
+      },
+      "pages": 16,
+      "returned": 7814,
+      "live": 8353,
+      "coldFirstRun": {
+        "atVN": "22:11:38",
+        "v522Custom": {
+          "page1": {
+            "ms": 97.8,
+            "hit": 2666,
+            "read": 206
+          },
+          "sweep": {
+            "pages": 16,
+            "ms": 1680.8,
+            "hit": 96069,
+            "read": 3945
+          }
+        }
+      }
+    },
+    "2061/1837": {
+      "force_custom_plan": {
+        "page1": {
+          "ms": 434.211,
+          "hit": 5918,
+          "read": 695,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 500
+        },
+        "pages": 4,
+        "items": 1953,
+        "hit": 23494,
+        "read": 3115,
+        "ms": 1541.8,
+        "watchRows": 1953,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 6900,
+        "maxPageWatchRows": 500
+      },
+      "force_generic_plan": {
+        "page1": {
+          "ms": 14.777,
+          "hit": 6613,
+          "read": 0,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 500
+        },
+        "pages": 4,
+        "items": 1953,
+        "hit": 26609,
+        "read": 0,
+        "ms": 55.7,
+        "watchRows": 1953,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 6900,
+        "maxPageWatchRows": 500
+      },
+      "note": "1.953 lượt, 2 tài khoản; custom chạy trước khi trang nóng"
+    },
+    "385/365": {
+      "force_custom_plan": {
+        "page1": {
+          "ms": 484.84,
+          "hit": 6322,
+          "read": 767,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 500
+        },
+        "pages": 4,
+        "items": 1629,
+        "hit": 21178,
+        "read": 2064,
+        "ms": 1208.6,
+        "watchRows": 1629,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 7089,
+        "maxPageWatchRows": 500
+      },
+      "force_generic_plan": {
+        "page1": {
+          "ms": 15.098,
+          "hit": 7073,
+          "read": 0,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 500
+        },
+        "pages": 4,
+        "items": 1629,
+        "hit": 22832,
+        "read": 0,
+        "ms": 48.5,
+        "watchRows": 1629,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 7073,
+        "maxPageWatchRows": 500
+      },
+      "note": "1.612 lượt còn hạn, 62 tài khoản; custom chạy trước khi trang nóng"
+    },
+    "1576/1463": {
+      "force_custom_plan": {
+        "page1": {
+          "ms": 1036.692,
+          "hit": 15866,
+          "read": 2024,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 1311
+        },
+        "pages": 2,
+        "items": 601,
+        "hit": 17535,
+        "read": 2070,
+        "ms": 1070.8,
+        "watchRows": 1412,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 17890,
+        "maxPageWatchRows": 1311
+      },
+      "force_generic_plan": {
+        "page1": {
+          "ms": 26.548,
+          "hit": 17822,
+          "read": 0,
+          "sort": false,
+          "index": "auto_campaign_engagement_catalog",
+          "watchRows": 1311
+        },
+        "pages": 2,
+        "items": 601,
+        "hit": 19235,
+        "read": 0,
+        "ms": 29.6,
+        "watchRows": 1412,
+        "sortedPages": 0,
+        "indexes": [
+          "auto_campaign_engagement_catalog"
+        ],
+        "maxPageBuffers": 17822,
+        "maxPageWatchRows": 1311
+      },
+      "note": "1.408 lượt còn hạn, 811 lượt tài khoản đổi uid (bị loại): trang đầu đọc 1.311 lượt để có 500 hợp lệ"
+    }
+  },
+  "method": "node scripts/zalo-engagement-v522-catalog-explain.cjs <staff> <org> [v510] > f.sql; supabase db query --linked -f f.sql (EXPLAIN ANALYZE, BUFFERS của câu SELECT nhánh catalog dạng PREPARE, plan_cache_mode force_custom_plan / force_generic_plan, đi hết các trang từ con trỏ {})"
+}
