@@ -55,7 +55,10 @@ Nếu bật hôm nay: 71 tổ chức ở mức đỏ (còn 0–3 ngày), 35 ở 
 5. **Thay đổi DB:** viết SQL gửi duyệt trước khi chạy (mục 8). Lưu ý: ưu đãi gia hạn sớm cần thêm **một cột** trên
    `aka_promotion`; các phần còn lại không thêm bảng hay cột.
 6. **Không cho khách thấy thói quen đăng nhập** (chốt thêm 13/11 khi xem bản thiết kế): quy tắc ở 4.4 chỉ dùng bên trong để
-   quyết định nhắc sớm hơn; trên màn hình chỉ có số ngày còn lại.
+   quyết định nhắc sớm hơn; trên màn hình chỉ có số ngày còn lại. Số liệu này cũng **không đưa sang CRM** (không dùng để xếp
+   ưu tiên việc cho nhân viên).
+7. **Dùng lại trang thanh toán của cổng CRM** (chốt 13/11): không làm trang thanh toán riêng trong Web hay Desktop. Desktop
+   mở trang CRM trong cửa sổ ngay trong app, Web mở tab mới (mục 5). Sửa trang ở CRM là mọi bản app nhận ngay.
 
 Bản thiết kế giao diện: https://claude.ai/artifact/7cyq51CEWt2mgxNCKLMmoV (riêng tư, cần chia sẻ từ trang mới mở được).
 
@@ -302,7 +305,7 @@ renewal_reminder` của Đợt 0 để không hiện hai dải.
 chưa cập nhật vẫn có kênh Đợt 0.
 
 **Đợt 3 — ngoài app và iOS:** thông báo chuông + email "Gói sắp hết hạn" cho khách ít mở app (email chỉ tới được khoảng
-150 tổ chức có email); đưa "số lần đăng nhập còn lại" vào ưu tiên việc gia hạn của CRM (chỉ nhân viên thấy, không gửi cho khách); iOS hiện số ngày.
+150 tổ chức có email); iOS hiện số ngày.
 
 Mở dần ở mỗi đợt: `admin_akabiz` → một nhóm tổ chức thử → `all`.
 
