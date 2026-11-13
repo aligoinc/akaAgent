@@ -10,13 +10,13 @@ import {
   type RenewalReminderOpenResult
 } from '../../../shared/renewalReminderDesktop'
 
-/** Cửa sổ "Gia hạn gói" khi đang đăng nhập (nhắc gia hạn). Link ký số chỉ đi trong main. */
+/** Cửa sổ "Gia hạn gói" khi đang đăng nhập (nhắc gia hạn). Link (có vé dùng một lần) chỉ đi trong main. */
 export interface RenewalReminderWebControl {
   /** Mã phiên đăng nhập hiện tại; null khi chưa đăng nhập. */
   currentSessionId(): number | null
   onSessionChanged(listener: () => void): () => void
   hasReminder(): boolean
-  /** Link cho thông báo hiện tại (ký số, hoặc link thường khi không ký được). Ném lỗi có `code` khi không có thông báo. */
+  /** Link cho thông báo hiện tại (có vé dùng một lần, hoặc link thường khi không có vé). Ném lỗi có `code` khi không có thông báo. */
   createLink(reminderKey: unknown): Promise<RenewalWebLink>
   /** Trang CRM báo đơn đã kích hoạt. */
   orderCompleted(): void

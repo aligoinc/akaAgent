@@ -11,7 +11,7 @@ import {
 export interface RenewalWebLink { url: string; signed: boolean }
 
 interface RenewalWebDependencies {
-  /** Link ký số (hoặc trang đăng nhập cổng khi không ký được) do main tạo. */
+  /** Link ký số (màn Gia hạn trước đăng nhập) hoặc link có vé (nhắc gia hạn), hoặc trang đăng nhập cổng, do main tạo. */
   createLink: () => Promise<RenewalWebLink>
   isAllowed: () => boolean
   /** Kênh gửi trạng thái webview; mặc định là kênh của màn Gia hạn trước đăng nhập. */

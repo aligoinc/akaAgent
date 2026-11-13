@@ -8,10 +8,11 @@ import {
   RENEWAL_REMINDER_STATE_OFF,
   isRenewalLegacyNotice,
   isRenewalTrialPackageType,
+  parseRenewalLinkTicket,
   renewalProductGroup,
   renewalReminderPlainUrl,
-  renewalReminderSignedUrl,
   renewalReminderSource,
+  renewalReminderTicketUrl,
   toPublicRenewalReminder,
   vietnamDayOf,
   type RenewalReminder,
@@ -192,20 +193,26 @@ export function shouldSkipLegacyRenewalNotice(nativeReminderEnabled: boolean, ra
 
 // ------------------------------------------------------------------ Link sang cổng gia hạn
 
-export interface RenewalReminderLink { url: string; signed: boolean }
+export interface RenewalReminderLink {
+  url: string
+  /** true: link có vé dùng một lần, khách vào thẳng trang thanh toán; false: khách đăng nhập cổng bằng mật khẩu. */
+  signed: boolean
+}
 
 /**
- * Link ký số (vào thẳng trang thanh toán) hoặc, khi ký lỗi/link lạ (bình thường khi Edge `renewal_link` chưa deploy),
- * link thường để khách đăng nhập cổng bằng mật khẩu. URL chỉ dùng trong tiến trình chính.
+ * Link có vé gia hạn dùng một lần do DB cấp (`aka_agent_renewal_link_ticket`, V519) hoặc, khi không có vé (DB chưa có hàm,
+ * `{ok:false}` như `rate_limited`, mã vé sai dạng, lỗi gọi), link thường để khách đăng nhập cổng bằng mật khẩu. URL (có
+ * mã vé) chỉ dùng trong tiến trình chính.
  */
 export async function buildRenewalReminderLink(
   reminder: RenewalReminder,
-  sign: (organizationProductId: number | null) => Promise<string>
+  issueTicket: (organizationProductId: number | null) => Promise<unknown>
 ): Promise<RenewalReminderLink> {
   const source = renewalReminderSource('desktop', reminder)
   try {
-    const signed = renewalReminderSignedUrl(await sign(reminder.product.organizationProductId), reminder.kind, source)
-    if (signed) return { url: signed, signed: true }
-  } catch { /* Ký lỗi: dùng link thường bên dưới, không log chi tiết. */ }
+    const ticket = parseRenewalLinkTicket(await issueTicket(reminder.product.organizationProductId))
+    const url = ticket ? renewalReminderTicketUrl(ticket, reminder.kind, source) : null
+    if (url) return { url, signed: true }
+  } catch { /* Xin vé lỗi: dùng link thường bên dưới, không log chi tiết. */ }
   return { url: renewalReminderPlainUrl(reminder.kind, source), signed: false }
 }

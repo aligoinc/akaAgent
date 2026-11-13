@@ -1,8 +1,7 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { RENEWAL_REMINDER_IPC } from '../../../shared/renewalReminderDesktop'
 import type { RenewalReminderState } from '../../../shared/renewalReminder'
-import { createRenewalPortalLink } from '../../data/repositories/authRepository'
-import { getCurrentDeviceIdentity } from '../../services/deviceIdentity'
+import { issueRenewalLinkTicket } from '../../data/repositories/renewalReminderRepository'
 import { renewalReminderService } from '../../services/renewalReminderService'
 import type { RenewalReminderWebControl } from './renewalWebHandlers'
 
@@ -22,10 +21,8 @@ export function registerRenewalReminderHandlers(
   renewalReminderService.attach({
     send,
     refreshEntitlements,
-    // Edge `renewal_link` (aka-agent-desktop-session); chưa deploy thì ném lỗi và service dùng link thường.
-    sign: async (credentials, organizationProductId) => createRenewalPortalLink(
-      credentials, (await getCurrentDeviceIdentity()).fingerprintHash, organizationProductId
-    )
+    // Vé gia hạn dùng một lần do DB cấp (V519); DB chưa có hàm hoặc từ chối thì service dùng link thường.
+    issueTicket: issueRenewalLinkTicket
   })
 
   ipcMain.handle(RENEWAL_REMINDER_IPC.state, () => renewalReminderService.getState())

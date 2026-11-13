@@ -28,6 +28,7 @@ import type {
   SaveNotificationSettingsRequest,
   ScheduledReportSubscription
 } from './types'
+import { RENEWAL_BELL_EVENT_TYPE } from './renewalReminder'
 
 export const NOTIFICATION_EVENT_TYPES: readonly NotificationEventType[] = [
   'campaign.status_changed',
@@ -113,8 +114,26 @@ export function notificationDeliveryReason(errorCode: string | null | undefined)
   }
 }
 
+/**
+ * Loại "Gói sắp hết hạn" (akaAgent V520, do job nhắc gia hạn ghi). Chỉ để hiển thị: không nằm trong
+ * `NOTIFICATION_EVENT_TYPES` vì hàm danh sách của DB chưa nhận loại này làm bộ lọc, nên không có nút lọc riêng.
+ */
+export const NOTIFICATION_PACKAGE_EXPIRING = RENEWAL_BELL_EVENT_TYPE
+
+/** Nhãn của các loại chỉ để hiển thị (không lọc được). */
+export const NOTIFICATION_DISPLAY_ONLY_LABELS: Readonly<Record<string, string>> = {
+  [NOTIFICATION_PACKAGE_EXPIRING]: 'Gói dịch vụ'
+}
+
+/** Nhãn loại thông báo; loại máy chủ thêm sau mà bản app chưa biết thì hiện nhãn chung. */
 export function notificationEventLabel(type: string | null | undefined): string {
-  return (NOTIFICATION_EVENT_LABELS as Record<string, string>)[type ?? ''] ?? 'Thông báo'
+  const key = String(type ?? '')
+  return (NOTIFICATION_EVENT_LABELS as Record<string, string>)[key] ?? NOTIFICATION_DISPLAY_ONLY_LABELS[key] ?? 'Thông báo'
+}
+
+/** Thông báo "Gói sắp hết hạn": Web/Desktop thêm nút Gia hạn, iOS chỉ hiện chữ. */
+export function isPackageExpiringNotification(item: { eventType?: string | null } | null | undefined): boolean {
+  return (item?.eventType as string | null | undefined) === NOTIFICATION_PACKAGE_EXPIRING
 }
 
 export function normalizeNotificationEmails(values: readonly string[]): string[] {
@@ -415,7 +434,8 @@ function parseSection(raw: unknown): NotificationContentSection | null {
   return section
 }
 
-const CONTENT_KINDS: readonly NotificationContent['kind'][] = ['campaign', 'account', 'report', 'data_group', 'test', 'verify_email']
+// 'package': nội dung "Gói sắp hết hạn" (V520), hiển thị chung như các loại khác (tiêu đề + các phần).
+const CONTENT_KINDS: readonly NotificationContent['kind'][] = ['campaign', 'account', 'report', 'data_group', 'test', 'verify_email', 'package']
 
 function parseContent(raw: unknown): NotificationContent | null {
   if (!isObject(raw)) return null

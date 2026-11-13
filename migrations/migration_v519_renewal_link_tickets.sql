@@ -115,6 +115,9 @@ BEGIN
     v_product := NULL;
   END IF;
 
+  -- Các lượt xin vé của cùng một nhân viên chạy lần lượt, để hạn mức bên dưới không bị vượt khi gọi đồng thời.
+  PERFORM pg_advisory_xact_lock(hashtextextended('aka_renewal_link_ticket:' || p_staff_id::text, 0));
+
   -- Dọn vé cũ (không cần job riêng): vé quá 1 ngày của chính nhân viên, và một ít vé quá 7 ngày của người khác.
   DELETE FROM private.aka_renewal_link_tickets t WHERE t.staff_id = p_staff_id AND t.created_at < v_now - interval '1 day';
   DELETE FROM private.aka_renewal_link_tickets t

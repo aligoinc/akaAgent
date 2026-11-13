@@ -17,7 +17,7 @@ import {
   type RenewalReminderLink,
   type RenewalReminderServerSnapshot
 } from '../../shared/renewalReminderDesktop'
-import { getCurrentUser, getCurrentUserCredentials, onCurrentUserSessionChanged, type ProcessAuthCredentials } from '../data/currentUser'
+import { getCurrentUser, onCurrentUserSessionChanged } from '../data/currentUser'
 import { loadRenewalReminderServerState } from '../data/repositories/renewalReminderRepository'
 
 /** Khách quay lại cửa sổ/đóng cửa sổ gia hạn: đọc lại gói tối đa một lượt mỗi ngần này. */
@@ -30,8 +30,8 @@ export class RenewalReminderLinkError extends Error {
 interface RenewalReminderDependencies {
   /** Gửi trạng thái xuống renderer (không bao giờ có ngày đăng nhập). */
   send?: (state: RenewalReminderState) => void
-  /** Ký link cổng gia hạn (Edge `renewal_link`); lỗi = dùng link thường. */
-  sign?: (credentials: ProcessAuthCredentials, organizationProductId: number | null) => Promise<string>
+  /** Xin vé gia hạn dùng một lần (`aka_agent_renewal_link_ticket`, V519); không có vé = dùng link thường. */
+  issueTicket?: (organizationProductId: number | null) => Promise<unknown>
   /** Đọc lại gói ngay (cùng hàm của lượt kiểm 30 giây), để `accountProducts` cập nhật sau khi thanh toán. */
   refreshEntitlements?: () => Promise<void>
 }
@@ -100,7 +100,7 @@ export class RenewalReminderService {
 
   private reset(scope: string | null): void {
     // Cùng nhân viên, chỉ đổi thông tin đăng nhập (đổi mật khẩu): giữ cài đặt và dữ liệu máy chủ, vì cài đặt chỉ được
-    // đọc một lần mỗi phiên của renderer. Mã phiên vẫn đổi để cửa sổ gia hạn đang mở đóng lại và link ký bằng mật khẩu mới.
+    // đọc một lần mỗi phiên của renderer. Mã phiên vẫn đổi để cửa sổ gia hạn đang mở đóng lại.
     const sameStaff = scope !== null && scope === this.scope
     this.scope = scope
     this.sessionSeq += 1
@@ -225,20 +225,20 @@ export class RenewalReminderService {
 
   /**
    * Link cổng gia hạn cho thông báo hiện tại. `reminderKey` của renderer chỉ để đối chiếu; luôn dùng thông báo tính lại
-   * trong main. Link (có thể chứa mã ký số) chỉ dùng trong main.
+   * trong main. Link (có thể chứa mã vé dùng một lần) chỉ dùng trong main. Phiên đổi trong lúc xin vé (đăng xuất, đổi tài
+   * khoản, đổi mật khẩu) → `not_logged_in`, link vừa tạo bị bỏ.
    */
   async resolveLink(_reminderKey: unknown): Promise<RenewalReminderLink> {
     const session = this.currentSessionId()
-    const credentials = getCurrentUserCredentials()
-    if (session === null || !credentials) throw new RenewalReminderLinkError('not_logged_in', RENEWAL_REMINDER_NOT_LOGGED_IN_MESSAGE)
+    if (session === null) throw new RenewalReminderLinkError('not_logged_in', RENEWAL_REMINDER_NOT_LOGGED_IN_MESSAGE)
     const reminder = this.currentReminder()
     if (!reminder) throw new RenewalReminderLinkError('no_reminder', RENEWAL_REMINDER_NO_REMINDER_MESSAGE)
-    const sign = this.deps.sign
+    const issueTicket = this.deps.issueTicket
     const link = await buildRenewalReminderLink(reminder, async opid => {
-      if (!sign) throw new Error('unavailable')
-      return sign(credentials, opid)
+      if (!issueTicket) return null
+      return issueTicket(opid)
     })
-    if (session !== this.sessionSeq || getCurrentUserCredentials() !== credentials) {
+    if (this.currentSessionId() !== session) {
       throw new RenewalReminderLinkError('not_logged_in', RENEWAL_REMINDER_NOT_LOGGED_IN_MESSAGE)
     }
     return link

@@ -43,6 +43,8 @@ export interface RenewalReminderSettings {
   adminOnly: boolean
   /** Bật kênh có sẵn `org_staff.app_notification` cho bản app chưa có giao diện nhắc gia hạn. */
   legacyBanner: boolean
+  /** Ghi thông báo "Gói sắp hết hạn" vào chuông (trung tâm thông báo) ở mỗi mốc. */
+  bell: boolean
 }
 
 export const RENEWAL_REMINDER_DEFAULT_MILESTONES: readonly number[] = [30, 14, 7, 5, 3, 1, 0]
@@ -59,7 +61,8 @@ export const RENEWAL_REMINDER_SETTINGS_OFF: RenewalReminderSettings = {
   usageMaxDaysLeft: 60,
   usageMinLoginDays: 3,
   adminOnly: false,
-  legacyBanner: false
+  legacyBanner: false,
+  bell: false
 }
 
 const intInRange = (value: unknown, fallback: number, min: number, max: number): number =>
@@ -80,7 +83,7 @@ function parseMilestones(value: unknown): number[] {
  * `auto_system_settings` `renewal.reminder` = JSON
  * `{"audience":"off"|"admin_akabiz"|"all","milestones":[30,14,7,5,3,1,0],"popupFromDays":7,"lockedFromDays":3,
  *   "shortPackageDays":61,"usageCycles":3,"usageWindowDays":60,"usageMaxDaysLeft":60,"usageMinLoginDays":3,
- *   "adminOnly":false,"legacyBanner":true}`. Trường thiếu hoặc sai lấy mặc định; `audience` thiếu hoặc sai = tắt.
+ *   "adminOnly":false,"legacyBanner":true,"bell":true}`. Trường thiếu hoặc sai lấy mặc định; `audience` thiếu hoặc sai = tắt.
  */
 export function parseRenewalReminderSettings(value: unknown): RenewalReminderSettings {
   try {
@@ -101,7 +104,8 @@ export function parseRenewalReminderSettings(value: unknown): RenewalReminderSet
       usageMaxDaysLeft: intInRange(record.usageMaxDaysLeft, off.usageMaxDaysLeft, 0, 365),
       usageMinLoginDays: intInRange(record.usageMinLoginDays, off.usageMinLoginDays, 2, 60),
       adminOnly: record.adminOnly === true,
-      legacyBanner: record.legacyBanner === true
+      legacyBanner: record.legacyBanner === true,
+      bell: record.bell === true
     }
   } catch { return { ...RENEWAL_REMINDER_SETTINGS_OFF } }
 }
@@ -573,17 +577,27 @@ export function renewalReminderPlainUrl(kind: RenewalReminderKind, source?: stri
   return url.toString()
 }
 
-/** Gắn `next` và `src` vào link ký số `…/gia-han?t=<JWT>`. Trả null nếu link không thuộc cổng gia hạn. */
-export function renewalReminderSignedUrl(signedUrl: string, kind: RenewalReminderKind, source?: string | null): string | null {
-  try {
-    const url = new URL(signedUrl)
-    const path = url.pathname.replace(/\/+$/, '') || '/'
-    if (url.origin !== RENEWAL_REMINDER_PORTAL_ORIGIN || url.username || url.password || path !== RENEWAL_REMINDER_PORTAL_LOGIN_PATH) return null
-    if (!url.searchParams.get('t')) return null
-    url.searchParams.set('next', renewalReminderLandingPath(kind))
-    if (source && RENEWAL_ENTRY_SOURCE_PATTERN.test(source)) url.searchParams.set('src', source)
-    return url.toString()
-  } catch { return null }
+/** Mã vé gia hạn dùng một lần do DB cấp (akaAgent V519): 64 ký tự hex. */
+export const RENEWAL_LINK_TICKET_PATTERN = /^[0-9a-f]{64}$/
+
+/**
+ * Link vào thẳng trang thanh toán bằng vé dùng một lần: `…/gia-han?t=<vé>&next=…&src=…`. Cổng CRM đổi vé qua DB, mỗi vé
+ * một lần trong 10 phút; không cần khóa ký dùng chung. Trả null nếu mã vé sai dạng (bên gọi dùng link thường).
+ */
+export function renewalReminderTicketUrl(ticket: unknown, kind: RenewalReminderKind, source?: string | null): string | null {
+  if (typeof ticket !== 'string' || !RENEWAL_LINK_TICKET_PATTERN.test(ticket)) return null
+  const url = new URL(RENEWAL_REMINDER_PORTAL_LOGIN_PATH, RENEWAL_REMINDER_PORTAL_ORIGIN)
+  url.searchParams.set('t', ticket)
+  url.searchParams.set('next', renewalReminderLandingPath(kind))
+  if (source && RENEWAL_ENTRY_SOURCE_PATTERN.test(source)) url.searchParams.set('src', source)
+  return url.toString()
+}
+
+/** Kết quả hàm DB cấp vé (`aka_agent_renewal_link_ticket`, `aka_agent_control_renewal_link_ticket`): lấy mã vé nếu có. */
+export function parseRenewalLinkTicket(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const record = value as Record<string, unknown>
+  return record.ok === true && typeof record.token === 'string' && RENEWAL_LINK_TICKET_PATTERN.test(record.token) ? record.token : null
 }
 
 // ------------------------------------------------------------------ Hợp đồng API / IPC
@@ -617,8 +631,95 @@ export interface RenewalReminderLinkRequest {
 
 export interface RenewalReminderLinkResponse {
   url: string
-  /** true: link ký số, khách vào thẳng trang thanh toán; false: khách đăng nhập cổng bằng mật khẩu. */
+  /** true: link có vé, khách vào thẳng trang thanh toán; false: khách đăng nhập cổng bằng mật khẩu. */
   signed: boolean
+}
+
+// ------------------------------------------------------------------ Câu chữ trung tính (iOS, chuông)
+
+export interface RenewalReminderNoticeTexts {
+  title: string
+  detail: string
+  tone: 'info' | 'warning' | 'danger'
+}
+
+/**
+ * Câu chữ chỉ nêu số ngày còn lại và ngày hết hạn: không lời mời gia hạn/nâng cấp, không nhắc thói quen đăng nhập. Dùng cho
+ * app iOS (không được có lời mời mua) và cho thông báo chuông, vì chuông hiện trên mọi nền tảng kể cả iOS.
+ */
+export function renewalReminderNoticeTexts(reminder: Pick<RenewalReminder, 'kind' | 'daysLeft' | 'expiryDay' | 'level' | 'product'>): RenewalReminderNoticeTexts {
+  const label = renewalReminderProductLabel(reminder)
+  const expiry = formatVietnamDay(reminder.expiryDay)
+  const tone: RenewalReminderNoticeTexts['tone'] = reminder.level === 'strong' ? 'danger' : reminder.level === 'medium' ? 'warning' : 'info'
+  if (reminder.kind === 'trial') {
+    return {
+      title: `Bạn đang dùng thử ${label}`,
+      detail: reminder.daysLeft <= 0 ? 'Hết hạn lúc 24:00 hôm nay.' : `Còn ${reminder.daysLeft} ngày, hết hạn lúc 24:00 ngày ${expiry}.`,
+      tone
+    }
+  }
+  if (reminder.daysLeft <= 0) return { title: `Gói ${label} hết hạn hôm nay`, detail: 'Sau 24:00 phần mềm sẽ ngừng chạy chiến dịch.', tone }
+  return { title: `Gói ${label} còn ${reminder.daysLeft} ngày`, detail: `Hết hạn ngày ${expiry}.`, tone }
+}
+
+// ------------------------------------------------------------------ Chuông (trung tâm thông báo, akaAgent V520)
+
+/** Loại thông báo "Gói sắp hết hạn" trong trung tâm thông báo. */
+export const RENEWAL_BELL_EVENT_TYPE = 'package.expiring'
+
+/** Một phần tử gửi cho hàm DB `aka_agent_notification_emit_package_expiring`; máy chủ thêm `staffId`, `organizationId`. */
+export interface RenewalBellItem {
+  organizationProductId: number
+  expiryDay: string
+  /** Mốc của thông báo (`s7:medium`…): DB chỉ ghi một thông báo cho mỗi nhân viên, gói, hạn và mốc. */
+  stageKey: string
+  severity: 'info' | 'warning' | 'critical'
+  title: string
+  body: string
+  daysLeft: number
+  kind: RenewalReminderKind
+  /** Nội dung trang chi tiết thông báo, cùng dạng `NotificationContent` của trung tâm thông báo. */
+  content: {
+    kind: 'package'
+    headline: string
+    sections: Array<{ title: string; tone: 'info' | 'issue'; rows: Array<{ label: string; value: string; tone?: 'ok' | 'warn' | 'bad' | 'muted' }> }>
+  }
+}
+
+/**
+ * Thông báo chuông cho một lời nhắc, hoặc null khi không cần báo. Chỉ báo ở các mốc mà phần mềm cũng hiện dải hoặc hộp
+ * thoại (gói ngắn ở mốc 30 ngày và những ngày đầu dùng thử chỉ có nhãn nên không báo chuông). Câu chữ trung tính vì chuông
+ * hiện cả trên iOS; nút Gia hạn do giao diện Web/Desktop tự thêm. Mốc lấy từ bản gửi máy khách nên không lộ dấu nhắc sớm.
+ */
+export function buildRenewalBellItem(reminder: RenewalReminder): RenewalBellItem | null {
+  if (reminder.banner === 'none' && reminder.dialog === 'none') return null
+  const organizationProductId = reminder.product.organizationProductId
+  if (typeof organizationProductId !== 'number' || !Number.isSafeInteger(organizationProductId) || organizationProductId <= 0) return null
+  const texts = renewalReminderNoticeTexts(reminder)
+  const lastDay = reminder.daysLeft <= 0
+  return {
+    organizationProductId,
+    expiryDay: reminder.expiryDay,
+    stageKey: toPublicRenewalReminder(reminder).stageKey,
+    severity: reminder.level === 'strong' ? 'critical' : reminder.level === 'medium' ? 'warning' : 'info',
+    title: texts.title,
+    body: texts.detail,
+    daysLeft: Math.max(0, reminder.daysLeft),
+    kind: reminder.kind,
+    content: {
+      kind: 'package',
+      headline: texts.title,
+      sections: [{
+        title: reminder.kind === 'trial' ? 'Bản dùng thử' : 'Gói dịch vụ',
+        tone: reminder.level === 'mild' ? 'info' : 'issue',
+        rows: [
+          { label: reminder.kind === 'trial' ? 'Sản phẩm' : 'Gói', value: renewalReminderProductLabel(reminder) },
+          { label: 'Hết hạn', value: reminder.kind === 'trial' ? `24:00 ngày ${formatVietnamDay(reminder.expiryDay)}` : formatVietnamDay(reminder.expiryDay) },
+          { label: 'Còn lại', value: lastDay ? 'Hết hạn hôm nay' : `${reminder.daysLeft} ngày`, tone: reminder.level === 'strong' ? 'bad' : reminder.level === 'medium' ? 'warn' : 'muted' }
+        ]
+      }]
+    }
+  }
 }
 
 // ------------------------------------------------------------------ Kênh có sẵn `org_staff.app_notification`

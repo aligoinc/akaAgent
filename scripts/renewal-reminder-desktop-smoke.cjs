@@ -1,5 +1,5 @@
 // Smoke test (không DB, không Electron) của nhắc gia hạn Desktop: chuyển accountProducts, kiểm kết quả RPC và dự phòng khi
-// RPC chưa có, trạng thái gửi renderer không có ngày đăng nhập, quyết định bỏ thông báo kiểu cũ, dựng link ký số/link thường.
+// RPC chưa có, trạng thái gửi renderer không có ngày đăng nhập, quyết định bỏ thông báo kiểu cũ, dựng link có vé gia hạn/link thường.
 // Chạy: node scripts/renewal-reminder-desktop-smoke.cjs
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -15,7 +15,8 @@ const stubs = {
     export const onCurrentUserSessionChanged = listener => { listeners.add(listener); return () => listeners.delete(listener) }
     globalThis.__sessionChanged = () => { for (const listener of listeners) listener() }`,
   renewalReminderRepository: `
-    export const loadRenewalReminderServerState = async () => { globalThis.__rpcCalls += 1; return globalThis.__rpc() }`
+    export const loadRenewalReminderServerState = async () => { globalThis.__rpcCalls += 1; return globalThis.__rpc() }
+    export const issueRenewalLinkTicket = async () => { throw new Error('service phải dùng issueTicket được attach') }`
 }
 
 const DAY_MS = 86_400_000
@@ -99,23 +100,41 @@ async function main() {
     assert.equal(shared.shouldSkipLegacyRenewalNotice(true, null), false)
     ok('chỉ bỏ thông báo nhắc gia hạn kiểu cũ khi giao diện mới bật')
 
-    // 4. Link: ký số và dự phòng
+    // 4. Link: vé gia hạn dùng một lần và dự phòng
     const reminder = rule.computeRenewalReminder({ products: mapped, today, settings: rule.parseRenewalReminderSettings({ audience: 'all' }) })
     assert.ok(reminder && reminder.kind === 'paid' && reminder.daysLeft === 7)
-    const signedCalls = []
-    const signed = await shared.buildRenewalReminderLink(reminder, async opid => { signedCalls.push(opid); return 'https://crm.akabiz.net/gia-han?t=abc.def.ghi' })
-    assert.equal(signed.signed, true)
-    assert.deepEqual(signedCalls, [101])
-    const signedUrl = new URL(signed.url)
-    assert.equal(signedUrl.searchParams.get('t'), 'abc.def.ghi')
-    assert.equal(signedUrl.searchParams.get('next'), '/gia-han/het-han-goi')
-    assert.equal(signedUrl.searchParams.get('src'), 'desktop.d7')
-    for (const signer of [async () => { throw new Error('400') }, async () => 'https://evil.example/gia-han?t=x', async () => 'https://crm.akabiz.net/gia-han']) {
-      const plain = await shared.buildRenewalReminderLink(reminder, signer)
+    const TICKET = 'a1b2c3d4'.repeat(8)
+    const ticketCalls = []
+    const ticketLink = await shared.buildRenewalReminderLink(reminder, async opid => {
+      ticketCalls.push(opid)
+      return { ok: true, token: TICKET, expiresAt: new Date(Date.now() + 600_000).toISOString() }
+    })
+    assert.equal(ticketLink.signed, true)
+    assert.deepEqual(ticketCalls, [101])
+    const ticketUrl = new URL(ticketLink.url)
+    assert.equal(ticketUrl.origin + ticketUrl.pathname, 'https://crm.akabiz.net/gia-han')
+    assert.equal(ticketUrl.searchParams.get('t'), TICKET)
+    assert.equal(ticketUrl.searchParams.get('next'), '/gia-han/het-han-goi')
+    assert.equal(ticketUrl.searchParams.get('src'), 'desktop.d7')
+    assert.ok(/^https:\/\/crm\.akabiz\.net\/gia-han\?t=[0-9a-f]{64}&next=.+&src=desktop\.d7$/.test(ticketLink.url), ticketLink.url)
+    const plainUrl = 'https://crm.akabiz.net/gia-han?next=%2Fgia-han%2Fhet-han-goi&src=desktop.d7'
+    for (const issuer of [
+      async () => ({ ok: false, reason: 'rate_limited' }),
+      async () => ({ ok: false, reason: 'no_session' }),
+      async () => null,
+      async () => ({ ok: true, token: 'ABC' }),
+      async () => ({ ok: true, token: TICKET.toUpperCase() }),
+      async () => ({ ok: true, token: TICKET + '0' }),
+      async () => ({ ok: 'true', token: TICKET }),
+      async () => TICKET,
+      async () => 'https://crm.akabiz.net/gia-han?t=abc.def.ghi',
+      async () => { throw new Error('PGRST202') }
+    ]) {
+      const plain = await shared.buildRenewalReminderLink(reminder, issuer)
       assert.equal(plain.signed, false)
-      assert.equal(plain.url, 'https://crm.akabiz.net/gia-han?next=%2Fgia-han%2Fhet-han-goi&src=desktop.d7')
+      assert.equal(plain.url, plainUrl)
     }
-    ok('link ký số (opid + next + src) và link thường khi ký lỗi/link lạ')
+    ok('link có vé (opid + t + next + src) và link thường khi không có vé/vé sai dạng/xin vé lỗi')
 
     // 5. Service: cài đặt, RPC, trạng thái công khai, link
     const sent = []
@@ -125,7 +144,7 @@ async function main() {
     const loginDay = vnDay(now - 3 * DAY_MS)
     globalThis.__rpc = () => ({ today, serverTime: new Date().toISOString(), loginDays: [loginDay, vnDay(now - 6 * DAY_MS), vnDay(now - 9 * DAY_MS)], offers: [] })
     const service = new svcModule.RenewalReminderService()
-    service.attach({ send: state => sent.push(state), sign: async () => { throw new Error('Edge chưa có renewal_link') }, refreshEntitlements: async () => {} })
+    service.attach({ send: state => sent.push(state), issueTicket: async () => null, refreshEntitlements: async () => {} })
     const scope = service.currentScope()
     assert.equal(scope, '9:7')
 
@@ -163,13 +182,38 @@ async function main() {
     const earlyLink = await service.resolveLink(earlyState.reminder.key)
     assert.equal(earlyLink.signed, false)
     assert.equal(new URL(earlyLink.url).searchParams.get('src'), 'desktop.e10')
-    ok('nhắc sớm: renderer không biết, link vẫn ghi nguồn e10 (link thường khi chưa ký được)')
+    assert.equal(new URL(earlyLink.url).searchParams.get('t'), null)
+    ok('nhắc sớm: renderer không biết, link vẫn ghi nguồn e10 (link thường khi chưa có vé)')
 
-    service.attach({ sign: async (credentials, opid) => { assert.equal(credentials.username, 'u'); assert.equal(opid, 101); return 'https://crm.akabiz.net/gia-han?t=tok' } })
-    const signedLink = await service.resolveLink('khóa-cũ-không-khớp')
-    assert.equal(signedLink.signed, true)
-    assert.equal(new URL(signedLink.url).searchParams.get('t'), 'tok')
-    ok('resolveLink bỏ qua khóa cũ, dùng thông báo hiện tại, ký với opid')
+    const issued = []
+    service.attach({ issueTicket: async opid => { issued.push(opid); return { ok: true, token: TICKET, expiresAt: 'x' } } })
+    const sentBeforeTicket = sent.length
+    const earlyTicketLink = await service.resolveLink('khóa-cũ-không-khớp')
+    assert.equal(earlyTicketLink.signed, true)
+    assert.deepEqual(issued, [101])
+    const earlyTicketUrl = new URL(earlyTicketLink.url)
+    assert.equal(earlyTicketUrl.searchParams.get('t'), TICKET)
+    assert.equal(earlyTicketUrl.searchParams.get('src'), 'desktop.e10')
+    assert.equal(sent.length, sentBeforeTicket, 'xin vé không gửi gì xuống renderer')
+    assert.ok(!JSON.stringify(sent).includes(TICKET) && !JSON.stringify(service.getState()).includes(TICKET), 'mã vé không có trong trạng thái renderer')
+    ok('resolveLink bỏ qua khóa cũ, dùng thông báo hiện tại, xin vé với opid; vé chỉ ở main')
+
+    service.attach({ issueTicket: async () => ({ ok: false, reason: 'rate_limited' }) })
+    const limitedLink = await service.resolveLink('x')
+    assert.equal(limitedLink.signed, false)
+    assert.equal(new URL(limitedLink.url).searchParams.get('t'), null)
+    service.attach({ issueTicket: async () => { throw new Error('mạng') } })
+    assert.equal((await service.resolveLink('x')).signed, false)
+    ok('rate_limited / xin vé lỗi: link thường')
+
+    // Phiên đổi trong lúc xin vé (đổi mật khẩu/đăng xuất): bỏ link, trả not_logged_in.
+    service.attach({ issueTicket: async () => { globalThis.__sessionChanged(); return { ok: true, token: TICKET } } })
+    await assert.rejects(service.resolveLink('x'), error => error.code === 'not_logged_in')
+    globalThis.__user = { ...globalThis.__user }
+    await new Promise(resolve => setTimeout(resolve, 0))
+    service.attach({ issueTicket: async () => ({ ok: true, token: TICKET }) })
+    assert.equal(service.getState().enabled, true, 'đổi mật khẩu giữ cài đặt')
+    ok('phiên đổi trong lúc xin vé: not_logged_in, link bị bỏ')
 
     globalThis.__user = { ...globalThis.__user, accountProducts: [product({ expirationDate: expiryIn(200) })] }
     service.productsChanged()

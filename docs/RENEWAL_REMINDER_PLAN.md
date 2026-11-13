@@ -2,11 +2,15 @@
 
 Ngày 13/11/2026. Người dùng đã duyệt hướng làm và các quyết định ở mục 3 cùng ngày, rồi yêu cầu làm toàn bộ.
 
-**Trạng thái 13/11 (cuối ngày): mã Đợt 0–2 và phần iOS của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
-repo, chưa merge, chưa deploy/phát hành; chưa đổi DB.** Hai file SQL chờ duyệt: akaAgent
+**Trạng thái 13/11 (tối): mã Đợt 0–2, phần iOS và chuông của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
+repo, chưa merge, chưa deploy/phát hành; chưa đổi DB.** SQL chưa apply: akaAgent
 [V518](../migrations/migration_v518_renewal_reminder_state.sql) (hàm cho Desktop + dòng cài đặt `renewal.reminder`) và
 SqlServerDashboard `supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql` (cột cho ưu đãi gia hạn
-sớm). Chưa làm: chuông + email "Gói sắp hết hạn" của Đợt 3 (mục 8 dòng 4). Cách chạy, bật/tắt và kiểm chứng:
+sớm) — người dùng đã duyệt tối 13/11, chạy ngoài giờ cao điểm; [V519](../migrations/migration_v519_renewal_link_tickets.sql)
+(vé gia hạn dùng một lần) và [V520](../migrations/migration_v520_notification_package_expiring.sql) (chuông) — viết sau lần
+duyệt đó, cần duyệt riêng. **Đổi so với quyết định 1 (người dùng yêu cầu tối 13/11: không xử lý qua biến giá trị ở Fly, chỉ
+qua DB):** link vào thẳng trang thanh toán không còn là JWT ký bằng khoá dùng chung ở Fly/Edge mà là vé dùng một lần do DB
+cấp (mục 5). Chưa làm: email "Gói sắp hết hạn" (người dùng để sau). Cách chạy, bật/tắt và kiểm chứng:
 [Desktop](RENEWAL_REMINDER_DESKTOP.md), akaAgentWebApp `docs/RENEWAL_REMINDER.md`, SqlServerDashboard
 `docs/trang-gia-han-khach-hang.md`. Khác với bảng ở mục 9: trong mã, `legacyBanner` thiếu = tắt, và V518 chỉ đặt
 `{"audience":"admin_akabiz"}`; muốn bật kênh cho bản app cũ phải ghi rõ `"legacyBanner": true`. Phạm vi: akaAgent Desktop (repo này), Web/iOS (akaAgentWebApp), cổng gia hạn của CRM
@@ -54,8 +58,9 @@ Nếu bật hôm nay: 71 tổ chức ở mức đỏ (còn 0–3 ngày), 35 ở 
 
 ## 3. Quyết định đã chốt (13/11/2026)
 
-1. **Bật link ký số** (bản vá Edge `renewal_link` hoãn từ 04/11): bấm Gia hạn là vào thẳng trang thanh toán, không gõ lại
-   mật khẩu.
+1. **Bấm Gia hạn là vào thẳng trang thanh toán, không gõ lại mật khẩu.** Ban đầu chốt làm bằng link ký số (bản vá Edge
+   `renewal_link` hoãn từ 04/11); tối 13/11 người dùng yêu cầu không dùng khoá đặt ở Fly mà chỉ xử lý qua DB, nên đổi sang
+   vé dùng một lần do DB cấp (mục 5). Bản vá Edge không còn cần cho tính năng này.
 2. **Mốc 30 ngày với gói 2 tháng:** giữ, nhưng chỉ hiện nhãn nhỏ, không dải thông báo, không hộp thoại.
 3. **iOS:** chỉ hiện số ngày còn lại, không đặt nút Gia hạn (sau lần duyệt App Store 03/10 app đã bỏ link nâng cấp/thanh
    toán ở màn đăng nhập).
@@ -169,25 +174,33 @@ thông báo của giai đoạn hiện tại một lần — chấp nhận đư�
 Luồng đích: bấm **Gia hạn** → trang thanh toán nhanh đã chọn sẵn đúng gói đang dùng → bấm **Tạo mã QR thanh toán** → quét
 → hệ thống tự nâng cấp (webhook SePay và engine nâng cấp đã có).
 
-**Link:** `https://crm.akabiz.net/gia-han?t=<JWT>&next=<trang>&src=<nguồn>`
+**Link:** `https://crm.akabiz.net/gia-han?t=<vé>&next=<trang>&src=<nguồn>`
 
-- `t`: JWT HS256 (`aud = akabiz-renewal-link`, `sub = org_staff.id`, `opid = id dòng sản phẩm cần gia hạn`, sống 10 phút).
-  Luôn gửi `opid`: tổ chức nhiều sản phẩm mà thiếu `opid` thì cổng chọn sẵn mọi sản phẩm.
+- `t`: vé dùng một lần, 64 ký tự hex, do DB cấp cho nhân viên đang đăng nhập (akaAgent
+  [V519](../migrations/migration_v519_renewal_link_tickets.sql)). Vé sống 10 phút, đổi được đúng một lần, DB chỉ lưu mã băm
+  SHA-256 kèm nhân viên, tổ chức và dòng sản phẩm cần gia hạn (để cổng chọn sẵn đúng gói; tổ chức nhiều sản phẩm mà thiếu
+  dòng sản phẩm thì cổng chọn sẵn mọi sản phẩm).
 - `next`: gói trả phí còn hạn → `/gia-han/het-han-goi`; dùng thử còn hạn → `/gia-han/het-han-dung-thu`. Hai trang này có
   thẻ thanh toán nhanh; nếu không gửi `next`, gói còn hạn rơi vào trang Nâng cấp (giỏ hàng đầy đủ, nhiều bước hơn).
 - `src`: nguồn và mốc để đo, dạng `desktop.d7`, `web.d3`, `web.e28` (`d` = mốc ngày, `e` = nhắc sớm kèm số ngày còn lại; link không mang số lần đăng nhập),
   `banner.d14` (kênh ở Đợt 0). Chỉ dùng để thống kê, không dùng để phân quyền.
 
-**Ký link:**
+**Cấp và đổi vé (chỉ qua DB, không có khoá ký ở Fly hay Edge):**
 
-- Desktop: Edge `aka-agent-desktop-session`, action `renewal_link` — bản vá đã viết sẵn ở
-  [RENEWAL_PORTAL_DESKTOP.md](RENEWAL_PORTAL_DESKTOP.md), không cần sửa thêm. Main đang giữ thông tin đăng nhập trong RAM
-  (`getCurrentUserCredentials`) nên gọi được khi đang đăng nhập. Link chỉ đi trong main, không qua renderer.
-- Web: API thêm `POST /renewal/link`, ký bằng `node:crypto` (API chưa có thư viện JWT, không cần thêm). Kiểm `opid` thuộc
-  đúng tổ chức của phiên.
-- Khóa `RENEWAL_PORTAL_LINK_SECRET` phải cùng giá trị ở ba nơi: Supabase Edge secrets, Fly `aka10000` (CRM), Fly
-  `aka-agent-web-app` (API Web).
-- Ký lỗi hoặc chưa có khóa: mở link thường `/gia-han?next=…`, khách đăng nhập cổng bằng mật khẩu như hiện nay.
+- Desktop: RPC `aka_agent_renewal_link_ticket(dòng sản phẩm)` — chỉ role `aka_agent_desktop`; nhân viên và tổ chức lấy từ
+  phiên Desktop, không nhận từ tham số. Link chỉ đi trong main, không qua renderer.
+- Web: `POST /renewal/link` gọi `aka_agent_control_renewal_link_ticket(nhân viên, tổ chức, dòng sản phẩm)` — chỉ
+  `service_role`, nhân viên và tổ chức lấy từ phiên Web đã xác thực.
+- Cổng CRM: `POST /api/public/renewal/link` thấy mã 64 ký tự hex thì gọi `aka_renewal_link_ticket_redeem(vé)` — chỉ
+  `service_role`; hàm đánh dấu vé đã dùng và trả nhân viên, tổ chức, dòng sản phẩm. Cổng kiểm lại tài khoản còn hoạt động
+  và còn thuộc tổ chức đó rồi mới cấp phiên.
+- Ai giữ gì: quyền xin vé gắn với phiên đăng nhập của phần mềm; quyền đổi vé gắn với khoá service mà CRM vốn đã dùng để đọc
+  DB. Không bên nào giữ khoá ký của bên kia, nên không còn `RENEWAL_PORTAL_LINK_SECRET` ở API Web và không cần bản vá Edge.
+- Giới hạn: mỗi nhân viên tối đa 12 vé trong 10 phút; vé cũ tự dọn khi xin vé mới (không cần job).
+- Không có vé (DB chưa có hàm, hết lượt, lỗi gọi): mở link thường `/gia-han?next=…`, khách đăng nhập cổng bằng mật khẩu như
+  hiện nay.
+- Link JWT cũ (`RENEWAL_PORTAL_LINK_SECRET` trên CRM + Edge `renewal_link`) vẫn được cổng nhận nếu đã cấu hình; màn Gia hạn
+  trước đăng nhập của Desktop còn gọi Edge rồi rơi về link thường, vì lúc đó chưa có phiên để xin vé.
 
 **Chỗ mở:**
 
@@ -226,7 +239,7 @@ Một mô-đun thuần `renewalReminder.ts`: đầu vào là danh sách gói, ng
 - Trang đăng nhập cổng đọc `src`, đưa vào phiên, `createPortalOrder` ghi `custom_config.entry` (cột jsonb có sẵn). Trang
   *Khách tự gia hạn* thêm cột và bộ lọc nguồn.
 - Ưu đãi gia hạn sớm (mục 6).
-- Đặt `RENEWAL_PORTAL_LINK_SECRET` trên Fly `aka10000` nếu chưa có.
+- `POST …/link` nhận vé dùng một lần và đổi qua hàm DB (mục 5). Không cần đặt `RENEWAL_PORTAL_LINK_SECRET`.
 
 ### 7.3 API Web (akaAgentWebApp `apps/api`)
 
@@ -265,11 +278,13 @@ Chỉ hiện "Gói … còn N ngày" ở Cài đặt và Tổng quan, không nú
 | 1 | Dòng `auto_system_settings` khóa `renewal.reminder` | dữ liệu | akaAgent | 0 |
 | 2 | Cột `aka_promotion.min_days_before_expiry` (số nguyên, cho phép NULL) | thêm cột | CRM | 0 |
 | 3 | Hàm `aka_agent_renewal_reminder_state()` — chỉ đọc, STABLE, EXECUTE chỉ `aka_agent_desktop`, lấy nhân viên từ phiên; trả ngày máy chủ, các ngày có đăng nhập 60 ngày, ưu đãi gia hạn sớm | hàm mới | akaAgent | 2 |
-| 4 | Loại thông báo "Gói sắp hết hạn" trong trung tâm thông báo (V457) | sửa hàm | akaAgent | 3 |
+| 4 | V520: loại thông báo `package.expiring` (nới ràng buộc CHECK của `auto_notifications.event_type`) + hai hàm chỉ `service_role`: ghi thông báo "Gói sắp hết hạn", và đánh dấu đã đọc khi gói đã gia hạn. Không sửa hàm nào của V457 | nới ràng buộc + hàm mới | akaAgent | 3 |
+| 5 | V519: bảng `private.aka_renewal_link_tickets` (chỉ truy cập qua hàm) + bốn hàm cấp/đổi vé gia hạn dùng một lần | bảng mới + hàm mới | akaAgent | 1–2 |
 
 - Mục 3 cần vì `auto_staff_device_presence` chỉ `service_role` đọc được; Web không cần hàm này (API đọc thẳng).
 - Số migration lấy theo sổ chung lúc làm (kiểm `supabase_migrations.schema_migrations` và `git log --all`).
-- Mục 2, 3, 4 là DDL, làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm.
+- Mục 2, 3, 4, 5 là DDL, làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm.
+- Mục 1–3 người dùng đã duyệt tối 13/11; mục 4, 5 viết sau đó, cần duyệt riêng.
 
 ## 9. Khóa cấu hình `renewal.reminder`
 
@@ -287,12 +302,13 @@ nhập). **Thiếu dòng hoặc sai định dạng = tắt.**
 | `usageWindowDays` / `usageMaxDaysLeft` / `usageMinLoginDays` | cửa sổ tính thói quen | 60 / 60 / 3 |
 | `adminOnly` | chỉ quản trị tổ chức thấy | `false` |
 | `legacyBanner` | bật kênh Đợt 0 | `true` |
+| `bell` | bật thông báo chuông "Gói sắp hết hạn" (Đợt 3, cần V520) | `false` |
 
 ## 10. Lộ trình
 
 **Đợt 0 — không cần phát hành app.**
 
-1. Bật link ký số: áp bản vá Edge, đặt khóa ở ba nơi (mục 5).
+1. Vé gia hạn dùng một lần: apply V519, deploy CRM (mục 5). Không đặt khoá nào ở Fly hay Edge.
 2. CRM: sửa trang hết hạn gói cho gói còn hạn, ghi nguồn đơn, ưu đãi gia hạn sớm.
 3. Kênh có sẵn `org_staff.app_notification`: Desktop 9.x, Web và iOS đều đã đọc cột này trước thông báo chung và đã hiện
    dải có nút link. Một job trong API Web ghi thông báo theo mốc cho nhân viên của tổ chức sắp hết hạn:
@@ -303,7 +319,7 @@ nhập). **Thiếu dòng hoặc sai định dạng = tắt.**
    - Khối lượng: khoảng 414 tổ chức trong cửa sổ 30 ngày, tối đa một lượt ghi nhỏ mỗi tổ chức mỗi ngày.
    - Đã kiểm 13/11: 0 nhân viên đang dùng cột này; hai trigger nhạy cảm trên `org_staff` (khoá máy, ghi nhớ đăng nhập)
      không phản ứng khi chỉ ghi cột này.
-   - Hạn chế: link thường nên khách gõ mật khẩu ở cổng (link ký số cần mã phía app), không tắt được, không đếm ngược, không
+   - Hạn chế: link thường nên khách gõ mật khẩu ở cổng (link có vé cần mã phía app), không tắt được, không đếm ngược, không
      có quy tắc thói quen đăng nhập.
 
 **Đợt 1 — Web** (deploy API/Web): đủ hành vi ở mục 4 và 5. Khi bản mới chạy, client bỏ qua thông báo `kind =
@@ -312,8 +328,9 @@ renewal_reminder` của Đợt 0 để không hiện hai dải.
 **Đợt 2 — Desktop** (phát hành bản mới): đủ hành vi, gồm cửa sổ gia hạn trong app. Khách tự cập nhật nên phủ chậm; máy
 chưa cập nhật vẫn có kênh Đợt 0.
 
-**Đợt 3 — ngoài app và iOS:** thông báo chuông + email "Gói sắp hết hạn" cho khách ít mở app (email chỉ tới được khoảng
-150 tổ chức có email); iOS hiện số ngày.
+**Đợt 3 — ngoài app và iOS:** thông báo chuông "Gói sắp hết hạn" cho khách ít mở app (đã viết 13/11: V520 + job của API Web
+ghi theo mốc, bật bằng `bell`; Web và Desktop có nút Gia hạn trên thông báo khi đang có lời nhắc, iOS chỉ chữ); iOS hiện số
+ngày. Email "Gói sắp hết hạn" (chỉ tới được khoảng 150 tổ chức có email) người dùng để sau.
 
 Mở dần ở mỗi đợt: `admin_akabiz` → một nhóm tổ chức thử → `all`.
 

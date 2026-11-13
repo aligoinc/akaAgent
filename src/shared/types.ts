@@ -2941,7 +2941,7 @@ export interface NotificationContentSection {
 
 /** Dữ liệu đã chốt lúc dựng (contentSnapshot); email và chi tiết trong app cùng dùng. */
 export interface NotificationContent {
-  kind: 'campaign' | 'account' | 'report' | 'data_group' | 'test' | 'verify_email'
+  kind: 'campaign' | 'account' | 'report' | 'data_group' | 'test' | 'verify_email' | 'package'
   headline: string
   countedAt?: string | null
   sections: NotificationContentSection[]

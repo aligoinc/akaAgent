@@ -32,6 +32,7 @@ import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequ
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import RenewalReminderBanner from './components/RenewalReminder/RenewalReminderBanner'
 import RenewalReminderHost from './components/RenewalReminder/RenewalReminderHost'
+import { useRenewalReminderStore } from './stores/renewalReminderStore'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
 import type { NotificationTarget } from './components/Notifications/notificationTargets'
 import { useNotificationUnreadSync } from './stores/notificationCenterStore'
@@ -152,8 +153,13 @@ export default function App() {
     setActivePage('notifications')
   }, [])
 
-  // Nút "Mở nhanh" trong trang Thông báo: chiến dịch/tài khoản mở ở trang Chiến dịch, nhóm data mở hộp Nhóm data.
+  // Nút "Mở nhanh" trong trang Thông báo: chiến dịch/tài khoản mở ở trang Chiến dịch, nhóm data mở hộp Nhóm data,
+  // "Gói sắp hết hạn" mở cửa sổ Gia hạn gói (chỉ khi đang có lời nhắc gia hạn; không có thì store bỏ qua).
   const openNotificationTarget = useCallback((target: NotificationTarget) => {
+    if (target.kind === 'renewal') {
+      useRenewalReminderStore.getState().openWindow()
+      return
+    }
     if (target.kind === 'campaign') {
       setActivePage('campaigns')
       setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'open', campaignId: target.id })

@@ -2,8 +2,9 @@
 # Thử V520 (thông báo chuông "Gói sắp hết hạn") trên PostgreSQL 16 cục bộ, không chạm production. Fixture dựng bảng
 # auto_notifications đúng định nghĩa V457 (cột, ràng buộc, index hộp thư) và bản thay của công tắc notifications.enabled.
 # Kiểm: apply, loại mới được nhận còn loại lạ vẫn bị chặn, quyền gọi, công tắc tắt không ghi, nội dung ghi đúng và hiện ngay
-# trong hộp thư, gọi lại không sinh trùng, mốc mới đánh dấu mốc cũ đã đọc, phần tử sai bị bỏ qua, giới hạn 500, apply lại
-# bị từ chối, rollback.
+# trong hộp thư, gọi lại không sinh trùng, mốc mới đánh dấu mốc cũ đã đọc, phần tử sai bị bỏ qua, giới hạn 500, một lượt chỉ
+# một thông báo cho mỗi gói, gói đã gia hạn hoặc không còn thì thông báo cũ thành đã đọc (đúng ranh giới ngày Việt Nam),
+# apply lại bị từ chối, rollback.
 # Dùng: bash scripts/test-v520-notification-package-expiring.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
@@ -21,6 +22,8 @@ as_pg "$PGBIN/pg_ctl" -D "$WORK/data" -o "-k $WORK -c listen_addresses=''" -l "$
 psql_db() { as_pg "$PGBIN/psql" -h "$WORK" -U postgres -d fixture -v ON_ERROR_STOP=1 -qAt "$@"; }
 q() { psql_db -c "$1"; }
 emit() { psql_db -c "SET ROLE service_role; SELECT public.aka_agent_notification_emit_package_expiring(\$json\$$1\$json\$::jsonb)"; }
+resolve() { psql_db -c "SET ROLE service_role; SELECT public.aka_agent_notification_resolve_package_expiring()"; }
+unread() { q "SELECT coalesce(string_agg(dedupe_key, ' ' ORDER BY id), '') FROM public.auto_notifications WHERE event_type = 'package.expiring' AND read_at IS NULL"; }
 run_file() { psql_db -f "$1" 2>&1; }
 pass=0
 ok() { pass=$((pass + 1)); echo "ok $pass - $1"; }
@@ -41,7 +44,8 @@ GRANT USAGE ON SCHEMA public, private TO anon, authenticated, service_role, aka_
 CREATE SCHEMA supabase_migrations;
 CREATE TABLE supabase_migrations.schema_migrations (version text PRIMARY KEY, name text, statements text[]);
 CREATE TABLE public.org_staff (id bigint PRIMARY KEY, organization_id bigint NOT NULL, is_active boolean NOT NULL DEFAULT true);
-CREATE TABLE public.org_organization_product (id bigint PRIMARY KEY, organization_id bigint, is_deleted boolean DEFAULT false);
+CREATE TABLE public.org_organization_product (id bigint PRIMARY KEY, organization_id bigint, is_deleted boolean DEFAULT false,
+  expiration_date timestamptz);
 CREATE TABLE public.auto_system_settings (key text PRIMARY KEY, value text);
 INSERT INTO public.auto_system_settings VALUES ('notifications.enabled', 'true');
 CREATE FUNCTION private.aka_agent_notification_enabled()
@@ -77,7 +81,9 @@ CREATE INDEX idx_auto_notifications_unread ON public.auto_notifications (staff_i
 ALTER TABLE public.auto_notifications ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.auto_notifications FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 INSERT INTO public.org_staff VALUES (7, 9, true), (8, 9, false), (20, 30, true);
-INSERT INTO public.org_organization_product VALUES (501, 9, false), (502, 9, false), (504, 9, true), (601, 30, false);
+-- 502 hết hạn 23:59 ngày 01/12 giờ Việt Nam (16:59 UTC), để thử ranh giới ngày.
+INSERT INTO public.org_organization_product VALUES (501, 9, false, '2026-11-20T03:00:00Z'), (502, 9, false, '2026-12-01T16:59:00Z'),
+  (504, 9, true, '2026-11-20T03:00:00Z'), (601, 30, false, '2026-11-25T03:00:00Z');
 INSERT INTO public.auto_notifications (organization_id, staff_id, event_type, entity_key, dedupe_key, content_status, app_title)
 VALUES (9, 7, 'campaign.status_changed', 'campaign:1', 'old-1', 'ready', 'Chiến dịch A đã hoàn thành');
 SQL
@@ -96,6 +102,8 @@ refuse "loại lạ vẫn bị chặn" "auto_notifications_event_type_check" q "
 expect "loại cũ vẫn ghi được" "$(q "INSERT INTO public.auto_notifications (organization_id, staff_id, event_type, entity_key, dedupe_key) VALUES (9, 7, 'system.test', 'test:email', 'old-2') RETURNING 1")" "1"
 expect "chỉ service_role gọi được hàm" "$(q "SELECT string_agg(r.rolname, ',' ORDER BY r.rolname) FROM pg_roles r WHERE r.rolname IN ('anon','authenticated','service_role','aka_agent_desktop','aka_agent_chat_api') AND has_function_privilege(r.rolname, 'public.aka_agent_notification_emit_package_expiring(jsonb)', 'EXECUTE')")" "service_role"
 refuse "Desktop gọi hàm bị từ chối" "permission denied" psql_db -c "SET ROLE aka_agent_desktop; SELECT public.aka_agent_notification_emit_package_expiring('[]'::jsonb)"
+expect "chỉ service_role gọi được hàm đánh dấu đã đọc" "$(q "SELECT string_agg(r.rolname, ',' ORDER BY r.rolname) FROM pg_roles r WHERE r.rolname IN ('anon','authenticated','service_role','aka_agent_desktop','aka_agent_chat_api') AND has_function_privilege(r.rolname, 'public.aka_agent_notification_resolve_package_expiring()', 'EXECUTE')")" "service_role"
+refuse "Desktop gọi hàm đánh dấu đã đọc bị từ chối" "permission denied" psql_db -c "SET ROLE aka_agent_desktop; SELECT public.aka_agent_notification_resolve_package_expiring()"
 
 # --- công tắc tắt ---
 q "UPDATE public.auto_system_settings SET value = 'false' WHERE key = 'notifications.enabled'"
@@ -135,11 +143,35 @@ MANY=$(q "SELECT jsonb_agg(jsonb_build_object('staffId', 7))::text FROM generate
 refuse "quá 500 phần tử bị từ chối" "notification_too_many_items" emit "$MANY"
 expect "mảng rỗng: không lỗi" "$(field "$(emit '[]')" inserted)" "0"
 
+# --- một lượt chỉ một thông báo cho mỗi nhân viên và mỗi gói: hạn xa nhất, rồi số ngày còn lại ít nhất ---
+two() { printf '{"staffId":20,"organizationId":30,"organizationProductId":601,"expiryDay":"2026-11-25","stageKey":"%s","severity":"critical","title":"%s","daysLeft":%s,"kind":"paid"}' "$1" "$2" "$3"; }
+R=$(emit "[$(two s1:strong 'Gói còn 1 ngày' 1),$(two s0:strong 'Gói hết hạn hôm nay' 0)]")
+expect "hai mốc của một gói trong một lượt: nhận 2, hợp lệ 1, ghi mốc còn ít ngày nhất" "$(field "$R" received),$(field "$R" valid),$(field "$R" inserted),$(q "SELECT count(*) FROM public.auto_notifications WHERE dedupe_key = 'pkg:20:601:2026-11-25:s0:strong'"),$(q "SELECT count(*) FROM public.auto_notifications WHERE dedupe_key = 'pkg:20:601:2026-11-25:s1:strong'")" "2,1,1,1,0"
+expect "mỗi gói chỉ còn một thông báo chưa đọc" "$(unread)" "pkg:7:502:2026-12-01:s30:mild pkg:7:501:2026-11-20:s5:medium pkg:20:601:2026-11-25:s0:strong"
+
+# --- gói đã gia hạn hoặc không còn: thông báo cũ chưa đọc thành đã đọc ---
+R=$(resolve)
+expect "chưa gói nào gia hạn: không đổi gì (hạn 23:59 giờ Việt Nam vẫn là cùng ngày)" "$(field "$R" enabled),$(field "$R" resolved),$(unread)" "true,0,pkg:7:502:2026-12-01:s30:mild pkg:7:501:2026-11-20:s5:medium pkg:20:601:2026-11-25:s0:strong"
+q "UPDATE public.org_organization_product SET expiration_date = '2026-12-01T17:00:00Z' WHERE id = 502"
+expect "hạn dời sang 00:00 hôm sau giờ Việt Nam: thông báo của gói đó thành đã đọc" "$(field "$(resolve)" resolved),$(unread)" "1,pkg:7:501:2026-11-20:s5:medium pkg:20:601:2026-11-25:s0:strong"
+q "UPDATE public.org_organization_product SET expiration_date = '2027-01-19T03:00:00Z' WHERE id = 501"
+expect "gia hạn gói 501: thông báo cũ thành đã đọc; thông báo loại khác giữ nguyên" "$(field "$(resolve)" resolved),$(unread),$(q "SELECT (read_at IS NULL)::text FROM public.auto_notifications WHERE dedupe_key = 'old-1'")" "1,pkg:20:601:2026-11-25:s0:strong,true"
+q "UPDATE public.org_organization_product SET is_deleted = true WHERE id = 601"
+q "UPDATE public.auto_system_settings SET value = 'false' WHERE key = 'notifications.enabled'"
+R=$(resolve)
+expect "công tắc trung tâm thông báo tắt: không đổi gì" "$(field "$R" enabled),$(field "$R" resolved),$(unread)" "false,0,pkg:20:601:2026-11-25:s0:strong"
+q "UPDATE public.auto_system_settings SET value = 'true' WHERE key = 'notifications.enabled'"
+expect "dòng sản phẩm đã xoá: thông báo thành đã đọc" "$(field "$(resolve)" resolved),$(unread)" "1,"
+q "INSERT INTO public.auto_notifications (organization_id, staff_id, event_type, entity_key, dedupe_key, content_status, app_title, payload) VALUES (9, 7, 'package.expiring', 'package:x', 'pkg:la', 'ready', 'Thông báo thiếu dữ liệu', '{\"expiryDay\":\"khong-phai-ngay\"}')"
+expect "payload thiếu dòng sản phẩm, ngày sai dạng: không lỗi, coi như gói không còn" "$(field "$(resolve)" resolved),$(unread)" "1,"
+expect "gọi lại: không còn gì để đổi" "$(field "$(resolve)" resolved)" "0"
+expect "gói đã gia hạn rồi tới mốc của hạn mới: ghi thông báo mới và giữ chưa đọc" "$(field "$(emit "[$(item 7 9 501 2027-01-19 s14:mild info 'Gói akaAgent Zalo còn 14 ngày' 'Hết hạn ngày 19/01/2027.')]")" inserted),$(field "$(resolve)" resolved),$(unread)" "1,0,pkg:7:501:2027-01-19:s14:mild"
+
 # --- apply lại / rollback ---
 refuse "apply lại V520 bị từ chối" "đã có trong sổ migration" run_file "$MIGRATION"
 run_file "$ROLLBACK" >/dev/null || fail "rollback V520"
 ok "rollback V520"
-expect "sau rollback: hàm không còn, thông báo loại mới đã xoá, loại cũ còn nguyên, ràng buộc về 6 giá trị" "$(q "SELECT (to_regprocedure('public.aka_agent_notification_emit_package_expiring(jsonb)') IS NULL)::text || ',' || (SELECT count(*) FROM public.auto_notifications WHERE event_type = 'package.expiring') || ',' || (SELECT count(*) FROM public.auto_notifications) || ',' || (SELECT (pg_get_constraintdef(oid) NOT LIKE '%package.expiring%')::text FROM pg_constraint WHERE conname = 'auto_notifications_event_type_check')")" "true,0,2,true"
+expect "sau rollback: hai hàm không còn, thông báo loại mới đã xoá, loại cũ còn nguyên, ràng buộc về 6 giá trị" "$(q "SELECT (to_regprocedure('public.aka_agent_notification_emit_package_expiring(jsonb)') IS NULL AND to_regprocedure('public.aka_agent_notification_resolve_package_expiring()') IS NULL)::text || ',' || (SELECT count(*) FROM public.auto_notifications WHERE event_type = 'package.expiring') || ',' || (SELECT count(*) FROM public.auto_notifications) || ',' || (SELECT (pg_get_constraintdef(oid) NOT LIKE '%package.expiring%')::text FROM pg_constraint WHERE conname = 'auto_notifications_event_type_check')")" "true,0,2,true"
 q "DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v520_%'"
 run_file "$MIGRATION" >/dev/null || fail "apply lại sau rollback"
 ok "apply lại sau rollback (preflight khớp lại đúng ràng buộc V457)"

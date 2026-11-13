@@ -12,11 +12,16 @@
 --    - Mỗi nhân viên, mỗi dòng sản phẩm, mỗi hạn, mỗi mốc chỉ một thông báo (dedupe_key = pkg:<nhân viên>:<dòng sản phẩm>:
 --      <hạn>:<mốc>), nên job gọi lại mỗi ngày không sinh trùng.
 --    - Chỉ nhận nhân viên đang hoạt động thuộc đúng tổ chức và dòng sản phẩm chưa xoá của tổ chức đó; phần tử sai bị bỏ qua.
+--    - Mỗi lần gọi chỉ nhận một thông báo cho mỗi nhân viên và mỗi dòng sản phẩm (hạn xa nhất, rồi số ngày còn lại ít nhất).
 --    - Khi có thông báo mốc mới cho một gói, thông báo mốc cũ chưa đọc của chính gói đó được đánh dấu đã đọc, để số trên
 --      chuông không cộng dồn các mốc đã qua.
 --    - Công tắc notifications.enabled tắt thì không ghi gì. Tối đa 500 phần tử mỗi lần gọi.
 --    Các quy tắc "mốc nào, câu chữ gì" nằm ở mã dùng chung của app (packages/control-api/src/renewalReminder.ts), không lặp
 --    lại trong SQL.
+-- 3) public.aka_agent_notification_resolve_package_expiring(): job của API Web gọi mỗi lượt (15 phút, chỉ service_role).
+--    Thông báo "Gói sắp hết hạn" chưa đọc mà gói đã được gia hạn (ngày hết hạn theo giờ Việt Nam của dòng sản phẩm đã muộn
+--    hơn hạn ghi trong thông báo), hoặc dòng sản phẩm không còn, thì được đánh dấu đã đọc: khách gia hạn xong không còn thấy
+--    số chưa đọc của thông báo cũ. Không xoá thông báo, tối đa 2.000 dòng mỗi lần gọi.
 --
 -- Không sửa hàm nào của V457/V465/V466/V475. Danh sách, chi tiết, số chưa đọc, đánh dấu đã đọc và dọn 90 ngày của trung tâm
 -- thông báo áp dụng luôn cho loại mới. App bản cũ hiển thị loại lạ dưới nhãn chung "Thông báo" (đã kiểm trong mã Desktop,
@@ -46,6 +51,9 @@ BEGIN
   IF to_regprocedure('public.aka_agent_notification_emit_package_expiring(jsonb)') IS NOT NULL THEN
     RAISE EXCEPTION 'V520: public.aka_agent_notification_emit_package_expiring(jsonb) đã có';
   END IF;
+  IF to_regprocedure('public.aka_agent_notification_resolve_package_expiring()') IS NOT NULL THEN
+    RAISE EXCEPTION 'V520: public.aka_agent_notification_resolve_package_expiring() đã có';
+  END IF;
   IF to_regprocedure('private.aka_agent_notification_enabled()') IS NULL THEN
     RAISE EXCEPTION 'V520: thiếu private.aka_agent_notification_enabled() (V457)';
   END IF;
@@ -70,7 +78,8 @@ BEGIN
       ('auto_notifications', 'content_snapshot'), ('auto_notifications', 'template_version'), ('auto_notifications', 'read_at'),
       ('auto_notifications', 'updated_at'),
       ('org_staff', 'id'), ('org_staff', 'organization_id'), ('org_staff', 'is_active'),
-      ('org_organization_product', 'id'), ('org_organization_product', 'organization_id'), ('org_organization_product', 'is_deleted')
+      ('org_organization_product', 'id'), ('org_organization_product', 'organization_id'), ('org_organization_product', 'is_deleted'),
+      ('org_organization_product', 'expiration_date')
     ) AS need(tbl, col)
    WHERE NOT EXISTS (
      SELECT 1 FROM pg_attribute a
@@ -131,12 +140,13 @@ BEGIN
        AND char_length(btrim(coalesce(e ->> 'title', ''))) BETWEEN 1 AND 200
        AND char_length(coalesce(e ->> 'body', '')) <= 1000
   ), valid AS (
-    SELECT DISTINCT ON (p.staff_id, p.product_id, p.expiry_day, p.stage_key) p.*
+    -- Một thông báo cho mỗi nhân viên và mỗi dòng sản phẩm trong một lần gọi: hạn xa nhất, rồi số ngày còn lại ít nhất.
+    SELECT DISTINCT ON (p.staff_id, p.product_id) p.*
       FROM parsed p
       JOIN public.org_staff s ON s.id = p.staff_id AND s.organization_id = p.organization_id AND s.is_active
       JOIN public.org_organization_product op
         ON op.id = p.product_id AND op.organization_id = p.organization_id AND op.is_deleted IS NOT TRUE
-     ORDER BY p.staff_id, p.product_id, p.expiry_day, p.stage_key
+     ORDER BY p.staff_id, p.product_id, p.expiry_day DESC, p.days_left ASC NULLS LAST, p.stage_key
   ), inserted AS (
     INSERT INTO public.auto_notifications (organization_id, staff_id, event_type, severity, entity_key, occurred_at, deliver_after,
                                            dedupe_key, payload, content_status, app_title, app_body, content_snapshot, template_version)
@@ -178,6 +188,61 @@ END $grants$;
 COMMENT ON FUNCTION public.aka_agent_notification_emit_package_expiring(jsonb) IS
   'Nhắc gia hạn (V520): job của API Web ghi thông báo chuông "Gói sắp hết hạn" đã có nội dung, mỗi nhân viên/gói/hạn/mốc một lần. Chỉ service_role.';
 
+CREATE FUNCTION public.aka_agent_notification_resolve_package_expiring()
+RETURNS jsonb
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'public', 'private'
+AS $function$
+DECLARE
+  c_max_rows CONSTANT integer := 2000;
+  v_now timestamptz := clock_timestamp();
+  v_resolved integer := 0;
+BEGIN
+  IF NOT private.aka_agent_notification_enabled() THEN
+    RETURN jsonb_build_object('enabled', false, 'resolved', 0);
+  END IF;
+  WITH stale AS (
+    SELECT n.id
+      FROM public.auto_notifications n
+      LEFT JOIN public.org_organization_product op
+        ON op.id = CASE WHEN (n.payload ->> 'organizationProductId') ~ '^[1-9][0-9]{0,17}$'
+                        THEN (n.payload ->> 'organizationProductId')::bigint END
+       AND op.organization_id = n.organization_id
+     WHERE n.event_type = 'package.expiring' AND n.read_at IS NULL AND n.content_status = 'ready'
+       -- Dòng sản phẩm không còn, hoặc hạn hiện tại (ngày Việt Nam) đã muộn hơn hạn ghi trong thông báo. So chuỗi YYYY-MM-DD
+       -- nên giá trị lạ trong payload không gây lỗi ép kiểu.
+       AND (op.id IS NULL OR op.is_deleted IS TRUE
+            OR to_char(op.expiration_date AT TIME ZONE 'Asia/Ho_Chi_Minh', 'YYYY-MM-DD') > coalesce(n.payload ->> 'expiryDay', ''))
+     ORDER BY n.id
+     LIMIT c_max_rows
+  ), updated AS (
+    UPDATE public.auto_notifications n
+       SET read_at = v_now, updated_at = v_now
+      FROM stale s
+     WHERE n.id = s.id AND n.read_at IS NULL
+    RETURNING n.id
+  )
+  SELECT count(*) INTO v_resolved FROM updated;
+  RETURN jsonb_build_object('enabled', true, 'resolved', v_resolved);
+END
+$function$;
+
+REVOKE ALL ON FUNCTION public.aka_agent_notification_resolve_package_expiring() FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.aka_agent_notification_resolve_package_expiring() TO service_role;
+DO $grants$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aka_agent_desktop') THEN
+    REVOKE ALL ON FUNCTION public.aka_agent_notification_resolve_package_expiring() FROM aka_agent_desktop;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aka_agent_chat_api') THEN
+    REVOKE ALL ON FUNCTION public.aka_agent_notification_resolve_package_expiring() FROM aka_agent_chat_api;
+  END IF;
+END $grants$;
+COMMENT ON FUNCTION public.aka_agent_notification_resolve_package_expiring() IS
+  'Nhắc gia hạn (V520): đánh dấu đã đọc thông báo chuông "Gói sắp hết hạn" của gói đã gia hạn hoặc không còn. Chỉ service_role.';
+
 -- Nới ràng buộc ở cuối giao dịch để giữ khoá bảng ngắn nhất.
 ALTER TABLE public.auto_notifications DROP CONSTRAINT auto_notifications_event_type_check;
 ALTER TABLE public.auto_notifications ADD CONSTRAINT auto_notifications_event_type_check
@@ -187,12 +252,15 @@ ALTER TABLE public.auto_notifications ADD CONSTRAINT auto_notifications_event_ty
 DO $post$
 DECLARE v_bad text;
 BEGIN
-  SELECT string_agg(r.rolname, ', ') INTO v_bad
+  SELECT string_agg(r.rolname || ':' || f.fn, ', ') INTO v_bad
     FROM pg_roles r
+    CROSS JOIN (VALUES ('public.aka_agent_notification_emit_package_expiring(jsonb)'),
+                       ('public.aka_agent_notification_resolve_package_expiring()')) AS f(fn)
    WHERE r.rolname IN ('anon', 'authenticated', 'aka_agent_desktop', 'aka_agent_chat_api')
-     AND has_function_privilege(r.rolname, 'public.aka_agent_notification_emit_package_expiring(jsonb)', 'EXECUTE');
+     AND has_function_privilege(r.rolname, f.fn, 'EXECUTE');
   IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V520 postflight: role không được gọi hàm: %', v_bad; END IF;
-  IF NOT has_function_privilege('service_role', 'public.aka_agent_notification_emit_package_expiring(jsonb)', 'EXECUTE') THEN
+  IF NOT has_function_privilege('service_role', 'public.aka_agent_notification_emit_package_expiring(jsonb)', 'EXECUTE')
+     OR NOT has_function_privilege('service_role', 'public.aka_agent_notification_resolve_package_expiring()', 'EXECUTE') THEN
     RAISE EXCEPTION 'V520 postflight: service_role chưa gọi được hàm';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint c

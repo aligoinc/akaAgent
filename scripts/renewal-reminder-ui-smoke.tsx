@@ -6,6 +6,10 @@ import AppUtilityTopbar from '../src/renderer/src/components/TopBar/AppUtilityTo
 import RenewalReminderBanner from '../src/renderer/src/components/RenewalReminder/RenewalReminderBanner'
 import RenewalReminderHost from '../src/renderer/src/components/RenewalReminder/RenewalReminderHost'
 import AccountProfileModal from '../src/renderer/src/components/Settings/AccountProfileModal'
+import NotificationBell from '../src/renderer/src/components/Notifications/NotificationBell'
+import NotificationsPage, { type NotificationSelectRequest } from '../src/renderer/src/pages/NotificationsPage'
+import type { NotificationTarget } from '../src/renderer/src/components/Notifications/notificationTargets'
+import { parseNotificationDetail, parseNotificationListPage } from '../src/shared/notificationCenter'
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useRenewalReminderStore } from '../src/renderer/src/stores/renewalReminderStore'
 import {
@@ -47,7 +51,45 @@ const user = (expirationDate: string | null, trial: boolean): any => ({
   }]
 })
 
+// Trung tâm thông báo (V457 + V520): một thông báo "Gói sắp hết hạn" và một thông báo chiến dịch, đi qua đúng bộ đọc của main.
+const nowIso = new Date().toISOString()
+const notificationRows: any[] = [
+  { id: 900, eventType: 'package.expiring', severity: 'warning', title: 'Gói akaAgent Zalo Web - 1 năm còn 7 ngày', body: 'Hết hạn ngày 20/11/2026.',
+    occurredAt: nowIso, createdAt: nowIso, readAt: null, emailState: 'none', pushState: 'none', campaignId: null, accountId: null, dataGroupId: null,
+    entityKey: 'package:501' },
+  { id: 899, eventType: 'campaign.status_changed', severity: 'info', title: 'Chiến dịch A đã hoàn thành', body: null,
+    occurredAt: nowIso, createdAt: nowIso, readAt: null, emailState: 'none', pushState: 'none', campaignId: 42, accountId: null, dataGroupId: null,
+    entityKey: 'campaign:42' }
+]
+const notificationContent = {
+  kind: 'package',
+  headline: 'Gói akaAgent Zalo Web - 1 năm còn 7 ngày',
+  sections: [{ title: 'Thông tin gói', tone: 'info', rows: [
+    { label: 'Gói', value: 'akaAgent Zalo Web - 1 năm' }, { label: 'Hết hạn', value: '20/11/2026', tone: 'warn' }
+  ] }]
+}
+const notificationCall = (method: string, args: unknown[]) => state.calls.push({ method: `notificationCenter.${method}`, args })
+const notificationCenter = {
+  list: async (query: unknown) => {
+    notificationCall('list', [query])
+    return { ok: true, data: parseNotificationListPage({ items: notificationRows, nextCursor: null, unreadCount: notificationRows.filter(row => !row.readAt).length }) }
+  },
+  detail: async (id: number) => {
+    notificationCall('detail', [id])
+    const row = notificationRows.find(item => item.id === id)
+    const raw = row && { ...row, emailSubject: null, content: id === 900 ? notificationContent : null, templateVersion: 1, suppressedCount: 0, mergedCount: 1, deliveries: [] }
+    const detail = raw ? parseNotificationDetail(raw) : null
+    return detail ? { ok: true, data: detail } : { ok: false, code: 'notification_not_found', message: 'Không tìm thấy thông báo.' }
+  },
+  markRead: async (request: any) => {
+    notificationCall('markRead', [request])
+    for (const row of notificationRows) if (request?.ids?.includes(row.id)) row.readAt = row.readAt ?? new Date().toISOString()
+    return { ok: true, data: { ok: true, updated: 1, unreadCount: notificationRows.filter(row => !row.readAt).length } }
+  }
+}
+
 const handlers: Record<string, any> = {
+  notificationCenter,
   platform: 'win32',
   getRenewalReminderState: () => build(state.scenario).state,
   refreshRenewalReminder: () => build(state.scenario).state,
@@ -73,15 +115,37 @@ const handlers: Record<string, any> = {
   }
 })
 
+// Giống `openNotificationTarget` của App.tsx: "Gói sắp hết hạn" mở cửa sổ Gia hạn gói, các đích khác chỉ ghi lại.
+const openNotificationTarget = (target: NotificationTarget) => {
+  state.calls.push({ method: 'openNotificationTarget', args: [target] })
+  if (target.kind === 'renewal') useRenewalReminderStore.getState().openWindow()
+}
+
+let notificationSelectSeq = 0
+
 function Harness() {
   const [profileOpen, setProfileOpen] = useState(false)
+  const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [selectRequest, setSelectRequest] = useState<NotificationSelectRequest | null>(null)
   ;(window as any).renewalSmokeOpenProfile = () => setProfileOpen(true)
+  ;(window as any).renewalSmokeNotifications = (open: boolean) => { setNotificationsOpen(open); if (!open) setSelectRequest(null) }
   return (
     <div className="app-layout app-layout-authenticated platform-win32">
       <AppUtilityTopbar currentVersion="9.7.0" checkingUpdate={false} onCheckUpdate={() => undefined} />
       <RenewalReminderBanner />
-      <div className="app-content-shell" style={{ padding: 24 }}>
-        <p style={{ color: 'var(--text-secondary)' }}>Nội dung ứng dụng (màn Chiến dịch) nằm ở đây.</p>
+      <div className="app-content-shell" style={{ padding: 24, display: 'flex', gap: 16, minHeight: 0 }}>
+        <div className="app-sidebar" style={{ width: 200 }}>
+          <NotificationBell active={notificationsOpen}
+            onOpenAll={() => setNotificationsOpen(true)}
+            onOpenNotification={id => { setSelectRequest({ notificationId: id, requestId: ++notificationSelectSeq }); setNotificationsOpen(true) }} />
+        </div>
+        {notificationsOpen ? (
+          <div style={{ display: 'flex', flex: 1, minHeight: 0 }}>
+            <NotificationsPage key="9:7" selectRequest={selectRequest} onOpenTarget={openNotificationTarget} />
+          </div>
+        ) : (
+          <p style={{ color: 'var(--text-secondary)' }}>Nội dung ứng dụng (màn Chiến dịch) nằm ở đây.</p>
+        )}
       </div>
       {profileOpen && <AccountProfileModal onClose={() => setProfileOpen(false)} />}
       <RenewalReminderHost scope="9:7" />
@@ -93,6 +157,7 @@ function Harness() {
   state,
   store: () => { const { state: reminderState, ...rest } = useRenewalReminderStore.getState(); return JSON.parse(JSON.stringify({ ...rest, reminder: reminderState?.reminder ?? null })) },
   /** Đổi kịch bản như thể main vừa gửi trạng thái mới; `fresh` = xoá trạng thái đã xem và coi như vừa mở phần mềm. */
+  resetNotifications() { for (const row of notificationRows) row.readAt = null },
   set(scenario: string, options: { theme?: 'light' | 'dark'; fresh?: boolean } = {}) {
     state.scenario = scenario
     const next = build(scenario)
