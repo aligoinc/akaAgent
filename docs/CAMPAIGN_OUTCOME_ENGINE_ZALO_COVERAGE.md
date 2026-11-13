@@ -920,7 +920,7 @@ ghi). check-all 26 bước; ChatApi `npm run verify` 184 file / 2.644 test; type
   `aka_agent_desktop` gọi được; gọi bằng phiên Desktop thật ra đúng cờ (false) và ngữ cảnh nhận đúng tổ chức; PostgREST nạp lại schema 1,6 giây,
   0 lỗi 5xx/503 (20 request chậm 1–1,3 giây đúng giây nạp lại); [biên nhận](../migrations/snapshots/engine-desktop-flag-v513/apply-receipt.json).
 
-### 13/11 ~10:30–11:30 VN: kiêm akaBiz Sms trên Fly (anh: "làm đi nhưng chưa cần deploy"; ChatApi nhánh `feat/engine-v2-akabiz-sms`, chưa commit, chưa deploy)
+### 13/11 ~10:30–11:30 VN: kiêm akaBiz Sms trên Fly (anh: "làm đi nhưng chưa cần deploy"; ChatApi [#143](https://github.com/aligoinc/akaAgentChatApi/pull/143), chưa merge, chưa deploy)
 
 - Trước đó, chiến dịch Server bật akaBiz Sms (không bật SMS nội bộ) chạy bộ cũ của Fly (`sms_push_external`), mà bộ cũ của Fly không đẩy SMS
   nào: tổ chức bật cờ mất tính năng này. Đếm production 13/11 (chỉ đọc): 8 nhân viên có tích hợp akaBiz Sms, 0 chiến dịch Server từng bật nó.
