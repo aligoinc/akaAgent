@@ -110,6 +110,7 @@ interface OrganizationProductRow {
   is_zalo_show_web?: boolean | null
   is_zalo_server?: boolean | null
   is_chat_sync?: boolean | null
+  duration_days?: number | string | null
   created_at?: string | null
 }
 
@@ -291,7 +292,8 @@ function mapOrganizationProductRow(row: OrganizationProductRow): AuthAccountProd
     displayOrder: productCatalogItem?.order ?? 99,
     expirationDate: row.expiration_date || null,
     maxAccounts: normalizePositiveInteger(row.max_accounts),
-    isActive: isExpirationActive(row.expiration_date)
+    isActive: isExpirationActive(row.expiration_date),
+    durationDays: normalizePositiveInteger(row.duration_days)
   }
 }
 
@@ -428,7 +430,7 @@ export async function loadOrganizationZaloAccountCapabilities(
 export async function loadOrganizationAccountProducts(organizationId: number): Promise<AuthAccountProduct[]> {
   const { data, error } = await client()
     .from('org_organization_product')
-    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, is_zalo_show_web, is_zalo_server, created_at')
+    .select('id, product_id, product_name, package_name, package_type, expiration_date, max_accounts, is_zalo_show_web, is_zalo_server, duration_days, created_at')
     .eq('organization_id', organizationId)
     .eq('is_deleted', false)
     .in('product_id', AUTH_PRODUCT_IDS)

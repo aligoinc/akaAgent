@@ -3052,6 +3052,8 @@ export interface AuthAccountProduct {
   expirationDate: string | null
   maxAccounts: number | null
   isActive: boolean
+  /** `org_organization_product.duration_days` (thời hạn gói, ngày); null khi không có. Dùng cho nhắc gia hạn. */
+  durationDays?: number | null
 }
 
 export interface AuthChatSyncProduct {

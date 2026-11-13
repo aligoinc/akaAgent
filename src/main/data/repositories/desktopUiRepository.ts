@@ -12,6 +12,7 @@ import {
   type DesktopCampaignSelection, type DesktopCampaignSelectionQuery, type DesktopPollingSettings
 } from '../../../shared/desktopUiReads'
 import { ZALO_SHARE_REPEAT_SETTING_KEY, parseZaloShareRepeatSetting } from '../../../shared/zaloShareRepeat'
+import { RENEWAL_REMINDER_SETTING_KEY, parseRenewalReminderSettings } from '../../../shared/renewalReminder'
 
 async function scope() {
   const user = requireCurrentUser()
@@ -28,7 +29,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
@@ -40,7 +41,9 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       hiddenPauseEnabled: parseDesktopUiFlag(values.get(DESKTOP_UI_TUNING_KEYS.hiddenPauseEnabled)),
       idleAfterSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idleAfterSeconds), DESKTOP_UI_TUNING_RANGES.idleAfterSeconds),
       idlePollSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idlePollSeconds), DESKTOP_UI_TUNING_RANGES.idlePollSeconds),
-      progressRecountSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.progressRecountSeconds), DESKTOP_UI_TUNING_RANGES.progressRecountSeconds)
+      progressRecountSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.progressRecountSeconds), DESKTOP_UI_TUNING_RANGES.progressRecountSeconds),
+      // Nhắc gia hạn: cùng câu đọc, thiếu dòng/sai định dạng = tắt (docs/RENEWAL_REMINDER_DESKTOP.md).
+      renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY))
     }
   } catch { return { ...DEFAULT_DESKTOP_POLLING } }
 }

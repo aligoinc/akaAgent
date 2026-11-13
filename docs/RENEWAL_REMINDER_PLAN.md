@@ -1,7 +1,15 @@
 # Nhắc gia hạn trong phần mềm — phương án
 
-Ngày 13/11/2026. **Đây là phương án, chưa có mã, chưa đổi DB, chưa deploy gì.** Người dùng đã duyệt hướng làm và 5 quyết
-định ở mục 3 cùng ngày. Phạm vi: akaAgent Desktop (repo này), Web/iOS (akaAgentWebApp), cổng gia hạn của CRM
+Ngày 13/11/2026. Người dùng đã duyệt hướng làm và các quyết định ở mục 3 cùng ngày, rồi yêu cầu làm toàn bộ.
+
+**Trạng thái 13/11 (cuối ngày): mã Đợt 0–2 và phần iOS của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
+repo, chưa merge, chưa deploy/phát hành; chưa đổi DB.** Hai file SQL chờ duyệt: akaAgent
+[V518](../migrations/migration_v518_renewal_reminder_state.sql) (hàm cho Desktop + dòng cài đặt `renewal.reminder`) và
+SqlServerDashboard `supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql` (cột cho ưu đãi gia hạn
+sớm). Chưa làm: chuông + email "Gói sắp hết hạn" của Đợt 3 (mục 8 dòng 4). Cách chạy, bật/tắt và kiểm chứng:
+[Desktop](RENEWAL_REMINDER_DESKTOP.md), akaAgentWebApp `docs/RENEWAL_REMINDER.md`, SqlServerDashboard
+`docs/trang-gia-han-khach-hang.md`. Khác với bảng ở mục 9: trong mã, `legacyBanner` thiếu = tắt, và V518 chỉ đặt
+`{"audience":"admin_akabiz"}`; muốn bật kênh cho bản app cũ phải ghi rõ `"legacyBanner": true`. Phạm vi: akaAgent Desktop (repo này), Web/iOS (akaAgentWebApp), cổng gia hạn của CRM
 (SqlServerDashboard, `https://crm.akabiz.net/gia-han`).
 
 Mục tiêu: tăng tỷ lệ khách gia hạn, và để khách tự gia hạn nhanh nhất — từ thông báo trong phần mềm tới mã QR thanh toán

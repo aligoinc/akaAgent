@@ -1,5 +1,6 @@
 import type { AutoAccount, CampaignListItem } from './types'
 import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
+import type { RenewalReminderSettings } from './renewalReminder'
 
 export const DESKTOP_POLL_KEYS = {
   campaigns: 'desktop.campaigns.poll_interval_seconds',
@@ -21,6 +22,11 @@ export interface DesktopPollingSettings {
   idlePollSeconds?: number
   /** Chiến dịch không chạy và không đổi thì dùng lại số tiến độ, đếm lại sau ngần này giây. 0/thiếu = đếm mọi lượt. */
   progressRecountSeconds?: number
+  /**
+   * Nhắc gia hạn (`renewal.reminder`, docs/RENEWAL_REMINDER_DESKTOP.md): đọc chung câu này, không thêm request. Tiến trình
+   * chính dùng để tính thông báo; renderer không cần đọc (trạng thái nhắc đi kênh riêng). Thiếu/sai = tắt.
+   */
+  renewalReminder?: RenewalReminderSettings
 }
 export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false }
 export function parseDesktopPollSeconds(value: unknown): number {

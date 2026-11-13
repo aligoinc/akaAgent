@@ -30,6 +30,8 @@ import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
 import CustomerFeedbackLauncher from './components/CustomerFeedback/CustomerFeedbackLauncher'
 import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequiredModal'
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
+import RenewalReminderBanner from './components/RenewalReminder/RenewalReminderBanner'
+import RenewalReminderHost from './components/RenewalReminder/RenewalReminderHost'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
 import type { NotificationTarget } from './components/Notifications/notificationTargets'
 import { useNotificationUnreadSync } from './stores/notificationCenterStore'
@@ -441,6 +443,7 @@ export default function App() {
         onCheckUpdate={handleUpdateButtonClick}
       />
       <AppNotificationBar key={`${user.organizationId}:${user.staffId}`} />
+      <RenewalReminderBanner />
       <div className="app-content-shell">
         <TopBar
           activePage={activePage}
@@ -622,6 +625,7 @@ export default function App() {
         />
       )}
       <CustomerFeedbackLauncher />
+      <RenewalReminderHost scope={`${user.organizationId}:${user.staffId}`} />
     </div>
   )
 }
