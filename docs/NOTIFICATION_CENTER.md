@@ -295,3 +295,11 @@ tạm dừng, đã dừng, đã xóa, nháp, chiến dịch của bản cũ, g�
 phiên; chạy lại và rollback lần hai bị từ chối; rollback khôi phục V465. Sau apply: 0 lỗi 5xx/503, nạp lại schema 4,8 s.
 Phép thử tự rollback trên production chưa chạy vì hộp xác nhận hết hạn. Gỡ: `rollback_v475_journey_campaign_notifications.sql`.
 Biên nhận: `migrations/snapshots/journey-campaign-notifications-v475/apply-receipt.json`.
+
+## V516 — Chat đọc danh bạ iPhone (candidate 13/11/2026, chưa apply)
+
+Bộ phát thông báo tin nhắn của Chat (akaAgentChatApi) dùng chung danh bạ `auto_notification_devices` để đẩy tin của khách ra
+iPhone, qua hai hàm chỉ `aka_agent_chat_api` gọi được: `aka_agent_chat_push_devices(bigint[])` (thiết bị đang nhận, cùng
+luật với lượt đẩy của Trung tâm thông báo) và `aka_agent_chat_push_device_result(bigint, text)` (`sent` / `failed` /
+`invalid_token`, cùng cách ghi với `complete_delivery`). Không đổi bảng, worker hay cài đặt của Trung tâm thông báo; cài
+đặt bật đẩy, giờ yên lặng và trần mỗi giờ ở đây không áp cho tin chat. [Hợp đồng và kiểm thử](CHAT_PUSH_DEVICES_V516.md).
