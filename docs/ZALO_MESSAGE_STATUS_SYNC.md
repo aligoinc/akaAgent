@@ -156,11 +156,13 @@ Không thêm kết nối, không thêm vòng hỏi định kỳ.
 | `node scripts/zalo-message-status-sync-smoke.cjs` | 21 nhóm đạt |
 | `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `packages/campaign-engine` `tsc --noEmit` | 0 lỗi |
 | `npm run build` (Desktop) và `npm run build:server` (App Server), chỉ dựng gói mã, không đóng bộ cài | Đạt; cả hai gói đều chứa mã của tính năng |
+| `node scripts/campaign-engine-boundary-check.cjs` (ranh giới lõi bộ chạy mới) | Không có vi phạm |
 | akaAgentWebApp `scripts/test-zalo-message-status-sql.sh` (PostgreSQL 16, bốn file SQL trên) | 233 bước đạt, gồm 21 bước cho hàm của Desktop |
 | akaAgentWebApp `packages/control-api/src/zaloMessageStatusSync.test.ts` | 36 bài đạt |
 
 Chưa làm: đóng bộ cài; chạy thử trên Electron thật và trên App Server thật với một tài khoản Zalo; chạy bộ kiểm SQL trên
-PostgreSQL 17 (DB thật là 17.6); `scripts/campaign-outcome-engine-check-all.cjs` (cần PostgreSQL 17 và repo ChatApi). Không có
+PostgreSQL 17 (DB thật là 17.6); các bài kiểm của bộ chạy mới cần PostgreSQL 17 và module `pg` của repo ChatApi
+(`scripts/campaign-outcome-engine-check-all.cjs`, `campaign-outcome-engine-engagement-smoke.cjs`…), máy làm việc này không có. Không có
 tin Zalo thật nào được gửi trong quá trình làm.
 
 ## 10. Thứ tự đưa vào dùng
