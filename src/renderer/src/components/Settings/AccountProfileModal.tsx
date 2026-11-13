@@ -1,6 +1,9 @@
 import { Info, Package, Phone, User, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { useAuthStore } from '../../stores/authStore'
+import { useRenewalReminderStore } from '../../stores/renewalReminderStore'
+import { renewalProductGroup, renewalReminderTexts, type RenewalReminder } from '../../../../shared/renewalReminder'
+import type { AuthAccountProduct } from '../../../../shared/types'
 
 interface AccountProfileModalProps {
   onClose: () => void
@@ -23,8 +26,20 @@ function formatAccountLimit(value?: number | null): string {
     : 'Không giới hạn'
 }
 
+/** Gói đang được nhắc gia hạn có phải dòng này không (cùng id dòng sản phẩm; thiếu id thì cùng nhóm và cùng hạn). */
+function isReminderProduct(reminder: RenewalReminder | null, product: AuthAccountProduct): boolean {
+  if (!reminder || !product.isActive) return false
+  const id = reminder.product.organizationProductId
+  if (id !== null && product.organizationProductId !== null) return id === product.organizationProductId
+  return reminder.product.group === renewalProductGroup(product.productId) && reminder.product.expirationDate === product.expirationDate
+}
+
 export default function AccountProfileModal({ onClose }: AccountProfileModalProps) {
   const user = useAuthStore(state => state.user)
+  const reminderState = useRenewalReminderStore(state => state.state)
+  const openRenewalWindow = useRenewalReminderStore(state => state.openWindow)
+  const reminder = reminderState?.enabled ? reminderState.reminder : null
+  const reminderTexts = reminder && reminderState?.today ? renewalReminderTexts(reminder, reminderState.today) : null
   const products = useMemo(
     () => [...(user?.accountProducts || [])].sort((a, b) => a.displayOrder - b.displayOrder),
     [user?.accountProducts]
@@ -88,6 +103,11 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                           <span className={`account-profile-product-date-chip ${product.isActive ? 'is-active' : 'is-expired'}`}>
                             {formatDate(product.expirationDate)}
                           </span>
+                          {reminderTexts && isReminderProduct(reminder, product) && (
+                            <span className="account-profile-renewal-days">
+                              {reminder!.daysLeft <= 0 ? 'Hết hạn hôm nay' : `Còn ${reminder!.daysLeft} ngày`}
+                            </span>
+                          )}
                         </span>
                         <span className="account-profile-product-expiration">
                           <span>Giới hạn tài khoản:</span>
@@ -96,8 +116,15 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                           </span>
                         </span>
                       </div>
-                      <span className={`account-profile-product-status ${product.isActive ? 'is-active' : 'is-expired'}`}>
-                        {product.isActive ? 'Còn hạn' : 'Hết hạn'}
+                      <span className="account-profile-product-side">
+                        <span className={`account-profile-product-status ${product.isActive ? 'is-active' : 'is-expired'}`}>
+                          {product.isActive ? 'Còn hạn' : 'Hết hạn'}
+                        </span>
+                        {reminderTexts && isReminderProduct(reminder, product) && (
+                          <button type="button" className="renewal-reminder-primary" onClick={() => { onClose(); openRenewalWindow() }}>
+                            {reminderTexts.button}
+                          </button>
+                        )}
                       </span>
                     </div>
                   </div>

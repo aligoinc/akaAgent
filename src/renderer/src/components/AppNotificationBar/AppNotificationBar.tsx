@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleAlert, ExternalLink, Info, WifiOff } from 'lucide-react'
 import type { AppNotification, AppNotificationLevel } from '../../../../shared/types'
+import { APP_NOTIFICATION_REFRESH_EVENT } from '../../stores/renewalReminderStore'
 
 const REFRESH_INTERVAL_MS = 60 * 60_000
 
@@ -57,7 +58,11 @@ export default function AppNotificationBar() {
     window.addEventListener('offline', handleOffline)
     window.addEventListener('focus', handleFocus)
     document.addEventListener('visibilitychange', handleVisibilityChange)
+    // Nhắc gia hạn vừa bật: đọc lại một lần để bỏ thông báo nhắc gia hạn kiểu cũ (main quyết định bỏ hay không).
+    const handleRefreshRequest = () => { void refresh() }
+    window.addEventListener(APP_NOTIFICATION_REFRESH_EVENT, handleRefreshRequest)
     return () => {
+      window.removeEventListener(APP_NOTIFICATION_REFRESH_EVENT, handleRefreshRequest)
       window.clearInterval(interval)
       window.removeEventListener('online', handleOnline)
       window.removeEventListener('offline', handleOffline)

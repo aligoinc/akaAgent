@@ -37,6 +37,8 @@ import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState,
 import { MESSAGE_OPT_OUT_CUSTOMERS_IPC, type MessageOptOutCustomerQuery, type MessageOptOutCustomerPage } from '../shared/messageOptOutCustomers'
 import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimitsResult } from '../shared/browserRunLimits'
 import { CAMPAIGN_TYPE_VISIBILITY_IPC, type CampaignTypeVisibilityResult, type CampaignVisibilityChange } from '../shared/campaignTypeVisibility'
+import { RENEWAL_REMINDER_IPC, type RenewalReminderExternalResult, type RenewalReminderOpenResult } from '../shared/renewalReminderDesktop'
+import type { RenewalReminderState } from '../shared/renewalReminder'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
 import { appAccessAPI } from './appAccessBridge'
@@ -658,6 +660,26 @@ const electronAPI = {
 
   getActiveAppNotification: (): Promise<AppNotification | null> =>
     ipcRenderer.invoke(IPC_EVENTS.APP_NOTIFICATION_GET_ACTIVE),
+
+  // Nhắc gia hạn (docs/RENEWAL_REMINDER_DESKTOP.md): main tính, renderer chỉ hiển thị; không có link/mã ký số đi qua đây.
+  getRenewalReminderState: (): Promise<RenewalReminderState> => ipcRenderer.invoke(RENEWAL_REMINDER_IPC.state),
+  refreshRenewalReminder: (): Promise<RenewalReminderState> => ipcRenderer.invoke(RENEWAL_REMINDER_IPC.refresh),
+  onRenewalReminderChanged: (callback: (state: RenewalReminderState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: RenewalReminderState) => callback(state)
+    ipcRenderer.on(RENEWAL_REMINDER_IPC.changed, handler)
+    return () => ipcRenderer.removeListener(RENEWAL_REMINDER_IPC.changed, handler)
+  },
+  openRenewalReminderWindow: (reminderKey: string): Promise<RenewalReminderOpenResult> =>
+    ipcRenderer.invoke(RENEWAL_REMINDER_IPC.open, { reminderKey }),
+  reloadRenewalReminderWindow: (): Promise<RenewalWebState> => ipcRenderer.invoke(RENEWAL_REMINDER_IPC.webReload),
+  closeRenewalReminderWindow: (): Promise<void> => ipcRenderer.invoke(RENEWAL_REMINDER_IPC.close),
+  openRenewalReminderExternal: (reminderKey: string): Promise<RenewalReminderExternalResult> =>
+    ipcRenderer.invoke(RENEWAL_REMINDER_IPC.openExternal, { reminderKey }),
+  onRenewalReminderWebState: (callback: (state: RenewalWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: RenewalWebState) => callback(state)
+    ipcRenderer.on(RENEWAL_REMINDER_IPC.webState, handler)
+    return () => ipcRenderer.removeListener(RENEWAL_REMINDER_IPC.webState, handler)
+  },
 
   // Reports
   getAccountActionStatusReport: (query: AccountActionReportQuery): Promise<AccountActionStatusReportResult> =>

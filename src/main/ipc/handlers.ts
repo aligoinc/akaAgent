@@ -42,6 +42,8 @@ import { registerAccountHandlers, type AccountZaloOperationController } from './
 import { registerAccountContactHandlers } from './handlers/accountContactHandlers'
 import { registerAuthHandlers, type AuthRenewalControl } from './handlers/authHandlers'
 import { registerRenewalWebHandlers } from './handlers/renewalWebHandlers'
+import { registerRenewalReminderHandlers } from './handlers/renewalReminderHandlers'
+import { renewalReminderService } from '../services/renewalReminderService'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
@@ -800,7 +802,7 @@ export function registerIpcHandlers(
   let authRenewal: AuthRenewalControl | null = null
 
   const expireCurrentSession = async (
-    reason: 'login' | 'daily' | 'runtime' | 'token',
+    reason: 'login' | 'daily' | 'runtime' | 'renewal' | 'token',
     renewalCredentials: SavedLoginCredentials | null = null
   ): Promise<void> => {
     const user = getCurrentUser()
@@ -853,7 +855,7 @@ export function registerIpcHandlers(
   })
   mainWindow.once('closed', removeTokenListener)
 
-  const runSessionExpiryCheck = async (reason: 'login' | 'daily' | 'runtime'): Promise<void> => {
+  const runSessionExpiryCheck = async (reason: 'login' | 'daily' | 'runtime' | 'renewal'): Promise<void> => {
     if (sessionExpiryCheckRunning) return
 
     const checkedUser = getCurrentUser()
@@ -953,7 +955,17 @@ export function registerIpcHandlers(
     } finally {
       sessionExpiryCheckRunning = false
       if (getCurrentUser()) scheduleSessionExpiryCheck()
+      // Nhắc gia hạn: tính lại theo gói mới; sang ngày mới thì đọc lại RPC một lần (không đọc DB ở các lượt khác).
+      renewalReminderService.productsChanged()
     }
+  }
+
+  /** Sau khi khách thanh toán trong cửa sổ gia hạn: đọc lại gói ngay, chờ lượt kiểm đang chạy (nếu có) xong trước. */
+  const refreshEntitlementsForRenewal = async (): Promise<void> => {
+    for (let waited = 0; sessionExpiryCheckRunning && waited < 15_000; waited += 250) {
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+    await runSessionExpiryCheck('renewal')
   }
 
   function scheduleSessionExpiryCheck(): void {
@@ -1475,7 +1487,7 @@ export function registerIpcHandlers(
     }
   })
   authRenewal = renewalControl
-  registerRenewalWebHandlers(mainWindow, renewalControl)
+  registerRenewalWebHandlers(mainWindow, renewalControl, registerRenewalReminderHandlers(mainWindow, refreshEntitlementsForRenewal))
   registerUpdateHandlers(mainWindow)
   registerAiHandlers()
   registerAkaBizIntegrationHandlers()

@@ -11,9 +11,13 @@ import {
 export interface RenewalWebLink { url: string; signed: boolean }
 
 interface RenewalWebDependencies {
-  /** Link ký số (hoặc trang đăng nhập cổng khi không ký được) do main tạo. */
+  /** Link ký số (màn Gia hạn trước đăng nhập) hoặc link có vé (nhắc gia hạn), hoặc trang đăng nhập cổng, do main tạo. */
   createLink: () => Promise<RenewalWebLink>
   isAllowed: () => boolean
+  /** Kênh gửi trạng thái webview; mặc định là kênh của màn Gia hạn trước đăng nhập. */
+  stateChannel?: string
+  /** Trang CRM vừa báo đơn đã kích hoạt (gọi một lần). */
+  onOrderCompleted?: () => void
 }
 
 function isPortalOrigin(value: string): boolean {
@@ -30,7 +34,8 @@ function openExternal(value: string): void {
 }
 
 /**
- * Trình duyệt nhúng của màn Gia hạn trước đăng nhập. Chỉ mở cổng CRM /gia-han,
+ * Trình duyệt nhúng của cổng gia hạn: màn Gia hạn trước đăng nhập và cửa sổ "Gia hạn gói" khi đang đăng nhập
+ * (nhắc gia hạn; `isAllowed` gắn với phiên đăng nhập thay vì lượt gia hạn). Chỉ mở cổng CRM /gia-han,
  * phân vùng không lưu đĩa và bị xoá khi đóng màn; link ký số đi thẳng từ main
  * vào guest, không qua renderer.
  */
@@ -66,7 +71,7 @@ export class RenewalWebService {
   private publish(update: Partial<Omit<RenewalWebState, 'revision'>>): void {
     this.state = { ...this.state, ...update, revision: this.state.revision + 1 }
     if (!this.mainWindow.isDestroyed() && !this.mainWindow.webContents.isDestroyed()) {
-      this.mainWindow.webContents.send(IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, this.state)
+      this.mainWindow.webContents.send(this.deps.stateChannel ?? IPC_EVENTS.AUTH_RENEWAL_WEB_STATE, this.state)
     }
   }
 
@@ -108,6 +113,7 @@ export class RenewalWebService {
     contents.on('page-title-updated', (_event, title) => {
       if (contents === this.guest && this.isCurrent() && title.trim() === RENEWAL_ORDER_COMPLETED_TITLE && !this.state.orderCompleted) {
         this.publish({ orderCompleted: true })
+        try { this.deps.onOrderCompleted?.() } catch { /* Bên gọi tự xử lý lỗi. */ }
       }
     })
   }
