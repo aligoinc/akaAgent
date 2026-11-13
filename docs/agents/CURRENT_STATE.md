@@ -1,11 +1,11 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
 [Lọc trùng khi thêm data vào Nhóm data trên Desktop + V522](../DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md):
-Code trên nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` (13/11/2026), **chưa merge, chưa build/phát hành; V522 chưa apply**.
+Code đã merge `dev_3` qua #670 (13/11/2026), **chưa build/phát hành; V522 đã apply akachat 13/11 22:23:07 VN** (`20261113152307`, không apply lại, md5 sổ = file `a9d5a64b…`, [biên nhận](../../migrations/snapshots/data-group-member-matches-desktop-v522/apply-receipt.json)).
 Cửa sổ "Thêm data từ file" của Nhóm data có hai ô "Bỏ data đã có trong nhóm này" (bật sẵn) và "Bỏ data đã có ở nhóm data khác",
 cộng khung lọc với chiến dịch (V491/V493) cho nhóm loại SĐT; gọi hàm đọc V519 bằng token Desktop qua IPC `data-group:member-matches`.
-V522 chỉ `GRANT EXECUTE` hàm V519 cho `aka_agent_desktop` (số 520/521 là nhắc gia hạn, đã apply 13/11; sổ production đọc 13/11 22:20 VN chưa có
-V522, hàm V519 đúng md5/ACL; bản dán SQL Editor `migrations/tests/migration_v522_data_group_member_matches_desktop_paste.sql`). Chưa có quyền thì Desktop ẩn hai ô và thêm data như trước, không báo lỗi.
+V522 chỉ `GRANT EXECUTE` hàm V519 cho `aka_agent_desktop` (số 520/521 là nhắc gia hạn, đã apply 13/11; apply bằng bản dán SQL Editor
+`migrations/tests/migration_v522_data_group_member_matches_desktop_paste.sql`; PR #669 cũng lấy số 522 cho `migration_v522_zalo_engagement_catalog_ordered_walk` (chưa apply): sổ đã có V522 này nên preflight của bản đó từ chối (`v522 already recorded…`), bản đó phải đổi số trước khi apply). Chưa có quyền thì Desktop ẩn hai ô và thêm data như trước, không báo lỗi.
 Kiểm thử: SQL 33/33, service 12/12, giao diện Electron 13/13, hai typecheck sạch. Chưa gọi thật qua PostgREST bằng token Desktop.
 
 [V519 đối chiếu khách đã có khi nhập vào Nhóm data](../DATA_GROUP_MEMBER_MATCHES_V519.md):

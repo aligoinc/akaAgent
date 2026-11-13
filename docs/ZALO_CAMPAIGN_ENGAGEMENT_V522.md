@@ -2,6 +2,8 @@
 
 Trạng thái 13/11/2026: **chưa apply** (chỉ đo chỉ đọc trên production), không cần phát hành Desktop/App Server/Chat. Nhánh `perf/engagement-catalog-ordered-scan`. Nền: [V510](ZALO_CAMPAIGN_ENGAGEMENT_V510.md).
 
+**Trùng số (ghi 13/11/2026 22:30 VN):** sổ production đã có `migration_v522_data_group_member_matches_desktop` (apply 22:23:07 VN, [tài liệu](DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md)). Preflight của migration này sẽ dừng với `v522 already recorded in supabase_migrations.schema_migrations`; phải đổi sang số chưa dùng (file, rollback, guard `LIKE 'migration_v522_%'`, script và tài liệu) trước khi apply.
+
 ## Vấn đề
 
 Nhánh `catalog` của `aka_agent_campaign_engagement_batch` (gọi qua `aka_agent_read_campaign_engagement` với `[{"catalog":{from,until,id}}]`) trả danh mục lượt theo dõi còn hạn của một (tổ chức, nhân viên), mỗi trang 500 dòng theo `(tracking_until, campaign_detail_id)`. Ai gọi:

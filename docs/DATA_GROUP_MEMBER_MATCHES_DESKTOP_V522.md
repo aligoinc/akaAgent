@@ -1,9 +1,13 @@
 # Lọc trùng khi thêm data vào Nhóm data trên Desktop + V522
 
-Trạng thái (13/11/2026): code Desktop trên nhánh `claude_loc-trung-nhom-data-desktop_from_dev_3_13_11` (tách từ `dev_3`
-`e184c1e`), **chưa merge, chưa build/phát hành**. **V522 CHƯA apply** (chờ người dùng quyết định). Khi chưa có V522,
-Desktop coi hàm là "chưa sẵn sàng" và cửa sổ nhập thêm data như trước, không báo lỗi; vì vậy thứ tự "phát hành Desktop
-trước, apply V522 sau" không làm hỏng gì, chỉ chưa có tính năng.
+Trạng thái (13/11/2026): code Desktop **đã merge `dev_3` qua [#670](https://github.com/aligoinc/akaAgent/pull/670),
+chưa build/phát hành**. **V522 đã apply akachat 13/11/2026 22:23:07 VN** (`20261113152307 /
+migration_v522_data_group_member_matches_desktop`; không apply lại; người dùng tự chạy bản dán SQL Editor; md5 sổ = file
+`a9d5a64b…`; ACL `{aka_agent_desktop, postgres, service_role}`, thân hàm giữ md5, không nạp lại schema, 0 lỗi 5xx;
+[biên nhận](../migrations/snapshots/data-group-member-matches-desktop-v522/apply-receipt.json)). Bản Desktop chưa có
+tính năng không gọi hàm; gỡ V522 thì Desktop coi hàm là "chưa sẵn sàng" và cửa sổ nhập thêm data như trước, không báo lỗi.
+
+**Trùng số 522:** PR #669 cũng lấy số 522 cho `migration_v522_zalo_engagement_catalog_ordered_walk` (chưa apply): sổ đã có V522 này nên preflight của bản đó từ chối (`v522 already recorded…`), bản đó phải đổi số trước khi apply (PR này không sửa file của #669).
 
 Bản Web (hàm đọc V519, quy tắc đối chiếu, số đo, công tắc): [DATA_GROUP_MEMBER_MATCHES_V519.md](DATA_GROUP_MEMBER_MATCHES_V519.md)
 và akaAgentWebApp `docs/DATA_GROUP_IMPORT_DUPLICATES.md`. Desktop dùng **chung hàm V519 và chung công tắc**
@@ -72,7 +76,7 @@ GRANT EXECUTE ON FUNCTION public.aka_agent_read_data_group_member_matches(bigint
   `migration_v522_%` (dòng mới nhất là V521 `20261113141849`); hàm V519 đúng `md5(prosrc)` `0fffb42b…`, thuộc tính
   và ACL `{postgres, service_role}` mà preflight đòi. Apply muộn hơn thì đọc lại.
 
-### Apply (khi được yêu cầu)
+### Apply (đã làm 13/11/2026 22:23:07 VN bằng bản dán SQL Editor; các bước để đối chiếu)
 
 1. Đọc sổ và hàm (chỉ đọc): không có `migration_v522_%`; `md5(prosrc)` = `0fffb42b…`; ACL `{postgres, service_role}`.
 2. Apply (GRANT, không nạp lại schema, giờ nào cũng được) bằng một trong hai cách:
@@ -156,7 +160,8 @@ dòng mới). Khi khung lỗi còn hiện thì chưa thêm gì và nút "Thêm v
 
 Chưa kiểm:
 
-- Gọi thật qua PostgREST bằng token Desktop (V522 chưa apply; Desktop chưa phát hành).
+- Gọi thật qua PostgREST bằng token Desktop của nhân viên (Desktop chưa phát hành; sau apply mới gọi thử bằng role
+  `aka_agent_desktop` không có `sub`: vào được hàm và bị chặn bằng `desktop_staff_scope_denied`).
 - Cửa sổ thật với DB thật trên Windows/macOS; nhân viên có rất nhiều nhóm (hơn 500) hoặc nhiều tài khoản.
 - Nhóm đang đồng bộ Google Sheet/"quét tự động" (`datasetSyncMode`): đường nạp đó không đi qua cửa sổ này nên không đổi.
 
