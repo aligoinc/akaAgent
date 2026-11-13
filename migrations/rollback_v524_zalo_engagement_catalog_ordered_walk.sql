@@ -1,6 +1,6 @@
--- Rollback V522: trả aka_agent_campaign_engagement_batch về đúng thân V510 (md5(prosrc)
+-- Rollback V524: trả aka_agent_campaign_engagement_batch về đúng thân V510 (md5(prosrc)
 -- dd6cf2bd1f75998521d98ee46d8fff0e, md5(pg_get_functiondef) 6b40a8b7b51490287f7b39cb6b3c62ba, như
--- production 13/11/2026). Chỉ chạy khi hàm đang là thân V522. DDL ⇒ PostgREST nạp lại schema.
+-- production 13/11/2026). Chỉ chạy khi hàm đang là thân V524. DDL ⇒ PostgREST nạp lại schema.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
@@ -8,8 +8,8 @@ SET LOCAL statement_timeout = '60s';
 DO $preflight$
 DECLARE v_oid oid := to_regprocedure('public.aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)');
 BEGIN
- IF v_oid IS NULL OR (SELECT md5(prosrc) FROM pg_proc WHERE oid=v_oid) IS DISTINCT FROM '1d663e8e9a9203d3726a5892fceddda4' THEN
-   RAISE EXCEPTION 'rollback v522: function is not the V522 body';
+ IF v_oid IS NULL OR (SELECT md5(prosrc) FROM pg_proc WHERE oid=v_oid) IS DISTINCT FROM '167571de84782301ddd8bcd1ad3b2f89' THEN
+   RAISE EXCEPTION 'rollback v524: function is not the V524 body';
  END IF;
 END;
 $preflight$;
@@ -292,7 +292,7 @@ BEGIN
    AND pg_get_userbyid(proowner)='postgres' AND prosecdef AND provolatile='v'
    AND proconfig IS NOT DISTINCT FROM ARRAY['search_path=pg_catalog, public','statement_timeout=15s']::text[]
    AND proacl::text IS NOT DISTINCT FROM '{postgres=X/postgres}') THEN
-   RAISE EXCEPTION 'rollback v522 postflight mismatch';
+   RAISE EXCEPTION 'rollback v524 postflight mismatch';
  END IF;
 END;
 $postflight$;

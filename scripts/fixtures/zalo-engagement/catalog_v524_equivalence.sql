@@ -1,5 +1,5 @@
--- V522 catalog equivalence: the V510 body (public.zalo_engagement_batch_v510_ref, created by
--- scripts/run-zalo-engagement-v522-smoke.cjs from the V510 migration text) and the V522 body
+-- V524 catalog equivalence: the V510 body (public.zalo_engagement_batch_v510_ref, created by
+-- scripts/run-zalo-engagement-v524-smoke.cjs from the V510 migration text) and the V524 body
 -- must return the same JSON page after page: same rows, order, catalogCursor and catalogDone.
 -- Every row the V510 joins reject is interleaved with valid rows; tracking_until values tie
 -- inside and across page boundaries; several accounts, owners and tenants share the table.
@@ -104,7 +104,7 @@ BEGIN
    b := pg_temp.catalog_page(false,p_staff,p_org,c_new);
    pages := pages+1;
    IF a IS DISTINCT FROM b THEN
-     RAISE EXCEPTION 'catalog mismatch seed % % page %: v510 % / v522 %',p_seed,p_label,pages,left(a::text,400),left(b::text,400);
+     RAISE EXCEPTION 'catalog mismatch seed % % page %: v510 % / v524 %',p_seed,p_label,pages,left(a::text,400),left(b::text,400);
    END IF;
    IF NOT (a->>'enabled')::boolean THEN RAISE EXCEPTION 'catalog disabled in %',p_label; END IF;
    IF last_until IS NOT NULL AND jsonb_array_length(a->'items')>0 AND a->'items'->0->>'tracking_until'=last_until THEN ties := ties+1; END IF;

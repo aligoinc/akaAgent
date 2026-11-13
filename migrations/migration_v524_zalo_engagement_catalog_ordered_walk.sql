@@ -1,11 +1,11 @@
--- V522: Tương tác Zalo — nhánh nạp danh mục (catalog) của aka_agent_campaign_engagement_batch đi
+-- V524: Tương tác Zalo — nhánh nạp danh mục (catalog) của aka_agent_campaign_engagement_batch đi
 -- chỉ mục auto_campaign_engagement_catalog theo đúng thứ tự con trỏ (tracking_until,
 -- campaign_detail_id) và dừng khi đủ 500 lượt hợp lệ; mỗi lượt kiểm sở hữu bằng khoá chính
 -- (CROSS JOIN LATERAL … LIMIT 1, như nhánh đăng ký của V510). Thân V510 JOIN kết quả gửi/chiến
 -- dịch/tài khoản cho MỌI lượt còn lại của (tổ chức, nhân viên) rồi mới sắp xếp và lấy 500: staff
 -- 1988 (8.353 lượt) trang đầu 6,0 s khi nguội (10.669 trang auto_campaign_details), quét đủ một
 -- lượt tốn O(N²/500) lượt-join. Worker Fly nạp hết danh mục mỗi lần khởi động. Xem
--- docs/ZALO_CAMPAIGN_ENGAGEMENT_V522.md.
+-- docs/ZALO_CAMPAIGN_ENGAGEMENT_V524.md.
 -- Chỉ thay câu SELECT của nhánh catalog; các nhánh khác giữ nguyên từng byte; tập dòng, thứ tự,
 -- catalogCursor, catalogDone như V510. Giữ chữ ký, owner, SECURITY DEFINER, VOLATILE, search_path,
 -- statement_timeout 15s và ACL. Không đổi bảng/index/quyền/công tắc, không cần phát hành app.
@@ -18,20 +18,20 @@ DO $preflight$
 DECLARE v_oid oid := to_regprocedure('public.aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)'); v_checksum text;
 BEGIN
  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-   IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v522_%') THEN
-     RAISE EXCEPTION 'v522 already recorded in supabase_migrations.schema_migrations';
+   IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v524_%') THEN
+     RAISE EXCEPTION 'v524 already recorded in supabase_migrations.schema_migrations';
    END IF;
  END IF;
- IF v_oid IS NULL THEN RAISE EXCEPTION 'v522 engagement batch missing'; END IF;
+ IF v_oid IS NULL THEN RAISE EXCEPTION 'v524 engagement batch missing'; END IF;
  SELECT md5(prosrc) INTO v_checksum FROM pg_proc WHERE oid=v_oid;
  IF v_checksum IS DISTINCT FROM 'dd6cf2bd1f75998521d98ee46d8fff0e' THEN
-   RAISE EXCEPTION 'v522 engagement batch drift (expected V510 body): %',v_checksum;
+   RAISE EXCEPTION 'v524 engagement batch drift (expected V510 body): %',v_checksum;
  END IF;
  IF EXISTS (SELECT 1 FROM pg_proc WHERE oid=v_oid AND (
    pg_get_userbyid(proowner)<>'postgres' OR NOT prosecdef OR provolatile<>'v'
    OR proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, public','statement_timeout=15s']::text[]
    OR proacl::text IS DISTINCT FROM '{postgres=X/postgres}')) THEN
-   RAISE EXCEPTION 'v522 engagement function attributes drift';
+   RAISE EXCEPTION 'v524 engagement function attributes drift';
  END IF;
  -- The new body walks this index in cursor order.
  IF NOT EXISTS (SELECT 1 FROM pg_index i JOIN pg_class c ON c.oid=i.indexrelid JOIN pg_am am ON am.oid=c.relam
@@ -39,14 +39,14 @@ BEGIN
      AND i.indpred IS NULL AND i.indexprs IS NULL AND i.indrelid='public.auto_campaign_detail_zalo_engagement'::regclass
      AND (SELECT array_agg(a.attname::text ORDER BY k.n) FROM unnest(i.indkey::int2[]) WITH ORDINALITY k(attnum,n)
        JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=k.attnum)=ARRAY['organization_id','staff_id','tracking_until','campaign_detail_id']) THEN
-   RAISE EXCEPTION 'v522 catalog index missing or changed';
+   RAISE EXCEPTION 'v524 catalog index missing or changed';
  END IF;
  -- LATERAL ... LIMIT 1 drops exactly the rows the V510 joins dropped only while each probed key is unique.
  IF EXISTS (SELECT 1 FROM (VALUES ('public.auto_campaign_details'),('public.auto_campaigns'),('public.auto_accounts'),('public.zalo_accounts')) k(rel)
    WHERE NOT EXISTS (SELECT 1 FROM pg_index i JOIN pg_attribute a ON a.attrelid=i.indrelid AND a.attnum=i.indkey[0]
      WHERE i.indrelid=k.rel::regclass AND i.indisunique AND i.indisvalid AND i.indpred IS NULL AND i.indexprs IS NULL
        AND i.indnkeyatts=1 AND a.attname='id')) THEN
-   RAISE EXCEPTION 'v522 ownership probes need a unique id key';
+   RAISE EXCEPTION 'v524 ownership probes need a unique id key';
  END IF;
 END;
 $preflight$;
@@ -181,7 +181,7 @@ BEGIN
    v_catalog_from:=COALESCE((p_items#>>'{0,catalog,from}')::timestamptz,now());
    v_catalog_until:=COALESCE((p_items#>>'{0,catalog,until}')::timestamptz,v_catalog_from);
    v_catalog_id:=COALESCE((p_items#>>'{0,catalog,id}')::bigint,0);
-   -- v522: walk auto_campaign_engagement_catalog in cursor order and stop at 500 owned
+   -- v524: walk auto_campaign_engagement_catalog in cursor order and stop at 500 owned
    -- rows. Every ownership check is a primary-key probe inside LATERAL ... LIMIT 1 (never
    -- flattened, estimated one row), so the planner keeps the ordered index walk instead of
    -- joining every remaining watch of the owner and sorting them for each page (O(N^2/500)
@@ -333,11 +333,11 @@ $function$
 DO $postflight$
 DECLARE v_oid oid := to_regprocedure('public.aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)');
 BEGIN
- IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid=v_oid AND md5(prosrc)='1d663e8e9a9203d3726a5892fceddda4'
+ IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE oid=v_oid AND md5(prosrc)='167571de84782301ddd8bcd1ad3b2f89'
    AND pg_get_userbyid(proowner)='postgres' AND prosecdef AND provolatile='v'
    AND proconfig IS NOT DISTINCT FROM ARRAY['search_path=pg_catalog, public','statement_timeout=15s']::text[]
    AND proacl::text IS NOT DISTINCT FROM '{postgres=X/postgres}') THEN
-   RAISE EXCEPTION 'v522 engagement function postflight mismatch';
+   RAISE EXCEPTION 'v524 engagement function postflight mismatch';
  END IF;
 END;
 $postflight$;
