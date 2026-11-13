@@ -26,6 +26,8 @@ import test_v485 as V  # noqa: E402
 V519 = ROOT / 'migrations' / 'migration_v519_data_group_member_matches.sql'
 V522 = ROOT / 'migrations' / 'migration_v522_data_group_member_matches_desktop.sql'
 R522 = ROOT / 'migrations' / 'rollback_v522_data_group_member_matches_desktop.sql'
+PASTE = ROOT / 'migrations' / 'tests' / 'migration_v522_data_group_member_matches_desktop_paste.sql'
+LEDGER_NAME = 'migration_v522_data_group_member_matches_desktop'
 SIGNATURE = 'public.aka_agent_read_data_group_member_matches(bigint,bigint,text,text,jsonb)'
 PROSRC_MD5 = '0fffb42b865b8be45bf5a7f2f4e2db17'
 OTHER_STAFF = 725
@@ -246,6 +248,39 @@ def main() -> None:
         c.q(migration)
         ok(acl(c) == 'aka_agent_desktop,postgres,service_role' and without_time(c.json(desktop())) == without_time(service),
            'apply lại sau rollback: Desktop gọi được như trước')
+
+        # Bản dán SQL Editor (scripts/build-v522-paste-sql.py): tự ghi sổ migration, chặn dán lại và dán thiếu.
+        import hashlib
+        import subprocess
+        built = subprocess.run([sys.executable, str(ROOT / 'scripts' / 'build-v522-paste-sql.py')], capture_output=True, text=True)
+        paste = PASTE.read_text(encoding='utf-8')
+        file_md5 = hashlib.md5(migration.encode('utf-8')).hexdigest()
+        ok(built.returncode == 0 and file_md5 in paste and paste.count(migration) == 1,
+           'bản dán khớp file migration hiện tại (sinh lại không đổi, nội dung một lần)', built.stdout + built.stderr)
+        c.q(rollback)
+        c.q("CREATE SCHEMA IF NOT EXISTS supabase_migrations;\n"
+            "CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text PRIMARY KEY, statements text[], "
+            "name text, created_by text, idempotency_key text, rollback text[]);\n"
+            "INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261113141849', 'migration_v521_renewal_link_tickets') "
+            "ON CONFLICT DO NOTHING;")
+        ledger = lambda: c.q(f"SELECT count(*) || '/' || coalesce(max(md5(statements[1])), '') || '/' || coalesce(max(version), '') "
+                             f"FROM supabase_migrations.schema_migrations WHERE name = '{LEDGER_NAME}'")
+        broken = paste.replace('v522_reader_body_unexpected', 'v522_reader_body_unexpecte', 1)
+        error = V.err_of(c, broken)
+        ok('Nội dung dán bị thiếu hoặc sai' in error and acl(c) == 'postgres,service_role' and ledger().startswith('0/'),
+           'bản dán thiếu một ký tự: dừng, chưa đổi quyền, chưa ghi sổ', error)
+        c.q(paste.replace('\n', '\r\n'))
+        row = ledger().split('/')
+        ok(acl(c) == 'aka_agent_desktop,postgres,service_role' and row[0] == '1' and row[1] == file_md5 and row[2] > '20261113141849',
+           'bản dán (xuống dòng kiểu Windows): cấp quyền, ghi sổ một dòng, md5 sổ = file, version sau V521', row)
+        ok(without_time(c.json(desktop())) == without_time(service), 'sau bản dán: token Desktop gọi được hàm')
+        error = V.err_of(c, paste)
+        ok('đã có trong sổ migration' in error and ledger().startswith('1/') and acl(c) == 'aka_agent_desktop,postgres,service_role',
+           'dán lại lần hai: bị từ chối, không đổi gì', error)
+        c.q(f"DELETE FROM supabase_migrations.schema_migrations WHERE name = '{LEDGER_NAME}'")
+        error = V.err_of(c, paste)
+        ok('v522_already_applied_do_not_reapply' in error and ledger().startswith('0/'),
+           'đã cấp quyền mà sổ chưa có dòng: preflight của migration vẫn chặn, không ghi sổ', error)
         print(f'V522 data group member matches (Desktop) checks passed: {passed}')
     finally:
         c.close()

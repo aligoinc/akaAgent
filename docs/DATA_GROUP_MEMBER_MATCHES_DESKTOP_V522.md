@@ -68,15 +68,20 @@ GRANT EXECUTE ON FUNCTION public.aka_agent_read_data_group_member_matches(bigint
 - Gỡ: `migrations/rollback_v522_data_group_member_matches_desktop.sql` (md5 `6a0f6eaa…`) chỉ `REVOKE` quyền Desktop;
   API WebApp (`service_role`) vẫn đọc được; Desktop ẩn hai ô và thêm data như trước.
 - Số 522: V520/V521 là nhắc gia hạn (`notification_package_expiring`, `renewal_link_tickets`; đã apply 13/11, vào
-  `dev_3` qua #668; kiểm 13/11 trên 644 nhánh của repo). **Lúc viết, Supabase MCP không kết nối được nên chưa
-  đọc lại sổ migration**: trước khi apply phải kiểm `supabase_migrations.schema_migrations` không có
-  `migration_v522_%` và đọc lại md5 `prosrc`, ACL của hàm.
+  `dev_3` qua #668; kiểm 13/11 trên 644 nhánh của repo). Đọc sổ production 13/11 22:20 VN (chỉ đọc): chưa có
+  `migration_v522_%` (dòng mới nhất là V521 `20261113141849`); hàm V519 đúng `md5(prosrc)` `0fffb42b…`, thuộc tính
+  và ACL `{postgres, service_role}` mà preflight đòi. Apply muộn hơn thì đọc lại.
 
 ### Apply (khi được yêu cầu)
 
 1. Đọc sổ và hàm (chỉ đọc): không có `migration_v522_%`; `md5(prosrc)` = `0fffb42b…`; ACL `{postgres, service_role}`.
-2. Apply nguyên văn file bằng Supabase MCP `apply_migration`, tên `migration_v522_data_group_member_matches_desktop`
-   (GRANT, không nạp lại schema, giờ nào cũng được).
+2. Apply (GRANT, không nạp lại schema, giờ nào cũng được) bằng một trong hai cách:
+   - Supabase MCP `apply_migration` với nguyên văn file, tên `migration_v522_data_group_member_matches_desktop`.
+   - Dán SQL Editor bản gọn `migrations/tests/migration_v522_data_group_member_matches_desktop_paste.sql` (sinh bằng
+     `scripts/build-v522-paste-sql.py`, cùng cách với V511/V521): một giao dịch, so md5 nội dung dán với file trước khi
+     chạy, chạy nguyên preflight/postflight của file, tự ghi sổ `statements[1]` = nguyên văn file, bảng kết quả
+     `status = applied`. Dán lại lần hai bị từ chối (`V522 đã có trong sổ migration, không chạy lại`), dán thiếu ký tự
+     thì dừng trước khi chạy gì. **Đừng chạy thẳng file migration trong SQL Editor**: file không tự ghi sổ.
 3. Hậu kiểm: `md5(statements[1])` của sổ = `a9d5a64b92affaf58ce264528c24c215`; ACL ba role; gọi thử bằng role
    `aka_agent_desktop` không còn `permission denied for function` (claim không có `sub` thì bị chặn bằng
    `desktop_staff_scope_denied`, không ghi gì).
@@ -141,7 +146,7 @@ dòng mới). Khi khung lỗi còn hiện thì chưa thêm gì và nút "Thêm v
 
 | Bài | Lệnh | Kết quả 13/11/2026 |
 |---|---|---|
-| SQL V522 (PostgreSQL 16 dựng tạm, fixture `scripts/data-group-routing`, hàm nạp thật, chuỗi xác thực token Desktop của production) | `PGBIN=/usr/lib/postgresql/16/bin python3 scripts/data-group-routing/test_v522.py` | 27/27 |
+| SQL V522 (PostgreSQL 16 dựng tạm, fixture `scripts/data-group-routing`, hàm nạp thật, chuỗi xác thực token Desktop của production) | `PGBIN=/usr/lib/postgresql/16/bin python3 scripts/data-group-routing/test_v522.py` | 33/33 (27 ca migration + 6 ca bản dán SQL Editor) |
 | Service (không DB) | `node scripts/data-group-member-matches-service-smoke.cjs` | 12/12 |
 | Giao diện trên Electron thật (IPC giả), gồm cửa sổ "Quản lý nhóm data" thật | `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/data-group-member-matches-ui-smoke.cjs` | 13/13 |
 | Hồi quy cửa sổ nhập của chiến dịch | `…campaign-input-duplicates-ui-smoke.cjs`, `…campaign-add-data-duplicates-ui-smoke.cjs`, `node scripts/run-data-group-zalo-ui-smoke.cjs` | đạt |
