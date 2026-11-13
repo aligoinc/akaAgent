@@ -440,6 +440,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
         if (marking === 'refused') continue
         if (marking !== 'ok') return marking
         try {
+          engagements.get(v.item.targetRunId)?.markSending()
           const sent = await withDeadline('share_media', opts.mediaTimeoutMs ?? 390_000, api.signal,
             s => port.sendMedia({ ...v.item.ctx, signal: s }, { threadId: v.threadId, threadType, files, stepKey: 'share_media', mediaCacheKey,
               releaseMediaCache: index === valid.length - 1 }))
@@ -482,6 +483,8 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
       if (sendTo.length > 0) {
         if (api.signal.aborted) return bail()
         try {
+          // Không có tệp thì lệnh chia sẻ này là lệnh gửi đầu tiên tới từng người (như bộ chạy cũ: sentAt đặt tại đây).
+          if (files.length === 0) for (const v of sendTo) engagements.get(v.item.targetRunId)?.markSending()
           forward = await withDeadline('share_forward', opts.sendTimeoutMs ?? 150_000, api.signal,
             s => port.forwardMessage({ ...sendTo[0]!.item.ctx, signal: s }, { threadIds: sendTo.map(v => v.threadId), threadType, message }))
         } catch (error) {

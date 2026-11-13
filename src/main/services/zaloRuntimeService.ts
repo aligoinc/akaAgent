@@ -1,6 +1,7 @@
 import { searchZaloPhone, phoneSearchLimitScope } from './zaloPhoneSearch'
 import { CampaignMediaExecution } from './campaignMediaExecution'
 import { receiveCampaignEngagement, campaignEngagementEnabled } from './zaloCampaignEngagement'
+import { receiveZaloMessageStatus, zaloMessageStatusSyncEnabled } from './zaloMessageStatusSync'
 import { CampaignLabelContext } from '../../shared/campaignSendExclusion'
 import { findZaloExcludedLabels, type ZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountWarning } from './accountLogService'
@@ -2463,8 +2464,13 @@ export class ZaloRuntimeService {
     return this.accountCacheVersions.get(accountId) ?? 0
   }
 
+  /** Bộ nghe dùng chung cho hai tính năng tuỳ chọn, mỗi bên một công tắc riêng: theo dõi tương tác (V339) và đồng bộ trạng thái tin nhắn. */
+  private optionalTrackingWantsListener(): boolean {
+    return campaignEngagementEnabled() || zaloMessageStatusSyncEnabled()
+  }
+
   private warmCampaignEngagementListener(accountId: number, api: API): void {
-    if (this.apiCache.get(accountId)?.api !== api || !campaignEngagementEnabled()) return
+    if (this.apiCache.get(accountId)?.api !== api || !this.optionalTrackingWantsListener()) return
     const state=this.listenerStates.get(accountId)
     if (state?.api===api && state.ready && state.status==='running') return
     const previous=this.engagementListenerAttempts.get(api)
@@ -2474,7 +2480,7 @@ export class ZaloRuntimeService {
     // A listener for optional tracking cannot hold the outgoing action. Existing
     // media/upload waits still use ensureZaloListenerReady directly.
     void Promise.resolve().then(async () => {
-      if (this.apiCache.get(accountId)?.api===api && campaignEngagementEnabled()) await this.ensureZaloListenerReady(accountId,api)
+      if (this.apiCache.get(accountId)?.api===api && this.optionalTrackingWantsListener()) await this.ensureZaloListenerReady(accountId,api)
     }).catch(() => {
       attempt.retryAt=Date.now()+60_000
       console.warn('[ZaloEngagement] Shared listener unavailable', { accountId })
@@ -2594,6 +2600,19 @@ export class ZaloRuntimeService {
         oldMessages: (values, type) => { for (const value of (Array.isArray(values) ? values : [])) receive('message', { ...value, type }) },
         oldReactions: (values, isGroup) => { for (const value of (Array.isArray(values) ? values : [])) receive('reaction', { ...value, isGroup }) }
       }) } catch { console.warn('[ZaloEngagement] Event metadata unavailable', { accountId }) }
+      // Đồng bộ trạng thái tin nhắn Zalo: lượt đọc riêng, độc lập với theo dõi tương tác ở trên (công tắc, bộ đệm và lỗi riêng).
+      // Đang tắt thì bỏ qua ngay, không tạo gì cho từng sự kiện.
+      if (zaloMessageStatusSyncEnabled()) {
+        const receiveStatus = (type: string, value: unknown): void => receiveZaloMessageStatus(type, value, accountId, ownUid)
+        try { invoke({
+          message: value => receiveStatus('message', value), reaction: value => receiveStatus('reaction', value),
+          friendEvent: value => receiveStatus('friend_event', value),
+          seenMessages: value => receiveStatus('seen_messages', value),
+          deliveredMessages: value => receiveStatus('delivered_messages', value),
+          oldMessages: (values, type) => { for (const value of (Array.isArray(values) ? values : [])) receiveStatus('message', { ...value, type }) },
+          oldReactions: (values, isGroup) => { for (const value of (Array.isArray(values) ? values : [])) receiveStatus('reaction', { ...value, isGroup }) }
+        }) } catch { console.warn('[ZaloMessageStatus] Event metadata unavailable', { accountId }) }
+      }
     }
     const subscribers = this.realtimeListenerSubscribers.get(accountId)
     if (!subscribers || subscribers.size === 0) return

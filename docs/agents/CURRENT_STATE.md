@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 13/11/2026
 
+[Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
+**Mã đã merge `dev_3` qua #672 (13/11/2026; WebApp `dev_1` qua #226), chưa build/phát hành,
+App Server chưa cài VPS. `migration_v525_zalo_message_status_sync.sql` và `migration_v526_zalo_message_status_statuses.sql`
+CHƯA apply** (ban đầu giữ 522/523, đổi thành 525/526 trước khi merge vì sổ DB thật nhận `migration_v522_data_group_member_matches_desktop` lúc 22:23:07 VN và V524 lúc 22:23:57 VN 13/11; lúc đổi (22:57 VN) số lớn nhất trong sổ và trên mọi nhánh là 524; kiểm lại sổ trước khi apply). Chưa có dòng
+`zalo.message_status_sync.*` nào trong DB nên tính năng đang tắt với mọi tiến trình. Hàm mới khi apply: `aka_agent_ingest_zalo_message_status(text,jsonb)`
+(EXECUTE `service_role`, `aka_agent_chat_api`) và `aka_agent_desktop_ingest_zalo_message_status(jsonb)` (EXECUTE chỉ `aka_agent_desktop`,
+lấy nhân viên từ phiên Desktop). Kiểm cục bộ: smoke 29 nhóm, ba typecheck 0 lỗi, bộ kiểm SQL 239 bước (PostgreSQL 16, chạy ở akaAgentWebApp).
+Chưa chạy trên Electron/App Server thật, chưa kiểm trên PostgreSQL 17.
+
 [Lọc trùng khi thêm data vào Nhóm data trên Desktop + V522](../DATA_GROUP_MEMBER_MATCHES_DESKTOP_V522.md):
 Code đã merge `dev_3` qua #670 (13/11/2026), **chưa build/phát hành; V522 đã apply akachat 13/11 22:23:07 VN** (`20261113152307`, không apply lại, md5 sổ = file `a9d5a64b…`, [biên nhận](../../migrations/snapshots/data-group-member-matches-desktop-v522/apply-receipt.json)).
 Cửa sổ "Thêm data từ file" của Nhóm data có hai ô "Bỏ data đã có trong nhóm này" (bật sẵn) và "Bỏ data đã có ở nhóm data khác",

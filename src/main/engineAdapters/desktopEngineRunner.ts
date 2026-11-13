@@ -154,7 +154,7 @@ export class DesktopEngineRunner {
     if (!type) return null
     const port = createDesktopZaloPort({
       zaloRuntime, accountId: account.id, campaignId: campaign.id,
-      account: { zaloUid: account.zaloUid ?? null, isZaloShowWeb: account.isZaloShowWeb ?? null },
+      account: { zaloUid: account.zaloUid ?? null, isZaloShowWeb: account.isZaloShowWeb ?? null, organizationId: account.organizationId ?? null },
       saveContact: user => this.host.saveContact(account, campaign, user),
       saveResolvedProfile: target => this.host.saveResolvedProfile(account, campaign, target),
       saveJoinedGroup: (result, isJoined) => this.host.saveJoinedGroup(account, result, isJoined),

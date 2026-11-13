@@ -14,6 +14,7 @@ import { applyAkaBizTagsToContactTargets } from '../data/repositories/contactTag
 import { engagementMessageIds } from '../../shared/zaloCampaignEngagement'
 import { abandonCampaignEngagementSend, beginCampaignEngagementSend, recordCampaignEngagementDetail, stageCampaignEngagementSource }
   from '../services/zaloCampaignEngagement'
+import { beginZaloMessageStatusSend } from '../services/zaloMessageStatusSync'
 import { isZaloLabelSkipResult, readZaloApiFriendStatus } from '../../shared/zaloAuxiliaryActions'
 import type { CampaignLabelContext } from '../../shared/campaignSendExclusion'
 import type { CampaignMediaInput } from '../../shared/types'
@@ -31,7 +32,7 @@ export interface DesktopZaloPortHost {
   accountId: number
   campaignId: number
   /** Tài khoản đang chạy (theo dõi tương tác: UID Zalo, đăng nhập bằng trình duyệt thì không theo dõi như bộ cũ). */
-  account: { zaloUid?: string | null; isZaloShowWeb?: boolean | null }
+  account: { zaloUid?: string | null; isZaloShowWeb?: boolean | null; organizationId?: number | null }
   /** Lưu hồ sơ tìm được vào danh bạ (upsertZaloFoundUserContact của bộ lập lịch). */
   saveContact(user: ZaloFoundUser): Promise<void>
   /** Lưu hồ sơ đọc theo UID vào danh bạ (upsertZaloResolvedProfileTarget của bộ lập lịch). */
@@ -216,6 +217,13 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
     engagementAbandon: (_ctx, send) => abandonCampaignEngagementSend(send.operationId),
     engagementStage: (_ctx, source) => stageCampaignEngagementSource(source, host.campaignId, true),
     engagementRegister: (detailId, source) => recordCampaignEngagementDetail(detailId, source),
+    // Đồng bộ trạng thái tin nhắn Zalo (độc lập với theo dõi tương tác): cùng hàm với bộ chạy cũ, dấu tham chiếu ghi vào dòng lịch sử
+    // của lượt gửi thành công. Tính năng tắt, tài khoản trình duyệt hay thiếu UID thì không ghi gì.
+    messageStatusBegin: (_ctx, targetUid, actionType) => {
+      const send = beginZaloMessageStatusSend({ id: host.accountId, zaloUid: host.account.zaloUid, isZaloShowWeb: host.account.isZaloShowWeb,
+        organizationId: host.account.organizationId }, host.zaloRuntime.getCachedOwnUid?.(host.accountId), targetUid, actionType)
+      return send
+    },
     forwardMessage: async (_ctx, input) => {
       try {
         const result = input.threadType === 'group'

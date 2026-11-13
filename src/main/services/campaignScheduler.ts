@@ -21,6 +21,7 @@ import { browserRunLimitWaitNote } from '../../shared/browserRunLimits'
 import { inspectPendingCampaign } from './campaignPendingReasonService'
 import type { CampaignPendingReasonResult } from '../../shared/campaignPendingReason'
 import { makeEngagementSource } from '../../shared/zaloCampaignEngagement'
+import { beginZaloMessageStatusSend, type ZaloMessageStatusSend } from './zaloMessageStatusSync'
 import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
@@ -6512,6 +6513,12 @@ export class CampaignScheduler {
     const mediaFailures = new Map<number, unknown>()
     const engagementByInput = new Map<number, Awaited<ReturnType<typeof beginCampaignEngagementSend>>>()
     if (!isGroup) for (const item of batch) engagementByInput.set(item.detail.id, beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, item.threadId))
+    // Đồng bộ trạng thái tin nhắn Zalo (độc lập với theo dõi tương tác): một lần gửi cho mỗi người nhận, không áp cho group.
+    const statusSendByInput = new Map<number, ZaloMessageStatusSend>()
+    if (!isGroup) for (const item of batch) {
+      const statusSend = beginZaloMessageStatusSend(account, this.zaloRuntime.getCachedOwnUid?.(account.id), item.threadId, 'message')
+      if (statusSend) statusSendByInput.set(item.detail.id, statusSend)
+    }
     const mediaResponses = new Map<number, unknown>()
     const startedInputDataIds = new Set<number>()
     const recordedMediaTimeouts = new Set<number>()
@@ -6537,6 +6544,7 @@ export class CampaignScheduler {
           try {
             const engagement=engagementByInput.get(item.detail.id)
             if (engagement) engagement.sentAt=new Date().toISOString()
+            statusSendByInput.get(item.detail.id)?.markSending()
             response = isGroup
               ? await this.zaloRuntime.sendMessageToGroup(account.id, item.threadId, '', attachments, true)
               : await this.zaloRuntime.sendMessageToUser(account.id, item.threadId, '', attachments, true)
@@ -6630,6 +6638,7 @@ export class CampaignScheduler {
         try {
           const sentAt=new Date().toISOString()
           if (!attachments.length) for (const item of textBatch) { const engagement=engagementByInput.get(item.detail.id); if (engagement) engagement.sentAt=sentAt }
+          if (!attachments.length) for (const item of textBatch) statusSendByInput.get(item.detail.id)?.markSending()
           forwardResult = isGroup
             ? await this.zaloRuntime.forwardMessageToGroups(account.id, textBatch.map(item => item.threadId), message)
             : await this.zaloRuntime.forwardMessageToUsers(account.id, textBatch.map(item => item.threadId), message)
@@ -6779,7 +6788,7 @@ export class CampaignScheduler {
         } else if (trimmedMessage) {
           forwardTargetResult = this.findZaloForwardTargetResult(forwardResult, item.threadId)
           if (forwardTargetResult?.ok) {
-            actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response, forwardTargetResult?.engagementMapped ? forwardTargetResult.raw : undefined, engagementByInput.get(item.detail.id))
+            actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, trimmedMessage, attachments, mediaResponses.get(item.detail.id), forwardResult?.response, forwardTargetResult?.engagementMapped ? forwardTargetResult.raw : undefined, engagementByInput.get(item.detail.id), statusSendByInput.get(item.detail.id))
           } else {
             actionDetail = await this.createZaloForwardFailureDetail(
               account,
@@ -6794,7 +6803,7 @@ export class CampaignScheduler {
             )
           }
         } else {
-          actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null, undefined, engagementByInput.get(item.detail.id))
+          actionDetail = this.createZaloShareSuccessDetail(actionDescriptor, item, '', attachments, mediaResponses.get(item.detail.id), null, undefined, engagementByInput.get(item.detail.id), statusSendByInput.get(item.detail.id))
         }
 
         if (
@@ -7007,7 +7016,7 @@ export class CampaignScheduler {
     attachments: string[],
     mediaResponse: unknown,
     forwardResponse: unknown,
-    mappedForwardResponse: unknown, engagement?: EngagementSendContext
+    mappedForwardResponse: unknown, engagement?: EngagementSendContext, statusSend?: ZaloMessageStatusSend
   ): ZaloActionDetailOutput {
     const isGroup = actionDescriptor.code === 'zalo_message_group'
     return this.createZaloSuccessDetail({
@@ -7023,6 +7032,8 @@ export class CampaignScheduler {
         attachments,
         sendMode: 'share',
         zaloEngagementSource: isGroup ? undefined : makeEngagementSource(engagement?.accountZaloUid, item.threadId, 'message', engagement?.sentAt || '', [mediaResponse, mappedForwardResponse], engagement?.revision || '', engagement?.operationId),
+        // Cùng các phản hồi mà theo dõi tương tác dùng để lấy mã tin: tệp đã gửi và phần của người này trong lệnh chia sẻ.
+        ...(isGroup ? {} : statusSend?.detailData([mediaResponse, mappedForwardResponse]) ?? {}),
         mediaResponse: mediaResponse as Record<string, unknown> | undefined,
         forwardResponse: forwardResponse as Record<string, unknown> | undefined
       }
@@ -15784,6 +15795,8 @@ export class CampaignScheduler {
     const engagement = beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, target.uid)
     const engagementGeneration = engagement.revision
     const engagementSentAt = engagement.sentAt
+    // Đồng bộ trạng thái tin nhắn Zalo (độc lập với theo dõi tương tác ở trên): dấu tham chiếu ghi cùng kết quả gửi thành công.
+    const statusSend = beginZaloMessageStatusSend(account, this.zaloRuntime.getCachedOwnUid?.(account.id), target.uid, 'message')
     try {
       const response = await this.dispatchZaloMessage(account.id, target.uid, false, message, attachments)
       const engagementSource = makeEngagementSource(engagement.accountZaloUid, target.uid, 'message', engagementSentAt, response, engagementGeneration, engagement.operationId)
@@ -15799,6 +15812,7 @@ export class CampaignScheduler {
           data: {
             target, message, attachments, response,
             zaloEngagementSource: engagementSource,
+            ...(statusSend?.detailData(response) ?? {}),
             messageOptOutSource: buildMessageOptOutSource(
               campaign.extraSettings?.zaloOptOutLinkEnabled === true && campaign.extraSettings?.zaloMessageSendMode !== ZALO_MESSAGE_SEND_MODE_SHARE
                 ? this.zaloMessageOptOutContexts.get(this.zaloMessageOptOutContextKey(campaign.id, Number(metadata?.campaignInputDataId ?? options.inputData?.id)))?.linkId
@@ -15863,6 +15877,8 @@ export class CampaignScheduler {
     const engagement = beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, target.uid)
     const engagementGeneration = engagement.revision
     const engagementSentAt = engagement.sentAt
+    // Đồng bộ trạng thái tin nhắn Zalo (độc lập với theo dõi tương tác ở trên): dấu tham chiếu ghi cùng kết quả gửi thành công.
+    const statusSend = beginZaloMessageStatusSend(account, this.zaloRuntime.getCachedOwnUid?.(account.id), target.uid, 'message')
     try {
       const response = await this.dispatchZaloMessage(account.id, target.uid, false, message, attachments)
       const engagementSource = makeEngagementSource(engagement.accountZaloUid, target.uid, 'message', engagementSentAt, response, engagementGeneration, engagement.operationId)
@@ -15878,6 +15894,7 @@ export class CampaignScheduler {
           data: {
             target, message, attachments, response,
             zaloEngagementSource: engagementSource,
+            ...(statusSend?.detailData(response) ?? {}),
             messageOptOutSource: buildMessageOptOutSource(
               campaign.extraSettings?.zaloOptOutLinkEnabled === true && campaign.extraSettings?.zaloMessageSendMode !== ZALO_MESSAGE_SEND_MODE_SHARE
                 ? this.zaloMessageOptOutContexts.get(this.zaloMessageOptOutContextKey(campaign.id, Number(metadata?.campaignInputDataId ?? options.inputData?.id)))?.linkId
@@ -16185,6 +16202,8 @@ export class CampaignScheduler {
     const engagement = beginCampaignEngagementSend({ ...account, zaloUid: this.zaloRuntime.getCachedOwnUid?.(account.id) || account.zaloUid }, target.uid)
     const engagementGeneration = engagement.revision
     const engagementSentAt = engagement.sentAt
+    // Đồng bộ trạng thái tin nhắn Zalo: chỉ ghi dấu khi cấu hình bật ghi nhận "đồng ý kết bạn" (track_friend_accept).
+    const statusSend = beginZaloMessageStatusSend(account, this.zaloRuntime.getCachedOwnUid?.(account.id), target.uid, 'friend_request')
     try {
       const response = await this.zaloRuntime.sendFriendRequestToUser(account.id, target.uid, message)
       const engagementSource = makeEngagementSource(engagement.accountZaloUid, target.uid, 'friend_request', engagementSentAt, null, engagementGeneration, engagement.operationId)
@@ -16199,7 +16218,7 @@ export class CampaignScheduler {
           status: 'thành công',
           log: `Đã gửi lời mời kết bạn đến ${this.getZaloTargetLabel(target)}`,
           data: { target, message, response: response as Record<string, unknown> | undefined,
-            zaloEngagementSource: engagementSource }
+            zaloEngagementSource: engagementSource, ...(statusSend?.detailData(null) ?? {}) }
         })
       }
     } catch (err) {
