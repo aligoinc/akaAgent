@@ -1,4 +1,4 @@
--- V519: vé gia hạn dùng một lần (13/11/2026) — CHƯA APPLY, cần người dùng duyệt trước khi chạy.
+-- V521: vé gia hạn dùng một lần (13/11/2026) — CHƯA APPLY, cần người dùng duyệt trước khi chạy.
 -- Phương án: docs/RENEWAL_REMINDER_PLAN.md (mục 5); Desktop: docs/RENEWAL_REMINDER_DESKTOP.md; Web/API: akaAgentWebApp
 -- docs/RENEWAL_REMINDER.md; cổng CRM: SqlServerDashboard docs/trang-gia-han-khach-hang.md.
 --
@@ -21,8 +21,8 @@
 -- Mã vé: 64 ký tự hex từ hai gen_random_uuid() (244 bit ngẫu nhiên), không cần extension.
 --
 -- Chỉ thêm một bảng mới và bốn hàm mới; không sửa bảng, hàm hay dữ liệu cũ. App và cổng bản cũ không gọi các hàm này.
--- CREATE TABLE/FUNCTION làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm. Gỡ: rollback_v519_renewal_link_tickets.sql.
--- Trước khi apply: kiểm lại sổ migration và `git log --all` xem số V519 còn trống (số dùng chung mọi repo và nhánh).
+-- CREATE TABLE/FUNCTION làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm. Gỡ: rollback_v521_renewal_link_tickets.sql.
+-- Trước khi apply: kiểm lại sổ migration và `git log --all` xem số V521 còn trống (số dùng chung mọi repo và nhánh).
 BEGIN;
 SET LOCAL lock_timeout = '2s';
 SET LOCAL statement_timeout = '30s';
@@ -31,26 +31,26 @@ DO $pre$
 DECLARE v_missing text;
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v519_%') THEN
-      RAISE EXCEPTION 'V519 đã có trong sổ migration, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v521_%') THEN
+      RAISE EXCEPTION 'V521 đã có trong sổ migration, không chạy lại';
     END IF;
   END IF;
   IF to_regclass('private.aka_renewal_link_tickets') IS NOT NULL THEN
-    RAISE EXCEPTION 'V519: private.aka_renewal_link_tickets đã có';
+    RAISE EXCEPTION 'V521: private.aka_renewal_link_tickets đã có';
   END IF;
   IF to_regprocedure('public.aka_agent_renewal_link_ticket(bigint)') IS NOT NULL
      OR to_regprocedure('public.aka_agent_control_renewal_link_ticket(bigint,bigint,bigint)') IS NOT NULL
      OR to_regprocedure('public.aka_renewal_link_ticket_redeem(text)') IS NOT NULL
      OR to_regprocedure('private.aka_renewal_link_ticket_issue(bigint,bigint,bigint,text)') IS NOT NULL THEN
-    RAISE EXCEPTION 'V519: hàm vé gia hạn đã có';
+    RAISE EXCEPTION 'V521: hàm vé gia hạn đã có';
   END IF;
   IF to_regprocedure('private.aka_agent_desktop_data_context()') IS NULL THEN
-    RAISE EXCEPTION 'V519: thiếu private.aka_agent_desktop_data_context()';
+    RAISE EXCEPTION 'V521: thiếu private.aka_agent_desktop_data_context()';
   END IF;
   SELECT string_agg(need.rolname, ', ' ORDER BY need.rolname) INTO v_missing
     FROM (VALUES ('aka_agent_desktop'), ('service_role'), ('anon'), ('authenticated')) AS need(rolname)
    WHERE NOT EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname = need.rolname);
-  IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'V519: thiếu role: %', v_missing; END IF;
+  IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'V521: thiếu role: %', v_missing; END IF;
   SELECT string_agg(need.tbl || '.' || need.col, ', ' ORDER BY need.tbl, need.col) INTO v_missing
     FROM (VALUES
       ('org_staff', 'id'), ('org_staff', 'organization_id'), ('org_staff', 'is_active'),
@@ -60,7 +60,7 @@ BEGIN
      SELECT 1 FROM pg_attribute a
       WHERE a.attrelid = to_regclass('public.' || need.tbl) AND a.attname = need.col AND NOT a.attisdropped
    );
-  IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'V519: thiếu cột: %', v_missing; END IF;
+  IF v_missing IS NOT NULL THEN RAISE EXCEPTION 'V521: thiếu cột: %', v_missing; END IF;
 END $pre$;
 
 CREATE TABLE private.aka_renewal_link_tickets (
@@ -78,7 +78,7 @@ CREATE INDEX idx_aka_renewal_link_tickets_expires ON private.aka_renewal_link_ti
 ALTER TABLE private.aka_renewal_link_tickets ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON TABLE private.aka_renewal_link_tickets FROM PUBLIC, anon, authenticated, service_role, aka_agent_desktop;
 COMMENT ON TABLE private.aka_renewal_link_tickets IS
-  'Vé gia hạn dùng một lần (V519): app xin vé, cổng CRM đổi vé lấy nhân viên. Chỉ lưu SHA-256 của mã vé. Chỉ truy cập qua hàm.';
+  'Vé gia hạn dùng một lần (V521): app xin vé, cổng CRM đổi vé lấy nhân viên. Chỉ lưu SHA-256 của mã vé. Chỉ truy cập qua hàm.';
 
 -- Lõi cấp vé. Không cấp quyền gọi cho role nào; hai hàm public bên dưới gọi thay.
 CREATE FUNCTION private.aka_renewal_link_ticket_issue(
@@ -222,11 +222,11 @@ BEGIN
 END $grants$;
 
 COMMENT ON FUNCTION public.aka_agent_renewal_link_ticket(bigint) IS
-  'Nhắc gia hạn (V519): Desktop xin vé gia hạn dùng một lần cho nhân viên của phiên Desktop. Trả {ok, token, expiresAt} hoặc {ok:false, reason}.';
+  'Nhắc gia hạn (V521): Desktop xin vé gia hạn dùng một lần cho nhân viên của phiên Desktop. Trả {ok, token, expiresAt} hoặc {ok:false, reason}.';
 COMMENT ON FUNCTION public.aka_agent_control_renewal_link_ticket(bigint, bigint, bigint) IS
-  'Nhắc gia hạn (V519): API Web xin vé gia hạn dùng một lần cho phiên Web đã xác thực. Chỉ service_role.';
+  'Nhắc gia hạn (V521): API Web xin vé gia hạn dùng một lần cho phiên Web đã xác thực. Chỉ service_role.';
 COMMENT ON FUNCTION public.aka_renewal_link_ticket_redeem(text) IS
-  'Nhắc gia hạn (V519): cổng CRM đổi vé lấy nhân viên, mỗi vé một lần trong 10 phút. Chỉ service_role.';
+  'Nhắc gia hạn (V521): cổng CRM đổi vé lấy nhân viên, mỗi vé một lần trong 10 phút. Chỉ service_role.';
 
 DO $post$
 DECLARE v_bad text;
@@ -256,9 +256,9 @@ BEGIN
      WHERE r.rolname IN ('anon', 'authenticated', 'service_role', 'aka_agent_desktop', 'aka_agent_chat_api')
        AND has_table_privilege(r.rolname, 'private.aka_renewal_link_tickets', 'SELECT, INSERT, UPDATE, DELETE')
   ) x;
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V519 postflight: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V521 postflight: %', v_bad; END IF;
   IF NOT (SELECT c.relrowsecurity FROM pg_class c WHERE c.oid = 'private.aka_renewal_link_tickets'::regclass) THEN
-    RAISE EXCEPTION 'V519 postflight: bảng vé chưa bật RLS';
+    RAISE EXCEPTION 'V521 postflight: bảng vé chưa bật RLS';
   END IF;
 END $post$;
 

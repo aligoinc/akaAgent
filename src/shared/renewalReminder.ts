@@ -577,7 +577,7 @@ export function renewalReminderPlainUrl(kind: RenewalReminderKind, source?: stri
   return url.toString()
 }
 
-/** Mã vé gia hạn dùng một lần do DB cấp (akaAgent V519): 64 ký tự hex. */
+/** Mã vé gia hạn dùng một lần do DB cấp (akaAgent V521): 64 ký tự hex. */
 export const RENEWAL_LINK_TICKET_PATTERN = /^[0-9a-f]{64}$/
 
 /**

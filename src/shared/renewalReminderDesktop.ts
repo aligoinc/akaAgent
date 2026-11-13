@@ -200,7 +200,7 @@ export interface RenewalReminderLink {
 }
 
 /**
- * Link có vé gia hạn dùng một lần do DB cấp (`aka_agent_renewal_link_ticket`, V519) hoặc, khi không có vé (DB chưa có hàm,
+ * Link có vé gia hạn dùng một lần do DB cấp (`aka_agent_renewal_link_ticket`, V521) hoặc, khi không có vé (DB chưa có hàm,
  * `{ok:false}` như `rate_limited`, mã vé sai dạng, lỗi gọi), link thường để khách đăng nhập cổng bằng mật khẩu. URL (có
  * mã vé) chỉ dùng trong tiến trình chính.
  */

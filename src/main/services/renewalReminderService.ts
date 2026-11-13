@@ -30,7 +30,7 @@ export class RenewalReminderLinkError extends Error {
 interface RenewalReminderDependencies {
   /** Gửi trạng thái xuống renderer (không bao giờ có ngày đăng nhập). */
   send?: (state: RenewalReminderState) => void
-  /** Xin vé gia hạn dùng một lần (`aka_agent_renewal_link_ticket`, V519); không có vé = dùng link thường. */
+  /** Xin vé gia hạn dùng một lần (`aka_agent_renewal_link_ticket`, V521); không có vé = dùng link thường. */
   issueTicket?: (organizationProductId: number | null) => Promise<unknown>
   /** Đọc lại gói ngay (cùng hàm của lượt kiểm 30 giây), để `accountProducts` cập nhật sau khi thanh toán. */
   refreshEntitlements?: () => Promise<void>

@@ -21,7 +21,7 @@ export function registerRenewalReminderHandlers(
   renewalReminderService.attach({
     send,
     refreshEntitlements,
-    // Vé gia hạn dùng một lần do DB cấp (V519); DB chưa có hàm hoặc từ chối thì service dùng link thường.
+    // Vé gia hạn dùng một lần do DB cấp (V521); DB chưa có hàm hoặc từ chối thì service dùng link thường.
     issueTicket: issueRenewalLinkTicket
   })
 

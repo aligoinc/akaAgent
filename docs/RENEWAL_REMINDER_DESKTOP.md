@@ -2,7 +2,7 @@
 
 13/11/2026. **Mã nhánh `claude/exciting-archimedes-wu7hz6`, chưa merge, chưa build/phát hành. V518 (hàm trạng thái + dòng cài
 đặt) đã apply akachat 13/11 19:45:37 VN (`20261113124537`, không apply lại; md5 sổ = file); cột ưu đãi gia hạn sớm của CRM đã
-apply 19:46:22 VN. V519 (vé gia hạn dùng một lần) và V520 (chuông "Gói sắp hết hạn") chưa apply (hộp xác nhận của V519 hết
+apply 19:46:22 VN. V521 (vé gia hạn dùng một lần) và V520 (chuông "Gói sắp hết hạn") chưa apply (hộp xác nhận của V521 hết
 hạn lúc 19:51). Dòng `renewal.reminder` đang là `{"audience":"admin_akabiz"}`: chỉ admin akaBiz thấy, và chỉ trên bản app có
 tính năng này (chưa phát hành). [Biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json).** Phương án và quy tắc:
 [RENEWAL_REMINDER_PLAN.md](RENEWAL_REMINDER_PLAN.md) (mục 3, 4, 5, 7.5). Màn Gia hạn sau khi hết hạn (không đổi):
@@ -37,7 +37,7 @@ Tiến trình chính tính thông báo, renderer chỉ hiển thị.
 | `auto_system_settings` `renewal.reminder` | Một lần mỗi phiên, **chung câu** `getDesktopPollingSettings` (renderer gọi khi vào phiên) | Thiếu/sai = tắt. Handler `desktop-ui:polling-settings` chuyển giá trị đã parse cho service |
 | `aka_agent_renewal_reminder_state()` | Sau khi biết tính năng bật cho người dùng; khi đổi ngày (so ngày ở mỗi lượt kiểm gói, tối đa 1 lượt/ngày); sau khi trang CRM báo đã kích hoạt; khi đóng cửa sổ gia hạn; khi quay lại cửa sổ sau "Mở bằng trình duyệt" (hai mục sau tối đa 1 lượt/20 giây) | Không có đồng hồ riêng. Tắt/ngoài nhóm thấy = không gọi |
 | Gói (`org_organization_product`) | Như cũ (30 giây); thêm một lượt ngay khi trang CRM báo đã kích hoạt / khi đóng cửa sổ / quay lại cửa sổ | Dùng đúng `runSessionExpiryCheck('renewal')` |
-| `aka_agent_renewal_link_ticket(opid)` (V519) | Chỉ khi mở cửa sổ/tải lại/mở bằng trình duyệt | Một vé mỗi lần mở; DB chưa có hàm hoặc từ chối → link thường |
+| `aka_agent_renewal_link_ticket(opid)` (V521) | Chỉ khi mở cửa sổ/tải lại/mở bằng trình duyệt | Một vé mỗi lần mở; DB chưa có hàm hoặc từ chối → link thường |
 
 Nhóm thấy: `renewalReminderEnabledFor(settings, { isAdminAkabiz, isAdmin })`, tính lại mỗi lần (quyền admin đổi được giữa phiên).
 
@@ -77,7 +77,7 @@ tới lần kích hoạt sau. Lần đọc đầu chưa xong thì chưa hiện g
 - `RenewalWebService` chỉ thêm hai tuỳ chọn: `stateChannel` (mặc định kênh cũ `AUTH_RENEWAL_WEB_STATE`) và
   `onOrderCompleted`. Chặn điều hướng ngoài `https://crm.akabiz.net/gia-han*`, link ngoài/popup → trình duyệt, chặn tải
   file, chỉ cấp quyền ghi clipboard, xoá storage/cache/kết nối khi đóng: như cũ.
-- Link dùng **vé gia hạn một lần do DB cấp** ([V519](../migrations/migration_v519_renewal_link_tickets.sql), chưa apply):
+- Link dùng **vé gia hạn một lần do DB cấp** ([V521](../migrations/migration_v521_renewal_link_tickets.sql), chưa apply):
   `issueRenewalLinkTicket(opid = reminder.product.organizationProductId)` gọi RPC `aka_agent_renewal_link_ticket` (chỉ
   `aka_agent_desktop`; nhân viên và tổ chức lấy từ phiên Desktop, không nhận từ tham số) → `{ ok, token }` →
   `renewalReminderTicketUrl(token, kind, src)` = `https://crm.akabiz.net/gia-han?t=<vé 64 hex>&next=…&src=…`. Cổng CRM đổi
@@ -131,7 +131,7 @@ thêm lượt đọc nào: thông báo đi qua danh sách/chi tiết/số chưa 
 `node scripts/renewal-reminder-desktop-smoke.cjs` (14 nhóm: chuyển gói, kiểm RPC + dự phòng, trạng thái không có ngày đăng
 nhập/dấu nhắc sớm, bỏ thông báo kiểu cũ, link có vé/link thường với bộ cấp vé giả — vé hợp lệ, `rate_limited`, null, mã sai
 dạng, bộ cấp vé ném lỗi —, mã vé không tới renderer, đổi phiên trong lúc xin vé, giới hạn refresh, đổi mật khẩu),
-`bash scripts/test-v518-renewal-reminder-state.sh` (22 khẳng định), `bash scripts/test-v519-renewal-link-tickets.sh` (40
+`bash scripts/test-v518-renewal-reminder-state.sh` (22 khẳng định), `bash scripts/test-v521-renewal-link-tickets.sh` (40
 khẳng định: quyền gọi, phiên, chỉ lưu mã băm, hạn 10 phút, dùng một lần kể cả 6 lượt đổi đồng thời, hạn mức, dọn vé cũ, apply
 lại bị từ chối, rollback), `bash scripts/test-v520-notification-package-expiring.sh` (38 khẳng định: loại mới, quyền gọi,
 công tắc trung tâm thông báo, không sinh trùng, mốc mới đánh dấu mốc cũ đã đọc, một lượt một thông báo mỗi gói, gói đã gia

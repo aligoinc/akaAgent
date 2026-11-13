@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Thử V519 (vé gia hạn dùng một lần) trên PostgreSQL 16 cục bộ, không chạm production. Fixture chỉ dựng các cột mà các hàm
+# Thử V521 (vé gia hạn dùng một lần) trên PostgreSQL 16 cục bộ, không chạm production. Fixture chỉ dựng các cột mà các hàm
 # đọc và một bản thay của private.aka_agent_desktop_data_context() (lấy nhân viên từ biến phiên test.staff_id khi role là
 # aka_agent_desktop).
 # Kiểm: apply, quyền gọi từng hàm, Desktop xin vé theo phiên, API Web xin vé, cổng đổi vé đúng một lần, vé hết hạn/đã dùng/
 # sai mã, không lưu mã vé dạng đọc được, giới hạn tần suất, tự dọn vé cũ, apply lại bị từ chối, rollback.
-# Dùng: bash scripts/test-v519-renewal-link-tickets.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
+# Dùng: bash scripts/test-v521-renewal-link-tickets.sh   (PGBIN mặc định /usr/lib/postgresql/16/bin)
 set -euo pipefail
 PGBIN=${PGBIN:-/usr/lib/postgresql/16/bin}
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
-MIGRATION="$ROOT/migrations/migration_v519_renewal_link_tickets.sql"
-ROLLBACK="$ROOT/migrations/rollback_v519_renewal_link_tickets.sql"
-WORK=$(mktemp -d "${TMPDIR:-/tmp}/v519.XXXXXX")
+MIGRATION="$ROOT/migrations/migration_v521_renewal_link_tickets.sql"
+ROLLBACK="$ROOT/migrations/rollback_v521_renewal_link_tickets.sql"
+WORK=$(mktemp -d "${TMPDIR:-/tmp}/v521.XXXXXX")
 as_pg() { if [ "$(id -u)" = 0 ]; then runuser -u postgres -- "$@"; else "$@"; fi; }
 [ "$(id -u)" = 0 ] && chown postgres "$WORK"
 chmod 755 "$WORK"
@@ -58,9 +58,9 @@ INSERT INTO public.org_organization_product VALUES (501, 9, false), (504, 9, tru
 SQL
 
 # --- apply ---
-run_file "$MIGRATION" >/dev/null || fail "apply V519"
-ok "apply V519"
-q "INSERT INTO supabase_migrations.schema_migrations VALUES ('20261113000001', 'migration_v519_renewal_link_tickets', ARRAY['x'])"
+run_file "$MIGRATION" >/dev/null || fail "apply V521"
+ok "apply V521"
+q "INSERT INTO supabase_migrations.schema_migrations VALUES ('20261113000001', 'migration_v521_renewal_link_tickets', ARRAY['x'])"
 
 # --- quyền ---
 priv() { q "SELECT has_function_privilege('$1', '$2', 'EXECUTE')"; }
@@ -131,11 +131,11 @@ expect "vé quá 7 ngày của người khác được dọn, vé 3 ngày thì c
 refuse "nơi xin vé lạ bị từ chối" "renewal_link_invalid_client" q "SELECT private.aka_renewal_link_ticket_issue(7, 9, NULL, 'ios')"
 
 # --- apply lại / rollback ---
-refuse "apply lại V519 bị từ chối" "đã có trong sổ migration" run_file "$MIGRATION"
-run_file "$ROLLBACK" >/dev/null || fail "rollback V519"
-ok "rollback V519"
+refuse "apply lại V521 bị từ chối" "đã có trong sổ migration" run_file "$MIGRATION"
+run_file "$ROLLBACK" >/dev/null || fail "rollback V521"
+ok "rollback V521"
 expect "sau rollback: bảng và hàm không còn" "$(q "SELECT (to_regclass('private.aka_renewal_link_tickets') IS NULL)::text || ',' || (SELECT count(*) FROM pg_proc WHERE proname LIKE '%renewal_link_ticket%')")" "true,0"
-q "DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v519_%'"
+q "DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v521_%'"
 run_file "$MIGRATION" >/dev/null || fail "apply lại sau rollback"
 ok "apply lại sau rollback"
-echo "V519: $pass khẳng định đạt"
+echo "V521: $pass khẳng định đạt"

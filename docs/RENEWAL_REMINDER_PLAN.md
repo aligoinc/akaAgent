@@ -3,10 +3,10 @@
 Ngày 13/11/2026. Người dùng đã duyệt hướng làm và các quyết định ở mục 3 cùng ngày, rồi yêu cầu làm toàn bộ.
 
 **Trạng thái 13/11 (tối): mã Đợt 0–2, phần iOS và chuông của Đợt 3 đã viết trên nhánh `claude/exciting-archimedes-wu7hz6` ở ba
-repo, chưa merge, chưa deploy/phát hành.** DB (cập nhật 19:52 VN 13/11): V518 và cột CRM đã apply lúc 19:45–19:46 VN theo yêu cầu "run sql luôn"; V519, V520 chưa apply vì hộp xác nhận của V519 hết hạn ([biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json)). Các file SQL: akaAgent
+repo, chưa merge, chưa deploy/phát hành.** DB (cập nhật 19:52 VN 13/11): V518 và cột CRM đã apply lúc 19:45–19:46 VN theo yêu cầu "run sql luôn"; V521, V520 chưa apply vì hộp xác nhận của V521 hết hạn ([biên nhận](../migrations/snapshots/renewal-reminder-v518-v520/apply-receipt.json)). Các file SQL: akaAgent
 [V518](../migrations/migration_v518_renewal_reminder_state.sql) (hàm cho Desktop + dòng cài đặt `renewal.reminder`) và
 SqlServerDashboard `supabase/migrations/20261113120000_aka_promotion_min_days_before_expiry.sql` (cột cho ưu đãi gia hạn
-sớm) — người dùng đã duyệt tối 13/11, chạy ngoài giờ cao điểm; [V519](../migrations/migration_v519_renewal_link_tickets.sql)
+sớm) — người dùng đã duyệt tối 13/11, chạy ngoài giờ cao điểm; [V521](../migrations/migration_v521_renewal_link_tickets.sql)
 (vé gia hạn dùng một lần) và [V520](../migrations/migration_v520_notification_package_expiring.sql) (chuông) — viết sau lần
 duyệt đó, cần duyệt riêng. **Đổi so với quyết định 1 (người dùng yêu cầu tối 13/11: không xử lý qua biến giá trị ở Fly, chỉ
 qua DB):** link vào thẳng trang thanh toán không còn là JWT ký bằng khoá dùng chung ở Fly/Edge mà là vé dùng một lần do DB
@@ -177,7 +177,7 @@ Luồng đích: bấm **Gia hạn** → trang thanh toán nhanh đã chọn sẵ
 **Link:** `https://crm.akabiz.net/gia-han?t=<vé>&next=<trang>&src=<nguồn>`
 
 - `t`: vé dùng một lần, 64 ký tự hex, do DB cấp cho nhân viên đang đăng nhập (akaAgent
-  [V519](../migrations/migration_v519_renewal_link_tickets.sql)). Vé sống 10 phút, đổi được đúng một lần, DB chỉ lưu mã băm
+  [V521](../migrations/migration_v521_renewal_link_tickets.sql)). Vé sống 10 phút, đổi được đúng một lần, DB chỉ lưu mã băm
   SHA-256 kèm nhân viên, tổ chức và dòng sản phẩm cần gia hạn (để cổng chọn sẵn đúng gói; tổ chức nhiều sản phẩm mà thiếu
   dòng sản phẩm thì cổng chọn sẵn mọi sản phẩm).
 - `next`: gói trả phí còn hạn → `/gia-han/het-han-goi`; dùng thử còn hạn → `/gia-han/het-han-dung-thu`. Hai trang này có
@@ -279,7 +279,7 @@ Chỉ hiện "Gói … còn N ngày" ở Cài đặt và Tổng quan, không nú
 | 2 | Cột `aka_promotion.min_days_before_expiry` (số nguyên, cho phép NULL) | thêm cột | CRM | 0 |
 | 3 | Hàm `aka_agent_renewal_reminder_state()` — chỉ đọc, STABLE, EXECUTE chỉ `aka_agent_desktop`, lấy nhân viên từ phiên; trả ngày máy chủ, các ngày có đăng nhập 60 ngày, ưu đãi gia hạn sớm | hàm mới | akaAgent | 2 |
 | 4 | V520: loại thông báo `package.expiring` (nới ràng buộc CHECK của `auto_notifications.event_type`) + hai hàm chỉ `service_role`: ghi thông báo "Gói sắp hết hạn", và đánh dấu đã đọc khi gói đã gia hạn. Không sửa hàm nào của V457 | nới ràng buộc + hàm mới | akaAgent | 3 |
-| 5 | V519: bảng `private.aka_renewal_link_tickets` (chỉ truy cập qua hàm) + bốn hàm cấp/đổi vé gia hạn dùng một lần | bảng mới + hàm mới | akaAgent | 1–2 |
+| 5 | V521: bảng `private.aka_renewal_link_tickets` (chỉ truy cập qua hàm) + bốn hàm cấp/đổi vé gia hạn dùng một lần | bảng mới + hàm mới | akaAgent | 1–2 |
 
 - Mục 3 cần vì `auto_staff_device_presence` chỉ `service_role` đọc được; Web không cần hàm này (API đọc thẳng).
 - Số migration lấy theo sổ chung lúc làm (kiểm `supabase_migrations.schema_migrations` và `git log --all`).
@@ -308,7 +308,7 @@ nhập). **Thiếu dòng hoặc sai định dạng = tắt.**
 
 **Đợt 0 — không cần phát hành app.**
 
-1. Vé gia hạn dùng một lần: apply V519, deploy CRM (mục 5). Không đặt khoá nào ở Fly hay Edge.
+1. Vé gia hạn dùng một lần: apply V521, deploy CRM (mục 5). Không đặt khoá nào ở Fly hay Edge.
 2. CRM: sửa trang hết hạn gói cho gói còn hạn, ghi nguồn đơn, ưu đãi gia hạn sớm.
 3. Kênh có sẵn `org_staff.app_notification`: Desktop 9.x, Web và iOS đều đã đọc cột này trước thông báo chung và đã hiện
    dải có nút link. Một job trong API Web ghi thông báo theo mốc cho nhân viên của tổ chức sắp hết hạn:

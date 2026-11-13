@@ -29,7 +29,7 @@ export async function loadRenewalReminderServerState(): Promise<unknown | null> 
 const RENEWAL_LINK_TICKET_TIMEOUT_MS = 10_000
 
 /**
- * `aka_agent_renewal_link_ticket(p_organization_product_id)` (akaAgent V519): vé gia hạn dùng một lần (10 phút) để khách vào
+ * `aka_agent_renewal_link_ticket(p_organization_product_id)` (akaAgent V521): vé gia hạn dùng một lần (10 phút) để khách vào
  * thẳng trang thanh toán của cổng CRM mà không gõ mật khẩu. Nhân viên/tổ chức lấy từ phiên Desktop. Trả dữ liệu thô để
  * `parseRenewalLinkTicket` kiểm; lỗi mạng, hết giờ hoặc DB chưa có hàm (PGRST202) → null, bên gọi dùng link thường.
  *
