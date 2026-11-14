@@ -53,6 +53,7 @@ import {
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
+import { insertWithContentRotationFallback, normalizeContentRotationIndexes } from '../campaignInputContentRotation'
 import { CampaignProgressReuse, type CampaignProgressRow } from '../campaignProgressReuse'
 import { mapCampaignConfigFromDB, mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB, mapCampaignListItemFromDB } from '../mappers'
 import {
@@ -5224,6 +5225,8 @@ type CampaignInputDataInsertPayload = {
   status: CampaignInputStatus
   note: string | null
   schedule: string | null
+  /** Chỉ gửi khi có dòng chọn trước chỉ số nội dung (V531 cấp quyền INSERT cột này cho Desktop). */
+  content_rotation_indexes?: Record<string, number>
 }
 
 type CampaignInputDataBatchInsertResult = {
@@ -5273,10 +5276,10 @@ async function insertCampaignInputDataPayload(
     for (const payloadChunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
       beforeChunk?.()
       if (returnRows) {
-        const { data, error } = await client()
+        const { data, error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
           .from('auto_campaign_input_data')
-          .insert(payloadChunk)
-          .select()
+          .insert(chunk)
+          .select())
         if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
         insertedCount += data?.length ?? payloadChunk.length
         rows.push(...(data || []).map(row => mapCampaignInputDataFromDB(row)))
@@ -5285,10 +5288,10 @@ async function insertCampaignInputDataPayload(
       }
 
       if (rollbackOnFailure) {
-        const { data, error } = await client()
+        const { data, error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
           .from('auto_campaign_input_data')
-          .insert(payloadChunk)
-          .select('id')
+          .insert(chunk)
+          .select('id'))
         if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
         insertedCount += data?.length ?? payloadChunk.length
         insertedIds.push(...(data || []).map(row => Number(row.id)).filter(id => Number.isSafeInteger(id) && id > 0))
@@ -5296,9 +5299,9 @@ async function insertCampaignInputDataPayload(
         continue
       }
 
-      const { error } = await client()
+      const { error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
         .from('auto_campaign_input_data')
-        .insert(payloadChunk)
+        .insert(chunk))
       if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
       insertedCount += payloadChunk.length
       notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
@@ -5379,6 +5382,7 @@ async function createCampaignInputDataBatchInternal(
         phone,
         schedule: schedule || undefined
       }
+      const contentRotationIndexes = normalizeContentRotationIndexes(action.contentRotationIndexes)
       return {
         campaign_id: campaignId,
         input_id: action.inputId ?? null,
@@ -5399,7 +5403,8 @@ async function createCampaignInputDataBatchInternal(
           : action.content || null,
         status: action.status || 'chờ xử lý',
         note: action.note || null,
-        schedule: schedule || null
+        schedule: schedule || null,
+        ...(contentRotationIndexes ? { content_rotation_indexes: contentRotationIndexes } : {})
       }
     })
 

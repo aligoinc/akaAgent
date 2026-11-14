@@ -2031,6 +2031,7 @@ export default function CampaignFormModal({
       ? {} as Record<string, number>
       : { ...(campaign?.extraSettings?.postBumpCreatedCampaignIdsByAccount || {}) } as Record<string, number>,
     postBumpRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.postBumpRotationIndex ?? 0),
+    postBumpContentRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.postBumpContentRotationIndex ?? 0),
     // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? initialIsZaloFriendRecommendationCampaign,
@@ -6547,6 +6548,7 @@ export default function CampaignFormModal({
             postBumpContent: formData.postBumpContent,
             postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
             postBumpRotationIndex: formData.postBumpRotationIndex,
+            postBumpContentRotationIndex: formData.postBumpContentRotationIndex,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: isDataGroupSource ? false : effectiveUseSuggestedFriends,

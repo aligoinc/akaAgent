@@ -57,6 +57,7 @@ import {
   isVideoMediaSource
 } from '../../shared/mediaTypes'
 import { renderContentSpin, renderContentSpinNonEmpty, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
+import { planPostBumpContentIndexes, POST_BUMP_COMMENT_ACTION_CODE } from '../../shared/postBumpContent'
 import {
   isFormattedContentEmpty,
   sanitizeFormattedContent,
@@ -14250,6 +14251,8 @@ export class CampaignScheduler {
     const initialDelay = this.normalizePostBumpMinutes(extra.postBumpInitialDelayMinutes, 30, 0)
     const interval = this.normalizePostBumpMinutes(extra.postBumpIntervalMinutes, 10, 1)
     const startIndex = this.normalizePostBumpRotationIndex(extra.postBumpRotationIndex, targets.length)
+    // Mỗi lượt up của bài giữ trước một câu riêng, không phụ thuộc lượt rơi vào tài khoản nào (xem postBumpContent.ts).
+    const contentPlan = planPostBumpContentIndexes(extra.postBumpContentRotationIndex, count)
     const now = await this.getDatabaseBusinessNow()
     const earliestByCampaign = new Map<number, Date>()
 
@@ -14261,7 +14264,8 @@ export class CampaignScheduler {
         uid: postUrl,
         status: 'chờ xử lý',
         schedule: schedule.toISOString(),
-        note: `Đã thêm từ chiến dịch "${campaign.name}"`
+        note: `Đã thêm từ chiến dịch "${campaign.name}"`,
+        contentRotationIndexes: { [POST_BUMP_COMMENT_ACTION_CODE]: contentPlan.indexes[i] }
       })
       const currentEarliest = earliestByCampaign.get(target.campaignId)
       if (!currentEarliest || schedule.getTime() < currentEarliest.getTime()) {
@@ -14272,7 +14276,8 @@ export class CampaignScheduler {
     const nextRotationIndex = (startIndex + count) % targets.length
     const nextExtraSettings = {
       ...campaign.extraSettings,
-      postBumpRotationIndex: nextRotationIndex
+      postBumpRotationIndex: nextRotationIndex,
+      postBumpContentRotationIndex: contentPlan.nextCursor
     }
     campaign.extraSettings = nextExtraSettings
     await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
