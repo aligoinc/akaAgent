@@ -2,7 +2,13 @@
 
 Hai lỗi của engine v2, tìm ra khi kiểm sức khoẻ lúc 13:35 VN ngày 14/11/2026. Anh chốt "Sửa cả hai".
 Migration [V532](../migrations/migration_v532_engine_aux_step_pause_claim_order.sql) được sinh bằng `node scripts/build-v532-sql.cjs`, không sửa tay. Bản gỡ là [rollback](../migrations/rollback_v532_engine_aux_step_pause_claim_order.sql).
-Trạng thái: **chưa apply production**.
+Trạng thái: **đã apply akachat 14/11/2026 20:01:44–47 VN** (`20261114130144 / migration_v532_engine_aux_step_pause_claim_order`; không apply lại; md5 sổ = file `e89902cd…`; [biên nhận](../migrations/snapshots/engine-aux-step-pause-claim-order-v532/apply-receipt.json)).
+
+Kết quả sau apply:
+- PostgREST nạp lại schema mất 5,1 giây. Trong phút apply, p99 lên 295 ms và có 63 request quá 1 giây; không phát sinh lỗi 5xx mới.
+- Từ 20:02 không còn lượt claim nào của Desktop lỗi 500 (trước đó 2 lượt / phút); p99 của claim còn 105–174 ms.
+- Chiến dịch 34061 chạy lại được ngay.
+- Lúc 20:02:05 đã cho 49746 và 50194 chạy lại.
 
 ## 1. Lỗi ở bước phụ tạm dừng chiến dịch ngay
 
