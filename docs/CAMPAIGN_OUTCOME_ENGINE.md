@@ -508,7 +508,7 @@ Thay đổi:
   - Kiểm lại quyền của kênh realtime vốn đã nhận tổ chức theo cờ từ V497.
   - Đã áp sang bản dựng deploy `akaAgentChatApi-deploy-v2`; chỉ cần deploy nhóm `api`.
 - **Desktop:**
-  - Lúc đăng nhập, tổ chức không Chat có quyền Server thì gọi thêm hàm V498 (`zaloServerOnFlyRepository.ts`, lưu vào `AuthUser.zaloServerOnFly`).
+  - Lúc đăng nhập, tổ chức không Chat có quyền Server thì gọi thêm hàm V498 (`zaloServerOnFlyRepository.ts`, lưu vào `AuthUser.zaloServerOnFly`). **Đổi 14/11/2026 (sau 9.7.0):** Desktop không gọi V498 nữa. `AuthUser.zaloServerOnFly` lấy theo cờ engine v2 đọc lúc đăng nhập (V513): bật là Fly, tắt là App Server. Lý do và chi tiết: [ZALO_SERVER_FLY_ACCOUNT_OPERATIONS.md](ZALO_SERVER_FLY_ACCOUNT_OPERATIONS.md) mục V529.
   - Nếu tổ chức đang chạy trên Fly, `startZaloRemoteClients` mở thêm `ZaloChatApiClient` ở chế độ chỉ realtime (`isRealtimeOnly()`, `ensureRealtimeToken()`), song song với App Server.
   - Thao tác tài khoản vẫn đi App Server; `requireEnabled` vẫn từ chối.
   - DB chưa có V498 (`PGRST202`) hoặc lỗi mạng thì coi như không chạy trên Fly, giữ đúng hành vi cũ.

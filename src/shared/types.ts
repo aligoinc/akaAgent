@@ -3098,9 +3098,9 @@ export interface AuthUser {
   /** Quyền đồng bộ Chat hiệu lực, gộp từ Product Zalo 16/18 còn hạn của tổ chức. */
   isChatSync?: boolean
   /**
-   * V498: tài khoản Zalo Server của tổ chức đang chạy trên Fly (có Chat, hoặc ChatApi đã nhận theo cờ engine v2).
-   * Chỉ hỏi khi tổ chức không Chat có quyền Server; chốt lúc đăng nhập. Tổ chức không Chat chỉ dùng để nghe tiến trình
-   * chiến dịch từ ChatApi, thao tác tài khoản vẫn đi App Server.
+   * Tài khoản Zalo Server của tổ chức không Chat chạy trên Fly; chốt lúc đăng nhập theo cờ engine v2 của tổ chức (V513,
+   * `resolveZaloServerOnFlyAtLogin`): bật = Fly, tắt = App Server. Đúng (và có quyền Server) thì mọi việc của tài khoản Server
+   * đi ChatApi (`serverAccountsUseChatApi`): tiến trình, QR, kiểm phiên, đăng xuất, quét data, kiểm SĐT.
    */
   zaloServerOnFly?: boolean
   /**
