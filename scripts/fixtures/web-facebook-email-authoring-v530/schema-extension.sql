@@ -1,0 +1,128 @@
+-- Nền test v530 = fixtures V461 + migration V461 + V464 + V476 + V490 (đúng md5 production 14/11/2026 của 11 hàm
+-- v530 vá) cộng phần production có mà chuỗi repo chưa dựng lại: cột, hai thân hàm phụ thuộc đọc nguyên văn từ
+-- production (create_control_campaign_v2 bản V482, aka_agent_campaign_config_version), stub tách quyền, quyền cột
+-- và RLS của phiên Desktop, default ACL hàm public như production.
+SET client_min_messages = warning;
+
+ALTER TABLE public.auto_campaigns ADD COLUMN IF NOT EXISTS web_campaign_form text;
+ALTER TABLE public.auto_account_groups
+  ADD COLUMN IF NOT EXISTS flatform_type text NOT NULL DEFAULT 'facebook',
+  ADD COLUMN IF NOT EXISTS staff_id bigint,
+  ADD COLUMN IF NOT EXISTS organization_id bigint,
+  ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
+  ADD COLUMN IF NOT EXISTS is_delete boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
+
+-- Production: tổ chức có sản phẩm 5 khi bật chính sách tách quyền. Test bật bằng GUC v530_test.separate_org.
+CREATE OR REPLACE FUNCTION public.aka_agent_app_access_separate(p_org bigint) RETURNS boolean
+LANGUAGE sql STABLE AS $$ SELECT COALESCE(current_setting('v530_test.separate_org', true), '') = p_org::text $$;
+
+-- Nguyên văn production (md5 661579fa2e8b6571f429079dd0b89c0a, ledger 20261109101616 migration_v482_campaign_web_form).
+CREATE OR REPLACE FUNCTION public.create_control_campaign_v2(p_staff_id bigint, p_organization_id bigint, p_idempotency_key text, p_campaign jsonb, p_inputs jsonb DEFAULT '[]'::jsonb, p_initial_status text DEFAULT 'chờ xử lý'::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+ SET statement_timeout TO '60s'
+AS $function$
+DECLARE
+  v_result jsonb;
+  v_campaign_id bigint;
+  v_web_form text;
+BEGIN
+  IF p_initial_status NOT IN ('chờ xử lý', 'tạm dừng') THEN
+    RAISE EXCEPTION 'invalid_control_campaign_initial_status';
+  END IF;
+
+  v_result := public.create_control_campaign(
+    p_staff_id,
+    p_organization_id,
+    p_idempotency_key,
+    p_campaign,
+    p_inputs
+  );
+
+  -- V482: form Web đã tạo chiến dịch (form thủ công/Agent, phiên bản 1/2). Không gửi hoặc giá trị lạ = NULL
+  -- (Desktop, iOS, Quy trình, nhập SQL...). Chỉ ghi lúc tạo; lần gọi lặp cùng Idempotency-Key không ghi lại.
+  v_web_form := CASE WHEN p_campaign->>'webCampaignForm' IN ('form_1', 'form_2', 'agent_1', 'agent_2')
+    THEN p_campaign->>'webCampaignForm' END;
+
+  -- The inner insert and this update share a transaction, so a cloned campaign is
+  -- never externally visible in the runnable state.
+  IF COALESCE((v_result->>'created')::boolean, false) THEN
+    v_campaign_id := NULLIF(v_result->>'campaign_id', '')::bigint;
+    IF p_initial_status = 'tạm dừng' THEN
+      UPDATE public.auto_campaigns
+      SET status = 'tạm dừng', web_campaign_form = v_web_form, updated_at = now()
+      WHERE id = v_campaign_id
+        AND staff_id = p_staff_id
+        AND organization_id = p_organization_id
+        AND COALESCE(is_delete, false) = false;
+    ELSIF v_web_form IS NOT NULL THEN
+      -- Chỉ ghi cột form, không nêu status: không chạy trigger UPDATE OF status, không đổi config version.
+      UPDATE public.auto_campaigns
+      SET web_campaign_form = v_web_form
+      WHERE id = v_campaign_id
+        AND staff_id = p_staff_id
+        AND organization_id = p_organization_id
+        AND COALESCE(is_delete, false) = false;
+    END IF;
+  END IF;
+
+  RETURN v_result;
+END;
+$function$;
+
+-- Nguyên văn production (md5 5992a9958a3df3ccba087f9c9388ebb4): phiên bản cấu hình mà
+-- update_control_campaign_by_config_version_atomic so khớp; gồm cả extra_settings.
+CREATE OR REPLACE FUNCTION public.aka_agent_campaign_config_version(p_campaign auto_campaigns)
+ RETURNS text
+ LANGUAGE sql
+ IMMUTABLE PARALLEL SAFE
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+  SELECT pg_catalog.md5(
+    pg_catalog.jsonb_build_array(
+      p_campaign.name,
+      p_campaign.action_id,
+      p_campaign.account_id,
+      p_campaign.secondary_account_id,
+      p_campaign.schedule,
+      p_campaign.original_schedule,
+      p_campaign.content,
+      p_campaign.schedule_type,
+      p_campaign.schedule_end_date,
+      p_campaign.daily_stop_time,
+      p_campaign.schedule_days,
+      p_campaign.schedule_week_days,
+      p_campaign.continue_next_day,
+      p_campaign.refresh_data,
+      p_campaign.extra_settings,
+      p_campaign.images,
+      p_campaign.data_target_source_mode,
+      p_campaign.data_group_id
+    )::text
+  )
+$function$;
+REVOKE ALL ON FUNCTION public.aka_agent_campaign_config_version(public.auto_campaigns) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.aka_agent_campaign_config_version(public.auto_campaigns) TO service_role;
+
+-- Phiên Desktop (production): SELECT bảng, UPDATE theo cột payload, RLS desktop_owned_resource theo nhân viên
+-- của phiên. Test thay private.aka_agent_staff_scope_for_request() bằng GUC v530_test.desktop_staff.
+-- service_role của Supabase có BYPASSRLS (hàm Control SECURITY INVOKER đọc mọi dòng như production).
+ALTER ROLE service_role BYPASSRLS;
+GRANT SELECT ON public.auto_campaigns TO aka_agent_desktop;
+GRANT UPDATE (extra_settings, updated_at) ON public.auto_campaigns TO aka_agent_desktop;
+ALTER TABLE public.auto_campaigns ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS v530_test_existing_role_access ON public.auto_campaigns;
+CREATE POLICY v530_test_existing_role_access ON public.auto_campaigns AS PERMISSIVE FOR ALL
+  TO aka_agent_desktop USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS v530_test_desktop_owned_resource ON public.auto_campaigns;
+CREATE POLICY v530_test_desktop_owned_resource ON public.auto_campaigns AS RESTRICTIVE FOR ALL
+  TO aka_agent_desktop
+  USING (staff_id = NULLIF(current_setting('v530_test.desktop_staff', true), '')::bigint)
+  WITH CHECK (staff_id = NULLIF(current_setting('v530_test.desktop_staff', true), '')::bigint);
+
+-- Default ACL production cho hàm public do postgres tạo: anon, authenticated, service_role (PUBLIC vẫn có EXECUTE).
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;
