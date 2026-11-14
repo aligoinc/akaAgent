@@ -137,7 +137,7 @@ new_objects() {
   run -d "$1" -At -c "select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace
       where n.nspname in ('public', 'private') and p.proname in ('aka_agent_web_email_campaigns_policy',
         'aka_agent_control_web_email_campaigns_policy', 'aka_agent_control_assert_campaign_inputs',
-        'aka_agent_control_assert_secondary_account', 'aka_agent_control_normalize_email_session',
+        'aka_agent_control_resolve_secondary_account', 'aka_agent_control_normalize_email_session',
         'aka_agent_control_email_account_view', 'create_control_email_account_atomic', 'update_control_email_account_atomic',
         'delete_control_email_account_atomic', 'aka_agent_control_email_account_session', 'aka_agent_control_link_find_data_target',
         'aka_agent_desktop_merge_campaign_runtime_settings')

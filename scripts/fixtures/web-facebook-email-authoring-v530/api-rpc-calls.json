@@ -1,0 +1,623 @@
+{
+  "description": "Lời gọi RPC ghi của V530 do API tạo ra (apps/api v530RpcContract.test.ts). Không sửa tay; ghi lại bằng V530_RPC_CAPTURE=1.",
+  "placeholders": {
+    "campaignIds": {
+      "900001": "facebook_create",
+      "900002": "email_create"
+    },
+    "accountIds": {
+      "900003": "email_account_create"
+    },
+    "campaignUpdatedAt": "2001-01-01T00:00:00.000Z",
+    "emailAccountUpdatedAt": "2001-02-02T00:00:00.000Z"
+  },
+  "calls": [
+    {
+      "step": "facebook_create",
+      "name": "create_control_campaign_v2",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_idempotency_key": "v530-contract:fb:create",
+        "p_campaign": {
+          "name": "Đăng bài căn hộ",
+          "actionId": "facebook_group_post",
+          "accountId": 3005,
+          "schedule": "2026-11-14T03:00:00.000Z",
+          "scheduleType": "daily",
+          "scheduleEndDate": null,
+          "dailyStopTime": null,
+          "scheduleDays": null,
+          "scheduleWeekDays": null,
+          "continueNextDay": true,
+          "refreshData": true,
+          "timeSleepBetween2": 30,
+          "content": "Căn hộ mới mở bán|Mở bán căn hộ tháng 11",
+          "extraSettings": {
+            "facebookRestBrowse": {
+              "enabled": false,
+              "browseSeconds": 180,
+              "restSeconds": 60,
+              "browseTarget": true,
+              "browseHome": true
+            },
+            "runAsPage": false,
+            "runAsPageUid": "",
+            "runAsPageName": "",
+            "sharePost": false,
+            "postWithBackground": false,
+            "rewriteContentEachRun": false,
+            "formattedContentEnabled": false,
+            "advancedContentEnabled": false,
+            "advancedContentItems": [],
+            "enableComment": true,
+            "commentGroupMode": "all",
+            "commentType": "own",
+            "commentCount": 3,
+            "commentContent": "Inbox mình nhé",
+            "rewriteCommentContentEachRun": false,
+            "enablePostLike": false,
+            "postsPerTarget": 3,
+            "newsfeedLikeKind": "",
+            "newsfeedLikeLimit": 0,
+            "newsfeedCommentKind": "",
+            "newsfeedCommentLimit": 0,
+            "newsfeedCommentContent": "",
+            "newsfeedCommentUseAI": false,
+            "actionLimits": {
+              "sleepBetweenActions": 30,
+              "enabledActionCodes": [
+                "fb_post_group",
+                "fb_comment"
+              ],
+              "dailyLimit": 30,
+              "rateLimitCount": 9,
+              "rateLimitMinutes": 65,
+              "continueWhenActionLimitReached": true,
+              "byActionCode": {
+                "fb_post_group": {
+                  "dailyLimit": 30,
+                  "rateLimitCount": 9,
+                  "rateLimitMinutes": 65
+                },
+                "fb_comment": {
+                  "dailyLimit": 30,
+                  "rateLimitCount": 9,
+                  "rateLimitMinutes": 65
+                }
+              }
+            },
+            "recentDeliveryCooldownEnabled": false,
+            "recentDeliveryCooldownAllAccounts": false,
+            "recentDeliveryCooldownDays": 3,
+            "imageOption": "none",
+            "randomImageCount": 3,
+            "commentImageOption": "none",
+            "commentImages": [],
+            "leaveGroupOnPendingApproval": false,
+            "autoJoinGroupAfterPost": false,
+            "shuffleGroupList": false,
+            "skipPostIfGroupRequiresApproval": false,
+            "enableGroupPostShareToJoinedGroups": false,
+            "enablePostBump": false,
+            "postBumpCount": 3,
+            "postBumpInitialDelayMinutes": 30,
+            "postBumpIntervalMinutes": 10,
+            "postBumpMode": "create",
+            "postBumpTargetCampaignIds": [],
+            "postBumpAccountIds": [],
+            "postBumpContent": "",
+            "enableMessage": true,
+            "enableAddFriend": false,
+            "useSuggestedFriends": false,
+            "suggestedFriendsCount": 10,
+            "facebookGroupInviteTargetGroupUid": "",
+            "facebookGroupInviteTargetGroupUrl": "",
+            "facebookGroupInviteTargetGroupName": "",
+            "pageInboxPageUid": "",
+            "pageInboxPageName": "",
+            "groupPostShareFromPost": false,
+            "groupPostShareCaption": "",
+            "copyContentFromSource": false,
+            "includeSourceImages": false,
+            "rewriteSourceContentWithAI": false,
+            "sourceContentAiPrompt": "",
+            "postAsReels": false,
+            "sourceLinks": "",
+            "pagePostMode": "api",
+            "isFindPhone": false,
+            "isFindLinkGroupZalo": false,
+            "isFindUid": false,
+            "isFindPostLink": false,
+            "isFindFacebookGroup": false,
+            "isFindInPost": false,
+            "sortTypePost": "most_relevant",
+            "countPostFindData": 10,
+            "isFindInComment": false,
+            "sortTypeComment": "most_relevant",
+            "countCommentFindData": 30,
+            "isFindNewInteractors": false,
+            "isFindInGroupMembers": false,
+            "countGroupMemberFindData": 100,
+            "findDataGoalModeEnabled": false,
+            "findDataGoalDailyLimit": 30,
+            "searchPostRecentOnly": false,
+            "searchPostSeenOnly": false,
+            "searchPostDateFilter": "all",
+            "searchPostAuthorFilter": "all",
+            "searchPostTaggedLocation": "all",
+            "searchGroupCity": "",
+            "searchGroupNearMe": false,
+            "searchGroupPublicOnly": false,
+            "searchGroupMineOnly": false,
+            "minSearchGroupMembers": 0,
+            "minSearchGroupPostsPerDay": 0,
+            "findDataRerunEnabled": false,
+            "findDataRerunAfterHours": 1,
+            "multiDailyTimeSlotsEnabled": false,
+            "multiDailyTimeSlots": "",
+            "isFindPostByKeywords": false,
+            "postKeywords": "",
+            "isFindPostByContentAI": false,
+            "postContentAI": "",
+            "isFindCommentByKeywords": false,
+            "commentKeywords": "",
+            "isFindCommentByContentAI": false,
+            "commentContentAI": "",
+            "findUidTargetCampaignIds": [],
+            "findPostLinkTargetCampaignIds": [],
+            "findPhoneSmsTargetCampaignIds": [],
+            "findPhoneZaloWebTargetCampaignIds": [],
+            "findPhoneZaloMessagePhoneTargetCampaignIds": [],
+            "findZaloGroupLinkWebTargetCampaignIds": [],
+            "findZaloGroupLinkJoinTargetCampaignIds": [],
+            "findPhoneAkaBizDesktopTargetCampaignIds": [],
+            "findZaloGroupLinkAkaBizDesktopTargetCampaignIds": [],
+            "findFacebookGroupPostTargetCampaignIds": [],
+            "findFacebookGroupCommentTargetCampaignIds": [],
+            "findFacebookGroupJoinTargetCampaignIds": []
+          },
+          "images": [],
+          "webCampaignForm": "form_1",
+          "secondaryAccountId": 3006
+        },
+        "p_inputs": [],
+        "p_initial_status": "tạm dừng"
+      },
+      "expect": {
+        "created": true
+      },
+      "bind": {
+        "900001": "campaign_id"
+      }
+    },
+    {
+      "step": "facebook_add_inputs",
+      "name": "add_control_campaign_input_rows",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_campaign_id": 900001,
+        "p_idempotency_key": "v530-contract:fb:inputs:1",
+        "p_expected_input_count": 0,
+        "p_inputs": [
+          {
+            "name": "Nhóm mua bán căn hộ",
+            "uid": "https://www.facebook.com/groups/1234567890"
+          },
+          {
+            "name": "Nhóm cho thuê",
+            "uid": "https://www.facebook.com/groups/9876543210"
+          }
+        ],
+        "p_campaign_schedule": "2026-11-20T02:00:00.000Z",
+        "p_campaign_status": "tạm dừng"
+      },
+      "expect": {
+        "created": true,
+        "inserted": 2
+      }
+    },
+    {
+      "step": "facebook_update",
+      "name": "update_control_campaign_atomic",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_campaign_id": 900001,
+        "p_expected_updated_at": "2001-01-01T00:00:00.000Z",
+        "p_campaign_patch": {
+          "name": "Đăng bài căn hộ (sửa)",
+          "content": "Căn hộ mới mở bán đợt 2",
+          "extra_settings": {
+            "facebookRestBrowse": {
+              "enabled": false,
+              "browseSeconds": 180,
+              "restSeconds": 60,
+              "browseTarget": true,
+              "browseHome": true
+            },
+            "runAsPage": false,
+            "runAsPageUid": "",
+            "runAsPageName": "",
+            "sharePost": false,
+            "postWithBackground": false,
+            "rewriteContentEachRun": false,
+            "formattedContentEnabled": false,
+            "advancedContentEnabled": false,
+            "advancedContentItems": [],
+            "enableComment": true,
+            "commentGroupMode": "all",
+            "commentType": "own",
+            "commentCount": 3,
+            "commentContent": "Inbox mình nhé",
+            "rewriteCommentContentEachRun": false,
+            "enablePostLike": false,
+            "postsPerTarget": 3,
+            "newsfeedLikeKind": "",
+            "newsfeedLikeLimit": 0,
+            "newsfeedCommentKind": "",
+            "newsfeedCommentLimit": 0,
+            "newsfeedCommentContent": "",
+            "newsfeedCommentUseAI": false,
+            "actionLimits": {
+              "sleepBetweenActions": 30,
+              "enabledActionCodes": [
+                "fb_post_group",
+                "fb_comment"
+              ],
+              "dailyLimit": 30,
+              "rateLimitCount": 9,
+              "rateLimitMinutes": 65,
+              "continueWhenActionLimitReached": true,
+              "byActionCode": {
+                "fb_post_group": {
+                  "dailyLimit": 30,
+                  "rateLimitCount": 9,
+                  "rateLimitMinutes": 65
+                },
+                "fb_comment": {
+                  "dailyLimit": 30,
+                  "rateLimitCount": 9,
+                  "rateLimitMinutes": 65
+                }
+              }
+            },
+            "recentDeliveryCooldownEnabled": false,
+            "recentDeliveryCooldownAllAccounts": false,
+            "recentDeliveryCooldownDays": 3,
+            "imageOption": "none",
+            "randomImageCount": 3,
+            "commentImageOption": "none",
+            "commentImages": [],
+            "leaveGroupOnPendingApproval": false,
+            "autoJoinGroupAfterPost": false,
+            "shuffleGroupList": false,
+            "skipPostIfGroupRequiresApproval": false,
+            "enableGroupPostShareToJoinedGroups": false,
+            "enablePostBump": false,
+            "postBumpCount": 3,
+            "postBumpInitialDelayMinutes": 30,
+            "postBumpIntervalMinutes": 10,
+            "postBumpMode": "create",
+            "postBumpTargetCampaignIds": [],
+            "postBumpAccountIds": [],
+            "postBumpContent": "",
+            "enableMessage": true,
+            "enableAddFriend": false,
+            "useSuggestedFriends": false,
+            "suggestedFriendsCount": 10,
+            "facebookGroupInviteTargetGroupUid": "",
+            "facebookGroupInviteTargetGroupUrl": "",
+            "facebookGroupInviteTargetGroupName": "",
+            "pageInboxPageUid": "",
+            "pageInboxPageName": "",
+            "groupPostShareFromPost": false,
+            "groupPostShareCaption": "",
+            "copyContentFromSource": false,
+            "includeSourceImages": false,
+            "rewriteSourceContentWithAI": false,
+            "sourceContentAiPrompt": "",
+            "postAsReels": false,
+            "sourceLinks": "",
+            "pagePostMode": "api",
+            "isFindPhone": false,
+            "isFindLinkGroupZalo": false,
+            "isFindUid": false,
+            "isFindPostLink": false,
+            "isFindFacebookGroup": false,
+            "isFindInPost": false,
+            "sortTypePost": "most_relevant",
+            "countPostFindData": 10,
+            "isFindInComment": false,
+            "sortTypeComment": "most_relevant",
+            "countCommentFindData": 30,
+            "isFindNewInteractors": false,
+            "isFindInGroupMembers": false,
+            "countGroupMemberFindData": 100,
+            "findDataGoalModeEnabled": false,
+            "findDataGoalDailyLimit": 30,
+            "searchPostRecentOnly": false,
+            "searchPostSeenOnly": false,
+            "searchPostDateFilter": "all",
+            "searchPostAuthorFilter": "all",
+            "searchPostTaggedLocation": "all",
+            "searchGroupCity": "",
+            "searchGroupNearMe": false,
+            "searchGroupPublicOnly": false,
+            "searchGroupMineOnly": false,
+            "minSearchGroupMembers": 0,
+            "minSearchGroupPostsPerDay": 0,
+            "findDataRerunEnabled": false,
+            "findDataRerunAfterHours": 1,
+            "multiDailyTimeSlotsEnabled": false,
+            "multiDailyTimeSlots": "",
+            "isFindPostByKeywords": false,
+            "postKeywords": "",
+            "isFindPostByContentAI": false,
+            "postContentAI": "",
+            "isFindCommentByKeywords": false,
+            "commentKeywords": "",
+            "isFindCommentByContentAI": false,
+            "commentContentAI": "",
+            "findUidTargetCampaignIds": [],
+            "findPostLinkTargetCampaignIds": [],
+            "findPhoneSmsTargetCampaignIds": [],
+            "findPhoneZaloWebTargetCampaignIds": [],
+            "findPhoneZaloMessagePhoneTargetCampaignIds": [],
+            "findZaloGroupLinkWebTargetCampaignIds": [],
+            "findZaloGroupLinkJoinTargetCampaignIds": [],
+            "findPhoneAkaBizDesktopTargetCampaignIds": [],
+            "findZaloGroupLinkAkaBizDesktopTargetCampaignIds": [],
+            "findFacebookGroupPostTargetCampaignIds": [],
+            "findFacebookGroupCommentTargetCampaignIds": [],
+            "findFacebookGroupJoinTargetCampaignIds": [],
+            "contentRotationIndex": 5,
+            "sourceLinkIndex": 2
+          },
+          "secondary_account_id": null
+        },
+        "p_sms_inputs": null,
+        "p_update_sms_schedule": false,
+        "p_append_idempotency_key": null,
+        "p_expected_input_count": null,
+        "p_append_inputs": null
+      },
+      "expect": {
+        "updated": true
+      }
+    },
+    {
+      "step": "email_create",
+      "name": "create_control_campaign_v2",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_idempotency_key": "v530-contract:email:create",
+        "p_campaign": {
+          "name": "Email chào hàng",
+          "actionId": "email_send",
+          "accountId": 3009,
+          "schedule": "2026-11-20T02:00:00.000Z",
+          "scheduleType": "daily",
+          "scheduleEndDate": null,
+          "dailyStopTime": null,
+          "scheduleDays": null,
+          "scheduleWeekDays": null,
+          "continueNextDay": false,
+          "refreshData": false,
+          "timeSleepBetween2": 30,
+          "content": "<p>Chào #{INPUT_FULLNAME}</p>",
+          "extraSettings": {
+            "actionLimits": {
+              "sleepBetweenActions": 30,
+              "dailyLimit": 30,
+              "rateLimitCount": 9,
+              "rateLimitMinutes": 65,
+              "continueWhenActionLimitReached": false,
+              "enabledActionCodes": [
+                "email_send"
+              ],
+              "byActionCode": {
+                "email_send": {
+                  "dailyLimit": 30,
+                  "rateLimitCount": 9,
+                  "rateLimitMinutes": 65
+                }
+              }
+            },
+            "emailSubject": "Bảng giá tháng 11",
+            "emailBodyIsHtml": true,
+            "emailCheckLinkClicks": true,
+            "formattedContentEnabled": false,
+            "rewriteContentEachRun": false,
+            "imageOption": "all",
+            "randomImageCount": 3,
+            "recentDeliveryCooldownEnabled": true,
+            "recentDeliveryCooldownAllAccounts": false,
+            "recentDeliveryCooldownDays": 7,
+            "multiDailyTimeSlotsEnabled": false,
+            "multiDailyTimeSlots": ""
+          },
+          "images": [
+            {
+              "name": "bang-gia.pdf",
+              "localPath": null,
+              "cloudUrl": "https://media.example.com/bang-gia.pdf",
+              "mimeType": "application/pdf",
+              "sizeBytes": 12345,
+              "provider": "r2"
+            }
+          ],
+          "webCampaignForm": "form_1"
+        },
+        "p_inputs": [],
+        "p_initial_status": "tạm dừng"
+      },
+      "expect": {
+        "created": true
+      },
+      "bind": {
+        "900002": "campaign_id"
+      }
+    },
+    {
+      "step": "email_add_inputs",
+      "name": "add_control_campaign_input_rows",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_campaign_id": 900002,
+        "p_idempotency_key": "v530-contract:email:inputs:1",
+        "p_expected_input_count": 0,
+        "p_inputs": [
+          {
+            "name": "Khách 1",
+            "email": "khach1@example.test",
+            "info1": "A"
+          },
+          {
+            "name": "Khách 2",
+            "email": "khach2@example.test"
+          }
+        ],
+        "p_campaign_schedule": "2026-11-20T02:00:00.000Z",
+        "p_campaign_status": "tạm dừng"
+      },
+      "expect": {
+        "created": true,
+        "inserted": 2
+      }
+    },
+    {
+      "step": "email_account_create",
+      "name": "create_control_email_account_atomic",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_name": "Email cửa hàng",
+        "p_session": {
+          "brandName": "Cửa hàng",
+          "host": "smtp.example.test",
+          "port": 587,
+          "secure": false,
+          "user": "shop@example.test",
+          "pass": "mat-khau-thu-v530",
+          "fromEmail": "shop@example.test",
+          "replyTo": "",
+          "cc": ""
+        },
+        "p_verified": true,
+        "p_verify_error": null,
+        "p_max_accounts": 10,
+        "p_account_group_id": null
+      },
+      "expect": {
+        "created": true
+      },
+      "bind": {
+        "900003": "account_id"
+      }
+    },
+    {
+      "step": "email_account_update",
+      "name": "update_control_email_account_atomic",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_account_id": 900003,
+        "p_expected_updated_at": "2001-02-02T00:00:00.000Z",
+        "p_name": "Email cửa hàng",
+        "p_session": {
+          "brandName": "Cửa hàng mới",
+          "host": "smtp.example.test",
+          "port": 587,
+          "secure": false,
+          "user": "shop@example.test",
+          "fromEmail": "shop@example.test",
+          "replyTo": "",
+          "cc": ""
+        },
+        "p_verified": true,
+        "p_verify_error": null,
+        "p_account_group_id": null
+      },
+      "expect": {
+        "updated": true
+      }
+    },
+    {
+      "step": "email_account_update_keep_status",
+      "name": "update_control_email_account_atomic",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_account_id": 900003,
+        "p_expected_updated_at": "2001-02-02T00:00:00.000Z",
+        "p_name": "Email cửa hàng",
+        "p_session": {
+          "brandName": "Cửa hàng giữ trạng thái",
+          "host": "smtp.example.test",
+          "port": 587,
+          "secure": false,
+          "user": "shop@example.test",
+          "fromEmail": "shop@example.test",
+          "replyTo": "",
+          "cc": ""
+        },
+        "p_verified": null,
+        "p_verify_error": null,
+        "p_account_group_id": null
+      },
+      "expect": {
+        "updated": true
+      }
+    },
+    {
+      "step": "email_account_delete",
+      "name": "delete_control_email_account_atomic",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_account_id": 900003
+      },
+      "expect": {
+        "deleted": true
+      }
+    },
+    {
+      "step": "find_data_link_add",
+      "name": "aka_agent_control_link_find_data_target",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_source_campaign_ids": [
+          30010
+        ],
+        "p_target_campaign_id": 900001,
+        "p_target_key": "findFacebookGroupPostTargetCampaignIds",
+        "p_add": true
+      },
+      "expect": {
+        "ok": true
+      }
+    },
+    {
+      "step": "find_data_link_remove",
+      "name": "aka_agent_control_link_find_data_target",
+      "params": {
+        "p_staff_id": 301,
+        "p_organization_id": 30,
+        "p_source_campaign_ids": [
+          30010
+        ],
+        "p_target_campaign_id": 900001,
+        "p_target_key": "findFacebookGroupPostTargetCampaignIds",
+        "p_add": false
+      },
+      "expect": {
+        "ok": true
+      }
+    }
+  ]
+}

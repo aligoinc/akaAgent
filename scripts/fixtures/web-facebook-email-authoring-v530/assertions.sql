@@ -214,6 +214,18 @@ BEGIN
     '[{"uid":"   "}]', 'tạm dừng')$$, 'control_input_uid_required', 'row=0');
   PERFORM v530_test.expect_error($$SELECT create_control_campaign_v2(301, 30, 'k-e3', '{"accountId":3005,"actionId":"facebook_group_post","name":"x"}',
     '["https://www.facebook.com/groups/1"]', 'tạm dừng')$$, 'control_input_uid_required', 'row=0');
+  -- uid phải là chuỗi hoặc số; email phải là chuỗi (mảng/đối tượng/boolean/null/số bị từ chối, không ghi "[...]" vào cột).
+  FOR t IN SELECT unnest(ARRAY['["g1"]', '{"id":"g1"}', 'true', 'null', '""']) LOOP
+    PERFORM v530_test.expect_error(format($$SELECT create_control_campaign_v2(301, 30, 'k-e3b', '{"accountId":3005,"actionId":"facebook_group_post","name":"x"}',
+      '[{"uid":"ok"},{"uid":"ok2"},{"uid":%s}]', 'tạm dừng')$$, t), 'control_input_uid_required', 'row=2');
+  END LOOP;
+  v := create_control_campaign_v2(301, 30, 'k-e3c', '{"accountId":3005,"actionId":"facebook_message_uid","name":"uid số"}', '[{"uid":100012345678901},{"uid":" 61550000000001 "}]', 'tạm dừng');
+  ASSERT (SELECT array_agg(i.uid ORDER BY i.id) FROM auto_campaign_input_data i WHERE i.campaign_id = (v->>'campaign_id')::bigint)
+    = ARRAY['100012345678901', ' 61550000000001 '], 'numeric uid stored as text';
+  FOR t IN SELECT unnest(ARRAY['["a@example.test"]', '{"address":"a@example.test"}', 'true', 'null', '123']) LOOP
+    PERFORM v530_test.expect_error(format($$SELECT create_control_campaign_v2(301, 30, 'k-e3d', '{"accountId":3009,"actionId":"email_send","name":"x"}',
+      '[{"email":"ok@example.test"},{"email":%s}]', 'tạm dừng')$$, t), 'control_input_email_invalid', 'row=1');
+  END LOOP;
   FOR t IN SELECT unnest(ARRAY['abc', 'a@b', ' a@example.test', 'a@ex ample.test', '', repeat('a', 250) || '@example.test']) LOOP
     PERFORM v530_test.expect_error(format($$SELECT create_control_campaign_v2(301, 30, 'k-e4', '{"accountId":3009,"actionId":"email_send","name":"x"}',
       %L, 'tạm dừng')$$, jsonb_build_array(jsonb_build_object('email', t))), 'control_input_email_invalid', 'row=0');
@@ -228,7 +240,28 @@ BEGIN
     PERFORM v530_test.expect_error(format($$SELECT create_control_campaign_v2(301, 30, 'k-e8', '{"accountId":3005,"actionId":"facebook_message_uid","name":"x","secondaryAccountId":%s}',
       '[]', 'tạm dừng')$$, n), 'control_secondary_account_not_found');
   END LOOP;
-  PERFORM v530_test.expect_error($$SELECT create_control_campaign_v2(301, 30, 'k-e9', '{"accountId":3002,"actionId":"zalo_message_phone","name":"x","secondaryAccountId":3003}',
+  -- Zalo/SMS: khoá secondaryAccountId bị bỏ qua hoàn toàn như trước v530 (kể cả giá trị không phải số).
+  FOR t IN SELECT unnest(ARRAY['3003', '"abc"', '{"id":3003}', '[3003]', 'true', '1.5']) LOOP
+    v := create_control_campaign_v2(301, 30, 'k-e9-' || t, format('{"accountId":3002,"actionId":"zalo_message_phone","name":"x","secondaryAccountId":%s}', t)::jsonb,
+      '[]', 'tạm dừng');
+    ASSERT (v->>'created')::boolean AND (SELECT secondary_account_id IS NULL FROM auto_campaigns WHERE id = (v->>'campaign_id')::bigint),
+      'zalo ignores secondaryAccountId ' || t;
+  END LOOP;
+  v := create_control_campaign_v2(301, 30, 'k-e9-sms', '{"accountId":3004,"actionId":"sms_send","name":"x","secondaryAccountId":"abc"}', '[]', 'tạm dừng');
+  ASSERT (v->>'created')::boolean, 'sms ignores secondaryAccountId';
+  -- Facebook: giá trị phải là số nguyên dương hoặc chuỗi chữ số; kiểu khác không bị ép kiểu mù (không còn lỗi 22P02).
+  FOR t IN SELECT unnest(ARRAY['"abc"', '"30 06"', '-5', '0', '1.5', 'true', '[3006]', '{"id":3006}', '"9999999999999999999999"']) LOOP
+    PERFORM v530_test.expect_error(format($$SELECT create_control_campaign_v2(301, 30, 'k-e9b', '{"accountId":3005,"actionId":"facebook_group_post","name":"x","secondaryAccountId":%s}',
+      '[]', 'tạm dừng')$$, t), 'control_secondary_account_not_found');
+  END LOOP;
+  v := create_control_campaign_v2(301, 30, 'k-e9c', '{"accountId":3005,"actionId":"facebook_group_post","name":"x","secondaryAccountId":" 3006 "}', '[]', 'tạm dừng');
+  ASSERT (SELECT secondary_account_id = 3006 FROM auto_campaigns WHERE id = (v->>'campaign_id')::bigint), 'digit string secondary';
+  FOR t IN SELECT unnest(ARRAY['""', '"  "', 'null']) LOOP
+    v := create_control_campaign_v2(301, 30, 'k-e9d-' || t, format('{"accountId":3005,"actionId":"facebook_timeline_post","name":"x","secondaryAccountId":%s}', t)::jsonb,
+      '[]', 'tạm dừng');
+    ASSERT (SELECT secondary_account_id IS NULL FROM auto_campaigns WHERE id = (v->>'campaign_id')::bigint), 'empty secondary ' || t;
+  END LOOP;
+  PERFORM v530_test.expect_error($$SELECT create_control_campaign_v2(301, 30, 'k-e9e', '{"accountId":3009,"actionId":"email_send","name":"x","secondaryAccountId":"abc"}',
     '[]', 'tạm dừng')$$, 'control_secondary_account_not_allowed');
   PERFORM v530_test.expect_error($$SELECT create_control_campaign_v2(301, 30, 'k-e10', '{"accountId":3009,"actionId":"email_send","name":"x","secondaryAccountId":3010}',
     '[]', 'tạm dừng')$$, 'control_secondary_account_not_allowed');
@@ -274,17 +307,95 @@ BEGIN
     'control_account_not_found');
   PERFORM v530_test.expect_error(format($$SELECT update_control_campaign_atomic(301, 30, 30008, %L, '{"secondary_account_id":3010}')$$,
     (SELECT updated_at FROM auto_campaigns WHERE id = 30008)), 'control_secondary_account_not_allowed');
-  PERFORM v530_test.expect_error(format($$SELECT update_control_campaign_atomic(301, 30, 30002, %L, '{"secondary_account_id":3003}')$$,
-    (SELECT updated_at FROM auto_campaigns WHERE id = 30002)), 'control_secondary_account_not_allowed');
-  v := update_control_campaign_atomic(301, 30, 30002, (SELECT updated_at FROM auto_campaigns WHERE id = 30002), '{"secondary_account_id":null}');
-  ASSERT (v->>'updated')::boolean, 'zalo may clear secondary';
+  -- Zalo/SMS: cả hai cách viết khoá tài khoản phụ đều bị bỏ qua như trước v530 (không lỗi, không ghi cột).
+  FOR t IN SELECT unnest(ARRAY['{"secondary_account_id":3003}', '{"secondary_account_id":"abc"}', '{"secondaryAccountId":{"x":1}}', '{"secondary_account_id":null}']) LOOP
+    v := update_control_campaign_atomic(301, 30, 30002, (SELECT updated_at FROM auto_campaigns WHERE id = 30002), t::jsonb);
+    ASSERT (v->>'updated')::boolean AND (SELECT secondary_account_id IS NULL FROM auto_campaigns WHERE id = 30002), 'zalo ignores secondary key ' || t;
+  END LOOP;
+  UPDATE auto_campaigns SET secondary_account_id = 3003 WHERE id = 30014;
+  v := update_control_campaign_atomic(301, 30, 30014, (SELECT updated_at FROM auto_campaigns WHERE id = 30014), '{"secondary_account_id":null,"name":"giữ cột"}');
+  ASSERT (v->>'updated')::boolean AND (SELECT secondary_account_id = 3003 FROM auto_campaigns WHERE id = 30014), 'zalo keeps stored secondary column';
+  UPDATE auto_campaigns SET secondary_account_id = NULL WHERE id = 30014;
+  v := update_control_campaign_atomic(301, 30, 30004, (SELECT updated_at FROM auto_campaigns WHERE id = 30004), '{"secondary_account_id":"abc","content":"SMS x"}');
+  ASSERT (v->>'updated')::boolean, 'sms ignores secondary key';
+  -- Facebook: giá trị sai kiểu không bị ép kiểu mù.
+  SELECT updated_at INTO ts FROM auto_campaigns WHERE id = 30005;
+  FOR t IN SELECT unnest(ARRAY['"abc"', '-1', '0', '2.5', 'false', '[3006]', '{"id":3006}']) LOOP
+    PERFORM v530_test.expect_error(format($$SELECT update_control_campaign_atomic(301, 30, 30005, %L, '{"secondary_account_id":%s}')$$, ts, t),
+      'control_secondary_account_not_found');
+  END LOOP;
+  v := update_control_campaign_atomic(301, 30, 30005, ts, '{"secondary_account_id":""}');
+  ASSERT (v->>'updated')::boolean AND (SELECT secondary_account_id IS NULL FROM auto_campaigns WHERE id = 30005), 'empty string clears secondary';
+  SELECT updated_at INTO ts FROM auto_campaigns WHERE id = 30005;
+  v := update_control_campaign_atomic(301, 30, 30005, ts, '{"secondary_account_id":"3006"}');
+  ASSERT (v->>'updated')::boolean AND (SELECT secondary_account_id = 3006 FROM auto_campaigns WHERE id = 30005), 'digit string sets secondary';
+  SELECT updated_at INTO ts FROM auto_campaigns WHERE id = 30005;
   v := update_control_campaign_atomic(301, 30, 30005, ts, '{"extra_settings":null}');
   ASSERT (v->>'updated')::boolean AND (SELECT jsonb_typeof(extra_settings) = 'null' FROM auto_campaigns WHERE id = 30005), 'non-object patch kept as before';
-  -- Zalo cũng giữ khoá do bộ chạy sở hữu (Server không bị chặn khi còn lease).
+  -- 4 cặp dấu "đã lấy data" của Zalo (Server không bị chặn khi còn lease): dấu gửi JSON null = Web chủ động đặt
+  -- lại, cả cặp lấy từ patch như trước v530; ngoài ra giữ giá trị DB của cả cặp (DB không có thì không có).
   v := update_control_campaign_atomic(301, 30, 30001, (SELECT updated_at FROM auto_campaigns WHERE id = 30001),
     '{"extra_settings":{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"enableMessage":false}}');
   ASSERT (v->>'updated')::boolean AND (SELECT extra_settings FROM auto_campaigns WHERE id = 30001)
-    = '{"zaloFriendDataMaterializedAt":"2026-11-01T00:00:00Z","enableMessage":false}'::jsonb, 'zalo runtime keys ' || v::text;
+    = '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"enableMessage":false}'::jsonb, 'explicit reset applied ' || v::text;
+  FOR r IN SELECT * FROM (VALUES
+    -- (nhãn, extra_settings trong DB, extra_settings của patch, kết quả)
+    ('stale copy keeps db',
+      '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7,"a":1}',
+      '{"zaloFriendDataMaterializedAt":"2026-11-01T00:00:00Z","zaloFriendMaterializedCount":2,"a":2}',
+      '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7,"a":2}'),
+    ('marker absent keeps db pair',
+      '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7}',
+      '{"zaloFriendMaterializedCount":0,"a":2}',
+      '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7,"a":2}'),
+    ('marker absent, db has no pair',
+      '{"a":1}',
+      '{"zaloFriendMaterializedCount":0,"zaloBirthdayDataMaterializedDate":"2026-11-14","zaloBirthdayMaterializedCount":3,"a":2}',
+      '{"a":2}'),
+    ('reset takes patch pair',
+      '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7}',
+      '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0}',
+      '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0}'),
+    ('reset without count drops db count',
+      '{"zaloBirthdayDataMaterializedDate":"2026-11-13","zaloBirthdayMaterializedCount":4}',
+      '{"zaloBirthdayDataMaterializedDate":null}',
+      '{"zaloBirthdayDataMaterializedDate":null}'),
+    ('count null is not a reset',
+      '{"zaloBirthdayDataMaterializedDate":"2026-11-13","zaloBirthdayMaterializedCount":4}',
+      '{"zaloBirthdayMaterializedCount":null}',
+      '{"zaloBirthdayDataMaterializedDate":"2026-11-13","zaloBirthdayMaterializedCount":4}'),
+    ('pairs are independent',
+      '{"zaloFriendRecommendationDataMaterializedAt":"2026-11-12T00:00:00Z","zaloFriendRecommendationMaterializedCount":10,
+        "zaloCancelFriendRequestDataMaterializedAt":"2026-11-11T00:00:00Z","zaloCancelFriendRequestMaterializedCount":5}',
+      '{"zaloFriendRecommendationDataMaterializedAt":null,"zaloFriendRecommendationMaterializedCount":0,
+        "zaloCancelFriendRequestDataMaterializedAt":"2026-01-01T00:00:00Z","zaloCancelFriendRequestMaterializedCount":1}',
+      '{"zaloFriendRecommendationDataMaterializedAt":null,"zaloFriendRecommendationMaterializedCount":0,
+        "zaloCancelFriendRequestDataMaterializedAt":"2026-11-11T00:00:00Z","zaloCancelFriendRequestMaterializedCount":5}'),
+    ('web form of another zalo type (all four reset) keeps the five runtime keys',
+      '{"contentRotationIndex":4,"internalSmsCreatedCampaignIdsByAccount":{"3004":30004},"zaloBirthdayMaterializedCount":4}',
+      '{"contentRotationIndex":0,"sourceLinkIndex":1,"internalSmsCreatedCampaignIdsByAccount":{},
+        "zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"zaloBirthdayDataMaterializedDate":null,"zaloBirthdayMaterializedCount":0,
+        "zaloFriendRecommendationDataMaterializedAt":null,"zaloFriendRecommendationMaterializedCount":0,
+        "zaloCancelFriendRequestDataMaterializedAt":null,"zaloCancelFriendRequestMaterializedCount":0,"enableMessage":true}',
+      '{"contentRotationIndex":4,"internalSmsCreatedCampaignIdsByAccount":{"3004":30004},
+        "zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"zaloBirthdayDataMaterializedDate":null,"zaloBirthdayMaterializedCount":0,
+        "zaloFriendRecommendationDataMaterializedAt":null,"zaloFriendRecommendationMaterializedCount":0,
+        "zaloCancelFriendRequestDataMaterializedAt":null,"zaloCancelFriendRequestMaterializedCount":0,"enableMessage":true}')
+  ) AS x(label, db_extra, patch_extra, expected) LOOP
+    UPDATE auto_campaigns SET extra_settings = r.db_extra::jsonb WHERE id = 30014;
+    v := update_control_campaign_atomic(301, 30, 30014, (SELECT updated_at FROM auto_campaigns WHERE id = 30014),
+      jsonb_build_object('extra_settings', r.patch_extra::jsonb));
+    ASSERT (v->>'updated')::boolean AND (SELECT extra_settings FROM auto_campaigns WHERE id = 30014) = r.expected::jsonb,
+      'materialized pair: ' || r.label || ' → ' || (SELECT extra_settings::text FROM auto_campaigns WHERE id = 30014);
+  END LOOP;
+  -- Cùng luật qua bản theo config_version, và trên chiến dịch Facebook (khoá Zalo lạ vẫn theo luật cặp).
+  UPDATE auto_campaigns SET extra_settings = '{"zaloFriendDataMaterializedAt":"2026-11-10T01:00:00Z","zaloFriendMaterializedCount":7}' WHERE id = 30014;
+  v := update_control_campaign_by_config_version_atomic(301, 30, 30014, now() - interval '1 year',
+    jsonb_build_object('extra_settings', '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"b":1}'::jsonb,
+      '_expected_config_version', (SELECT aka_agent_campaign_config_version(c) FROM auto_campaigns c WHERE c.id = 30014)));
+  ASSERT (v->>'updated')::boolean AND (SELECT extra_settings FROM auto_campaigns WHERE id = 30014)
+    = '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"b":1}'::jsonb, 'reset through config-version wrapper ' || v::text;
+  UPDATE auto_campaigns SET extra_settings = '{}' WHERE id = 30014;
   -- App Desktop còn giữ lượt và còn hoạt động: chặn (Facebook, Email, Zalo QR/trình duyệt), cả qua bản config_version.
   FOR n IN SELECT unnest(ARRAY[30006, 30009, 30003]::bigint[]) LOOP
     v := update_control_campaign_atomic(301, 30, n, (SELECT updated_at FROM auto_campaigns WHERE id = n), '{"name":"x"}');
@@ -355,11 +466,30 @@ BEGIN
     AND a.email_session_updated_at = now() AND a.email_session_last_verified_at = now() AND a.email_session_last_error IS NULL
     AND a.staff_id = 301 AND a.organization_id = 30
     FROM auto_accounts a WHERE a.id = n), 'email account row like Desktop';
-  v := create_control_email_account_atomic(301, 30, 'Email lỗi', '{"host":"h","port":99999,"secure":true,"user":"u","pass":"p","fromEmail":"f@example.test"}',
+  v := create_control_email_account_atomic(301, 30, 'Email lỗi', '{"host":"h","port":null,"secure":true,"user":"u","pass":"p","fromEmail":"f@example.test"}',
     false, '  Invalid login: 535  ', 4, NULL);
   ASSERT (v->>'created')::boolean AND (SELECT a.login_status = 'chưa đăng nhập' AND a.email_session_last_verified_at IS NULL
     AND a.email_session_last_error = 'Invalid login: 535' AND (a.email_session->>'port')::integer = 465 AND a.email_session->>'brandName' = ''
     FROM auto_accounts a WHERE a.id = (v->>'account_id')::bigint), 'unverified email account ' || v::text;
+  -- secure thiếu/null = false (boolean, không phải JSON null); port thiếu/rỗng = 587 khi không secure.
+  FOR t IN SELECT unnest(ARRAY['{"host":"h","user":"u","pass":"p","fromEmail":"f@example.test"}',
+    '{"host":"h","secure":null,"port":"","user":"u","pass":"p","fromEmail":"f@example.test"}']) LOOP
+    ASSERT private.aka_agent_control_normalize_email_session(t::jsonb, NULL)
+      = '{"brandName":"","host":"h","port":587,"secure":false,"user":"u","pass":"p","fromEmail":"f@example.test","replyTo":"","cc":""}'::jsonb,
+      'secure/port defaults ' || private.aka_agent_control_normalize_email_session(t::jsonb, NULL)::text;
+  END LOOP;
+  ASSERT private.aka_agent_control_normalize_email_session('{"host":"h","port":" 2525 ","secure":true,"user":"u","fromEmail":"f@x.vn","pass":null}', 'cũ')
+    = '{"brandName":"","host":"h","port":2525,"secure":true,"user":"u","pass":"cũ","fromEmail":"f@x.vn","replyTo":"","cc":""}'::jsonb, 'digit-string port, null pass keeps current';
+  -- Kiểu JSON sai bị từ chối (không ép kiểu ngầm): port ngoài 1..65535/không nguyên/không phải số, secure không phải
+  -- boolean, trường chữ không phải chuỗi.
+  FOR t IN SELECT unnest(ARRAY['"port":99999', '"port":0', '"port":-1', '"port":587.5', '"port":"abc"', '"port":"58a"', '"port":true', '"port":[587]',
+    '"secure":"true"', '"secure":1', '"secure":[]', '"brandName":5', '"host":["h"]', '"user":{"u":1}', '"pass":123', '"fromEmail":true',
+    '"replyTo":1', '"cc":["a@x.vn"]']) LOOP
+    PERFORM v530_test.expect_error(format($$SELECT private.aka_agent_control_normalize_email_session(%L, NULL)$$,
+      ('{"host":"h","user":"u","pass":"p","fromEmail":"f@x.vn"}'::jsonb || ('{' || t || '}')::jsonb)::text), 'invalid_control_email_account_payload');
+  END LOOP;
+  PERFORM v530_test.expect_error($$SELECT create_control_email_account_atomic(301, 30, 'x', '{"host":"h","port":99999,"user":"u","pass":"p","fromEmail":"f@x.vn"}', true)$$,
+    'invalid_control_email_account_payload');
   v := create_control_email_account_atomic(301, 30, 'Quá hạn mức', session_ok, true, NULL, 4, NULL);
   ASSERT v = '{"created":false,"reason":"account_limit_reached","max_accounts":4}'::jsonb, 'email quota ' || v::text;
   v := create_control_email_account_atomic(301, 30, 'Không giới hạn', session_ok, true, NULL, NULL, NULL);
@@ -425,9 +555,39 @@ BEGIN
   v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, NULL, false, 'Timeout', NULL);
   ASSERT (SELECT a.login_status = 'chưa đăng nhập' AND a.email_session_last_verified_at = now() - interval '1 day' AND a.email_session_last_error = 'Timeout'
     FROM auto_accounts a WHERE a.id = 3009), 'verify only failed keeps last verified time';
+  -- p_verified NULL kèm cấu hình mới (API không kiểm được từ máy chủ): lưu cấu hình, GIỮ trạng thái đăng nhập, mốc
+  -- đã kiểm và lỗi cũ; email_session_updated_at vẫn đổi. Thử ở cả hai trạng thái.
   SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
-  PERFORM v530_test.expect_error(format($$SELECT update_control_email_account_atomic(301, 30, 3009, %L, NULL, %L, NULL, NULL, NULL)$$, ts, session_ok),
-    'invalid_control_email_account_payload');
+  v := update_control_email_account_atomic(301, 30, 3009, ts, NULL,
+    '{"brandName":"Giữ trạng thái","host":"h3","port":2525,"user":"u3","fromEmail":"shop@example.test"}', NULL, 'bị bỏ qua', NULL);
+  ASSERT (v->>'updated')::boolean AND v->'account'->>'login_status' = 'chưa đăng nhập', 'session with null verified ' || v::text;
+  ASSERT (SELECT a.login_status = 'chưa đăng nhập' AND a.email_session_last_verified_at = now() - interval '1 day' AND a.email_session_last_error = 'Timeout'
+    AND a.email_session = '{"brandName":"Giữ trạng thái","host":"h3","port":2525,"secure":false,"user":"u3","pass":"secret-new","fromEmail":"shop@example.test","replyTo":"","cc":""}'::jsonb
+    AND a.email_session_updated_at = now() FROM auto_accounts a WHERE a.id = 3009), 'null verified keeps failed status, saves session';
+  UPDATE auto_accounts SET login_status = 'đã đăng nhập', email_session_last_verified_at = now() - interval '2 days', email_session_last_error = NULL,
+    email_session_updated_at = now() - interval '3 days', updated_at = now() - interval '2 hours' WHERE id = 3009;
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
+  v := update_control_email_account_atomic(301, 30, 3009, ts, 'Tên mới', '{"host":"h4","user":"u4","pass":"secret-4","fromEmail":"shop@example.test"}', NULL, NULL, NULL);
+  ASSERT (SELECT a.login_status = 'đã đăng nhập' AND a.email_session_last_verified_at = now() - interval '2 days' AND a.email_session_last_error IS NULL
+    AND a.email_session->>'host' = 'h4' AND a.email_session->>'pass' = 'secret-4' AND a.email_session_updated_at = now() AND a.name = 'Tên mới'
+    FROM auto_accounts a WHERE a.id = 3009), 'null verified keeps working account logged in';
+  -- p_verified true/false kèm cấu hình vẫn như trước.
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
+  v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, '{"host":"h5","user":"u5","fromEmail":"shop@example.test"}', false, 'Sai mật khẩu', NULL);
+  ASSERT (SELECT a.login_status = 'chưa đăng nhập' AND a.email_session_last_verified_at IS NULL AND a.email_session_last_error = 'Sai mật khẩu'
+    AND a.email_session->>'pass' = 'secret-4' FROM auto_accounts a WHERE a.id = 3009), 'false with session clears verified time';
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
+  v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, '{"host":"h5","user":"u5","pass":"secret-new","fromEmail":"shop@example.test"}', true, NULL, NULL);
+  ASSERT (SELECT a.login_status = 'đã đăng nhập' AND a.email_session_last_verified_at = now() AND a.email_session_last_error IS NULL
+    FROM auto_accounts a WHERE a.id = 3009), 'true with session verifies';
+  -- Chuyển nhóm: nhóm Email khác của chính nhân viên; trigger production (khoá dùng chung nhóm cũ + mới) chạy cùng.
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
+  v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, NULL, NULL, NULL, 3905);
+  ASSERT (v->>'updated')::boolean AND (SELECT account_group_id = 3905 FROM auto_accounts WHERE id = 3009), 'move to another email group';
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
+  v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, NULL, NULL, NULL, NULL);
+  ASSERT (v->>'updated')::boolean AND (SELECT account_group_id IS NULL FROM auto_accounts WHERE id = 3009), 'leave group';
+  SELECT updated_at INTO ts FROM auto_accounts WHERE id = 3009;
   v := update_control_email_account_atomic(301, 30, 3009, ts, NULL, NULL, NULL, NULL, 3902);
   ASSERT v = '{"updated":false,"reason":"account_group_not_found"}'::jsonb, 'zalo group rejected';
   FOR n IN SELECT unnest(ARRAY[3002, 3022, 3011, 3005]::bigint[]) LOOP
@@ -496,7 +656,7 @@ BEGIN
   -- J. Bộ chạy Desktop ghi từng khoá (SECURITY INVOKER: quyền cột + RLS của phiên Desktop).
   UPDATE auto_campaigns SET extra_settings = '{"contentRotationIndex":3,"imageOption":"all","postBumpRotationIndex":1,"keep":true}',
     updated_at = now() - interval '1 hour' WHERE id = 30006;
-  PERFORM set_config('v530_test.desktop_staff', '301', true);
+  PERFORM set_config('request.jwt.claims', '{"role":"aka_agent_desktop","sub":"00000000-0000-4000-8000-000000000301"}', true);
   SET LOCAL ROLE aka_agent_desktop;
   v := aka_agent_desktop_merge_campaign_runtime_settings(30006, '{"contentRotationIndex":4,"sourceLinkIndex":2}', ARRAY['postBumpRotationIndex','imageOption']);
   ASSERT (v->>'updated')::boolean AND (v->>'updatedAt')::timestamptz = now(), 'desktop merge ' || v::text;
@@ -511,6 +671,13 @@ BEGIN
     GET STACKED DIAGNOSTICS t = MESSAGE_TEXT;
     ASSERT t = 'invalid_campaign_runtime_settings', 'merge invalid: ' || t;
   END;
+  -- Phiên Desktop không hợp lệ (sub lạ / không có claims): RLS không cho dòng nào.
+  PERFORM set_config('request.jwt.claims', '{"role":"aka_agent_desktop","sub":"00000000-0000-4000-8000-00000000ffff"}', true);
+  v := aka_agent_desktop_merge_campaign_runtime_settings(30006, '{"contentRotationIndex":9}');
+  ASSERT v = '{"updated":false,"updatedAt":null}'::jsonb, 'unknown desktop user sees nothing ' || v::text;
+  PERFORM set_config('request.jwt.claims', '', true);
+  v := aka_agent_desktop_merge_campaign_runtime_settings(30006, '{"contentRotationIndex":9}');
+  ASSERT v = '{"updated":false,"updatedAt":null}'::jsonb, 'no claims sees nothing ' || v::text;
   RESET ROLE;
   ASSERT (SELECT extra_settings FROM auto_campaigns WHERE id = 30006) = '{"contentRotationIndex":4,"sourceLinkIndex":2,"keep":true}'::jsonb, 'merged keys';
   ASSERT (SELECT extra_settings FROM auto_campaigns WHERE id = 30021) = '{"contentRotationIndex":1}'::jsonb, 'other staff untouched';
@@ -542,7 +709,7 @@ BEGIN
   ASSERT (SELECT prosecdef FROM pg_proc WHERE oid = t::regprocedure) IS FALSE, 'desktop merge is security invoker';
   FOREACH t IN ARRAY ARRAY['private.aka_agent_web_email_campaigns_policy(bigint)', 'private.aka_agent_web_facebook_campaigns_policy(bigint)',
     'private.aka_agent_control_assert_campaign_inputs(text,jsonb)',
-    'private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)',
+    'private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)',
     'private.aka_agent_control_normalize_email_session(jsonb,text)', 'private.aka_agent_control_email_account_view(public.auto_accounts)'] LOOP
     ASSERT (SELECT proacl::text FROM pg_proc WHERE oid = t::regprocedure) = '{postgres=X/postgres}', 'owner only: ' || t;
   END LOOP;

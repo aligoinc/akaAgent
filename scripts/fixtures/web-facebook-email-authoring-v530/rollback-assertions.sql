@@ -6,7 +6,7 @@ BEGIN
   FOREACH f IN ARRAY ARRAY['private.aka_agent_web_email_campaigns_policy(bigint)',
     'public.aka_agent_control_web_email_campaigns_policy(bigint)',
     'private.aka_agent_control_assert_campaign_inputs(text,jsonb)',
-    'private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)',
+    'private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)',
     'private.aka_agent_control_normalize_email_session(jsonb,text)',
     'private.aka_agent_control_email_account_view(public.auto_accounts)',
     'public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)',

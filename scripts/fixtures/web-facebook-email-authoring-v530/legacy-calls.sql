@@ -3,7 +3,9 @@
 -- mới của v530 (capabilities.email, web_email_campaigns, authoring của chính sách Facebook). Lời gọi có ghi chạy
 -- trong subtransaction rồi hoàn tác, nên chạy lại bao nhiêu lần cũng như nhau.
 -- Không có trong tập này (hành vi đổi có chủ đích, kiểm ở assertions.sql): chiến dịch/tài khoản Email, sửa chiến dịch
--- Desktop còn lease khi app đang mở, patch extra_settings có khoá do bộ chạy sở hữu, gọi chéo nền tảng Facebook.
+-- Desktop còn lease khi app đang mở, patch extra_settings ghi đè khoá do bộ chạy sở hữu, gọi chéo nền tảng Facebook.
+-- CÓ trong tập này (phải giống hệt trước v530): Zalo/SMS gửi khoá tài khoản phụ (bị bỏ qua, kể cả giá trị không
+-- phải số), và patch đặt lại dấu "đã lấy data" của Zalo bằng JSON null như form Web đang chạy gửi.
 SET client_min_messages = warning;
 CREATE SCHEMA IF NOT EXISTS v530_test;
 RESET client_min_messages;
@@ -170,6 +172,12 @@ BEGIN
       '[{"phone":"0903333333","content":"SMS 1","phoneCarrier":"viettel"}]', 'chờ xử lý'),
     ('server', 301, 30, 'k-server', '{"accountId":3001,"actionId":"zalo_message_phone","name":"CD mới Server","scheduleType":"weekly","continueNextDay":true}',
       '[]', 'chờ xử lý'),
+    ('qr-secondary-number', 301, 30, 'k-qr-sec-1', '{"accountId":3002,"actionId":"zalo_message_phone","name":"QR có khoá phụ số","secondaryAccountId":3003}', '[]', 'tạm dừng'),
+    ('qr-secondary-text', 301, 30, 'k-qr-sec-2', '{"accountId":3002,"actionId":"zalo_message_phone","name":"QR có khoá phụ chữ","secondaryAccountId":"abc"}',
+      '[{"phone":"0907777777"}]', 'tạm dừng'),
+    ('sms-secondary-object', 301, 30, 'k-sms-sec', '{"accountId":3004,"actionId":"sms_send","name":"SMS có khoá phụ lạ","secondaryAccountId":{"id":1}}', '[]', 'chờ xử lý'),
+    ('server-materialized', 301, 30, 'k-server-mat', '{"accountId":3001,"actionId":"zalo_message_phone","name":"Server nhân bản",
+      "extraSettings":{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,"contentRotationIndex":2}}', '[]', 'tạm dừng'),
     ('cross', 301, 30, 'k-cross', '{"accountId":3004,"actionId":"zalo_message_phone","name":"Sai loại"}', '[]', 'chờ xử lý'),
     ('other-staff', 301, 30, 'k-other', '{"accountId":3023,"actionId":"zalo_message_phone","name":"TK nhân viên khác"}', '[]', 'chờ xử lý'),
     ('fb-deleted', 301, 30, 'k-fbdel', '{"accountId":3007,"actionId":"facebook_group_post","name":"FB đã xoá"}', '[]', 'chờ xử lý'),
@@ -201,6 +209,15 @@ BEGIN
     ('sms-status', 301, 30, 30004, '{"status":"tạm dừng","content":"SMS mới"}', NULL, NULL, NULL),
     ('server-lease-app-alive', 301, 30, 30001, '{"content":"Server mới","continue_next_day":true}', NULL, NULL, NULL),
     ('qr-302-lease-app-off', 302, 30, 30023, '{"name":"CD QR 302 sửa","extra_settings":{"enableMessage":true}}', NULL, NULL, NULL),
+    ('qr-secondary-keys', 301, 30, 30014, '{"name":"QR patch khoá phụ","secondary_account_id":"abc","secondaryAccountId":{"a":1}}', NULL, NULL, NULL),
+    ('sms-secondary-key', 301, 30, 30004, '{"secondary_account_id":3006,"content":"SMS khoá phụ"}', NULL, NULL, NULL),
+    -- Form Web đang chạy: loại không lấy data đầu lượt luôn gửi 4 cặp dấu null/0; đổi chế độ thì đặt lại cặp của loại đó.
+    ('qr-web-form-resets', 301, 30, 30002, '{"extra_settings":{"enableMessage":true,"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0,
+      "zaloBirthdayDataMaterializedDate":null,"zaloBirthdayMaterializedCount":0,"zaloFriendRecommendationDataMaterializedAt":null,
+      "zaloFriendRecommendationMaterializedCount":0,"zaloCancelFriendRequestDataMaterializedAt":null,"zaloCancelFriendRequestMaterializedCount":0}}', NULL, NULL, NULL),
+    ('server-reset-friend', 301, 30, 30001, '{"extra_settings":{"enableMessage":true,"zaloFriendTargetMode":"selected","zaloFriendDataMaterializedAt":null,
+      "zaloFriendMaterializedCount":0}}', NULL, NULL, NULL),
+    ('server-reset-marker-only', 301, 30, 30001, '{"extra_settings":{"zaloFriendDataMaterializedAt":null}}', NULL, NULL, NULL),
     ('qr-append', 301, 30, 30014, '{"name":"CD có append"}', '[{"phone":"0904444444","name":"C"}]', 'append-key-1', 0),
     ('qr-reassign-server', 301, 30, 30002, '{"account_id":3001}', NULL, NULL, NULL),
     ('qr-reassign-qr', 301, 30, 30014, '{"account_id":3002}', NULL, NULL, NULL),
@@ -239,6 +256,18 @@ BEGIN
     IF SQLERRM <> 'v530_test_undo' THEN RAISE; END IF;
   END;
   name := 'update_by_config:qr';
+  payload := v;
+  RETURN NEXT;
+  BEGIN
+    v := public.update_control_campaign_by_config_version_atomic(301, 30, 30001, now() - interval '1 year',
+      jsonb_build_object('extra_settings', '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0}'::jsonb, '_expected_config_version',
+        (SELECT public.aka_agent_campaign_config_version(c) FROM public.auto_campaigns c WHERE c.id = 30001)));
+    v := (v - 'updated_at') || jsonb_build_object('state', v530_test.campaign_state(30001));
+    RAISE EXCEPTION 'v530_test_undo';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'v530_test_undo' THEN RAISE; END IF;
+  END;
+  name := 'update_by_config:server-reset';
   payload := v;
   RETURN NEXT;
 

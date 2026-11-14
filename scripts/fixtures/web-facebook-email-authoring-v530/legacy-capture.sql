@@ -21,6 +21,18 @@ BEGIN
   ASSERT (SELECT payload->>'appended_input_count' FROM v530_test.captured WHERE name = 'update:qr-append') = '1', 'update append';
   ASSERT (SELECT payload->>'updated' FROM v530_test.captured WHERE name = 'update_by_config:qr') = 'true', 'update by config';
   ASSERT (SELECT payload->>'inserted' FROM v530_test.captured WHERE name = 'add_rows:qr') = '1', 'add rows';
+  -- Khoá tài khoản phụ ở Zalo/SMS bị bỏ qua từ trước v530 (kể cả giá trị không phải số).
+  ASSERT (SELECT payload->>'created' = 'true' AND payload->'state'->'campaign'->'secondary_account_id' = 'null'::jsonb
+    FROM v530_test.captured WHERE name = 'create:qr-secondary-text'), 'zalo create ignores secondaryAccountId';
+  ASSERT (SELECT payload->>'created' FROM v530_test.captured WHERE name = 'create:sms-secondary-object') = 'true', 'sms create ignores secondaryAccountId';
+  ASSERT (SELECT payload->>'updated' FROM v530_test.captured WHERE name = 'update:qr-secondary-keys') = 'true', 'zalo update ignores secondary keys';
+  -- Đặt lại dấu "đã lấy data" bằng JSON null được ghi nguyên từ trước v530.
+  ASSERT (SELECT payload->'state'->'campaign'->'extra_settings' FROM v530_test.captured WHERE name = 'update:server-reset-friend')
+    = '{"enableMessage":true,"zaloFriendTargetMode":"selected","zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0}'::jsonb, 'reset friend pair';
+  ASSERT (SELECT payload->'state'->'campaign'->'extra_settings'->'zaloBirthdayMaterializedCount' FROM v530_test.captured WHERE name = 'update:qr-web-form-resets')
+    = '0'::jsonb, 'web form reset birthday count';
+  ASSERT (SELECT payload->'state'->'campaign'->'extra_settings' FROM v530_test.captured WHERE name = 'update_by_config:server-reset')
+    = '{"zaloFriendDataMaterializedAt":null,"zaloFriendMaterializedCount":0}'::jsonb, 'reset through config version';
   RAISE NOTICE 'v530 legacy capture: % calls', n;
 END
 $c$;

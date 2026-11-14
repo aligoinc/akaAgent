@@ -42,7 +42,12 @@ INSERT INTO auto_account_groups(id, name, settings, flatform_type, staff_id, org
   (3901, 'Nhóm Email 301', '{}', 'email', 301, 30, false),
   (3902, 'Nhóm Zalo 301', '{}', 'zalo', 301, 30, false),
   (3903, 'Nhóm Email 302', '{}', 'email', 302, 30, false),
-  (3904, 'Nhóm Email đã xoá', '{}', 'email', 301, 30, true);
+  (3904, 'Nhóm Email đã xoá', '{}', 'email', 301, 30, true),
+  (3905, 'Nhóm Email 301 B', '{}', 'email', 301, 30, false);
+INSERT INTO auto_proxies(id, name) VALUES (3951, 'Proxy 301');
+-- Phiên Desktop (JWT sub → nhân viên) như private.aka_agent_desktop_users của production. 303 chưa từng đăng nhập 9.x.
+INSERT INTO private.aka_agent_desktop_users(staff_id, auth_user_id) VALUES
+  (301, '00000000-0000-4000-8000-000000000301'), (302, '00000000-0000-4000-8000-000000000302');
 INSERT INTO auto_accounts(id, name, flatform_type, staff_id, organization_id, is_zalo_server, is_zalo_show_web, is_delete, is_active,
   zalo_session, login_status, status, username, email_session, email_session_updated_at, email_session_last_verified_at, account_group_id) VALUES
   (3001, 'Zalo Server', 'zalo', 301, 30, true, false, false, true, '{"cookie":"x"}', 'đã đăng nhập', 'chờ xử lý', NULL, NULL, NULL, NULL, NULL),

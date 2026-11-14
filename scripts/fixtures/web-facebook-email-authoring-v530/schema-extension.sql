@@ -1,7 +1,8 @@
 -- Nền test v530 = fixtures V461 + migration V461 + V464 + V476 + V490 (đúng md5 production 14/11/2026 của 11 hàm
 -- v530 vá) cộng phần production có mà chuỗi repo chưa dựng lại: cột, hai thân hàm phụ thuộc đọc nguyên văn từ
--- production (create_control_campaign_v2 bản V482, aka_agent_campaign_config_version), stub tách quyền, quyền cột
--- và RLS của phiên Desktop, default ACL hàm public như production.
+-- production (create_control_campaign_v2 bản V482, aka_agent_campaign_config_version), stub tách quyền, trigger
+-- khoá tài nguyên tài khoản của V219, danh tính + trigger sở hữu + quyền cột + RLS của phiên Desktop (nguyên văn
+-- production), default ACL hàm public như production.
 SET client_min_messages = warning;
 
 ALTER TABLE public.auto_campaigns ADD COLUMN IF NOT EXISTS web_campaign_form text;
@@ -110,21 +111,201 @@ $function$;
 REVOKE ALL ON FUNCTION public.aka_agent_campaign_config_version(public.auto_campaigns) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.aka_agent_campaign_config_version(public.auto_campaigns) TO service_role;
 
--- Phiên Desktop (production): SELECT bảng, UPDATE theo cột payload, RLS desktop_owned_resource theo nhân viên
--- của phiên. Test thay private.aka_agent_staff_scope_for_request() bằng GUC v530_test.desktop_staff.
--- service_role của Supabase có BYPASSRLS (hàm Control SECURITY INVOKER đọc mọi dòng như production).
+-- Trigger production trên auto_accounts (nguyên văn migration V219, md5 production e2643b7a416182ebaf8a508438ef02a1):
+-- lượt ghi tài khoản lấy khoá advisory DÙNG CHUNG theo nhóm/proxy SAU khi đã khoá dòng tài khoản. RPC tài khoản
+-- Email của v530 phải theo đúng thứ tự này (bài kiểm khoá chéo trong test-v530-*.sh).
+ALTER TABLE public.auto_proxies ADD COLUMN IF NOT EXISTS is_delete boolean NOT NULL DEFAULT false;
+CREATE OR REPLACE FUNCTION public.lock_auto_account_control_resources()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path TO pg_catalog, public
+AS $function$
+DECLARE
+  v_old_account_group_id bigint;
+  v_old_proxy_id bigint;
+  v_lock_key bigint;
+BEGIN
+  IF TG_OP = 'UPDATE' THEN
+    v_old_account_group_id := OLD.account_group_id;
+    v_old_proxy_id := OLD.proxy_id;
+  END IF;
+
+  FOR v_lock_key IN
+    SELECT DISTINCT resource.lock_key
+    FROM (
+      VALUES
+        (CASE WHEN v_old_account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || v_old_account_group_id::text, 0
+        ) END),
+        (CASE WHEN NEW.account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || NEW.account_group_id::text, 0
+        ) END),
+        (CASE WHEN v_old_proxy_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-proxy:' || v_old_proxy_id::text, 0
+        ) END),
+        (CASE WHEN NEW.proxy_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-proxy:' || NEW.proxy_id::text, 0
+        ) END)
+    ) AS resource(lock_key)
+    WHERE resource.lock_key IS NOT NULL
+    ORDER BY resource.lock_key
+  LOOP
+    PERFORM pg_advisory_xact_lock_shared(v_lock_key);
+  END LOOP;
+
+  -- A reference that waited behind a soft delete must fail rather than attach
+  -- to a resource that became invisible while it was blocked on the lock.
+  IF NOT COALESCE(NEW.is_delete, false)
+    AND NEW.account_group_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.auto_account_groups AS account_group
+      WHERE account_group.id = NEW.account_group_id
+        AND COALESCE(account_group.is_delete, false) = false
+    )
+  THEN
+    RAISE EXCEPTION 'account_group_not_found';
+  END IF;
+  IF NOT COALESCE(NEW.is_delete, false)
+    AND NEW.proxy_id IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1
+      FROM public.auto_proxies AS proxy
+      WHERE proxy.id = NEW.proxy_id
+        AND COALESCE(proxy.is_delete, false) = false
+    )
+  THEN
+    RAISE EXCEPTION 'proxy_not_found';
+  END IF;
+
+  RETURN NEW;
+END;
+$function$;
+DROP TRIGGER IF EXISTS trg_lock_auto_account_control_resources
+  ON public.auto_accounts;
+CREATE TRIGGER trg_lock_auto_account_control_resources
+BEFORE INSERT OR UPDATE OF
+  account_group_id,
+  proxy_id,
+  flatform_type,
+  is_zalo_show_web,
+  is_zalo_server,
+  is_delete,
+  staff_id,
+  organization_id
+ON public.auto_accounts
+FOR EACH ROW
+EXECUTE FUNCTION public.lock_auto_account_control_resources();
+
+-- Danh tính phiên Desktop như production (nguyên văn; md5 kiểm ở baseline-check.sql): JWT role aka_agent_desktop,
+-- sub = auth user; private.aka_agent_desktop_users ánh xạ sang nhân viên. Trigger aaa_desktop_parent_ownership
+-- chặn phiên Desktop ghi dòng của nhân viên khác.
+CREATE TABLE IF NOT EXISTS private.aka_agent_desktop_users (
+  staff_id bigint PRIMARY KEY, auth_user_id uuid NOT NULL UNIQUE, created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE OR REPLACE FUNCTION private.aka_agent_staff_scope_for_request()
+ RETURNS bigint
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog'
+AS $function$
+DECLARE v_claims jsonb; v_user uuid; v_staff bigint;
+BEGIN
+ -- SET ROLE is retained across SECURITY DEFINER calls; current_user is not.
+ IF current_setting('role',true) IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN NULL; END IF;
+ BEGIN
+  v_claims := NULLIF(current_setting('request.jwt.claims',true),'')::jsonb;
+  IF v_claims->>'role' IS DISTINCT FROM 'aka_agent_desktop' THEN RETURN 0; END IF;
+  v_user := NULLIF(v_claims->>'sub','')::uuid;
+ EXCEPTION WHEN invalid_text_representation THEN RETURN 0;
+ END;
+ SELECT staff_id INTO v_staff FROM private.aka_agent_desktop_users WHERE auth_user_id=v_user;
+ RETURN COALESCE(v_staff,0);
+END;
+$function$;
+CREATE OR REPLACE FUNCTION private.aka_agent_assert_request_ownership(p_staff_id bigint DEFAULT NULL::bigint, p_account_id bigint DEFAULT NULL::bigint, p_campaign_id bigint DEFAULT NULL::bigint)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+DECLARE v_staff bigint := private.aka_agent_staff_scope_for_request();
+BEGIN
+ IF v_staff IS NULL THEN RETURN true; END IF;
+ IF v_staff <= 0 OR (p_staff_id IS NOT NULL AND p_staff_id IS DISTINCT FROM v_staff) THEN
+   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_staff_scope_denied';
+ END IF;
+ -- Preserve each caller's existing not-found/cleanup semantics.
+ IF p_account_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_accounts WHERE id=p_account_id AND staff_id IS DISTINCT FROM v_staff) THEN
+   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_account_scope_denied'; END IF;
+ IF p_campaign_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_campaigns WHERE id=p_campaign_id AND staff_id IS DISTINCT FROM v_staff) THEN
+   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_campaign_scope_denied'; END IF;
+ RETURN true;
+END;
+$function$;
+CREATE OR REPLACE FUNCTION private.aka_agent_guard_parent_ownership()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+DECLARE v_staff bigint := private.aka_agent_staff_scope_for_request(); v_org bigint;
+BEGIN
+ IF v_staff IS NULL THEN IF TG_OP='DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF; END IF;
+ IF v_staff<=0 OR (TG_OP<>'INSERT' AND OLD.staff_id IS DISTINCT FROM v_staff)
+   OR (TG_OP<>'DELETE' AND NEW.staff_id IS DISTINCT FROM v_staff) THEN
+   RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_parent_owner_denied'; END IF;
+ IF TG_OP='DELETE' THEN RETURN OLD; END IF;
+ IF TG_OP='INSERT' OR NEW.organization_id IS DISTINCT FROM OLD.organization_id OR NEW.staff_id IS DISTINCT FROM OLD.staff_id THEN
+   SELECT organization_id INTO v_org FROM public.org_staff WHERE id=v_staff;
+   IF NEW.organization_id IS DISTINCT FROM v_org THEN
+     RAISE EXCEPTION USING ERRCODE='42501',MESSAGE='desktop_parent_organization_denied'; END IF;
+ END IF;
+ IF TG_TABLE_NAME='auto_campaigns' THEN
+   PERFORM private.aka_agent_assert_request_ownership(v_staff,NEW.account_id,NEW.id);
+   PERFORM private.aka_agent_assert_request_ownership(v_staff,NEW.secondary_account_id,NULL);
+ END IF;
+ RETURN NEW;
+END;
+$function$;
+DROP TRIGGER IF EXISTS aaa_desktop_parent_ownership ON public.auto_campaigns;
+CREATE TRIGGER aaa_desktop_parent_ownership BEFORE INSERT OR DELETE OR UPDATE ON public.auto_campaigns
+  FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_parent_ownership();
+DROP TRIGGER IF EXISTS aaa_desktop_parent_ownership ON public.auto_accounts;
+CREATE TRIGGER aaa_desktop_parent_ownership BEFORE INSERT OR DELETE OR UPDATE ON public.auto_accounts
+  FOR EACH ROW EXECUTE FUNCTION private.aka_agent_guard_parent_ownership();
+
+-- Phiên Desktop (production): SELECT bảng, UPDATE theo cột payload, RLS desktop_owned_resource theo nhân viên của
+-- phiên (đúng biểu thức production trên auto_campaigns và auto_accounts; bỏ chính sách tách quyền
+-- app_access_desktop_accounts). service_role của Supabase có BYPASSRLS (hàm Control SECURITY INVOKER đọc mọi
+-- dòng như production).
 ALTER ROLE service_role BYPASSRLS;
-GRANT SELECT ON public.auto_campaigns TO aka_agent_desktop;
+GRANT SELECT ON public.auto_campaigns, public.auto_accounts, public.auto_account_groups, public.auto_proxies TO aka_agent_desktop;
 GRANT UPDATE (extra_settings, updated_at) ON public.auto_campaigns TO aka_agent_desktop;
+GRANT UPDATE (name, proxy_id, account_group_id, updated_at) ON public.auto_accounts TO aka_agent_desktop;
 ALTER TABLE public.auto_campaigns ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS v530_test_existing_role_access ON public.auto_campaigns;
-CREATE POLICY v530_test_existing_role_access ON public.auto_campaigns AS PERMISSIVE FOR ALL
+ALTER TABLE public.auto_accounts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS v435_existing_role_access ON public.auto_campaigns;
+CREATE POLICY v435_existing_role_access ON public.auto_campaigns AS PERMISSIVE FOR ALL
   TO aka_agent_desktop USING (true) WITH CHECK (true);
-DROP POLICY IF EXISTS v530_test_desktop_owned_resource ON public.auto_campaigns;
-CREATE POLICY v530_test_desktop_owned_resource ON public.auto_campaigns AS RESTRICTIVE FOR ALL
+DROP POLICY IF EXISTS desktop_owned_resource ON public.auto_campaigns;
+CREATE POLICY desktop_owned_resource ON public.auto_campaigns AS RESTRICTIVE FOR ALL
   TO aka_agent_desktop
-  USING (staff_id = NULLIF(current_setting('v530_test.desktop_staff', true), '')::bigint)
-  WITH CHECK (staff_id = NULLIF(current_setting('v530_test.desktop_staff', true), '')::bigint);
+  USING (staff_id = (SELECT private.aka_agent_staff_scope_for_request()))
+  WITH CHECK (staff_id = (SELECT private.aka_agent_staff_scope_for_request())
+    AND (account_id IS NULL OR EXISTS (SELECT 1 FROM public.auto_accounts owned WHERE owned.id = auto_campaigns.account_id))
+    AND (secondary_account_id IS NULL OR EXISTS (SELECT 1 FROM public.auto_accounts owned WHERE owned.id = auto_campaigns.secondary_account_id)));
+DROP POLICY IF EXISTS v435_existing_role_access ON public.auto_accounts;
+CREATE POLICY v435_existing_role_access ON public.auto_accounts AS PERMISSIVE FOR ALL
+  TO aka_agent_desktop USING (true) WITH CHECK (true);
+DROP POLICY IF EXISTS desktop_owned_resource ON public.auto_accounts;
+CREATE POLICY desktop_owned_resource ON public.auto_accounts AS RESTRICTIVE FOR ALL
+  TO aka_agent_desktop
+  USING (staff_id = (SELECT private.aka_agent_staff_scope_for_request()))
+  WITH CHECK (staff_id = (SELECT private.aka_agent_staff_scope_for_request())
+    AND (account_group_id IS NULL OR EXISTS (SELECT 1 FROM public.auto_account_groups owned WHERE owned.id = auto_accounts.account_group_id))
+    AND (proxy_id IS NULL OR EXISTS (SELECT 1 FROM public.auto_proxies owned WHERE owned.id = auto_accounts.proxy_id)));
 
 -- Default ACL production cho hàm public do postgres tạo: anon, authenticated, service_role (PUBLIC vẫn có EXECUTE).
 ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO anon, authenticated, service_role;

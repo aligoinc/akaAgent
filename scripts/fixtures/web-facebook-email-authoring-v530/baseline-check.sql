@@ -1,4 +1,6 @@
 -- Nền test phải đúng 11 định nghĩa live trước v530 + 4 hàm phụ thuộc (md5 production 14/11/2026) và đúng ACL.
+-- Bốn hàm trigger/danh tính production chép vào fixture (khoá tài nguyên tài khoản V219, phiên Desktop) cũng phải
+-- đúng md5 production.
 DO $check$
 DECLARE spec record;
 BEGIN
@@ -29,3 +31,22 @@ BEGIN
   END LOOP;
 END
 $check$;
+DO $fixture$
+DECLARE spec record;
+BEGIN
+  FOR spec IN SELECT * FROM (VALUES
+    ('public.lock_auto_account_control_resources()', 'e2643b7a416182ebaf8a508438ef02a1'),
+    ('private.aka_agent_staff_scope_for_request()', 'd417807fa9dc08cfecbd6cd0aab7df3e'),
+    ('private.aka_agent_assert_request_ownership(bigint,bigint,bigint)', '31494192d0a18efeafa4fb0296008230'),
+    ('private.aka_agent_guard_parent_ownership()', '1e72bdc906b4d905f555c3f6d4114dda')
+  ) AS x(signature, production_md5) LOOP
+    IF md5(pg_get_functiondef(spec.signature::regprocedure)) IS DISTINCT FROM spec.production_md5 THEN
+      RAISE EXCEPTION 'fixture_function_mismatch:%:%', spec.signature, md5(pg_get_functiondef(spec.signature::regprocedure));
+    END IF;
+  END LOOP;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid = 'public.auto_accounts'::regclass
+      AND tgname = 'trg_lock_auto_account_control_resources' AND NOT tgisinternal) THEN
+    RAISE EXCEPTION 'fixture_trigger_missing:trg_lock_auto_account_control_resources';
+  END IF;
+END
+$fixture$;
