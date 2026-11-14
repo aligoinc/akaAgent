@@ -126,12 +126,19 @@ export class EmailRuntimeService {
     return brand ? `"${brand}" <${config.fromEmail}>` : config.fromEmail
   }
 
-  private buildAttachmentFilename(path: string, count: number): string | undefined {
-    if (count <= 1) return undefined
+  /**
+   * Tên tệp đính kèm người nhận thấy: tên tệp của đường dẫn (tệp tải từ cloud mang tên gốc, xem campaignMediaSource.ts).
+   * Luôn đặt tường minh: nodemailer tự lấy tên bằng `path.split('/')`, trên Windows ra cả đường dẫn. Trùng tên trong cùng
+   * một thư thì thêm " (2)", " (3)"... trước đuôi tệp, bỏ qua tên đã dùng.
+   */
+  private buildAttachmentFilename(path: string, usedFilenames: Set<string>): string {
     const name = basename(path) || 'attachment'
     const ext = extname(name)
     const stem = ext ? name.slice(0, -ext.length) : name
-    return `${stem} (${count})${ext}`
+    let filename = name
+    for (let count = 2; usedFilenames.has(filename); count += 1) filename = `${stem} (${count})${ext}`
+    usedFilenames.add(filename)
+    return filename
   }
 
   private buildTrackingFunctionUrl(functionName: 'email-open' | 'email-click', token: string): string {
@@ -744,19 +751,14 @@ export class EmailRuntimeService {
   async sendEmail(accountId: number, input: EmailSendInput): Promise<EmailSendResult> {
     const config = await this.ensureConfig(accountId)
     const transporter = this.getTransporter(accountId, config)
-    const filenameCounts = new Map<string, number>()
+    const usedFilenames = new Set<string>()
     const attachments = (Array.isArray(input.attachments) ? input.attachments : [])
       .map(item => String(item || '').trim())
       .filter(path => path.length > 0 && existsSync(path))
-      .map(path => {
-        const name = basename(path) || 'attachment'
-        const count = (filenameCounts.get(name) || 0) + 1
-        filenameCounts.set(name, count)
-        return {
-          path,
-          filename: this.buildAttachmentFilename(path, count)
-        }
-      })
+      .map(path => ({
+        path,
+        filename: this.buildAttachmentFilename(path, usedFilenames)
+      }))
 
     const preparedBody = await this.prepareEmailBody(accountId, input)
     let info: { messageId?: string }

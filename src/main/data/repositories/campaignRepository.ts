@@ -12,6 +12,7 @@ import {
   AuthEntitlements,
   Campaign,
   CampaignConfig,
+  CampaignExtraSettings,
   CampaignListItem,
   CampaignLogSnapshot,
   CampaignUpdate,
@@ -592,25 +593,39 @@ const sanitizeClonedCampaignExtraSettings = (actionId: string, extraSettings: un
   return extra
 }
 
-function clearZaloBirthdayMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
+// Dấu "đã lấy data" của bộ chạy; bảo trì lịch xoá dấu khi đặt lượt mới.
+const ZALO_BIRTHDAY_MATERIALIZED_KEYS = ['zaloBirthdayDataMaterializedDate', 'zaloBirthdayMaterializedCount'] as const
+const ZALO_FRIEND_RECOMMENDATION_MATERIALIZED_KEYS = [
+  'zaloFriendRecommendationDataMaterializedAt', 'zaloFriendRecommendationMaterializedCount'
+] as const
+const ZALO_CANCEL_SENT_FRIEND_REQUEST_MATERIALIZED_KEYS = [
+  'zaloCancelFriendRequestDataMaterializedAt', 'zaloCancelFriendRequestMaterializedCount'
+] as const
+
+function omitCampaignExtraSettingsKeys(
+  extraSettings: Campaign['extraSettings'],
+  keys: readonly (keyof CampaignExtraSettings)[]
+): Campaign['extraSettings'] {
   const nextExtra = { ...(extraSettings || {}) }
-  delete nextExtra.zaloBirthdayDataMaterializedDate
-  delete nextExtra.zaloBirthdayMaterializedCount
+  for (const key of keys) delete nextExtra[key]
   return nextExtra
 }
 
-function clearZaloFriendRecommendationMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
-  const nextExtra = { ...(extraSettings || {}) }
-  delete nextExtra.zaloFriendRecommendationDataMaterializedAt
-  delete nextExtra.zaloFriendRecommendationMaterializedCount
-  return nextExtra
-}
-
-function clearZaloCancelSentFriendRequestMaterializedExtra(extraSettings: Campaign['extraSettings']): Campaign['extraSettings'] {
-  const nextExtra = { ...(extraSettings || {}) }
-  delete nextExtra.zaloCancelFriendRequestDataMaterializedAt
-  delete nextExtra.zaloCancelFriendRequestMaterializedCount
-  return nextExtra
+/**
+ * Bảo trì lịch đặt lượt mới cho chiến dịch Zalo lấy data đầu lượt: xoá dấu "đã lấy" qua RPC ghi từng khoá rồi mới ghi cột
+ * trạng thái/lịch (xoá dấu trước: lỗi giữa hai lượt ghi thì chiến dịch vẫn trễ lịch và lượt bảo trì sau làm lại). Không dùng
+ * được RPC thì một lượt ghi cả khối đúng như trước.
+ */
+async function updateCampaignRemovingRuntimeSettings(
+  campaign: Campaign,
+  updates: CampaignUpdate,
+  keys: readonly (keyof CampaignExtraSettings)[]
+): Promise<Campaign> {
+  const merged = await mergeCampaignRuntimeSettings(campaign.id, {}, keys, () => updateCampaign(campaign.id, {
+    ...updates,
+    extraSettings: omitCampaignExtraSettingsKeys(campaign.extraSettings, keys)
+  }))
+  return merged.via === 'fallback' ? merged.campaign : updateCampaign(campaign.id, updates)
 }
 
 async function getCampaignActionIdForCurrentUser(campaignId: number, staffId: number): Promise<string | null> {
@@ -2520,6 +2535,77 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
   return updatedCampaign
 }
 
+// RPC V530 (akaAgentWebApp docs/FACEBOOK_EMAIL_AUTHORING_IMPLEMENTATION.md mục 3, dòng 10).
+const CAMPAIGN_RUNTIME_SETTINGS_MERGE_RPC = 'aka_agent_desktop_merge_campaign_runtime_settings'
+// DB chưa có RPC (PGRST202/42883, HTTP 404), RPC trùng chữ ký (PGRST203) hoặc phiên không được gọi (42501: EXECUTE chỉ cấp
+// cho aka_agent_desktop, App Server dùng service_role).
+const CAMPAIGN_RUNTIME_SETTINGS_MERGE_UNAVAILABLE_CODES = new Set(['PGRST202', 'PGRST203', '42883', '42501'])
+let campaignRuntimeSettingsMergeUnavailable = false
+
+export type CampaignRuntimeSettingsMergeResult =
+  | { via: 'rpc'; updatedAt: string | null }
+  | { via: 'fallback'; campaign: Campaign }
+
+function parseCampaignRuntimeSettingsMergeResponse(data: unknown): { updated: boolean; updatedAt: string | null } | null {
+  const row = Array.isArray(data) ? data[0] : data
+  if (!row || typeof row !== 'object') return null
+  const record = row as Record<string, unknown>
+  if (typeof record.updated !== 'boolean') return null
+  const rawUpdatedAt = record.updatedAt ?? record.updated_at
+  return { updated: record.updated, updatedAt: typeof rawUpdatedAt === 'string' && rawUpdatedAt.trim() ? rawUpdatedAt : null }
+}
+
+/**
+ * Bộ chạy ghi các khoá extra_settings nó sở hữu (sourceLinkIndex, contentRotationIndex, postBump*, internalSms*,
+ * zalo*Materialized*) từng khoá một qua RPC V530 (`(extra_settings - p_remove) || p_set`, theo RLS phiên Desktop), để chỉnh
+ * sửa cấu hình từ Web/iOS giữa lượt chạy không bị bản trong RAM ghi đè.
+ *
+ * `wholeObjectWrite` là đúng lượt ghi cả khối trước đây. Dùng nó khi:
+ * - DB chưa có RPC hoặc phiên không được gọi (mã ở trên): nhớ trong tiến trình, các lần sau ghi cả khối luôn, không gọi lại RPC;
+ * - RPC trả `updated: false` (dòng không còn/không thuộc phiên) hoặc trả về lạ: lượt ghi cũ tự báo lỗi/ghi như trước.
+ * Lỗi khác (mạng, hết giờ, JWT...) ném lỗi như lượt ghi cả khối.
+ */
+export async function mergeCampaignRuntimeSettings(
+  campaignId: number,
+  set: Partial<CampaignExtraSettings>,
+  remove: readonly string[],
+  wholeObjectWrite: () => Promise<Campaign>
+): Promise<CampaignRuntimeSettingsMergeResult> {
+  requireCurrentUser()
+  if (!campaignRuntimeSettingsMergeUnavailable) {
+    const pSet: Record<string, unknown> = {}
+    const pRemove = new Set(remove.map(key => String(key)))
+    for (const [key, value] of Object.entries(set || {})) {
+      // JSON bỏ khoá có giá trị undefined, nên lượt ghi cả khối cũng làm mất khoá đó: xoá cho giống.
+      if (value === undefined) pRemove.add(key)
+      else {
+        pSet[key] = value
+        pRemove.delete(key)
+      }
+    }
+    const { data, error, status } = await client().rpc(CAMPAIGN_RUNTIME_SETTINGS_MERGE_RPC, {
+      p_campaign_id: campaignId,
+      p_set: pSet,
+      p_remove: Array.from(pRemove)
+    })
+    if (error) {
+      if (status !== 404 && !CAMPAIGN_RUNTIME_SETTINGS_MERGE_UNAVAILABLE_CODES.has(String(error.code || ''))) {
+        throw new Error(`Failed to update campaign: ${error.message}`)
+      }
+      campaignRuntimeSettingsMergeUnavailable = true
+      console.warn(`[CampaignRepository] ${CAMPAIGN_RUNTIME_SETTINGS_MERGE_RPC} unavailable (${error.code || status}); ` +
+        'runtime extra_settings keys use whole-object writes in this process.')
+    } else {
+      const result = parseCampaignRuntimeSettingsMergeResponse(data)
+      if (result?.updated) return { via: 'rpc', updatedAt: result.updatedAt }
+      if (!result) campaignRuntimeSettingsMergeUnavailable = true
+      console.warn(`[CampaignRepository] ${CAMPAIGN_RUNTIME_SETTINGS_MERGE_RPC} ${result ? 'did not update' : 'returned an unexpected response for'} ` +
+        `campaign ${campaignId}; using the whole extra_settings write.`)
+    }
+  }
+  return { via: 'fallback', campaign: await wholeObjectWrite() }
+}
+
 /**
  * Persist a preclaim note only while the scheduler snapshot is still current
  * and no runtime owns the campaign. The updated_at equality is the compare
@@ -3867,12 +3953,11 @@ export async function maintainCampaignSchedules(
           await clearCampaignInputData(campaign.id)
         }
 
-        const updated = await updateCampaign(campaign.id, {
+        const updated = await updateCampaignRemovingRuntimeSettings(campaign, {
           status: 'chờ xử lý',
           schedule: nextSchedule.toISOString(),
-          note: null,
-          extraSettings: clearZaloFriendRecommendationMaterializedExtra(campaign.extraSettings)
-        })
+          note: null
+        }, ZALO_FRIEND_RECOMMENDATION_MATERIALIZED_KEYS)
         updatedCampaigns.push(updated)
         continue
       }
@@ -3882,12 +3967,11 @@ export async function maintainCampaignSchedules(
           await clearCampaignInputData(campaign.id)
         }
 
-        const updated = await updateCampaign(campaign.id, {
+        const updated = await updateCampaignRemovingRuntimeSettings(campaign, {
           status: 'chờ xử lý',
           schedule: nextSchedule.toISOString(),
-          note: null,
-          extraSettings: clearZaloCancelSentFriendRequestMaterializedExtra(campaign.extraSettings)
-        })
+          note: null
+        }, ZALO_CANCEL_SENT_FRIEND_REQUEST_MATERIALIZED_KEYS)
         updatedCampaigns.push(updated)
         continue
       }
@@ -3903,12 +3987,11 @@ export async function maintainCampaignSchedules(
           if (deleteError) throw new Error(`Failed to clear birthday campaign input data: ${deleteError.message}`)
         }
 
-        const updated = await updateCampaign(campaign.id, {
+        const updated = await updateCampaignRemovingRuntimeSettings(campaign, {
           status: 'chờ xử lý',
           schedule: nextSchedule.toISOString(),
-          note: null,
-          extraSettings: clearZaloBirthdayMaterializedExtra(campaign.extraSettings)
-        })
+          note: null
+        }, ZALO_BIRTHDAY_MATERIALIZED_KEYS)
         updatedCampaigns.push(updated)
         continue
       }

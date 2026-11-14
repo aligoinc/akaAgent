@@ -20,6 +20,7 @@ const source = ts.createSourceFile('scheduler.ts', read('src/main/services/campa
 const schedulerClass = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
 const methodNames = [
   'randomBatchRemaining', 'finishRandomBudget', 'executeCampaignV2', 'buildVariablesV2', 'resolveCampaignContentRotation', 'advanceCampaignContentRotation',
+  'persistCampaignRuntimeSettings',
   'isAdvancedContentEnabled', 'shouldUseAdvancedContent', 'shouldUseAdvancedCommentContent',
   'campaignUsesMainContent', 'campaignUsesMainMedia', 'campaignUsesMessageMedia', 'campaignUsesCommentIterations',
   'getRawCampaignContentForIndex', 'resolveCampaignMediaForIndex'
@@ -100,8 +101,18 @@ function fixture(options = {}) {
       cleanupFailedCampaignRuntime: async payload => { saved.status = payload.campaignStatus; return { ok: true, reason: 'cleaned' } },
       listCampaignInputData: async () => details,
       getCampaign: async () => structuredClone(saved),
-      updateCampaignInputData: async (id, patch) => Object.assign(details.find(item => item.id === id), patch)
+      updateCampaignInputData: async (id, patch) => Object.assign(details.find(item => item.id === id), patch),
+      // V530 per-key RPC (`(extra - remove) || set`); `mergeRpcMissing` simulates a DB without it (whole-object write).
+      mergeCampaignRuntimeSettings: async (_id, set, remove, wholeObjectWrite) => {
+        if (options.mergeRpcMissing) return { via: 'fallback', campaign: await wholeObjectWrite() }
+        stats.writes.push(structuredClone({ extraSettings: set }))
+        const extraSettings = { ...saved.extraSettings }
+        for (const key of remove) delete extraSettings[key]
+        saved = { ...saved, extraSettings: { ...extraSettings, ...structuredClone(set) } }
+        return { via: 'rpc', updatedAt: new Date().toISOString() }
+      }
     },
+    mainWindow: { webContents: { send() {} } },
     updateCampaignAndBroadcast: async (_id, patch) => {
       stats.writes.push(structuredClone(patch))
       saved = { ...saved, ...structuredClone(patch) }
@@ -163,6 +174,13 @@ async function main() {
   const simple = fixture({ simple: true, mode: 'ui' })
   for (let i = 0; i < 4; i++) await simple.run()
   assert.deepEqual(simple.stats.variables.map(v => v.campaignContent), ['First', 'Second', 'Third', 'First'])
+
+  const wholeWrite = fixture({ mergeRpcMissing: true, extra: { copyContentFromSource: true, sourceLinks: 'https://fixture.invalid/a,https://fixture.invalid/b' } })
+  for (let i = 0; i < 3; i++) await wholeWrite.run()
+  assert.deepEqual(wholeWrite.stats.variables.map(v => v.campaignContent), ['Content 1', 'Content 2', 'Content 3'], 'DB without the per-key RPC keeps the whole-object writes')
+  assert.deepEqual(wholeWrite.stats.variables.map(v => v.sourceLink), ['https://fixture.invalid/a', 'https://fixture.invalid/b', 'https://fixture.invalid/a'])
+  assert.equal(wholeWrite.saved().extraSettings.contentRotationIndex, 3)
+  assert.equal(wholeWrite.saved().extraSettings.sourceLinkIndex, 1)
 
   for (const result of [
     { status: 'completed', steps: [{ blockName: 'fb_page_post_api', status: 'success', output: { ok: false } }] },

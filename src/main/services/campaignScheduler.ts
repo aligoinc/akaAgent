@@ -46,7 +46,7 @@ import { SupabaseService } from './supabase'
 import type { DisableAccountActionContext } from '../data/repositories/accountActionRepository'
 import { CampaignFailureCleanup, CampaignFailureCleanupPayload } from './campaignFailureCleanup'
 import { WebviewRegistry } from '../playwright/webviewController'
-import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CreateCampaignDetailInput, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
+import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CampaignExtraSettings, CreateCampaignDetailInput, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { readFacebookSearchGroupCardFields, type FacebookSearchGroupCardFields } from '../../shared/facebookSearchGroupCard'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
@@ -4491,10 +4491,11 @@ export class CampaignScheduler {
         currentSourceLink = sourceLinks[sourceIdx]
         sourceLinkRotationIndex = (sourceIdx + 1) % sourceLinks.length
         try {
-          const updated = await this.updateCampaignAndBroadcast(campaign.id, {
-            extraSettings: { ...campaign.extraSettings, sourceLinkIndex: sourceLinkRotationIndex }
-          })
-          campaign.extraSettings = updated.extraSettings
+          campaign.extraSettings = await this.persistCampaignRuntimeSettings(
+            campaign.id,
+            { sourceLinkIndex: sourceLinkRotationIndex },
+            { ...campaign.extraSettings, sourceLinkIndex: sourceLinkRotationIndex }
+          )
         } catch {}
         const targetLabel = detail ? ` cho "${this.getInputDataDisplayName(campaign, detail)}"` : ''
         await this.logCampaignProgress(campaign, `🔗 Link nguồn #${sourceIdx + 1}/${sourceLinks.length}${targetLabel}: ${currentSourceLink}`)
@@ -8531,12 +8532,10 @@ export class CampaignScheduler {
       }
       allowedUidKeys = new Set(conversationUids.map(uid => this.normalizeUidForCompare(uid)).filter(Boolean))
       if (allowedUidKeys.size === 0) {
-        await this.updateCampaignAndBroadcast(campaign.id, {
-          extraSettings: {
-            ...(campaign.extraSettings || {}),
-            zaloFriendDataMaterializedAt: new Date().toISOString(),
-            zaloFriendMaterializedCount: 0
-          }
+        const runtimeSettings = { zaloFriendDataMaterializedAt: new Date().toISOString(), zaloFriendMaterializedCount: 0 }
+        await this.persistCampaignRuntimeSettings(campaign.id, runtimeSettings, {
+          ...(campaign.extraSettings || {}),
+          ...runtimeSettings
         })
         await this.logCampaignProgress(campaign, `⚠️ Các tag Zalo đã chọn chưa có bạn bè nào`)
         return []
@@ -8599,13 +8598,10 @@ export class CampaignScheduler {
     }
     this.throwIfZaloRuntimeStopping(campaign.id)
 
-    const nextExtraSettings = {
-      ...(campaign.extraSettings || {}),
-      zaloFriendDataMaterializedAt: new Date().toISOString(),
-      zaloFriendMaterializedCount: profiles.length
-    }
+    const runtimeSettings = { zaloFriendDataMaterializedAt: new Date().toISOString(), zaloFriendMaterializedCount: profiles.length }
+    const nextExtraSettings = { ...(campaign.extraSettings || {}), ...runtimeSettings }
     campaign.extraSettings = nextExtraSettings
-    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    await this.persistCampaignRuntimeSettings(campaign.id, runtimeSettings, nextExtraSettings)
     await this.logCampaignProgress(campaign, `✅ Đã thêm ${profiles.length} bạn bè Zalo vào chiến dịch "${campaign.name}"`)
     return await this.supabase.listCampaignInputData(campaign.id)
   }
@@ -8678,13 +8674,10 @@ export class CampaignScheduler {
     }
     this.throwIfZaloRuntimeStopping(campaign.id)
 
-    const nextExtraSettings = {
-      ...(campaign.extraSettings || {}),
-      zaloBirthdayDataMaterializedDate: todayDateKey,
-      zaloBirthdayMaterializedCount: profiles.length
-    }
+    const runtimeSettings = { zaloBirthdayDataMaterializedDate: todayDateKey, zaloBirthdayMaterializedCount: profiles.length }
+    const nextExtraSettings = { ...(campaign.extraSettings || {}), ...runtimeSettings }
     campaign.extraSettings = nextExtraSettings
-    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    await this.persistCampaignRuntimeSettings(campaign.id, runtimeSettings, nextExtraSettings)
 
     if (profiles.length === 0) {
       return []
@@ -8701,13 +8694,13 @@ export class CampaignScheduler {
   }
 
   private async markZaloFriendRecommendationMaterialized(campaign: Campaign, count: number): Promise<void> {
-    const nextExtraSettings = {
-      ...(campaign.extraSettings || {}),
+    const runtimeSettings = {
       zaloFriendRecommendationDataMaterializedAt: new Date().toISOString(),
       zaloFriendRecommendationMaterializedCount: count
     }
+    const nextExtraSettings = { ...(campaign.extraSettings || {}), ...runtimeSettings }
     campaign.extraSettings = nextExtraSettings
-    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    await this.persistCampaignRuntimeSettings(campaign.id, runtimeSettings, nextExtraSettings)
   }
 
   private getZaloFriendRecommendationEmptyReason(input: {
@@ -8809,13 +8802,13 @@ export class CampaignScheduler {
   }
 
   private async markZaloCancelSentFriendRequestMaterialized(campaign: Campaign, count: number): Promise<void> {
-    const nextExtraSettings = {
-      ...(campaign.extraSettings || {}),
+    const runtimeSettings = {
       zaloCancelFriendRequestDataMaterializedAt: new Date().toISOString(),
       zaloCancelFriendRequestMaterializedCount: count
     }
+    const nextExtraSettings = { ...(campaign.extraSettings || {}), ...runtimeSettings }
     campaign.extraSettings = nextExtraSettings
-    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    await this.persistCampaignRuntimeSettings(campaign.id, runtimeSettings, nextExtraSettings)
   }
 
   private async completeZaloCancelSentFriendRequestWithoutTargets(campaign: Campaign, message: string): Promise<void> {
@@ -13833,13 +13826,11 @@ export class CampaignScheduler {
     })
 
     const nextMapping = { ...mapping, [String(smsAccount.id)]: createdCampaign.id }
-    const updatedSourceCampaign = await this.updateCampaignAndBroadcast(sourceCampaign.id, {
-      extraSettings: {
-        ...(sourceCampaign.extraSettings || {}),
-        internalSmsCreatedCampaignIdsByAccount: nextMapping
-      }
-    })
-    sourceCampaign.extraSettings = updatedSourceCampaign.extraSettings
+    sourceCampaign.extraSettings = await this.persistCampaignRuntimeSettings(
+      sourceCampaign.id,
+      { internalSmsCreatedCampaignIdsByAccount: nextMapping },
+      { ...(sourceCampaign.extraSettings || {}), internalSmsCreatedCampaignIdsByAccount: nextMapping }
+    )
 
     return createdCampaign
   }
@@ -14275,7 +14266,7 @@ export class CampaignScheduler {
       postBumpRotationIndex: nextRotationIndex
     }
     campaign.extraSettings = nextExtraSettings
-    await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+    await this.persistCampaignRuntimeSettings(campaign.id, { postBumpRotationIndex: nextRotationIndex }, nextExtraSettings)
 
     for (const campaignId of earliestByCampaign.keys()) {
       await this.refreshPostBumpTargetCampaignSchedule(campaignId)
@@ -14345,7 +14336,7 @@ export class CampaignScheduler {
         postBumpCreatedCampaignIdsByAccount: mapping
       }
       campaign.extraSettings = nextExtraSettings
-      await this.updateCampaignAndBroadcast(campaign.id, { extraSettings: nextExtraSettings })
+      await this.persistCampaignRuntimeSettings(campaign.id, { postBumpCreatedCampaignIdsByAccount: mapping }, nextExtraSettings)
     }
 
     return targets
@@ -17500,14 +17491,11 @@ export class CampaignScheduler {
     // cursor. Do not overwrite it with the stale index used by this run.
     if (latestIndex !== rotation.index) return
 
-    const nextExtraSettings = {
+    const contentRotationIndex = (rotation.index + 1) % rotation.count
+    campaign.extraSettings = await this.persistCampaignRuntimeSettings(campaign.id, { contentRotationIndex }, {
       ...latestExtra,
-      contentRotationIndex: (rotation.index + 1) % rotation.count
-    }
-    const updated = await this.updateCampaignAndBroadcast(campaign.id, {
-      extraSettings: nextExtraSettings
+      contentRotationIndex
     })
-    campaign.extraSettings = updated.extraSettings
   }
 
   private async resolveCampaignMediaForIndex(
@@ -17653,6 +17641,32 @@ export class CampaignScheduler {
       updates.extraSettings !== undefined ? { invalidateConfig: true } : undefined
     )
     return updated
+  }
+
+  /**
+   * Ghi các khoá extra_settings do bộ chạy sở hữu (sourceLinkIndex, contentRotationIndex, postBump*, internalSms*,
+   * zalo*Materialized*): chỉ gửi `runtimeSettings` qua RPC ghi từng khoá (V530), nên chỉnh sửa từ Web/iOS giữa lượt chạy không
+   * bị bản trong RAM ghi đè. DB chưa có RPC hoặc phiên không được gọi (App Server) thì ghi cả khối `wholeExtraSettings` qua
+   * updateCampaignAndBroadcast đúng như trước. Trả extraSettings cho những chỗ trước đây gán bản trong RAM từ kết quả ghi:
+   * bản DB trả về (ghi cả khối) hoặc chính `wholeExtraSettings` (ghi từng khoá; đúng giá trị lượt ghi cả khối sẽ trả).
+   */
+  private async persistCampaignRuntimeSettings(
+    campaignId: number,
+    runtimeSettings: Partial<CampaignExtraSettings>,
+    wholeExtraSettings: CampaignExtraSettings
+  ): Promise<CampaignExtraSettings | undefined> {
+    const result = await this.supabase.mergeCampaignRuntimeSettings(campaignId, runtimeSettings, [],
+      () => this.updateCampaignAndBroadcast(campaignId, { extraSettings: wholeExtraSettings }))
+    if (result.via === 'fallback') return result.campaign.extraSettings
+    // Trạng thái/ghi chú không đổi: chỉ báo cấu hình đã đổi, không gửi trạng thái trong RAM có thể đã cũ.
+    try {
+      const signal: CampaignSummaryRefreshSignal = { id: campaignId, invalidateConfig: true }
+      if (result.updatedAt) signal.updatedAt = result.updatedAt
+      this.mainWindow.webContents.send(IPC_EVENTS.CAMPAIGN_STATUS_UPDATED, signal)
+    } catch {
+      // Window may be closed
+    }
+    return wholeExtraSettings
   }
 
   private async updateRunningCampaignAndBroadcast(

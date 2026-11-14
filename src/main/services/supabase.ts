@@ -1,5 +1,5 @@
 import type { AccountActionStatusReportDetailQuery } from '../../shared/actionStatusReport'
-import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignUpdate, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
+import { ZaloFriendBlocklistPageQuery, AccountContactListQuery, ActionLimitConfig, AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, CampaignExtraSettings, CampaignUpdate, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignDetail, CampaignDetailPageQuery, CreateCampaignDetailInput, AutoAccountContact, ContactDatasetFinalizeInput, ContactDatasetListQuery, ContactType, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, EmailNotificationSettings, AccountActionReportDetailQuery, AccountActionReportQuery, AddCampaignInputDataRowsRequest, AddCampaignInputDataToCampaignRequest, CampaignInputStatus, CampaignRunEventListOptions, CampaignStatus, SaveUploadDatasetRequest, ZaloGroupMemberContactListQuery, ZaloSessionCredentials, EmailAccountConfig, ZaloRemarketingCustomerListQuery, MediaClipboardImageInput, MediaGroup, MediaStorageSettings, BindCampaignDataGroupSourceRequest, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupCampaignTargetPreviewRequest, DataGroupIngestRequest, DataGroupListQuery, DataGroupMemberListQuery, DataGroupMemberMutationRequest, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SnapshotDataGroupToCampaignRequest, UpdateDataGroupRequest } from '../../shared/types'
 import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
@@ -198,6 +198,15 @@ export class SupabaseService {
   updateCampaign(id: number, updates: CampaignUpdate, requireEditReady = false, expectedUpdatedAt?: string, retrySmsInputSchedule?: boolean) { return campaignRepo.updateCampaign(id, updates, requireEditReady, expectedUpdatedAt, retrySmsInputSchedule) }
   updateClaimedZaloServerCampaign(id: number, updates: CampaignUpdate) {
     return campaignRepo.updateClaimedZaloServerCampaign(id, updates)
+  }
+  /** Ghi từng khoá extra_settings của bộ chạy (RPC V530); không dùng được RPC thì chạy `wholeObjectWrite` như trước. */
+  mergeCampaignRuntimeSettings(
+    campaignId: number,
+    set: Partial<CampaignExtraSettings>,
+    remove: readonly string[],
+    wholeObjectWrite: () => Promise<Campaign>
+  ) {
+    return campaignRepo.mergeCampaignRuntimeSettings(campaignId, set, remove, wholeObjectWrite)
   }
   updateRunningDesktopCampaign(id: number, updates: Pick<CampaignUpdate, 'status' | 'note' | 'schedule'>, expectedRuntimeClaimToken?: string) {
     return campaignRepo.updateRunningDesktopCampaign(id, updates, expectedRuntimeClaimToken)
