@@ -15,7 +15,7 @@ type ZaloEngagementWithStatus = ZaloEngagement & { delivered_at?: string | null;
  * Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (Web, 14/11/2026).
  * Hợp đồng: docs/CAMPAIGN_RESULT_ACTION_FILTER.md. Hàm DB: scripts/sql/campaign-result-actions
  * (`aka_agent_list_campaign_details_page_v3`, `aka_agent_read_campaign_result_recipients`).
- * Mọi luật hiển thị và Excel của chế độ gộp nằm ở đây (hàm thuần) để Desktop/iOS dùng lại sau.
+ * Mọi luật hiển thị và Excel của chế độ gộp nằm ở đây (hàm thuần); akaAgent chép nguyên văn sang `src/shared` (sửa ở đây trước rồi chép lại).
  */
 
 /** Mã của lượt cũ chưa ghi hành động. */
