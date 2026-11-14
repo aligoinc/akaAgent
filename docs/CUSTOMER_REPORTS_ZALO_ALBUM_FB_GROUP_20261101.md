@@ -199,6 +199,10 @@ nên không riêng người lạ; 114 tham số; 161 nhóm không tồn tại.
 
 ### Mã 802 (đo 01/11/2026, mọi runtime, 01–31/10)
 
+Cập nhật 14/11/2026: nghiên cứu 120 ngày ở [ZALO_STRANGER_BLOCK_802_STUDY_20261114.md](ZALO_STRANGER_BLOCK_802_STUDY_20261114.md)
+thay các kết luận về yếu tố tác động ở mục này. Hai điểm khác: `auto_zalo_api_error_logs` đã có 802 từ 20/08 (QR)
+và 28/08 (Server), không phải từ 02/10; yếu tố mạnh nhất là hình thức tin (chỉ chữ so với kèm ảnh), mục này chưa đo.
+
 `Zalo: Bạn đang bị chặn nhắn tin với người lạ.` — Zalo khoá **nhắn người lạ** (và thêm người lạ vào
 nhóm, `auto_error` id 45) của cả tài khoản. Trong 48 giờ sau 802 các thao tác khác vẫn chạy: tra SĐT
 1.809 OK, đổi tên 1.703, kết bạn 210 OK / 5 lỗi, nhắn nhóm 97 OK.
