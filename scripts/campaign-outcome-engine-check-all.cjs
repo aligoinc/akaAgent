@@ -29,6 +29,7 @@ const steps = [
   ['Smoke V515 (mất câu trả lời của lần chốt data / của claim, ghi chú cũ sau khi gửi thành công)', ['scripts/campaign-outcome-engine-v515-smoke.cjs']],
   ['Smoke V517 (dọn bảng vận hành engine v2 giữ 30 ngày, decision gọn)', ['scripts/campaign-outcome-engine-v517-smoke.cjs']],
   ['Smoke V527 (claim bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng)', ['scripts/campaign-outcome-engine-v527-smoke.cjs']],
+  ['Smoke V532 (lỗi có ngưỡng ở bước phụ không tạm dừng chiến dịch ngay; câu nhận data không quét khoá chính)', ['scripts/campaign-outcome-engine-v532-smoke.cjs']],
   ['Smoke lõi: Fly ra cùng kết quả với Desktop (đọc hồ sơ treo, câu lỗi rỗng)', ['scripts/campaign-engine-fly-parity-smoke.cjs']],
   ['Smoke theo dõi tương tác (nguồn, cờ chờ đăng ký, đăng ký đúng dòng, kết bạn, group không theo dõi)', ['scripts/campaign-outcome-engine-engagement-smoke.cjs']],
   ['Smoke lõi + tích hợp', ['scripts/campaign-outcome-engine-core-smoke.cjs']],
