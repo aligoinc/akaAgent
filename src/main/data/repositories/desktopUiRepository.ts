@@ -13,6 +13,7 @@ import {
 } from '../../../shared/desktopUiReads'
 import { ZALO_SHARE_REPEAT_SETTING_KEY, parseZaloShareRepeatSetting } from '../../../shared/zaloShareRepeat'
 import { RENEWAL_REMINDER_SETTING_KEY, parseRenewalReminderSettings } from '../../../shared/renewalReminder'
+import { serverAccountsUseChatApi } from '../../../shared/zaloServerOnFly'
 
 async function scope() {
   const user = requireCurrentUser()
@@ -21,7 +22,10 @@ async function scope() {
   return {
     p_staff_id: user.staffId, p_organization_id: user.organizationId,
     p_auth_username: auth.username, p_auth_password: auth.password,
-    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: user.isChatSync === true }
+    // `chatSync` chỉ dùng ở `aka_agent_desktop_account_snapshot` để tính `hasZaloSession` của tài khoản Server: true thì theo
+    // `login_status` (phiên nằm ở ChatApi), false thì theo `auto_accounts.zalo_session` (phiên App Server). Tài khoản Server của
+    // tổ chức chạy trên Fly theo cờ cũng giữ phiên ở ChatApi, nên dùng cùng điều kiện với `mapAccountFromDB`.
+    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: serverAccountsUseChatApi(user) }
   }
 }
 

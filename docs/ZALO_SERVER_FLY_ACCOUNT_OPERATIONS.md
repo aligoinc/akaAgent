@@ -100,6 +100,32 @@ md5 sổ = file `a1217f23…`; [biên nhận](../migrations/snapshots/desktop-se
     (8 nhóm), hai typecheck, `electron-vite build`.
   - Hàm DB V498/V529 vẫn giữ cho máy cài 9.6.0/9.7.0.
 
+## Màn tài khoản Desktop: "có phiên Zalo" của tài khoản Server (14/11/2026, code sau 9.7.0, chưa phát hành)
+
+- **Lỗi.** Màn tài khoản lấy danh sách bằng `aka_agent_desktop_account_snapshot`. Phần `states` (trạng thái từng tài khoản) được
+  ghép đè lên phần `catalog` ([campaignStore.ts:259](../src/renderer/src/stores/campaignStore.ts:259)), nên `hasZaloSession` do DB
+  tính thắng giá trị của `mapAccountFromDB`. DB tính `hasZaloSession` của tài khoản Server theo `p_access.chatSync`: true thì theo
+  `login_status` (phiên ở ChatApi), false thì theo `auto_accounts.zalo_session_updated_at` (phiên App Server). Desktop gửi
+  `chatSync: user.isChatSync`, nên tổ chức không Chat chạy trên Fly theo cờ bị tính theo phiên App Server.
+- **Khách thấy.** Giá trị này chỉ đổi menu chuột phải của tài khoản Server
+  ([AccountContextMenu.tsx:200](../src/renderer/src/components/CampaignPanels/AccountContextMenu.tsx:200)); bộ kiểm phiên định kỳ bỏ
+  qua tài khoản Server, còn cửa sổ sửa tài khoản đọc bản trả về của `updateAccount` (đã đúng).
+  - Tài khoản quét QR trên Fly (không có phiên App Server) đang đăng nhập: menu ghi "Đăng nhập Zalo trên server" thay vì
+    "Đăng nhập lại…", không có "Đăng xuất Zalo".
+  - Tài khoản còn mốc phiên từ thời App Server nhưng đã mất phiên: menu vẫn ghi "Đăng nhập lại…" và còn "Đăng xuất Zalo".
+  - Đo 12:15 VN 14/11: 86 tổ chức không Chat chạy trên Fly theo cờ, 131 tài khoản Server. 1 tài khoản đang đăng nhập không có
+    phiên App Server, 119 tài khoản đã mất phiên nhưng còn mốc phiên App Server.
+- **Sửa.** [desktopUiRepository.ts](../src/main/data/repositories/desktopUiRepository.ts) gửi
+  `chatSync: serverAccountsUseChatApi(user)`, cùng điều kiện với `mapAccountFromDB`. Trong DB chỉ
+  `aka_agent_desktop_account_snapshot` đọc `p_access.chatSync` (dò `pg_proc` 14/11), nên các RPC khác dùng chung `scope()`
+  (trang chiến dịch, chi tiết, lịch sử) không đổi. Tổ chức có Chat, tổ chức chạy trên App Server và tổ chức tách quyền app gửi
+  như cũ.
+- **Kiểm.** `node scripts/desktop-account-snapshot-chat-sync-smoke.cjs` (5 ca; dựng `desktopUiRepository.ts` thật với Supabase
+  giả). Truyền đường dẫn một bản `desktopUiRepository.ts` khác để đối chứng: bản `dev_3` trước sửa sai đúng ca tổ chức chạy trên
+  Fly. Kèm hai typecheck và `electron-vite build`.
+- **Còn lại.** Máy cài 9.6.0/9.7.0 vẫn tính sai tới khi phát hành bản mới. Muốn sửa ngay cho máy đã cài thì phải sửa chính hàm DB
+  (tự xét `aka_agent_zalo_server_flag_route(org)` thay vì tin cờ Desktop gửi); chưa làm.
+
 ## Giới hạn
 
 - Desktop chốt cờ lúc đăng nhập. Bật hoặc tắt cờ của tổ chức thì Desktop phải đăng nhập lại mới đổi đường. Gói Server được
