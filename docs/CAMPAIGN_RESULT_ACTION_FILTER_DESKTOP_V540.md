@@ -1,7 +1,7 @@
 # Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy trên Desktop + V539/V540
 
-Trạng thái (14/11/2026): mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11` (tách từ `dev_3`),
-**chưa merge, chưa build phát hành**.
+Trạng thái (15/11/2026): mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11` (tách từ `dev_3`), PR #684 vào
+`dev_3`, **chưa merge, chưa build phát hành**.
 
 - **V539 = SQL đã chạy trên akachat**: tối 14/11/2026 người dùng tự chạy tệp WebApp
   `scripts/sql/campaign-result-actions/migration_campaign_result_actions.sql` bằng SQL Editor. Thân hai hàm khớp tệp, nhưng **sổ migration

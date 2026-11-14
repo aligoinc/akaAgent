@@ -1,7 +1,7 @@
 # Trạng thái đã xác nhận — cập nhật 14/11/2026
 
 [Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (V539/V540)](../CAMPAIGN_RESULT_ACTION_FILTER_DESKTOP_V540.md):
-Mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11`, **chưa merge, chưa build/phát hành**. Hai hàm chỉ đọc
+Mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11` (PR #684 vào `dev_3`), **chưa merge, chưa build/phát hành**. Hai hàm chỉ đọc
 `aka_agent_list_campaign_details_page_v3` và `aka_agent_read_campaign_result_recipients` **đã có trên akachat** từ tối 14/11/2026 (người dùng
 chạy tệp WebApp bằng SQL Editor; thân hàm khớp tệp, md5 `prosrc` `4e5c3003…` / `3fe7e598…`, ACL `{postgres, service_role}`), **sổ migration
 không có dòng**: `migration_v539_campaign_result_actions.sql` là bản chép giống từng byte tệp đó (md5 `e845efc8…`), đừng chạy lại (preflight
