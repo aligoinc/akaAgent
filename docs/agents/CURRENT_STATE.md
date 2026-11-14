@@ -1,5 +1,15 @@
 # Trạng thái đã xác nhận — cập nhật 14/11/2026
 
+[Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (V539/V540)](../CAMPAIGN_RESULT_ACTION_FILTER_DESKTOP_V540.md):
+Mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11` (PR #684 vào `dev_3`), **chưa merge, chưa build/phát hành**. Hai hàm chỉ đọc
+`aka_agent_list_campaign_details_page_v3` và `aka_agent_read_campaign_result_recipients` **đã có trên akachat** từ tối 14/11/2026 (người dùng
+chạy tệp WebApp bằng SQL Editor; thân hàm khớp tệp, md5 `prosrc` `4e5c3003…` / `3fe7e598…`, ACL `{postgres, service_role}`), **sổ migration
+không có dòng**: `migration_v539_campaign_result_actions.sql` là bản chép giống từng byte tệp đó (md5 `e845efc8…`), đừng chạy lại (preflight
+từ chối). **V540 (GRANT hai hàm cho `aka_agent_desktop`) đã apply akachat 15/11/2026 00:10:26 VN** (`20261114171026`, md5 sổ = tệp
+`55a9e025…`, không apply lại; [biên nhận](../../migrations/snapshots/campaign-result-actions-desktop-v540/apply-receipt.json)); hậu kiểm:
+ACL `{postgres, service_role, aka_agent_desktop}`, thân hàm không đổi, role Desktop đi vào hàm và bị chặn đúng `desktop_staff_scope_denied`,
+0 lỗi 5xx. Số tiếp theo cho việc khác là V541 trở đi (V539 đã dùng làm tên tệp dù chưa có dòng sổ).
+
 [Engine v2 bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng (V527)](../ENGINE_V2_LEGACY_STALE_CLAIM_V527.md):
 **V527 đã apply akachat 14/11/2026 02:07:26 VN** (`20261113190717 / migration_v527_engine_claim_skip_stale_legacy_token`; md5 sổ = md5 tệp
 `40f62f5f…`; không apply lại). Chỉ thay thân `aka_agent_engine_claim_target_v1(jsonb)` (V507 `e09100fd…` → `f8935a5a…`; chủ sở hữu, quyền,

@@ -23,7 +23,7 @@ const CATALOG_TTL_MS = 5 * 60_000
 let catalogCache: { value: ActionReportStatusCatalog; expires: number } | null = null
 
 // Facebook "Đăng bài trang cá nhân" và "Tương tác newsfeed" không có data đầu vào (như WebApp facebookUsesInputData).
-const FACEBOOK_WITHOUT_INPUT_DATA = new Set(['facebook_timeline_post', 'facebook_newsfeed_interaction'])
+export const FACEBOOK_WITHOUT_INPUT_DATA: ReadonlySet<string> = new Set(['facebook_timeline_post', 'facebook_newsfeed_interaction'])
 
 async function statusCatalog(signal: AbortSignal): Promise<ActionReportStatusCatalog | null> {
   if (catalogCache && catalogCache.expires > Date.now()) return catalogCache.value

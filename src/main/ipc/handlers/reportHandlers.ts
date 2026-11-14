@@ -8,6 +8,8 @@ import { DATA_REPORT_IPC, type DataReportIpcRequest } from '../../../shared/data
 import { handleDataReportRequest } from '../../services/dataReportService'
 import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest } from '../../../shared/campaignRunReportIpc'
 import { handleCampaignRunReportRequest } from '../../services/campaignRunReportService'
+import { CAMPAIGN_RESULT_ACTIONS_IPC, type CampaignResultActionsIpcRequest } from '../../../shared/campaignResultActionsIpc'
+import { handleCampaignResultActionsRequest } from '../../services/campaignResultActionsService'
 
 export function registerReportHandlers(supabase: SupabaseService): void {
   ipcMain.handle(IPC_EVENTS.REPORT_ACCOUNT_ACTION_STATUS_SUMMARY, async (_, query: AccountActionReportQuery) => {
@@ -32,4 +34,7 @@ export function registerReportHandlers(supabase: SupabaseService): void {
 
   // Tab "Báo cáo" của chi tiết chiến dịch: one V487 read per open/refresh; same envelope, never throws.
   ipcMain.handle(CAMPAIGN_RUN_REPORT_IPC, (_, request: CampaignRunReportIpcRequest) => handleCampaignRunReportRequest(request))
+
+  // Tab Kết quả chạy: danh sách hành động và chế độ "Gộp hành động vào một dòng" (V539/V540); same envelope, never throws.
+  ipcMain.handle(CAMPAIGN_RESULT_ACTIONS_IPC, (_, request: CampaignResultActionsIpcRequest) => handleCampaignResultActionsRequest(request))
 }

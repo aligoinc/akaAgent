@@ -18,6 +18,9 @@ import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcR
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
 import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
 import {
+  CAMPAIGN_RESULT_ACTIONS_IPC, type CampaignResultActionsIpcRequest, type CampaignResultActionsIpcResponses, type CampaignResultActionsIpcResult
+} from '../shared/campaignResultActionsIpc'
+import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
@@ -705,6 +708,10 @@ const electronAPI = {
 
   campaignRunReport: (request: CampaignRunReportIpcRequest): Promise<CampaignRunReportIpcResult> =>
     ipcRenderer.invoke(CAMPAIGN_RUN_REPORT_IPC, request),
+
+  // Tab Kết quả chạy → bộ lọc Hành động / "Gộp hành động vào một dòng" (V539/V540); không ném lỗi.
+  campaignResultActions: <R extends CampaignResultActionsIpcRequest>(request: R): Promise<CampaignResultActionsIpcResult<CampaignResultActionsIpcResponses[R['kind']]>> =>
+    ipcRenderer.invoke(CAMPAIGN_RESULT_ACTIONS_IPC, request),
 
   // Upload dữ liệu → "Lọc trùng dữ liệu" (V491/V493): công tắc và một lượt đối chiếu ≤ 2.000 SĐT; không ném lỗi.
   campaignInputDuplicates: <R extends CampaignInputDuplicatesIpcRequest>(request: R): Promise<CampaignInputDuplicatesIpcResult<CampaignInputDuplicatesIpcResponses[R['kind']]>> =>

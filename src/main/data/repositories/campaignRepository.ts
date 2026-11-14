@@ -2,6 +2,8 @@ import { validateContentGroupSelection } from './groupSharingRepository'
 import { resolveCampaignGroupMetadata } from '../../../shared/facebookGroupExport'
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
+import { CAMPAIGN_RESULT_ACTION_CODE_PATTERN, CAMPAIGN_RESULT_NO_ACTION } from '../../../shared/campaignResultActions'
+import { campaignResultActionsError } from './campaignResultActionsRepository'
 import { getCampaignEditVersion } from '../campaignEditVersion'
 import { writeManagedActionResult, settleManagedActionInput, settleManagedBadTarget, defersManagedBadTargetReset } from '../../services/actionResultRuntime'
 import { recordCampaignEngagementDetail, stageCampaignEngagementSource, failCampaignEngagementDetail } from '../../services/zaloCampaignEngagement'
@@ -6325,10 +6327,18 @@ export async function listCampaignDetailsPage(
   const dateTo = normalizeCampaignDetailPageDate(query.dateTo, 'Ngày kết thúc')
   if (dateFrom && dateTo && dateFrom > dateTo) throw new Error('Khoảng thời gian lọc không hợp lệ.')
 
+  const actionCode = query.actionCode
+  if (actionCode !== undefined && actionCode !== CAMPAIGN_RESULT_NO_ACTION && !CAMPAIGN_RESULT_ACTION_CODE_PATTERN.test(actionCode)) {
+    throw new Error('Hành động lọc không hợp lệ.')
+  }
+
   const auth = requireCurrentUserCredentials()
   // The RPC validates campaign ownership, pages over narrow index keys, then
   // reads full rows only for that page. Count and items share one DB snapshot.
-  const { data, error } = await client().rpc('aka_agent_list_campaign_details_page_v2', {
+  // "Tất cả" (no actionCode) keeps the exact v2 call; an action filter reads v3 (V539, Desktop grant V540) with the same
+  // arguments plus p_action_code and the same payload.
+  const { data, error } = await client().rpc(actionCode === undefined ? 'aka_agent_list_campaign_details_page_v2' : 'aka_agent_list_campaign_details_page_v3', {
+    ...(actionCode === undefined ? {} : { p_action_code: actionCode }),
     p_engagement_filter: query.engagementFilter || null,
     p_staff_id: staffId,
     p_organization_id: organizationId,
@@ -6344,6 +6354,8 @@ export async function listCampaignDetailsPage(
     p_auth_password: auth.password
   })
 
+  // v3 thiếu hoặc chưa cấp quyền cho token Desktop: câu "đang được cập nhật" để tab báo rõ thay vì "không có kết quả".
+  if (error && actionCode !== undefined) throw new Error(campaignResultActionsError(error).message)
   if (error) throw new Error(`Failed to list campaign detail page: ${error.message}`)
   if (!data || !Array.isArray(data.items) || !Number.isSafeInteger(Number(data.total)) || Number(data.total) < 0) {
     throw new Error('Dữ liệu phân trang kết quả không hợp lệ.')
