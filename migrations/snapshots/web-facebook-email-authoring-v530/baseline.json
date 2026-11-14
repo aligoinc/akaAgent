@@ -1,9 +1,9 @@
 {
   "migration": "migrations/migration_v530_web_facebook_email_authoring.sql",
   "ledgerName": "migration_v530_web_facebook_email_authoring",
-  "migrationFileMd5": "655a95257dd8047d22fc3b32ed17b737",
+  "migrationFileMd5": "2b14b8d25f4a165b727a967c0da8a1e8",
   "project": "akachat / cgjbsmqtfhqvttudyjzq",
-  "baselineReadAt": "2026-11-14 11:16–11:25 VN (read-only qua MCP execute_sql)",
+  "baselineReadAt": "2026-11-14 11:16–11:25 và 14:20–14:40 VN (read-only qua MCP execute_sql)",
   "ledgerTopAtBaseline": "20261114015453 migration_v529_desktop_server_on_fly_flag_route (không có migration_v53x nào)",
   "patchedFunctions": [
     {
@@ -109,7 +109,7 @@
     {
       "signature": "public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)",
       "sourceMd5": "61a6b5c855fbcf86cafaf3c3c7ce6f0a",
-      "targetMd5": "252ae351970aa1c0b19d356faad94540",
+      "targetMd5": "92859e8843ded3ae24547ab788b6b292",
       "owner": "postgres",
       "securityDefiner": true,
       "volatility": "v",
@@ -122,7 +122,7 @@
     {
       "signature": "public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
       "sourceMd5": "a86278195e18d1ef8d0091b41d1d0c5b",
-      "targetMd5": "0d5eb4e8e8d8d0545daf3b4b82307c30",
+      "targetMd5": "d69df6eb6a8ddd38ff8be452d1e26ea3",
       "owner": "postgres",
       "securityDefiner": true,
       "volatility": "v",
@@ -187,17 +187,17 @@
     },
     {
       "signature": "private.aka_agent_control_assert_campaign_inputs(text,jsonb)",
-      "targetMd5": "80972291d75cec5383aab3a28838b7b6",
+      "targetMd5": "7d93bfa6922542a27d5e9784c8641697",
       "acl": "{postgres=X/postgres}"
     },
     {
-      "signature": "private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)",
-      "targetMd5": "fa594cff527fcf2f553c9f376d67dc41",
+      "signature": "private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)",
+      "targetMd5": "83a8d509fcb8b730d61dbad9a8c7da82",
       "acl": "{postgres=X/postgres}"
     },
     {
       "signature": "private.aka_agent_control_normalize_email_session(jsonb,text)",
-      "targetMd5": "7068bce7f45562f1f4ebcb2fb902a89b",
+      "targetMd5": "58ddce1f4cfbc2b6c981c24e13560f0d",
       "acl": "{postgres=X/postgres}"
     },
     {
@@ -207,12 +207,12 @@
     },
     {
       "signature": "public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)",
-      "targetMd5": "496a0182daaa9c944119a9744fcf41eb",
+      "targetMd5": "325b6bf48ecb8dd201535fa6d5eedc75",
       "acl": "{postgres=X/postgres,service_role=X/postgres}"
     },
     {
       "signature": "public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)",
-      "targetMd5": "6f0f9fefac37de258d34c55deebd2cfd",
+      "targetMd5": "bc88995a45252ec3c2260646750d4a05",
       "acl": "{postgres=X/postgres,service_role=X/postgres}"
     },
     {
@@ -261,6 +261,13 @@
       "auto_validate_campaign_send_exclusion (BEFORE UPDATE OF extra_settings, account_id, staff_id, organization_id)",
       "app_access_guard_campaign_claim (BEFORE UPDATE OF status, account_id, secondary_account_id, runtime tokens; chỉ tổ chức tách quyền; lỗi app_access_denied 42501)",
       "trg_auto_table_log (AFTER mọi INSERT/UPDATE)"
-    ]
+    ],
+    "auto_accounts_triggers_relevant": [
+      "trg_lock_auto_account_control_resources (BEFORE INSERT OR UPDATE OF account_group_id, proxy_id, flatform_type, is_zalo_show_web, is_zalo_server, is_delete, staff_id, organization_id; md5 e2643b7a416182ebaf8a508438ef02a1): khoá dòng tài khoản trước, rồi khoá advisory DÙNG CHUNG control-zalo-account-group:<id> / control-zalo-proxy:<id> theo thứ tự key",
+      "app_access_guard_flags → private.app_access_validate_account (tổ chức tách quyền): khoá advisory độc quyền control-zalo-account:<staff>, có thể báo app_access_*",
+      "aaa_desktop_parent_ownership (private.aka_agent_guard_parent_ownership md5 1e72bdc906b4d905f555c3f6d4114dda): chỉ phiên aka_agent_desktop"
+    ],
+    "desktopIdentity": "private.aka_agent_staff_scope_for_request() md5 d417807fa9dc08cfecbd6cd0aab7df3e; private.aka_agent_desktop_users(staff_id, auth_user_id, created_at); private.aka_agent_assert_request_ownership md5 31494192d0a18efeafa4fb0296008230",
+    "organization1": "tách quyền (aka_agent_app_access_separate(1) = true), gói còn hạn 3/4/5/10/13/16/17/18, 11 nhân viên có phiên Desktop 9.x (đọc 14/11/2026 14:3x VN)"
   }
 }

@@ -521,24 +521,365 @@ $smoke$;
 """
 (tests_dir / 'migration_v530_web_facebook_email_authoring_smoke.sql').write_text(smoke)
 
-# 5. Thử trên production trong giao dịch tự huỷ: migration + smoke rồi RAISE để huỷ toàn bộ (không COMMIT, không sổ).
+# 5. Thử trên production trong giao dịch tự huỷ: migration + smoke chỉ đọc + mỗi đường GHI một lần, rồi RAISE để huỷ
+#    toàn bộ (không COMMIT, không sổ). Ngân sách thời gian: migration ≤ 30 s, smoke ≤ 35 s, đường ghi ≤ 30 s.
 smoke_body = smoke[smoke.index('SET LOCAL statement_timeout'):]
-trial = f"""-- v530 THỬ TRÊN PRODUCTION TRONG GIAO DỊCH TỰ HUỶ. File sinh tự động bởi scripts/build-v530-sql.py; đừng sửa tay.
--- Chạy migration v530 rồi smoke chỉ đọc trong MỘT giao dịch, cuối cùng RAISE để huỷ toàn bộ: không bao giờ COMMIT,
--- không ghi sổ migration, NOTIFY nạp lại schema của PostgREST không được gửi (chỉ gửi khi COMMIT).
--- Chỉ chạy ngoài 10:00–11:30 và 14:00–16:00 VN (CREATE OR REPLACE giữ khoá dòng pg_proc tới khi huỷ).
--- Kết quả đạt: lỗi 'v530_trial_ok: ...'. Lỗi khác (v530_..., assertion) = bước đó không đạt; đều đã huỷ.
-BEGIN;
-{migration_body}
-{smoke_body}RESET ROLE;
-DO $trial$
+assert smoke_body.count("SET LOCAL statement_timeout = '60s';") == 1
+trial_smoke = smoke_body.replace("SET LOCAL statement_timeout = '60s';", "SET LOCAL statement_timeout = '35s';")
+assert migration_body.count("SET LOCAL statement_timeout = '60s';") == 1
+trial_migration = migration_body.replace("SET LOCAL statement_timeout = '60s';", "SET LOCAL statement_timeout = '20s';")
+
+def trial_budget(seconds, label):
+    return f"""DO $budget$
 BEGIN
-  RAISE EXCEPTION 'v530_trial_ok: migration + smoke đạt, giao dịch đã huỷ (không COMMIT, không ghi sổ)';
+  IF clock_timestamp() - transaction_timestamp() > interval '{seconds} seconds' THEN
+    RAISE EXCEPTION 'v530_trial_budget_exceeded: {label} (% s)', round(extract(epoch FROM clock_timestamp() - transaction_timestamp()));
+  END IF;
 END
-$trial$;
-ROLLBACK;
+$budget$;
 """
-assert 'COMMIT;' not in trial.replace('không COMMIT', '').replace('khi COMMIT', '')
+
+trial_writes = r"""-- Đường GHI: mỗi RPC ghi của v530 chạy một lần với trigger và RLS thật của production, trên một nhân viên chọn
+-- động (ưu tiên tổ chức 1, app Desktop đang tắt, tài khoản Facebook không chạy). Mọi dòng tạo ra đều bị huỷ cùng
+-- giao dịch. Bước bị luật tách quyền từ chối (app_access_*) ghi "blocked", không tính là hỏng.
+SET LOCAL statement_timeout = '30s';
+DO $writes$
+DECLARE
+  c_tag constant text := 'v530-trial:' || txid_current()::text;
+  c_session constant jsonb := '{"brandName":"v530 trial","host":"smtp.invalid","port":587,"secure":false,
+    "user":"v530-trial@example.invalid","pass":"v530-trial-secret","fromEmail":"v530-trial@example.invalid","replyTo":"","cc":""}';
+  c_link_keys constant jsonb := '{"facebook_message_uid":"findUidTargetCampaignIds",
+    "facebook_group_post":"findFacebookGroupPostTargetCampaignIds","facebook_comment_seeding_post":"findPostLinkTargetCampaignIds",
+    "facebook_comment_seeding":"findFacebookGroupCommentTargetCampaignIds","facebook_join_group":"findFacebookGroupJoinTargetCampaignIds"}';
+  v_try bigint;
+  v_staff bigint;
+  v_org bigint;
+  v_app_online boolean;
+  v_fb_account bigint;
+  v_email_account bigint;
+  v_trial_account bigint;
+  v_action text;
+  v_source bigint;
+  v_foreign bigint;
+  v_auth uuid;
+  v_fb_campaign bigint;
+  v_email_campaign bigint;
+  v_ts timestamptz;
+  v jsonb;
+  v_row record;
+  v_notes text[] := ARRAY[]::text[];
+  v_failed integer := 0;
+  v_state text;
+  v_message text;
+BEGIN
+  -- Chọn nhân viên thử (đọc bằng quyền chủ sở hữu, trước khi đổi vai trò).
+  FOREACH v_try IN ARRAY ARRAY[1, NULL]::bigint[] LOOP
+    SELECT c.staff_id, c.organization_id, c.app_online INTO v_staff, v_org, v_app_online
+    FROM (
+      SELECT s.id AS staff_id, s.organization_id,
+        EXISTS (SELECT 1 FROM public.auto_staff_device_presence p WHERE p.staff_id = s.id AND p.ended_at IS NULL
+          AND p.last_seen_at >= now() - interval '5 minutes') AS app_online,
+        EXISTS (SELECT 1 FROM public.auto_accounts e WHERE e.staff_id = s.id AND e.organization_id = s.organization_id
+          AND e.flatform_type = 'email' AND COALESCE(e.is_delete, false) = false AND COALESCE(e.is_active, true)) AS has_email,
+        EXISTS (SELECT 1 FROM private.aka_agent_desktop_users u WHERE u.staff_id = s.id) AS has_desktop_user
+      FROM public.org_staff s
+      WHERE s.is_active IS TRUE AND s.deleted_at IS NULL AND COALESCE(s.is_aka_agent_enabled, true)
+        AND (v_try IS NULL OR s.organization_id = v_try)
+        AND EXISTS (SELECT 1 FROM public.auto_accounts a WHERE a.staff_id = s.id AND a.organization_id = s.organization_id
+          AND a.flatform_type = 'facebook' AND COALESCE(a.is_delete, false) = false AND COALESCE(a.is_active, true)
+          AND COALESCE(a.is_aka_agent_enabled, true) AND a.status IS DISTINCT FROM 'đang chạy'
+          AND a.runtime_operation_claim_token IS NULL)
+    ) c
+    ORDER BY c.app_online, c.has_email DESC, c.has_desktop_user DESC, c.staff_id
+    LIMIT 1;
+    EXIT WHEN v_staff IS NOT NULL;
+  END LOOP;
+  IF v_staff IS NULL THEN
+    RAISE EXCEPTION 'v530_trial_failed: không có nhân viên đang hoạt động nào có tài khoản Facebook rảnh để thử đường ghi';
+  END IF;
+  SELECT a.id INTO v_fb_account FROM public.auto_accounts a
+  WHERE a.staff_id = v_staff AND a.organization_id = v_org AND a.flatform_type = 'facebook'
+    AND COALESCE(a.is_delete, false) = false AND COALESCE(a.is_active, true) AND COALESCE(a.is_aka_agent_enabled, true)
+    AND a.status IS DISTINCT FROM 'đang chạy' AND a.runtime_operation_claim_token IS NULL
+  ORDER BY a.id LIMIT 1;
+  SELECT a.id INTO v_email_account FROM public.auto_accounts a
+  WHERE a.staff_id = v_staff AND a.organization_id = v_org AND a.flatform_type = 'email'
+    AND COALESCE(a.is_delete, false) = false AND COALESCE(a.is_active, true) AND COALESCE(a.is_aka_agent_enabled, true)
+    AND a.status IS DISTINCT FROM 'đang chạy'
+  ORDER BY a.id LIMIT 1;
+  SELECT action.id INTO v_action FROM public.auto_campaign_actions action
+  WHERE action.flatform_type = 'facebook' AND COALESCE(action.is_delete, false) = false AND COALESCE(action.is_active, true)
+    AND c_link_keys ? action.id
+  ORDER BY (action.id = 'facebook_message_uid') DESC, action.id LIMIT 1;
+  -- Chiến dịch tìm data đang rảnh của chính nhân viên (không chạy, không lease) để thử liên kết.
+  SELECT c.id INTO v_source FROM public.auto_campaigns c
+  WHERE c.staff_id = v_staff AND c.organization_id = v_org AND COALESCE(c.is_delete, false) = false
+    AND c.action_id IN ('facebook_find_data_group', 'facebook_find_data_search')
+    AND c.status IS DISTINCT FROM 'đang chạy' AND c.runtime_claim_token IS NULL AND c.runtime_unit_token IS NULL
+  ORDER BY c.id DESC LIMIT 1;
+  -- Chiến dịch đã xoá của nhân viên khác: RLS phiên Desktop phải không cho ghi.
+  SELECT c.id INTO v_foreign FROM public.auto_campaigns c
+  WHERE c.staff_id IS DISTINCT FROM v_staff AND c.is_delete = true ORDER BY c.id DESC LIMIT 1;
+  SELECT u.auth_user_id INTO v_auth FROM private.aka_agent_desktop_users u WHERE u.staff_id = v_staff;
+  v_notes := v_notes || format('staff=%s org=%s app_online=%s fb_account=%s action=%s', v_staff, v_org, v_app_online, v_fb_account,
+    COALESCE(v_action, 'none'));
+
+  -- Như Control API: vai trò service_role.
+  PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
+  SET LOCAL ROLE service_role;
+
+  -- 1. Tạo chiến dịch Facebook tạm dừng với một dòng data.
+  BEGIN
+    IF v_action IS NULL THEN RAISE EXCEPTION 'không có loại chiến dịch Facebook phù hợp'; END IF;
+    v := public.create_control_campaign_v2(v_staff, v_org, c_tag || ':fb',
+      jsonb_build_object('name', '[v530 trial] Facebook', 'actionId', v_action, 'accountId', v_fb_account,
+        'schedule', now() + interval '30 days', 'content', 'v530 trial', 'scheduleType', 'daily',
+        'extraSettings', jsonb_build_object('v530Trial', 1), 'images', '[]'::jsonb, 'webCampaignForm', 'form_1'),
+      jsonb_build_array(jsonb_build_object('uid', '100000000000001', 'name', 'v530 trial')), 'tạm dừng');
+    v_fb_campaign := (v->>'campaign_id')::bigint;
+    SELECT c.status, c.secondary_account_id, c.web_campaign_form,
+      (SELECT count(*) FROM public.auto_campaign_input_data d WHERE d.campaign_id = c.id) AS inputs
+    INTO v_row FROM public.auto_campaigns c WHERE c.id = v_fb_campaign;
+    IF (v->>'created')::boolean IS NOT TRUE OR v_row.status IS DISTINCT FROM 'tạm dừng' OR v_row.inputs <> 1
+      OR v_row.secondary_account_id IS NOT NULL OR v_row.web_campaign_form IS DISTINCT FROM 'form_1' THEN
+      RAISE EXCEPTION 'kết quả lạ: % / %', v, to_jsonb(v_row);
+    END IF;
+    v_notes := v_notes || format('fb_create=ok(%s)', v_fb_campaign);
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+    v_fb_campaign := NULL;
+    v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+    v_notes := v_notes || format('fb_create=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+  END;
+
+  -- 2. Sửa (tên, bỏ tài khoản phụ, extra_settings có khoá bộ chạy sở hữu) và 3. thêm data.
+  IF v_fb_campaign IS NULL THEN
+    v_notes := v_notes || 'fb_update=skipped fb_add_rows=skipped'::text;
+  ELSE
+    BEGIN
+      SELECT c.updated_at INTO v_ts FROM public.auto_campaigns c WHERE c.id = v_fb_campaign;
+      v := public.update_control_campaign_atomic(v_staff, v_org, v_fb_campaign, v_ts,
+        jsonb_build_object('name', '[v530 trial] Facebook (đã sửa)', 'secondary_account_id', NULL,
+          'extra_settings', jsonb_build_object('v530Trial', 2, 'contentRotationIndex', 99, 'zaloFriendDataMaterializedAt', 'x')));
+      SELECT c.name, c.status, c.secondary_account_id, c.extra_settings INTO v_row FROM public.auto_campaigns c WHERE c.id = v_fb_campaign;
+      IF (v->>'updated')::boolean IS NOT TRUE OR v_row.name <> '[v530 trial] Facebook (đã sửa)' OR v_row.status <> 'tạm dừng'
+        OR v_row.secondary_account_id IS NOT NULL OR v_row.extra_settings IS DISTINCT FROM '{"v530Trial":2}'::jsonb THEN
+        RAISE EXCEPTION 'kết quả lạ: % / %', v, to_jsonb(v_row);
+      END IF;
+      v_notes := v_notes || 'fb_update=ok'::text;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+      v_notes := v_notes || format('fb_update=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+    END;
+    BEGIN
+      v := public.add_control_campaign_input_rows(v_staff, v_org, v_fb_campaign, c_tag || ':fb:rows', 1,
+        '[{"uid":"100000000000002","name":"v530 trial 2"},{"uid":100000000000003}]'::jsonb, now() + interval '30 days', 'tạm dừng');
+      SELECT c.status, (SELECT count(*) FROM public.auto_campaign_input_data d WHERE d.campaign_id = c.id) AS inputs
+      INTO v_row FROM public.auto_campaigns c WHERE c.id = v_fb_campaign;
+      IF (v->>'inserted')::integer IS DISTINCT FROM 2 OR v_row.inputs <> 3 OR v_row.status <> 'tạm dừng' THEN
+        RAISE EXCEPTION 'kết quả lạ: % / %', v, to_jsonb(v_row);
+      END IF;
+      v_notes := v_notes || 'fb_add_rows=ok'::text;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+      v_notes := v_notes || format('fb_add_rows=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  -- 4. Tài khoản Email: tạo (kết nối chưa đạt), 5. sửa cấu hình không gửi mật khẩu với p_verified NULL (giữ trạng thái).
+  BEGIN
+    v := public.create_control_email_account_atomic(v_staff, v_org, '[v530 trial] Email', c_session, false, 'v530 trial: không kiểm tra kết nối', NULL, NULL);
+    IF (v->>'created')::boolean IS NOT TRUE THEN
+      v_notes := v_notes || format('email_account_create=not_created(%s)', v->>'reason');
+    ELSE
+      v_trial_account := (v->>'account_id')::bigint;
+      IF v::text LIKE '%v530-trial-secret%' OR v->'account'->'email_session' ? 'pass'
+        OR NOT EXISTS (SELECT 1 FROM public.auto_accounts a WHERE a.id = v_trial_account AND a.flatform_type = 'email'
+          AND a.login_status = 'chưa đăng nhập' AND a.email_session->>'pass' = 'v530-trial-secret' AND a.staff_id = v_staff) THEN
+        RAISE EXCEPTION 'kết quả lạ (mật khẩu trong kết quả hoặc dòng sai)';
+      END IF;
+      v_notes := v_notes || format('email_account_create=ok(%s)', v_trial_account);
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+    v_trial_account := NULL;
+    v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+    v_notes := v_notes || format('email_account_create=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+  END;
+  IF v_trial_account IS NULL THEN
+    v_notes := v_notes || 'email_account_update=skipped'::text;
+  ELSE
+    BEGIN
+      SELECT a.updated_at INTO v_ts FROM public.auto_accounts a WHERE a.id = v_trial_account;
+      v := public.update_control_email_account_atomic(v_staff, v_org, v_trial_account, v_ts, '[v530 trial] Email (đã sửa)',
+        (c_session - 'pass') || '{"brandName":"v530 trial 2","port":"465","secure":true}'::jsonb, NULL, NULL, NULL);
+      IF (v->>'updated')::boolean IS NOT TRUE
+        OR NOT EXISTS (SELECT 1 FROM public.auto_accounts a WHERE a.id = v_trial_account AND a.name = '[v530 trial] Email (đã sửa)'
+          AND a.login_status = 'chưa đăng nhập' AND a.email_session_last_error = 'v530 trial: không kiểm tra kết nối'
+          AND a.email_session->>'pass' = 'v530-trial-secret' AND a.email_session->'port' = '465'::jsonb
+          AND a.email_session->'secure' = 'true'::jsonb AND a.email_session->>'brandName' = 'v530 trial 2') THEN
+        RAISE EXCEPTION 'kết quả lạ: %', v - 'account';
+      END IF;
+      v_notes := v_notes || 'email_account_update=ok'::text;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+      v_notes := v_notes || format('email_account_update=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  -- 6. Tạo chiến dịch Email tạm dừng (tài khoản Email có sẵn của nhân viên, không có thì tài khoản vừa tạo).
+  IF COALESCE(v_email_account, v_trial_account) IS NULL THEN
+    v_notes := v_notes || 'email_campaign_create=skipped(không có tài khoản Email)'::text;
+  ELSE
+    BEGIN
+      v := public.create_control_campaign_v2(v_staff, v_org, c_tag || ':email',
+        jsonb_build_object('name', '[v530 trial] Email', 'actionId', 'email_send', 'accountId', COALESCE(v_email_account, v_trial_account),
+          'schedule', now() + interval '30 days', 'content', '<p>v530 trial</p>', 'scheduleType', 'daily',
+          'extraSettings', jsonb_build_object('emailSubject', 'v530 trial', 'emailBodyIsHtml', true), 'images', '[]'::jsonb,
+          'webCampaignForm', 'form_1'),
+        '[{"email":"v530-trial@example.invalid","name":"v530 trial"}]'::jsonb, 'tạm dừng');
+      v_email_campaign := (v->>'campaign_id')::bigint;
+      IF (v->>'created')::boolean IS NOT TRUE OR (v->>'input_count')::integer <> 1
+        OR NOT EXISTS (SELECT 1 FROM public.auto_campaigns c WHERE c.id = v_email_campaign AND c.status = 'tạm dừng' AND c.action_id = 'email_send') THEN
+        RAISE EXCEPTION 'kết quả lạ: %', v;
+      END IF;
+      v_notes := v_notes || format('email_campaign_create=ok(%s, account %s)', v_email_campaign,
+        CASE WHEN v_email_account IS NULL THEN 'trial' ELSE 'existing' END);
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+      v_notes := v_notes || format('email_campaign_create=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  -- 7. Xoá mềm tài khoản Email vừa tạo.
+  IF v_trial_account IS NULL THEN
+    v_notes := v_notes || 'email_account_delete=skipped'::text;
+  ELSE
+    BEGIN
+      v := public.delete_control_email_account_atomic(v_staff, v_org, v_trial_account);
+      IF (v->>'deleted')::boolean IS NOT TRUE
+        OR NOT EXISTS (SELECT 1 FROM public.auto_accounts a WHERE a.id = v_trial_account AND a.is_delete AND NOT a.is_active) THEN
+        RAISE EXCEPTION 'kết quả lạ: %', v;
+      END IF;
+      v_notes := v_notes || 'email_account_delete=ok'::text;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + CASE WHEN v_message LIKE 'app_access_%' THEN 0 ELSE 1 END;
+      v_notes := v_notes || format('email_account_delete=%s(%s %s)', CASE WHEN v_message LIKE 'app_access_%' THEN 'blocked' ELSE 'FAILED' END, v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  -- 8. Liên kết chiến dịch tìm data → chiến dịch Facebook vừa tạo: thêm, thêm lại (không đổi), bớt.
+  IF v_fb_campaign IS NULL OR v_source IS NULL THEN
+    v_notes := v_notes || format('find_data_link=skipped(%s)',
+      CASE WHEN v_fb_campaign IS NULL THEN 'không có chiến dịch Facebook thử' ELSE 'nhân viên không có chiến dịch tìm data đang rảnh' END);
+  ELSE
+    BEGIN
+      v := public.aka_agent_control_link_find_data_target(v_staff, v_org, ARRAY[v_source], v_fb_campaign, c_link_keys->>v_action, true);
+      IF (v->>'ok')::boolean IS NOT TRUE OR v->'changedSourceIds' IS DISTINCT FROM jsonb_build_array(v_source)
+        OR NOT (SELECT c.extra_settings->(c_link_keys->>v_action) @> to_jsonb(v_fb_campaign) FROM public.auto_campaigns c WHERE c.id = v_source) THEN
+        RAISE EXCEPTION 'thêm: %', v;
+      END IF;
+      v := public.aka_agent_control_link_find_data_target(v_staff, v_org, ARRAY[v_source], v_fb_campaign, c_link_keys->>v_action, true);
+      IF (v->>'ok')::boolean IS NOT TRUE OR v->'unchangedSourceIds' IS DISTINCT FROM jsonb_build_array(v_source) THEN
+        RAISE EXCEPTION 'thêm lại: %', v;
+      END IF;
+      v := public.aka_agent_control_link_find_data_target(v_staff, v_org, ARRAY[v_source], v_fb_campaign, c_link_keys->>v_action, false);
+      IF (v->>'ok')::boolean IS NOT TRUE OR v->'changedSourceIds' IS DISTINCT FROM jsonb_build_array(v_source)
+        OR (SELECT c.extra_settings->(c_link_keys->>v_action) @> to_jsonb(v_fb_campaign) FROM public.auto_campaigns c WHERE c.id = v_source) THEN
+        RAISE EXCEPTION 'bớt: %', v;
+      END IF;
+      v_notes := v_notes || format('find_data_link=ok(source %s, %s)', v_source, c_link_keys->>v_action);
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + 1;
+      v_notes := v_notes || format('find_data_link=FAILED(%s %s)', v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  -- 9. Bộ chạy Desktop ghi từng khoá: vai trò aka_agent_desktop + JWT của chính nhân viên (quyền cột, RLS, trigger sở
+  --    hữu thật); chiến dịch của nhân viên khác phải không ghi được. 10. Sau đó Web sửa không đè được khoá bộ chạy.
+  IF v_fb_campaign IS NULL OR v_auth IS NULL THEN
+    v_notes := v_notes || format('desktop_merge=skipped(%s)',
+      CASE WHEN v_fb_campaign IS NULL THEN 'không có chiến dịch Facebook thử' ELSE 'nhân viên chưa có phiên Desktop 9.x' END);
+  ELSE
+    BEGIN
+      PERFORM set_config('request.jwt.claims', json_build_object('role', 'aka_agent_desktop', 'sub', v_auth)::text, true);
+      SET LOCAL ROLE aka_agent_desktop;
+      v := public.aka_agent_desktop_merge_campaign_runtime_settings(v_fb_campaign,
+        '{"contentRotationIndex":3,"sourceLinkIndex":1}'::jsonb, ARRAY['postBumpRotationIndex', 'v530Trial']);
+      IF (v->>'updated')::boolean IS NOT TRUE OR v->>'updatedAt' IS NULL THEN
+        RAISE EXCEPTION 'ghi chiến dịch của chính mình: %', v;
+      END IF;
+      IF v_foreign IS NOT NULL THEN
+        v := public.aka_agent_desktop_merge_campaign_runtime_settings(v_foreign, '{"v530Trial":true}'::jsonb);
+        IF (v->>'updated')::boolean IS NOT FALSE THEN
+          RAISE EXCEPTION 'RLS cho phiên Desktop ghi chiến dịch % của nhân viên khác', v_foreign;
+        END IF;
+      END IF;
+      PERFORM set_config('request.jwt.claims', '{"role":"service_role"}', true);
+      SET LOCAL ROLE service_role;
+      IF (SELECT c.extra_settings FROM public.auto_campaigns c WHERE c.id = v_fb_campaign)
+        IS DISTINCT FROM '{"contentRotationIndex":3,"sourceLinkIndex":1}'::jsonb THEN
+        RAISE EXCEPTION 'extra_settings sau khi ghi từng khoá: %', (SELECT c.extra_settings FROM public.auto_campaigns c WHERE c.id = v_fb_campaign);
+      END IF;
+      v_notes := v_notes || format('desktop_merge=ok desktop_merge_foreign=%s', CASE WHEN v_foreign IS NULL THEN 'skipped' ELSE 'denied' END);
+      SELECT c.updated_at INTO v_ts FROM public.auto_campaigns c WHERE c.id = v_fb_campaign;
+      v := public.update_control_campaign_atomic(v_staff, v_org, v_fb_campaign, v_ts,
+        '{"extra_settings":{"contentRotationIndex":99,"postBumpRotationIndex":5,"v530Trial":3}}'::jsonb);
+      IF (v->>'updated')::boolean IS NOT TRUE OR (SELECT c.extra_settings FROM public.auto_campaigns c WHERE c.id = v_fb_campaign)
+        IS DISTINCT FROM '{"contentRotationIndex":3,"sourceLinkIndex":1,"v530Trial":3}'::jsonb THEN
+        RAISE EXCEPTION 'Web sửa sau khi bộ chạy ghi: % / %', v, (SELECT c.extra_settings FROM public.auto_campaigns c WHERE c.id = v_fb_campaign);
+      END IF;
+      v_notes := v_notes || 'web_update_keeps_runtime_keys=ok'::text;
+    EXCEPTION WHEN OTHERS THEN
+      GET STACKED DIAGNOSTICS v_state = RETURNED_SQLSTATE, v_message = MESSAGE_TEXT;
+      v_failed := v_failed + 1;
+      v_notes := v_notes || format('desktop_merge=FAILED(%s %s)', v_state, left(v_message, 140));
+    END;
+  END IF;
+
+  RESET ROLE;
+  PERFORM set_config('request.jwt.claims', '', true);
+  IF v_failed > 0 THEN
+    RAISE EXCEPTION 'v530_trial_failed: migration + smoke đạt; % bước ghi hỏng: % (giao dịch đã huỷ)', v_failed, array_to_string(v_notes, '; ');
+  END IF;
+  RAISE EXCEPTION 'v530_trial_ok: migration + smoke đạt; đường ghi: %; giao dịch đã huỷ (không COMMIT, không ghi sổ)', array_to_string(v_notes, '; ');
+END
+$writes$;
+"""
+
+trial = f"""-- v530 THỬ TRÊN PRODUCTION TRONG GIAO DỊCH TỰ HUỶ. File sinh tự động bởi scripts/build-v530-sql.py; đừng sửa tay.
+-- Trong MỘT giao dịch: migration v530 → smoke chỉ đọc → mỗi đường GHI của v530 chạy một lần với trigger/RLS thật
+-- (tạo/sửa/thêm data chiến dịch Facebook, tạo/sửa/xoá tài khoản Email, tạo chiến dịch Email, liên kết tìm data, RPC
+-- ghi từng khoá bằng vai trò aka_agent_desktop) → RAISE để huỷ toàn bộ. Không bao giờ COMMIT, không ghi sổ migration,
+-- NOTIFY nạp lại schema của PostgREST không được gửi (chỉ gửi khi COMMIT); id của sequence bị tiêu vài số.
+-- Chỉ chạy ngoài 10:00–11:30 và 14:00–16:00 VN: CREATE OR REPLACE giữ khoá dòng pg_proc, bước ghi giữ khoá dòng tài
+-- khoản Facebook/Email của nhân viên thử và khoá hạn mức tài khoản của nhân viên đó tới khi huỷ (vài giây).
+-- Giới hạn thời gian: migration ≤ 30 s, smoke ≤ 35 s/câu, đường ghi ≤ 30 s (tổng ≤ 100 s), lock_timeout 5 s.
+-- Kết quả đạt: lỗi 'v530_trial_ok: ...' liệt kê từng bước (ok / skipped / blocked = luật tách quyền từ chối).
+-- 'v530_trial_failed: ...' hoặc lỗi khác (v530_..., assertion) = có bước không đạt; mọi trường hợp đều đã huỷ.
+BEGIN;
+-- PostgreSQL 17+ (production): chặn cứng cả giao dịch ở 100 giây (quá hạn thì phiên bị ngắt, giao dịch tự huỷ).
+-- PostgreSQL 16 (test cục bộ) chưa có tham số này; khi đó chỉ còn các giới hạn theo từng câu ở dưới.
+DO $limit$
+BEGIN
+  IF current_setting('server_version_num')::integer >= 170000 THEN
+    PERFORM set_config('transaction_timeout', '100s', true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END
+$limit$;
+{trial_migration}
+{trial_budget(30, 'migration')}{trial_smoke}RESET ROLE;
+{trial_budget(65, 'smoke')}{trial_writes}ROLLBACK;
+"""
+assert 'COMMIT;' not in trial.replace('không COMMIT', '').replace('khi COMMIT', '').replace('bao giờ COMMIT', '')
 (tests_dir / 'migration_v530_web_facebook_email_authoring_rollback_trial.sql').write_text(trial)
 
 for path in ('migrations/snapshots/web-facebook-email-authoring-v530/rollback.sql',

@@ -27,8 +27,8 @@ BEGIN
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', 'ed7f9d447f72019feca71d717fd4e1bd'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '2d3fbc42cc31e57138cdc99554af9254'),
     ('public.delete_control_campaign_atomic(bigint,bigint,bigint)', '2af929cc5e02683e5e9dc16a48cc9bac', '2ede03119ec482102e1647c0b1bae220'),
-    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '252ae351970aa1c0b19d356faad94540'),
-    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', '0d5eb4e8e8d8d0545daf3b4b82307c30'),
+    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '92859e8843ded3ae24547ab788b6b292'),
+    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', 'd69df6eb6a8ddd38ff8be452d1e26ea3'),
     ('public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)', 'd283261c5e77558d10f5df86cd4d1127', '5fa5bcfd31f69db8114b82f3ade9b4a5')
   ) AS x(signature, source_md5, target_md5) LOOP
     ASSERT md5(pg_get_functiondef(r.signature::regprocedure)) = r.target_md5, 'target ' || r.signature;
@@ -36,12 +36,12 @@ BEGIN
   FOR r IN SELECT * FROM (VALUES
     ('private.aka_agent_web_email_campaigns_policy(bigint)', '2d131332e8d0fa54b4669f51a8fe92d8', '{postgres=X/postgres}'),
     ('public.aka_agent_control_web_email_campaigns_policy(bigint)', '70616ad6489372725cca33b09da41852', '{postgres=X/postgres,service_role=X/postgres}'),
-    ('private.aka_agent_control_assert_campaign_inputs(text,jsonb)', '80972291d75cec5383aab3a28838b7b6', '{postgres=X/postgres}'),
-    ('private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)', 'fa594cff527fcf2f553c9f376d67dc41', '{postgres=X/postgres}'),
-    ('private.aka_agent_control_normalize_email_session(jsonb,text)', '7068bce7f45562f1f4ebcb2fb902a89b', '{postgres=X/postgres}'),
+    ('private.aka_agent_control_assert_campaign_inputs(text,jsonb)', '7d93bfa6922542a27d5e9784c8641697', '{postgres=X/postgres}'),
+    ('private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)', '83a8d509fcb8b730d61dbad9a8c7da82', '{postgres=X/postgres}'),
+    ('private.aka_agent_control_normalize_email_session(jsonb,text)', '58ddce1f4cfbc2b6c981c24e13560f0d', '{postgres=X/postgres}'),
     ('private.aka_agent_control_email_account_view(public.auto_accounts)', 'c6c2b3218cf5946c7d4fa3cc23d0f429', '{postgres=X/postgres}'),
-    ('public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)', '496a0182daaa9c944119a9744fcf41eb', '{postgres=X/postgres,service_role=X/postgres}'),
-    ('public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)', '6f0f9fefac37de258d34c55deebd2cfd', '{postgres=X/postgres,service_role=X/postgres}'),
+    ('public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)', '325b6bf48ecb8dd201535fa6d5eedc75', '{postgres=X/postgres,service_role=X/postgres}'),
+    ('public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)', 'bc88995a45252ec3c2260646750d4a05', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.delete_control_email_account_atomic(bigint,bigint,bigint)', 'b912bdab82a4669569b184e46f166da0', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_control_email_account_session(bigint,bigint,bigint)', '2ee2b490a2f9224a9d8ac63a1683040f', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)', '84182eb3960fd1952037e80e183036fa', '{postgres=X/postgres,service_role=X/postgres}'),

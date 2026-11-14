@@ -39,8 +39,8 @@ BEGIN
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', 'ed7f9d447f72019feca71d717fd4e1bd'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '2d3fbc42cc31e57138cdc99554af9254'),
     ('public.delete_control_campaign_atomic(bigint,bigint,bigint)', '2af929cc5e02683e5e9dc16a48cc9bac', '2ede03119ec482102e1647c0b1bae220'),
-    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '252ae351970aa1c0b19d356faad94540'),
-    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', '0d5eb4e8e8d8d0545daf3b4b82307c30'),
+    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '92859e8843ded3ae24547ab788b6b292'),
+    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', 'd69df6eb6a8ddd38ff8be452d1e26ea3'),
     ('public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)', 'd283261c5e77558d10f5df86cd4d1127', '5fa5bcfd31f69db8114b82f3ade9b4a5')
   ) AS x(signature, source_md5, target_md5) LOOP
     checksum := md5(pg_get_functiondef(r.signature::regprocedure));
@@ -1795,7 +1795,7 @@ DROP FUNCTION IF EXISTS public.update_control_email_account_atomic(bigint,bigint
 DROP FUNCTION IF EXISTS public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint);
 DROP FUNCTION IF EXISTS private.aka_agent_control_email_account_view(public.auto_accounts);
 DROP FUNCTION IF EXISTS private.aka_agent_control_normalize_email_session(jsonb,text);
-DROP FUNCTION IF EXISTS private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint);
+DROP FUNCTION IF EXISTS private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb);
 DROP FUNCTION IF EXISTS private.aka_agent_control_assert_campaign_inputs(text,jsonb);
 DROP FUNCTION IF EXISTS public.aka_agent_control_web_email_campaigns_policy(bigint);
 DROP FUNCTION IF EXISTS private.aka_agent_web_email_campaigns_policy(bigint);
@@ -1813,8 +1813,8 @@ BEGIN
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', 'ed7f9d447f72019feca71d717fd4e1bd'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '2d3fbc42cc31e57138cdc99554af9254'),
     ('public.delete_control_campaign_atomic(bigint,bigint,bigint)', '2af929cc5e02683e5e9dc16a48cc9bac', '2ede03119ec482102e1647c0b1bae220'),
-    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '252ae351970aa1c0b19d356faad94540'),
-    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', '0d5eb4e8e8d8d0545daf3b4b82307c30'),
+    ('public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)', '61a6b5c855fbcf86cafaf3c3c7ce6f0a', '92859e8843ded3ae24547ab788b6b292'),
+    ('public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)', 'a86278195e18d1ef8d0091b41d1d0c5b', 'd69df6eb6a8ddd38ff8be452d1e26ea3'),
     ('public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)', 'd283261c5e77558d10f5df86cd4d1127', '5fa5bcfd31f69db8114b82f3ade9b4a5')
   ) AS x(signature, source_md5, target_md5) LOOP
     IF md5(pg_get_functiondef(r.signature::regprocedure)) IS DISTINCT FROM r.source_md5 THEN

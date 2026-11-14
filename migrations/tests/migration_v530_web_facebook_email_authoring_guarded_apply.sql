@@ -30,12 +30,12 @@ BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852"},
-    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6"},
-    {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"7068bce7f45562f1f4ebcb2fb902a89b"},
+    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429"},
-    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"496a0182daaa9c944119a9744fcf41eb"},
-    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"6f0f9fefac37de258d34c55deebd2cfd"},
+    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75"},
+    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05"},
     {"signature":"public.delete_control_email_account_atomic(bigint,bigint,bigint)","target":"b912bdab82a4669569b184e46f166da0"},
     {"signature":"public.aka_agent_control_email_account_session(bigint,bigint,bigint)","target":"2ee2b490a2f9224a9d8ac63a1683040f"},
     {"signature":"public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)","target":"84182eb3960fd1952037e80e183036fa"},
@@ -104,9 +104,9 @@ DECLARE
     {"signature":"public.delete_control_campaign_atomic(bigint,bigint,bigint)",
      "source":"2af929cc5e02683e5e9dc16a48cc9bac","target":"2ede03119ec482102e1647c0b1bae220"},
     {"signature":"public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)",
-     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"252ae351970aa1c0b19d356faad94540"},
+     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"92859e8843ded3ae24547ab788b6b292"},
     {"signature":"public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
-     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"0d5eb4e8e8d8d0545daf3b4b82307c30"},
+     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"d69df6eb6a8ddd38ff8be452d1e26ea3"},
     {"signature":"public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)",
      "source":"d283261c5e77558d10f5df86cd4d1127","target":"5fa5bcfd31f69db8114b82f3ade9b4a5"}
   ]$specs$::jsonb;
@@ -404,12 +404,11 @@ BEGIN
         || '    RAISE EXCEPTION ''control_action_not_allowed'';' || E'\n'
         || '  END IF;' || E'\n'
         || '  -- V530: tài khoản phụ (chỉ Facebook, loại cho phép) và dòng data Facebook (uid) / Email (email hợp lệ).' || E'\n'
-        || '  v_secondary_account_id := NULLIF(p_campaign->>''secondaryAccountId'', '''')::bigint;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id, v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n'
+        || '  -- Chỉ đọc secondaryAccountId với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này như trước v530.' || E'\n'
         || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id,' || E'\n'
+        || '      p_campaign->''secondaryAccountId'');' || E'\n'
         || '    PERFORM private.aka_agent_control_assert_campaign_inputs(v_account_platform, p_inputs);' || E'\n'
         || '  END IF;' || E'\n',
         1, 'create_secondary_inputs');
@@ -428,15 +427,22 @@ BEGIN
         '  v_appended_inputs integer := 0;' || E'\n',
         '  v_appended_inputs integer := 0;' || E'\n'
         || '  v_secondary_account_id bigint;' || E'\n'
-        || '  -- V530: khoá extra_settings do bộ chạy sở hữu; patch không ghi được (hợp đồng mục 3.2).' || E'\n'
+        || '  -- V530: khoá extra_settings do bộ chạy sở hữu (hợp đồng mục 3.2). 5 khoá đầu patch không bao giờ ghi được.' || E'\n'
         || '  v_runtime_owned_keys constant text[] := ARRAY[' || E'\n'
         || '    ''sourceLinkIndex'', ''contentRotationIndex'', ''postBumpRotationIndex'',' || E'\n'
-        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount'',' || E'\n'
-        || '    ''zaloFriendDataMaterializedAt'', ''zaloFriendMaterializedCount'',' || E'\n'
-        || '    ''zaloBirthdayDataMaterializedDate'', ''zaloBirthdayMaterializedCount'',' || E'\n'
-        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloFriendRecommendationMaterializedCount'',' || E'\n'
-        || '    ''zaloCancelFriendRequestDataMaterializedAt'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
-        || '  ];' || E'\n',
+        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  -- 4 cặp dấu "đã lấy data" của Zalo (dấu, số lượng): giữ giá trị trong DB, trừ khi patch gửi dấu là JSON null' || E'\n'
+        || '  -- (Web chủ động đặt lại khi đổi loại/đổi chế độ lấy data): khi đó cả cặp lấy từ patch như trước v530.' || E'\n'
+        || '  v_runtime_reset_markers constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendDataMaterializedAt'', ''zaloBirthdayDataMaterializedDate'',' || E'\n'
+        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloCancelFriendRequestDataMaterializedAt''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_reset_counters constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendMaterializedCount'', ''zaloBirthdayMaterializedCount'',' || E'\n'
+        || '    ''zaloFriendRecommendationMaterializedCount'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_kept_keys text[];' || E'\n',
         1, 'update_declare');
       d := pg_temp.v530_replace(d,
         '          account.flatform_type = ''sms''' || E'\n'
@@ -485,18 +491,27 @@ BEGIN
         || '  END IF;' || E'\n'
         || E'\n'
         || '  -- V530: tài khoản phụ chỉ Facebook ở loại cho phép. Khoá patch ''secondary_account_id'': có = ghi, null = xoá.' || E'\n'
-        || '  IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
-        || '    RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '  -- Chỉ đọc với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này (và cột) như trước v530.' || E'\n'
+        || '  v_secondary_account_id := v_campaign.secondary_account_id;' || E'\n'
+        || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
+        || '      RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '    END IF;' || E'\n'
+        || '    IF p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      OR (v_campaign.secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id'')) THEN' || E'\n'
+        || '      v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '        p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN p_campaign_patch->''secondary_account_id''' || E'\n'
+        || '          ELSE to_jsonb(v_campaign.secondary_account_id) END);' || E'\n'
+        || '    END IF;' || E'\n'
         || '  END IF;' || E'\n'
-        || '  v_secondary_account_id := CASE WHEN p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    THEN NULLIF(p_campaign_patch->>''secondary_account_id'', '''')::bigint ELSE v_campaign.secondary_account_id END;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    OR (v_account_platform IN (''facebook'', ''email'') AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id''))) THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
-        || '      CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
-        || '      v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n',
+        || '  -- V530: khoá bộ chạy sở hữu được giữ theo DB ở lượt ghi này (xem khai báo).' || E'\n'
+        || '  SELECT v_runtime_owned_keys || COALESCE(array_agg(kept.key ORDER BY pair.ordinality, kept.position), ARRAY[]::text[])' || E'\n'
+        || '  INTO v_runtime_kept_keys' || E'\n'
+        || '  FROM unnest(v_runtime_reset_markers, v_runtime_reset_counters) WITH ORDINALITY AS pair(marker, counter, ordinality)' || E'\n'
+        || '  CROSS JOIN LATERAL (VALUES (pair.marker, 1), (pair.counter, 2)) AS kept(key, position)' || E'\n'
+        || '  WHERE jsonb_typeof(p_campaign_patch->''extra_settings''->pair.marker) IS DISTINCT FROM ''null'';' || E'\n',
         1, 'update_secondary_account');
       d := pg_temp.v530_replace(d,
         '    IF v_current_input_count <> p_expected_input_count THEN' || E'\n'
@@ -514,18 +529,19 @@ BEGIN
       d := pg_temp.v530_replace(d,
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n',
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n'
-        || '    secondary_account_id = CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
+        || '    secondary_account_id = CASE WHEN v_account_platform IN (''facebook'', ''email'') AND p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
         1, 'update_set_secondary');
       d := pg_temp.v530_replace(d,
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN p_campaign_patch->''extra_settings'' ELSE campaign.extra_settings END,' || E'\n',
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN' || E'\n'
         || '      CASE WHEN jsonb_typeof(p_campaign_patch->''extra_settings'') = ''object'' THEN' || E'\n'
-        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_owned_keys)' || E'\n'
+        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_kept_keys)' || E'\n'
         || '        || COALESCE((' || E'\n'
         || '          SELECT jsonb_object_agg(owned.key, owned.value)' || E'\n'
         || '          FROM jsonb_each(CASE WHEN jsonb_typeof(campaign.extra_settings) = ''object''' || E'\n'
         || '            THEN campaign.extra_settings ELSE ''{}''::jsonb END) AS owned' || E'\n'
-        || '          WHERE owned.key = ANY(v_runtime_owned_keys)' || E'\n'
+        || '          WHERE owned.key = ANY(v_runtime_kept_keys)' || E'\n'
         || '        ), ''{}''::jsonb)' || E'\n'
         || '      ELSE p_campaign_patch->''extra_settings'' END' || E'\n'
         || '    ELSE campaign.extra_settings END,' || E'\n',
@@ -799,12 +815,15 @@ $guard$;
 --    Caller không gửi token 'email' nhận kết quả như trước.
 -- 4. Tạo/sửa/thêm data (create_control_campaign, update_control_campaign_atomic,
 --    add_control_campaign_input_rows) nhận tài khoản Facebook/Email của đúng nhân viên; hành động cùng
---    nền tảng; tài khoản phụ chỉ Facebook ở loại cho phép (create: p_campaign->>'secondaryAccountId',
---    update: khoá patch 'secondary_account_id', có khoá = ghi, null = xoá); dòng data Facebook phải có uid,
---    Email phải có email hợp lệ. Sửa chiến dịch chạy trên Desktop (Facebook, Email, Zalo QR/trình duyệt)
---    bị chặn khi chiến dịch còn claim/unit lease VÀ app Desktop của nhân viên còn báo hoạt động trong 2 phút
+--    nền tảng; tài khoản phụ chỉ Facebook ở loại cho phép (create: p_campaign->'secondaryAccountId',
+--    update: khoá patch 'secondary_account_id', có khoá = ghi, null = xoá; chỉ đọc với chiến dịch
+--    Facebook/Email, Zalo/SMS bỏ qua khoá như trước); dòng data Facebook phải có uid, Email phải có email
+--    hợp lệ. Sửa chiến dịch chạy trên Desktop (Facebook, Email, Zalo QR/trình duyệt) bị chặn khi chiến dịch
+--    còn claim/unit lease VÀ app Desktop của nhân viên còn báo hoạt động trong 2 phút
 --    ({"updated":false,"reason":"campaign_running","desktop_runtime_busy":true}). Khi patch có
---    extra_settings, 13 khoá do bộ chạy sở hữu luôn lấy từ dòng hiện tại (mọi nền tảng).
+--    extra_settings (mọi nền tảng): 5 khoá bộ chạy sở hữu luôn lấy từ dòng hiện tại; 4 cặp dấu "đã lấy data"
+--    của Zalo lấy từ dòng hiện tại, trừ khi patch gửi dấu của cặp là JSON null (Web chủ động đặt lại: lấy cả
+--    cặp từ patch như trước v530).
 --    update_control_campaign_by_config_version_atomic gọi bản trên nên có cùng luật, không sửa.
 -- 5. RPC mới (chỉ service_role): tài khoản Email SMTP (tạo/sửa/xoá/đọc cấu hình đầy đủ cho API kiểm tra
 --    kết nối), aka_agent_control_link_find_data_target (thêm/bớt chiến dịch đích trong find*TargetCampaignIds
@@ -827,12 +846,12 @@ BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852"},
-    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6"},
-    {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"7068bce7f45562f1f4ebcb2fb902a89b"},
+    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429"},
-    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"496a0182daaa9c944119a9744fcf41eb"},
-    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"6f0f9fefac37de258d34c55deebd2cfd"},
+    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75"},
+    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05"},
     {"signature":"public.delete_control_email_account_atomic(bigint,bigint,bigint)","target":"b912bdab82a4669569b184e46f166da0"},
     {"signature":"public.aka_agent_control_email_account_session(bigint,bigint,bigint)","target":"2ee2b490a2f9224a9d8ac63a1683040f"},
     {"signature":"public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)","target":"84182eb3960fd1952037e80e183036fa"},
@@ -948,7 +967,8 @@ REVOKE ALL ON FUNCTION public.aka_agent_control_web_email_campaigns_policy(bigin
 GRANT EXECUTE ON FUNCTION public.aka_agent_control_web_email_campaigns_policy(bigint) TO service_role;
 
 -- 2. Hàm phụ dùng chung cho các RPC ghi (chỉ owner).
--- Dòng data Facebook phải có uid; Email phải có email hợp lệ (kiểm thô, API kiểm đầy đủ theo luật Desktop).
+-- Dòng data Facebook phải có uid (chuỗi hoặc số, khác rỗng); Email phải có email là chuỗi hợp lệ (kiểm thô,
+-- API kiểm đầy đủ theo luật Desktop). Kiểu JSON khác (mảng, đối tượng, boolean, null) bị từ chối.
 CREATE OR REPLACE FUNCTION private.aka_agent_control_assert_campaign_inputs(p_platform text, p_inputs jsonb)
 RETURNS void
 LANGUAGE plpgsql
@@ -962,7 +982,8 @@ BEGIN
     SELECT item.ordinality - 1 INTO v_row
     FROM jsonb_array_elements(COALESCE(p_inputs, '[]'::jsonb)) WITH ORDINALITY AS item(value, ordinality)
     WHERE jsonb_typeof(item.value) IS DISTINCT FROM 'object'
-       OR NULLIF(btrim(COALESCE(item.value->>'uid', '')), '') IS NULL
+       OR COALESCE(jsonb_typeof(item.value->'uid') NOT IN ('string', 'number'), true)
+       OR NULLIF(btrim(item.value->>'uid'), '') IS NULL
     ORDER BY item.ordinality
     LIMIT 1;
     IF v_row IS NOT NULL THEN
@@ -972,7 +993,8 @@ BEGIN
     SELECT item.ordinality - 1 INTO v_row
     FROM jsonb_array_elements(COALESCE(p_inputs, '[]'::jsonb)) WITH ORDINALITY AS item(value, ordinality)
     WHERE jsonb_typeof(item.value) IS DISTINCT FROM 'object'
-       OR COALESCE(item.value->>'email', '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+       OR jsonb_typeof(item.value->'email') IS DISTINCT FROM 'string'
+       OR (item.value->>'email') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
        OR length(item.value->>'email') > 254
     ORDER BY item.ordinality
     LIMIT 1;
@@ -985,22 +1007,28 @@ $function$;
 REVOKE ALL ON FUNCTION private.aka_agent_control_assert_campaign_inputs(text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
 
 -- Tài khoản phụ: chỉ Facebook, loại có allow_secondary_account, cùng nhân viên/tổ chức, chưa xoá, khác tài khoản chính.
-CREATE OR REPLACE FUNCTION private.aka_agent_control_assert_secondary_account(
+-- p_value là giá trị JSON thô của payload: thiếu/null/chuỗi rỗng = không có tài khoản phụ (trả NULL); số nguyên
+-- dương hoặc chuỗi chữ số = id; kiểu/giá trị khác báo control_secondary_account_not_found (không ép kiểu mù).
+CREATE OR REPLACE FUNCTION private.aka_agent_control_resolve_secondary_account(
   p_staff_id bigint,
   p_organization_id bigint,
   p_platform text,
   p_action_id text,
   p_primary_account_id bigint,
-  p_secondary_account_id bigint
+  p_value jsonb
 )
-RETURNS void
+RETURNS bigint
 LANGUAGE plpgsql
 STABLE
 SET search_path TO 'pg_catalog', 'public'
 AS $function$
+DECLARE
+  v_text text;
+  v_secondary_account_id bigint;
 BEGIN
-  IF p_secondary_account_id IS NULL THEN
-    RETURN;
+  IF p_value IS NULL OR jsonb_typeof(p_value) = 'null'
+    OR (jsonb_typeof(p_value) = 'string' AND btrim(p_value #>> '{}') = '') THEN
+    RETURN NULL;
   END IF;
   IF p_platform IS DISTINCT FROM 'facebook' OR NOT EXISTS (
     SELECT 1 FROM public.auto_campaign_actions AS action
@@ -1011,12 +1039,18 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'control_secondary_account_not_allowed';
   END IF;
-  IF p_secondary_account_id = p_primary_account_id THEN
+  v_text := CASE WHEN jsonb_typeof(p_value) IN ('number', 'string') THEN btrim(p_value #>> '{}') END;
+  -- CASE: chỉ ép kiểu sau khi đã chắc là chuỗi chữ số (thứ tự tính của OR không được bảo đảm).
+  IF (CASE WHEN v_text IS NULL OR v_text !~ '^[0-9]{1,18}$' THEN true ELSE v_text::bigint <= 0 END) THEN
+    RAISE EXCEPTION 'control_secondary_account_not_found';
+  END IF;
+  v_secondary_account_id := v_text::bigint;
+  IF v_secondary_account_id = p_primary_account_id THEN
     RAISE EXCEPTION 'control_secondary_account_same_as_primary';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.auto_accounts AS account
-    WHERE account.id = p_secondary_account_id
+    WHERE account.id = v_secondary_account_id
       AND account.staff_id = p_staff_id
       AND account.organization_id = p_organization_id
       AND account.flatform_type = 'facebook'
@@ -1024,13 +1058,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'control_secondary_account_not_found';
   END IF;
+  RETURN v_secondary_account_id;
 END
 $function$;
-REVOKE ALL ON FUNCTION private.aka_agent_control_assert_secondary_account(bigint, bigint, text, text, bigint, bigint)
+REVOKE ALL ON FUNCTION private.aka_agent_control_resolve_secondary_account(bigint, bigint, text, text, bigint, jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- Cấu hình SMTP đúng dạng Desktop lưu: đủ 9 khoá, chuỗi rỗng khi trống, port số, secure boolean.
--- pass thiếu/null/rỗng thì dùng p_current_pass (giữ mật khẩu cũ khi sửa).
+-- Kiểu JSON chặt: 7 trường chữ phải là chuỗi (thiếu/null = trống), secure là boolean (thiếu/null = false),
+-- port là số nguyên hoặc chuỗi chữ số trong 1..65535 (thiếu/null/chuỗi rỗng = 465 khi secure, không thì 587);
+-- sai kiểu báo invalid_control_email_account_payload. pass thiếu/null/rỗng thì dùng p_current_pass (giữ mật khẩu
+-- cũ khi sửa).
 CREATE OR REPLACE FUNCTION private.aka_agent_control_normalize_email_session(p_session jsonb, p_current_pass text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -1038,29 +1076,39 @@ IMMUTABLE
 SET search_path TO 'pg_catalog'
 AS $function$
 DECLARE
+  v_key text;
   v_secure boolean;
   v_port_text text;
-  v_port numeric;
+  v_port integer;
   v_pass text;
   v_result jsonb;
 BEGIN
   IF jsonb_typeof(p_session) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
-  v_secure := jsonb_typeof(p_session->'secure') = 'boolean' AND (p_session->>'secure')::boolean;
+  FOREACH v_key IN ARRAY ARRAY['brandName', 'host', 'user', 'pass', 'fromEmail', 'replyTo', 'cc'] LOOP
+    IF COALESCE(jsonb_typeof(p_session->v_key), 'null') NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_control_email_account_payload';
+    END IF;
+  END LOOP;
+  IF COALESCE(jsonb_typeof(p_session->'secure'), 'null') NOT IN ('boolean', 'null')
+    OR COALESCE(jsonb_typeof(p_session->'port'), 'null') NOT IN ('number', 'string', 'null') THEN
+    RAISE EXCEPTION 'invalid_control_email_account_payload';
+  END IF;
+  v_secure := COALESCE((p_session->>'secure')::boolean, false);
   v_port_text := btrim(COALESCE(p_session->>'port', ''));
-  IF jsonb_typeof(p_session->'port') IN ('number', 'string') AND v_port_text ~ '^[0-9]{1,9}(\.[0-9]+)?$' THEN
-    v_port := floor(v_port_text::numeric);
-  END IF;
-  IF v_port IS NULL OR v_port < 1 OR v_port > 65535 THEN
+  IF v_port_text = '' AND COALESCE(jsonb_typeof(p_session->'port'), 'null') <> 'number' THEN
     v_port := CASE WHEN v_secure THEN 465 ELSE 587 END;
+  ELSIF (CASE WHEN v_port_text ~ '^[0-9]{1,5}$' THEN v_port_text::integer BETWEEN 1 AND 65535 ELSE false END) THEN
+    v_port := v_port_text::integer;
+  ELSE
+    RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
-  v_pass := CASE WHEN jsonb_typeof(p_session->'pass') = 'string' AND p_session->>'pass' <> ''
-    THEN p_session->>'pass' ELSE p_current_pass END;
+  v_pass := CASE WHEN COALESCE(p_session->>'pass', '') <> '' THEN p_session->>'pass' ELSE p_current_pass END;
   v_result := jsonb_build_object(
     'brandName', btrim(COALESCE(p_session->>'brandName', '')),
     'host', btrim(COALESCE(p_session->>'host', '')),
-    'port', v_port::integer,
+    'port', v_port,
     'secure', v_secure,
     'user', btrim(COALESCE(p_session->>'user', '')),
     'pass', COALESCE(v_pass, ''),
@@ -1155,9 +1203,12 @@ BEGIN
     RAISE EXCEPTION 'inactive_control_staff';
   END IF;
 
-  -- Cùng thứ tự khoá tài nguyên với create_control_zalo_account_atomic và trigger lock_auto_account_control_resources.
+  -- Khoá tài nguyên nhóm ở chế độ DÙNG CHUNG, đúng khoá mà trigger lock_auto_account_control_resources lấy khi
+  -- INSERT: vẫn loại trừ sửa/xoá nhóm của Control Web (khoá độc quyền cùng key) nhưng không chặn các lượt ghi
+  -- tài khoản khác trong nhóm, nên không tạo vòng chờ với trigger (trigger tách quyền lấy khoá hạn mức nhân viên
+  -- trước khoá nhóm). Tài khoản Email không có luật "nhóm chỉ dùng cho máy" như Zalo nên không cần độc quyền.
   IF p_account_group_id IS NOT NULL THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
+    PERFORM pg_advisory_xact_lock_shared(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
     PERFORM account_group.id
     FROM public.auto_account_groups AS account_group
     WHERE account_group.id = p_account_group_id
@@ -1165,7 +1216,7 @@ BEGIN
       AND account_group.organization_id = p_organization_id
       AND account_group.flatform_type = 'email'
       AND COALESCE(account_group.is_delete, false) = false
-    FOR UPDATE OF account_group;
+    FOR SHARE OF account_group;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('created', false, 'reason', 'account_group_not_found');
     END IF;
@@ -1182,7 +1233,8 @@ BEGIN
     RETURN jsonb_build_object('created', false, 'reason', 'capability_unavailable');
   END IF;
 
-  -- Cùng khoá hạn mức tài khoản theo nhân viên với create_control_zalo_account_atomic và trigger tách quyền.
+  -- Cùng khoá hạn mức tài khoản theo nhân viên với create_control_zalo_account_atomic và trigger tách quyền
+  -- (private.app_access_validate_account).
   PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account:' || p_staff_id::text, 0));
   SELECT count(*)::integer
   INTO v_account_count
@@ -1226,7 +1278,8 @@ GRANT EXECUTE ON FUNCTION public.create_control_email_account_atomic(bigint, big
   TO service_role;
 
 -- Sửa: so khớp updated_at. p_name/p_session null = giữ; p_session thiếu pass = giữ mật khẩu cũ.
--- p_account_group_id là giá trị đích (null = bỏ nhóm). Đổi cấu hình thì phải kèm kết quả kiểm tra (p_verified).
+-- p_account_group_id là giá trị đích (null = bỏ nhóm). p_verified: true/false = kết quả kiểm tra kết nối;
+-- null = không có kết quả đáng tin, giữ nguyên trạng thái đăng nhập/mốc đã kiểm/lỗi (kể cả khi đổi cấu hình).
 CREATE OR REPLACE FUNCTION public.update_control_email_account_atomic(
   p_staff_id bigint,
   p_organization_id bigint,
@@ -1249,6 +1302,7 @@ DECLARE
   v_account public.auto_accounts%ROWTYPE;
   v_session jsonb;
   v_error text := left(NULLIF(btrim(COALESCE(p_verify_error, '')), ''), 2000);
+  v_lock_key bigint;
 BEGIN
   IF p_staff_id IS NULL OR p_staff_id <= 0 OR p_organization_id IS NULL OR p_organization_id <= 0
     OR p_account_id IS NULL OR p_account_id <= 0 THEN
@@ -1256,7 +1310,6 @@ BEGIN
   END IF;
   IF p_expected_updated_at IS NULL
     OR (p_name IS NOT NULL AND (btrim(p_name) = '' OR length(btrim(p_name)) > 255))
-    OR (p_session IS NOT NULL AND p_verified IS NULL)
     OR (p_account_group_id IS NOT NULL AND p_account_group_id <= 0) THEN
     RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
@@ -1271,10 +1324,11 @@ BEGIN
     RAISE EXCEPTION 'inactive_control_staff';
   END IF;
 
-  IF p_account_group_id IS NOT NULL THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
-  END IF;
-
+  -- Thứ tự khoá đúng như một câu UPDATE auto_accounts thường: dòng tài khoản trước, rồi các khoá tài nguyên
+  -- DÙNG CHUNG mà trigger lock_auto_account_control_resources sẽ lấy (nhóm cũ, nhóm mới, proxy; theo thứ tự
+  -- key tăng dần). Lấy khoá nhóm độc quyền trước dòng tài khoản sẽ tạo vòng chờ với trigger đó (một lượt
+  -- UPDATE khác đang giữ dòng và chờ khoá nhóm dùng chung), và hai lượt chuyển nhóm ngược chiều sẽ khoá chéo.
+  -- Khoá dùng chung vẫn loại trừ sửa/xoá nhóm của Control Web (khoá độc quyền cùng key).
   SELECT account.*
   INTO v_account
   FROM public.auto_accounts AS account
@@ -1291,6 +1345,26 @@ BEGIN
     RETURN jsonb_build_object('updated', false, 'reason', 'version_conflict');
   END IF;
 
+  FOR v_lock_key IN
+    SELECT DISTINCT resource.lock_key
+    FROM (
+      VALUES
+        (CASE WHEN v_account.account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || v_account.account_group_id::text, 0
+        ) END),
+        (CASE WHEN p_account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || p_account_group_id::text, 0
+        ) END),
+        (CASE WHEN v_account.proxy_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-proxy:' || v_account.proxy_id::text, 0
+        ) END)
+    ) AS resource(lock_key)
+    WHERE resource.lock_key IS NOT NULL
+    ORDER BY resource.lock_key
+  LOOP
+    PERFORM pg_advisory_xact_lock_shared(v_lock_key);
+  END LOOP;
+
   IF p_account_group_id IS NOT NULL THEN
     PERFORM account_group.id
     FROM public.auto_account_groups AS account_group
@@ -1299,7 +1373,7 @@ BEGIN
       AND account_group.organization_id = p_organization_id
       AND account_group.flatform_type = 'email'
       AND COALESCE(account_group.is_delete, false) = false
-    FOR UPDATE OF account_group;
+    FOR SHARE OF account_group;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('updated', false, 'reason', 'account_group_not_found');
     END IF;
@@ -1314,6 +1388,9 @@ BEGIN
 
   -- Như Desktop: lưu cấu hình mới thì kết quả kiểm tra thay thế trạng thái cũ (chưa đạt: xoá mốc đã kiểm);
   -- chỉ kiểm tra lại cấu hình cũ (p_session null) thì giữ mốc đã kiểm khi chưa đạt.
+  -- p_verified NULL = không có kết quả kiểm tra đáng tin (API kiểm từ máy chủ, không phải máy Desktop gửi thư;
+  -- lỗi mạng khi thông số kết nối không đổi): vẫn lưu cấu hình nhưng GIỮ login_status, mốc đã kiểm và lỗi cũ,
+  -- để tài khoản đang chạy tốt không bị chuyển 'chưa đăng nhập' (làm dừng mọi chiến dịch Desktop của nó).
   UPDATE public.auto_accounts AS account
   SET
     name = COALESCE(btrim(p_name), account.name),
@@ -1668,9 +1745,9 @@ DECLARE
     {"signature":"public.delete_control_campaign_atomic(bigint,bigint,bigint)",
      "source":"2af929cc5e02683e5e9dc16a48cc9bac","target":"2ede03119ec482102e1647c0b1bae220"},
     {"signature":"public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)",
-     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"252ae351970aa1c0b19d356faad94540"},
+     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"92859e8843ded3ae24547ab788b6b292"},
     {"signature":"public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
-     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"0d5eb4e8e8d8d0545daf3b4b82307c30"},
+     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"d69df6eb6a8ddd38ff8be452d1e26ea3"},
     {"signature":"public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)",
      "source":"d283261c5e77558d10f5df86cd4d1127","target":"5fa5bcfd31f69db8114b82f3ade9b4a5"}
   ]$specs$::jsonb;
@@ -1968,12 +2045,11 @@ BEGIN
         || '    RAISE EXCEPTION ''control_action_not_allowed'';' || E'\n'
         || '  END IF;' || E'\n'
         || '  -- V530: tài khoản phụ (chỉ Facebook, loại cho phép) và dòng data Facebook (uid) / Email (email hợp lệ).' || E'\n'
-        || '  v_secondary_account_id := NULLIF(p_campaign->>''secondaryAccountId'', '''')::bigint;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id, v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n'
+        || '  -- Chỉ đọc secondaryAccountId với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này như trước v530.' || E'\n'
         || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id,' || E'\n'
+        || '      p_campaign->''secondaryAccountId'');' || E'\n'
         || '    PERFORM private.aka_agent_control_assert_campaign_inputs(v_account_platform, p_inputs);' || E'\n'
         || '  END IF;' || E'\n',
         1, 'create_secondary_inputs');
@@ -1992,15 +2068,22 @@ BEGIN
         '  v_appended_inputs integer := 0;' || E'\n',
         '  v_appended_inputs integer := 0;' || E'\n'
         || '  v_secondary_account_id bigint;' || E'\n'
-        || '  -- V530: khoá extra_settings do bộ chạy sở hữu; patch không ghi được (hợp đồng mục 3.2).' || E'\n'
+        || '  -- V530: khoá extra_settings do bộ chạy sở hữu (hợp đồng mục 3.2). 5 khoá đầu patch không bao giờ ghi được.' || E'\n'
         || '  v_runtime_owned_keys constant text[] := ARRAY[' || E'\n'
         || '    ''sourceLinkIndex'', ''contentRotationIndex'', ''postBumpRotationIndex'',' || E'\n'
-        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount'',' || E'\n'
-        || '    ''zaloFriendDataMaterializedAt'', ''zaloFriendMaterializedCount'',' || E'\n'
-        || '    ''zaloBirthdayDataMaterializedDate'', ''zaloBirthdayMaterializedCount'',' || E'\n'
-        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloFriendRecommendationMaterializedCount'',' || E'\n'
-        || '    ''zaloCancelFriendRequestDataMaterializedAt'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
-        || '  ];' || E'\n',
+        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  -- 4 cặp dấu "đã lấy data" của Zalo (dấu, số lượng): giữ giá trị trong DB, trừ khi patch gửi dấu là JSON null' || E'\n'
+        || '  -- (Web chủ động đặt lại khi đổi loại/đổi chế độ lấy data): khi đó cả cặp lấy từ patch như trước v530.' || E'\n'
+        || '  v_runtime_reset_markers constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendDataMaterializedAt'', ''zaloBirthdayDataMaterializedDate'',' || E'\n'
+        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloCancelFriendRequestDataMaterializedAt''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_reset_counters constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendMaterializedCount'', ''zaloBirthdayMaterializedCount'',' || E'\n'
+        || '    ''zaloFriendRecommendationMaterializedCount'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_kept_keys text[];' || E'\n',
         1, 'update_declare');
       d := pg_temp.v530_replace(d,
         '          account.flatform_type = ''sms''' || E'\n'
@@ -2049,18 +2132,27 @@ BEGIN
         || '  END IF;' || E'\n'
         || E'\n'
         || '  -- V530: tài khoản phụ chỉ Facebook ở loại cho phép. Khoá patch ''secondary_account_id'': có = ghi, null = xoá.' || E'\n'
-        || '  IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
-        || '    RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '  -- Chỉ đọc với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này (và cột) như trước v530.' || E'\n'
+        || '  v_secondary_account_id := v_campaign.secondary_account_id;' || E'\n'
+        || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
+        || '      RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '    END IF;' || E'\n'
+        || '    IF p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      OR (v_campaign.secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id'')) THEN' || E'\n'
+        || '      v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '        p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN p_campaign_patch->''secondary_account_id''' || E'\n'
+        || '          ELSE to_jsonb(v_campaign.secondary_account_id) END);' || E'\n'
+        || '    END IF;' || E'\n'
         || '  END IF;' || E'\n'
-        || '  v_secondary_account_id := CASE WHEN p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    THEN NULLIF(p_campaign_patch->>''secondary_account_id'', '''')::bigint ELSE v_campaign.secondary_account_id END;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    OR (v_account_platform IN (''facebook'', ''email'') AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id''))) THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
-        || '      CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
-        || '      v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n',
+        || '  -- V530: khoá bộ chạy sở hữu được giữ theo DB ở lượt ghi này (xem khai báo).' || E'\n'
+        || '  SELECT v_runtime_owned_keys || COALESCE(array_agg(kept.key ORDER BY pair.ordinality, kept.position), ARRAY[]::text[])' || E'\n'
+        || '  INTO v_runtime_kept_keys' || E'\n'
+        || '  FROM unnest(v_runtime_reset_markers, v_runtime_reset_counters) WITH ORDINALITY AS pair(marker, counter, ordinality)' || E'\n'
+        || '  CROSS JOIN LATERAL (VALUES (pair.marker, 1), (pair.counter, 2)) AS kept(key, position)' || E'\n'
+        || '  WHERE jsonb_typeof(p_campaign_patch->''extra_settings''->pair.marker) IS DISTINCT FROM ''null'';' || E'\n',
         1, 'update_secondary_account');
       d := pg_temp.v530_replace(d,
         '    IF v_current_input_count <> p_expected_input_count THEN' || E'\n'
@@ -2078,18 +2170,19 @@ BEGIN
       d := pg_temp.v530_replace(d,
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n',
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n'
-        || '    secondary_account_id = CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
+        || '    secondary_account_id = CASE WHEN v_account_platform IN (''facebook'', ''email'') AND p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
         1, 'update_set_secondary');
       d := pg_temp.v530_replace(d,
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN p_campaign_patch->''extra_settings'' ELSE campaign.extra_settings END,' || E'\n',
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN' || E'\n'
         || '      CASE WHEN jsonb_typeof(p_campaign_patch->''extra_settings'') = ''object'' THEN' || E'\n'
-        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_owned_keys)' || E'\n'
+        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_kept_keys)' || E'\n'
         || '        || COALESCE((' || E'\n'
         || '          SELECT jsonb_object_agg(owned.key, owned.value)' || E'\n'
         || '          FROM jsonb_each(CASE WHEN jsonb_typeof(campaign.extra_settings) = ''object''' || E'\n'
         || '            THEN campaign.extra_settings ELSE ''{}''::jsonb END) AS owned' || E'\n'
-        || '          WHERE owned.key = ANY(v_runtime_owned_keys)' || E'\n'
+        || '          WHERE owned.key = ANY(v_runtime_kept_keys)' || E'\n'
         || '        ), ''{}''::jsonb)' || E'\n'
         || '      ELSE p_campaign_patch->''extra_settings'' END' || E'\n'
         || '    ELSE campaign.extra_settings END,' || E'\n',
@@ -2169,12 +2262,12 @@ BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8","acl":"{postgres=X/postgres}"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852","acl":"{postgres=X/postgres,service_role=X/postgres}"},
-    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"7068bce7f45562f1f4ebcb2fb902a89b","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d","acl":"{postgres=X/postgres}"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429","acl":"{postgres=X/postgres}"},
-    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"496a0182daaa9c944119a9744fcf41eb","acl":"{postgres=X/postgres,service_role=X/postgres}"},
-    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"6f0f9fefac37de258d34c55deebd2cfd","acl":"{postgres=X/postgres,service_role=X/postgres}"},
+    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75","acl":"{postgres=X/postgres,service_role=X/postgres}"},
+    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.delete_control_email_account_atomic(bigint,bigint,bigint)","target":"b912bdab82a4669569b184e46f166da0","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.aka_agent_control_email_account_session(bigint,bigint,bigint)","target":"2ee2b490a2f9224a9d8ac63a1683040f","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)","target":"84182eb3960fd1952037e80e183036fa","acl":"{postgres=X/postgres,service_role=X/postgres}"},
@@ -2220,12 +2313,15 @@ VALUES (
 --    Caller không gửi token 'email' nhận kết quả như trước.
 -- 4. Tạo/sửa/thêm data (create_control_campaign, update_control_campaign_atomic,
 --    add_control_campaign_input_rows) nhận tài khoản Facebook/Email của đúng nhân viên; hành động cùng
---    nền tảng; tài khoản phụ chỉ Facebook ở loại cho phép (create: p_campaign->>'secondaryAccountId',
---    update: khoá patch 'secondary_account_id', có khoá = ghi, null = xoá); dòng data Facebook phải có uid,
---    Email phải có email hợp lệ. Sửa chiến dịch chạy trên Desktop (Facebook, Email, Zalo QR/trình duyệt)
---    bị chặn khi chiến dịch còn claim/unit lease VÀ app Desktop của nhân viên còn báo hoạt động trong 2 phút
+--    nền tảng; tài khoản phụ chỉ Facebook ở loại cho phép (create: p_campaign->'secondaryAccountId',
+--    update: khoá patch 'secondary_account_id', có khoá = ghi, null = xoá; chỉ đọc với chiến dịch
+--    Facebook/Email, Zalo/SMS bỏ qua khoá như trước); dòng data Facebook phải có uid, Email phải có email
+--    hợp lệ. Sửa chiến dịch chạy trên Desktop (Facebook, Email, Zalo QR/trình duyệt) bị chặn khi chiến dịch
+--    còn claim/unit lease VÀ app Desktop của nhân viên còn báo hoạt động trong 2 phút
 --    ({"updated":false,"reason":"campaign_running","desktop_runtime_busy":true}). Khi patch có
---    extra_settings, 13 khoá do bộ chạy sở hữu luôn lấy từ dòng hiện tại (mọi nền tảng).
+--    extra_settings (mọi nền tảng): 5 khoá bộ chạy sở hữu luôn lấy từ dòng hiện tại; 4 cặp dấu "đã lấy data"
+--    của Zalo lấy từ dòng hiện tại, trừ khi patch gửi dấu của cặp là JSON null (Web chủ động đặt lại: lấy cả
+--    cặp từ patch như trước v530).
 --    update_control_campaign_by_config_version_atomic gọi bản trên nên có cùng luật, không sửa.
 -- 5. RPC mới (chỉ service_role): tài khoản Email SMTP (tạo/sửa/xoá/đọc cấu hình đầy đủ cho API kiểm tra
 --    kết nối), aka_agent_control_link_find_data_target (thêm/bớt chiến dịch đích trong find*TargetCampaignIds
@@ -2249,12 +2345,12 @@ BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852"},
-    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6"},
-    {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"7068bce7f45562f1f4ebcb2fb902a89b"},
+    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429"},
-    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"496a0182daaa9c944119a9744fcf41eb"},
-    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"6f0f9fefac37de258d34c55deebd2cfd"},
+    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75"},
+    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05"},
     {"signature":"public.delete_control_email_account_atomic(bigint,bigint,bigint)","target":"b912bdab82a4669569b184e46f166da0"},
     {"signature":"public.aka_agent_control_email_account_session(bigint,bigint,bigint)","target":"2ee2b490a2f9224a9d8ac63a1683040f"},
     {"signature":"public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)","target":"84182eb3960fd1952037e80e183036fa"},
@@ -2370,7 +2466,8 @@ REVOKE ALL ON FUNCTION public.aka_agent_control_web_email_campaigns_policy(bigin
 GRANT EXECUTE ON FUNCTION public.aka_agent_control_web_email_campaigns_policy(bigint) TO service_role;
 
 -- 2. Hàm phụ dùng chung cho các RPC ghi (chỉ owner).
--- Dòng data Facebook phải có uid; Email phải có email hợp lệ (kiểm thô, API kiểm đầy đủ theo luật Desktop).
+-- Dòng data Facebook phải có uid (chuỗi hoặc số, khác rỗng); Email phải có email là chuỗi hợp lệ (kiểm thô,
+-- API kiểm đầy đủ theo luật Desktop). Kiểu JSON khác (mảng, đối tượng, boolean, null) bị từ chối.
 CREATE OR REPLACE FUNCTION private.aka_agent_control_assert_campaign_inputs(p_platform text, p_inputs jsonb)
 RETURNS void
 LANGUAGE plpgsql
@@ -2384,7 +2481,8 @@ BEGIN
     SELECT item.ordinality - 1 INTO v_row
     FROM jsonb_array_elements(COALESCE(p_inputs, '[]'::jsonb)) WITH ORDINALITY AS item(value, ordinality)
     WHERE jsonb_typeof(item.value) IS DISTINCT FROM 'object'
-       OR NULLIF(btrim(COALESCE(item.value->>'uid', '')), '') IS NULL
+       OR COALESCE(jsonb_typeof(item.value->'uid') NOT IN ('string', 'number'), true)
+       OR NULLIF(btrim(item.value->>'uid'), '') IS NULL
     ORDER BY item.ordinality
     LIMIT 1;
     IF v_row IS NOT NULL THEN
@@ -2394,7 +2492,8 @@ BEGIN
     SELECT item.ordinality - 1 INTO v_row
     FROM jsonb_array_elements(COALESCE(p_inputs, '[]'::jsonb)) WITH ORDINALITY AS item(value, ordinality)
     WHERE jsonb_typeof(item.value) IS DISTINCT FROM 'object'
-       OR COALESCE(item.value->>'email', '') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
+       OR jsonb_typeof(item.value->'email') IS DISTINCT FROM 'string'
+       OR (item.value->>'email') !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$'
        OR length(item.value->>'email') > 254
     ORDER BY item.ordinality
     LIMIT 1;
@@ -2407,22 +2506,28 @@ $function$;
 REVOKE ALL ON FUNCTION private.aka_agent_control_assert_campaign_inputs(text, jsonb) FROM PUBLIC, anon, authenticated, service_role;
 
 -- Tài khoản phụ: chỉ Facebook, loại có allow_secondary_account, cùng nhân viên/tổ chức, chưa xoá, khác tài khoản chính.
-CREATE OR REPLACE FUNCTION private.aka_agent_control_assert_secondary_account(
+-- p_value là giá trị JSON thô của payload: thiếu/null/chuỗi rỗng = không có tài khoản phụ (trả NULL); số nguyên
+-- dương hoặc chuỗi chữ số = id; kiểu/giá trị khác báo control_secondary_account_not_found (không ép kiểu mù).
+CREATE OR REPLACE FUNCTION private.aka_agent_control_resolve_secondary_account(
   p_staff_id bigint,
   p_organization_id bigint,
   p_platform text,
   p_action_id text,
   p_primary_account_id bigint,
-  p_secondary_account_id bigint
+  p_value jsonb
 )
-RETURNS void
+RETURNS bigint
 LANGUAGE plpgsql
 STABLE
 SET search_path TO 'pg_catalog', 'public'
 AS $function$
+DECLARE
+  v_text text;
+  v_secondary_account_id bigint;
 BEGIN
-  IF p_secondary_account_id IS NULL THEN
-    RETURN;
+  IF p_value IS NULL OR jsonb_typeof(p_value) = 'null'
+    OR (jsonb_typeof(p_value) = 'string' AND btrim(p_value #>> '{}') = '') THEN
+    RETURN NULL;
   END IF;
   IF p_platform IS DISTINCT FROM 'facebook' OR NOT EXISTS (
     SELECT 1 FROM public.auto_campaign_actions AS action
@@ -2433,12 +2538,18 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'control_secondary_account_not_allowed';
   END IF;
-  IF p_secondary_account_id = p_primary_account_id THEN
+  v_text := CASE WHEN jsonb_typeof(p_value) IN ('number', 'string') THEN btrim(p_value #>> '{}') END;
+  -- CASE: chỉ ép kiểu sau khi đã chắc là chuỗi chữ số (thứ tự tính của OR không được bảo đảm).
+  IF (CASE WHEN v_text IS NULL OR v_text !~ '^[0-9]{1,18}$' THEN true ELSE v_text::bigint <= 0 END) THEN
+    RAISE EXCEPTION 'control_secondary_account_not_found';
+  END IF;
+  v_secondary_account_id := v_text::bigint;
+  IF v_secondary_account_id = p_primary_account_id THEN
     RAISE EXCEPTION 'control_secondary_account_same_as_primary';
   END IF;
   IF NOT EXISTS (
     SELECT 1 FROM public.auto_accounts AS account
-    WHERE account.id = p_secondary_account_id
+    WHERE account.id = v_secondary_account_id
       AND account.staff_id = p_staff_id
       AND account.organization_id = p_organization_id
       AND account.flatform_type = 'facebook'
@@ -2446,13 +2557,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'control_secondary_account_not_found';
   END IF;
+  RETURN v_secondary_account_id;
 END
 $function$;
-REVOKE ALL ON FUNCTION private.aka_agent_control_assert_secondary_account(bigint, bigint, text, text, bigint, bigint)
+REVOKE ALL ON FUNCTION private.aka_agent_control_resolve_secondary_account(bigint, bigint, text, text, bigint, jsonb)
   FROM PUBLIC, anon, authenticated, service_role;
 
 -- Cấu hình SMTP đúng dạng Desktop lưu: đủ 9 khoá, chuỗi rỗng khi trống, port số, secure boolean.
--- pass thiếu/null/rỗng thì dùng p_current_pass (giữ mật khẩu cũ khi sửa).
+-- Kiểu JSON chặt: 7 trường chữ phải là chuỗi (thiếu/null = trống), secure là boolean (thiếu/null = false),
+-- port là số nguyên hoặc chuỗi chữ số trong 1..65535 (thiếu/null/chuỗi rỗng = 465 khi secure, không thì 587);
+-- sai kiểu báo invalid_control_email_account_payload. pass thiếu/null/rỗng thì dùng p_current_pass (giữ mật khẩu
+-- cũ khi sửa).
 CREATE OR REPLACE FUNCTION private.aka_agent_control_normalize_email_session(p_session jsonb, p_current_pass text)
 RETURNS jsonb
 LANGUAGE plpgsql
@@ -2460,29 +2575,39 @@ IMMUTABLE
 SET search_path TO 'pg_catalog'
 AS $function$
 DECLARE
+  v_key text;
   v_secure boolean;
   v_port_text text;
-  v_port numeric;
+  v_port integer;
   v_pass text;
   v_result jsonb;
 BEGIN
   IF jsonb_typeof(p_session) IS DISTINCT FROM 'object' THEN
     RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
-  v_secure := jsonb_typeof(p_session->'secure') = 'boolean' AND (p_session->>'secure')::boolean;
+  FOREACH v_key IN ARRAY ARRAY['brandName', 'host', 'user', 'pass', 'fromEmail', 'replyTo', 'cc'] LOOP
+    IF COALESCE(jsonb_typeof(p_session->v_key), 'null') NOT IN ('string', 'null') THEN
+      RAISE EXCEPTION 'invalid_control_email_account_payload';
+    END IF;
+  END LOOP;
+  IF COALESCE(jsonb_typeof(p_session->'secure'), 'null') NOT IN ('boolean', 'null')
+    OR COALESCE(jsonb_typeof(p_session->'port'), 'null') NOT IN ('number', 'string', 'null') THEN
+    RAISE EXCEPTION 'invalid_control_email_account_payload';
+  END IF;
+  v_secure := COALESCE((p_session->>'secure')::boolean, false);
   v_port_text := btrim(COALESCE(p_session->>'port', ''));
-  IF jsonb_typeof(p_session->'port') IN ('number', 'string') AND v_port_text ~ '^[0-9]{1,9}(\.[0-9]+)?$' THEN
-    v_port := floor(v_port_text::numeric);
-  END IF;
-  IF v_port IS NULL OR v_port < 1 OR v_port > 65535 THEN
+  IF v_port_text = '' AND COALESCE(jsonb_typeof(p_session->'port'), 'null') <> 'number' THEN
     v_port := CASE WHEN v_secure THEN 465 ELSE 587 END;
+  ELSIF (CASE WHEN v_port_text ~ '^[0-9]{1,5}$' THEN v_port_text::integer BETWEEN 1 AND 65535 ELSE false END) THEN
+    v_port := v_port_text::integer;
+  ELSE
+    RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
-  v_pass := CASE WHEN jsonb_typeof(p_session->'pass') = 'string' AND p_session->>'pass' <> ''
-    THEN p_session->>'pass' ELSE p_current_pass END;
+  v_pass := CASE WHEN COALESCE(p_session->>'pass', '') <> '' THEN p_session->>'pass' ELSE p_current_pass END;
   v_result := jsonb_build_object(
     'brandName', btrim(COALESCE(p_session->>'brandName', '')),
     'host', btrim(COALESCE(p_session->>'host', '')),
-    'port', v_port::integer,
+    'port', v_port,
     'secure', v_secure,
     'user', btrim(COALESCE(p_session->>'user', '')),
     'pass', COALESCE(v_pass, ''),
@@ -2577,9 +2702,12 @@ BEGIN
     RAISE EXCEPTION 'inactive_control_staff';
   END IF;
 
-  -- Cùng thứ tự khoá tài nguyên với create_control_zalo_account_atomic và trigger lock_auto_account_control_resources.
+  -- Khoá tài nguyên nhóm ở chế độ DÙNG CHUNG, đúng khoá mà trigger lock_auto_account_control_resources lấy khi
+  -- INSERT: vẫn loại trừ sửa/xoá nhóm của Control Web (khoá độc quyền cùng key) nhưng không chặn các lượt ghi
+  -- tài khoản khác trong nhóm, nên không tạo vòng chờ với trigger (trigger tách quyền lấy khoá hạn mức nhân viên
+  -- trước khoá nhóm). Tài khoản Email không có luật "nhóm chỉ dùng cho máy" như Zalo nên không cần độc quyền.
   IF p_account_group_id IS NOT NULL THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
+    PERFORM pg_advisory_xact_lock_shared(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
     PERFORM account_group.id
     FROM public.auto_account_groups AS account_group
     WHERE account_group.id = p_account_group_id
@@ -2587,7 +2715,7 @@ BEGIN
       AND account_group.organization_id = p_organization_id
       AND account_group.flatform_type = 'email'
       AND COALESCE(account_group.is_delete, false) = false
-    FOR UPDATE OF account_group;
+    FOR SHARE OF account_group;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('created', false, 'reason', 'account_group_not_found');
     END IF;
@@ -2604,7 +2732,8 @@ BEGIN
     RETURN jsonb_build_object('created', false, 'reason', 'capability_unavailable');
   END IF;
 
-  -- Cùng khoá hạn mức tài khoản theo nhân viên với create_control_zalo_account_atomic và trigger tách quyền.
+  -- Cùng khoá hạn mức tài khoản theo nhân viên với create_control_zalo_account_atomic và trigger tách quyền
+  -- (private.app_access_validate_account).
   PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account:' || p_staff_id::text, 0));
   SELECT count(*)::integer
   INTO v_account_count
@@ -2648,7 +2777,8 @@ GRANT EXECUTE ON FUNCTION public.create_control_email_account_atomic(bigint, big
   TO service_role;
 
 -- Sửa: so khớp updated_at. p_name/p_session null = giữ; p_session thiếu pass = giữ mật khẩu cũ.
--- p_account_group_id là giá trị đích (null = bỏ nhóm). Đổi cấu hình thì phải kèm kết quả kiểm tra (p_verified).
+-- p_account_group_id là giá trị đích (null = bỏ nhóm). p_verified: true/false = kết quả kiểm tra kết nối;
+-- null = không có kết quả đáng tin, giữ nguyên trạng thái đăng nhập/mốc đã kiểm/lỗi (kể cả khi đổi cấu hình).
 CREATE OR REPLACE FUNCTION public.update_control_email_account_atomic(
   p_staff_id bigint,
   p_organization_id bigint,
@@ -2671,6 +2801,7 @@ DECLARE
   v_account public.auto_accounts%ROWTYPE;
   v_session jsonb;
   v_error text := left(NULLIF(btrim(COALESCE(p_verify_error, '')), ''), 2000);
+  v_lock_key bigint;
 BEGIN
   IF p_staff_id IS NULL OR p_staff_id <= 0 OR p_organization_id IS NULL OR p_organization_id <= 0
     OR p_account_id IS NULL OR p_account_id <= 0 THEN
@@ -2678,7 +2809,6 @@ BEGIN
   END IF;
   IF p_expected_updated_at IS NULL
     OR (p_name IS NOT NULL AND (btrim(p_name) = '' OR length(btrim(p_name)) > 255))
-    OR (p_session IS NOT NULL AND p_verified IS NULL)
     OR (p_account_group_id IS NOT NULL AND p_account_group_id <= 0) THEN
     RAISE EXCEPTION 'invalid_control_email_account_payload';
   END IF;
@@ -2693,10 +2823,11 @@ BEGIN
     RAISE EXCEPTION 'inactive_control_staff';
   END IF;
 
-  IF p_account_group_id IS NOT NULL THEN
-    PERFORM pg_advisory_xact_lock(hashtextextended('control-zalo-account-group:' || p_account_group_id::text, 0));
-  END IF;
-
+  -- Thứ tự khoá đúng như một câu UPDATE auto_accounts thường: dòng tài khoản trước, rồi các khoá tài nguyên
+  -- DÙNG CHUNG mà trigger lock_auto_account_control_resources sẽ lấy (nhóm cũ, nhóm mới, proxy; theo thứ tự
+  -- key tăng dần). Lấy khoá nhóm độc quyền trước dòng tài khoản sẽ tạo vòng chờ với trigger đó (một lượt
+  -- UPDATE khác đang giữ dòng và chờ khoá nhóm dùng chung), và hai lượt chuyển nhóm ngược chiều sẽ khoá chéo.
+  -- Khoá dùng chung vẫn loại trừ sửa/xoá nhóm của Control Web (khoá độc quyền cùng key).
   SELECT account.*
   INTO v_account
   FROM public.auto_accounts AS account
@@ -2713,6 +2844,26 @@ BEGIN
     RETURN jsonb_build_object('updated', false, 'reason', 'version_conflict');
   END IF;
 
+  FOR v_lock_key IN
+    SELECT DISTINCT resource.lock_key
+    FROM (
+      VALUES
+        (CASE WHEN v_account.account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || v_account.account_group_id::text, 0
+        ) END),
+        (CASE WHEN p_account_group_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-account-group:' || p_account_group_id::text, 0
+        ) END),
+        (CASE WHEN v_account.proxy_id IS NULL THEN NULL ELSE hashtextextended(
+          'control-zalo-proxy:' || v_account.proxy_id::text, 0
+        ) END)
+    ) AS resource(lock_key)
+    WHERE resource.lock_key IS NOT NULL
+    ORDER BY resource.lock_key
+  LOOP
+    PERFORM pg_advisory_xact_lock_shared(v_lock_key);
+  END LOOP;
+
   IF p_account_group_id IS NOT NULL THEN
     PERFORM account_group.id
     FROM public.auto_account_groups AS account_group
@@ -2721,7 +2872,7 @@ BEGIN
       AND account_group.organization_id = p_organization_id
       AND account_group.flatform_type = 'email'
       AND COALESCE(account_group.is_delete, false) = false
-    FOR UPDATE OF account_group;
+    FOR SHARE OF account_group;
     IF NOT FOUND THEN
       RETURN jsonb_build_object('updated', false, 'reason', 'account_group_not_found');
     END IF;
@@ -2736,6 +2887,9 @@ BEGIN
 
   -- Như Desktop: lưu cấu hình mới thì kết quả kiểm tra thay thế trạng thái cũ (chưa đạt: xoá mốc đã kiểm);
   -- chỉ kiểm tra lại cấu hình cũ (p_session null) thì giữ mốc đã kiểm khi chưa đạt.
+  -- p_verified NULL = không có kết quả kiểm tra đáng tin (API kiểm từ máy chủ, không phải máy Desktop gửi thư;
+  -- lỗi mạng khi thông số kết nối không đổi): vẫn lưu cấu hình nhưng GIỮ login_status, mốc đã kiểm và lỗi cũ,
+  -- để tài khoản đang chạy tốt không bị chuyển 'chưa đăng nhập' (làm dừng mọi chiến dịch Desktop của nó).
   UPDATE public.auto_accounts AS account
   SET
     name = COALESCE(btrim(p_name), account.name),
@@ -3090,9 +3244,9 @@ DECLARE
     {"signature":"public.delete_control_campaign_atomic(bigint,bigint,bigint)",
      "source":"2af929cc5e02683e5e9dc16a48cc9bac","target":"2ede03119ec482102e1647c0b1bae220"},
     {"signature":"public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)",
-     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"252ae351970aa1c0b19d356faad94540"},
+     "source":"61a6b5c855fbcf86cafaf3c3c7ce6f0a","target":"92859e8843ded3ae24547ab788b6b292"},
     {"signature":"public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
-     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"0d5eb4e8e8d8d0545daf3b4b82307c30"},
+     "source":"a86278195e18d1ef8d0091b41d1d0c5b","target":"d69df6eb6a8ddd38ff8be452d1e26ea3"},
     {"signature":"public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)",
      "source":"d283261c5e77558d10f5df86cd4d1127","target":"5fa5bcfd31f69db8114b82f3ade9b4a5"}
   ]$specs$::jsonb;
@@ -3390,12 +3544,11 @@ BEGIN
         || '    RAISE EXCEPTION ''control_action_not_allowed'';' || E'\n'
         || '  END IF;' || E'\n'
         || '  -- V530: tài khoản phụ (chỉ Facebook, loại cho phép) và dòng data Facebook (uid) / Email (email hợp lệ).' || E'\n'
-        || '  v_secondary_account_id := NULLIF(p_campaign->>''secondaryAccountId'', '''')::bigint;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id, v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n'
+        || '  -- Chỉ đọc secondaryAccountId với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này như trước v530.' || E'\n'
         || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '      p_staff_id, p_organization_id, v_account_platform, v_action_id, v_account_id,' || E'\n'
+        || '      p_campaign->''secondaryAccountId'');' || E'\n'
         || '    PERFORM private.aka_agent_control_assert_campaign_inputs(v_account_platform, p_inputs);' || E'\n'
         || '  END IF;' || E'\n',
         1, 'create_secondary_inputs');
@@ -3414,15 +3567,22 @@ BEGIN
         '  v_appended_inputs integer := 0;' || E'\n',
         '  v_appended_inputs integer := 0;' || E'\n'
         || '  v_secondary_account_id bigint;' || E'\n'
-        || '  -- V530: khoá extra_settings do bộ chạy sở hữu; patch không ghi được (hợp đồng mục 3.2).' || E'\n'
+        || '  -- V530: khoá extra_settings do bộ chạy sở hữu (hợp đồng mục 3.2). 5 khoá đầu patch không bao giờ ghi được.' || E'\n'
         || '  v_runtime_owned_keys constant text[] := ARRAY[' || E'\n'
         || '    ''sourceLinkIndex'', ''contentRotationIndex'', ''postBumpRotationIndex'',' || E'\n'
-        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount'',' || E'\n'
-        || '    ''zaloFriendDataMaterializedAt'', ''zaloFriendMaterializedCount'',' || E'\n'
-        || '    ''zaloBirthdayDataMaterializedDate'', ''zaloBirthdayMaterializedCount'',' || E'\n'
-        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloFriendRecommendationMaterializedCount'',' || E'\n'
-        || '    ''zaloCancelFriendRequestDataMaterializedAt'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
-        || '  ];' || E'\n',
+        || '    ''postBumpCreatedCampaignIdsByAccount'', ''internalSmsCreatedCampaignIdsByAccount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  -- 4 cặp dấu "đã lấy data" của Zalo (dấu, số lượng): giữ giá trị trong DB, trừ khi patch gửi dấu là JSON null' || E'\n'
+        || '  -- (Web chủ động đặt lại khi đổi loại/đổi chế độ lấy data): khi đó cả cặp lấy từ patch như trước v530.' || E'\n'
+        || '  v_runtime_reset_markers constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendDataMaterializedAt'', ''zaloBirthdayDataMaterializedDate'',' || E'\n'
+        || '    ''zaloFriendRecommendationDataMaterializedAt'', ''zaloCancelFriendRequestDataMaterializedAt''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_reset_counters constant text[] := ARRAY[' || E'\n'
+        || '    ''zaloFriendMaterializedCount'', ''zaloBirthdayMaterializedCount'',' || E'\n'
+        || '    ''zaloFriendRecommendationMaterializedCount'', ''zaloCancelFriendRequestMaterializedCount''' || E'\n'
+        || '  ];' || E'\n'
+        || '  v_runtime_kept_keys text[];' || E'\n',
         1, 'update_declare');
       d := pg_temp.v530_replace(d,
         '          account.flatform_type = ''sms''' || E'\n'
@@ -3471,18 +3631,27 @@ BEGIN
         || '  END IF;' || E'\n'
         || E'\n'
         || '  -- V530: tài khoản phụ chỉ Facebook ở loại cho phép. Khoá patch ''secondary_account_id'': có = ghi, null = xoá.' || E'\n'
-        || '  IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
-        || '    RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '  -- Chỉ đọc với chiến dịch Facebook/Email; Zalo/SMS bỏ qua khoá này (và cột) như trước v530.' || E'\n'
+        || '  v_secondary_account_id := v_campaign.secondary_account_id;' || E'\n'
+        || '  IF v_account_platform IN (''facebook'', ''email'') THEN' || E'\n'
+        || '    IF p_campaign_patch ? ''secondaryAccountId'' THEN' || E'\n'
+        || '      RAISE EXCEPTION ''invalid_control_campaign_update_payload'';' || E'\n'
+        || '    END IF;' || E'\n'
+        || '    IF p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      OR (v_campaign.secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id'')) THEN' || E'\n'
+        || '      v_secondary_account_id := private.aka_agent_control_resolve_secondary_account(' || E'\n'
+        || '        p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
+        || '        CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN p_campaign_patch->''secondary_account_id''' || E'\n'
+        || '          ELSE to_jsonb(v_campaign.secondary_account_id) END);' || E'\n'
+        || '    END IF;' || E'\n'
         || '  END IF;' || E'\n'
-        || '  v_secondary_account_id := CASE WHEN p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    THEN NULLIF(p_campaign_patch->>''secondary_account_id'', '''')::bigint ELSE v_campaign.secondary_account_id END;' || E'\n'
-        || '  IF v_secondary_account_id IS NOT NULL AND (p_campaign_patch ? ''secondary_account_id''' || E'\n'
-        || '    OR (v_account_platform IN (''facebook'', ''email'') AND (p_campaign_patch ? ''account_id'' OR p_campaign_patch ? ''action_id''))) THEN' || E'\n'
-        || '    PERFORM private.aka_agent_control_assert_secondary_account(' || E'\n'
-        || '      p_staff_id, p_organization_id, v_account_platform, v_target_action_id,' || E'\n'
-        || '      CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE v_campaign.account_id END,' || E'\n'
-        || '      v_secondary_account_id);' || E'\n'
-        || '  END IF;' || E'\n',
+        || '  -- V530: khoá bộ chạy sở hữu được giữ theo DB ở lượt ghi này (xem khai báo).' || E'\n'
+        || '  SELECT v_runtime_owned_keys || COALESCE(array_agg(kept.key ORDER BY pair.ordinality, kept.position), ARRAY[]::text[])' || E'\n'
+        || '  INTO v_runtime_kept_keys' || E'\n'
+        || '  FROM unnest(v_runtime_reset_markers, v_runtime_reset_counters) WITH ORDINALITY AS pair(marker, counter, ordinality)' || E'\n'
+        || '  CROSS JOIN LATERAL (VALUES (pair.marker, 1), (pair.counter, 2)) AS kept(key, position)' || E'\n'
+        || '  WHERE jsonb_typeof(p_campaign_patch->''extra_settings''->pair.marker) IS DISTINCT FROM ''null'';' || E'\n',
         1, 'update_secondary_account');
       d := pg_temp.v530_replace(d,
         '    IF v_current_input_count <> p_expected_input_count THEN' || E'\n'
@@ -3500,18 +3669,19 @@ BEGIN
       d := pg_temp.v530_replace(d,
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n',
         '    account_id = CASE WHEN p_campaign_patch ? ''account_id'' THEN NULLIF(p_campaign_patch->>''account_id'', '''')::bigint ELSE campaign.account_id END,' || E'\n'
-        || '    secondary_account_id = CASE WHEN p_campaign_patch ? ''secondary_account_id'' THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
+        || '    secondary_account_id = CASE WHEN v_account_platform IN (''facebook'', ''email'') AND p_campaign_patch ? ''secondary_account_id''' || E'\n'
+        || '      THEN v_secondary_account_id ELSE campaign.secondary_account_id END,' || E'\n',
         1, 'update_set_secondary');
       d := pg_temp.v530_replace(d,
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN p_campaign_patch->''extra_settings'' ELSE campaign.extra_settings END,' || E'\n',
         '    extra_settings = CASE WHEN p_campaign_patch ? ''extra_settings'' THEN' || E'\n'
         || '      CASE WHEN jsonb_typeof(p_campaign_patch->''extra_settings'') = ''object'' THEN' || E'\n'
-        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_owned_keys)' || E'\n'
+        || '        ((p_campaign_patch->''extra_settings'') - v_runtime_kept_keys)' || E'\n'
         || '        || COALESCE((' || E'\n'
         || '          SELECT jsonb_object_agg(owned.key, owned.value)' || E'\n'
         || '          FROM jsonb_each(CASE WHEN jsonb_typeof(campaign.extra_settings) = ''object''' || E'\n'
         || '            THEN campaign.extra_settings ELSE ''{}''::jsonb END) AS owned' || E'\n'
-        || '          WHERE owned.key = ANY(v_runtime_owned_keys)' || E'\n'
+        || '          WHERE owned.key = ANY(v_runtime_kept_keys)' || E'\n'
         || '        ), ''{}''::jsonb)' || E'\n'
         || '      ELSE p_campaign_patch->''extra_settings'' END' || E'\n'
         || '    ELSE campaign.extra_settings END,' || E'\n',
@@ -3591,12 +3761,12 @@ BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8","acl":"{postgres=X/postgres}"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852","acl":"{postgres=X/postgres,service_role=X/postgres}"},
-    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"7068bce7f45562f1f4ebcb2fb902a89b","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d","acl":"{postgres=X/postgres}"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429","acl":"{postgres=X/postgres}"},
-    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"496a0182daaa9c944119a9744fcf41eb","acl":"{postgres=X/postgres,service_role=X/postgres}"},
-    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"6f0f9fefac37de258d34c55deebd2cfd","acl":"{postgres=X/postgres,service_role=X/postgres}"},
+    {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75","acl":"{postgres=X/postgres,service_role=X/postgres}"},
+    {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.delete_control_email_account_atomic(bigint,bigint,bigint)","target":"b912bdab82a4669569b184e46f166da0","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.aka_agent_control_email_account_session(bigint,bigint,bigint)","target":"2ee2b490a2f9224a9d8ac63a1683040f","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)","target":"84182eb3960fd1952037e80e183036fa","acl":"{postgres=X/postgres,service_role=X/postgres}"},

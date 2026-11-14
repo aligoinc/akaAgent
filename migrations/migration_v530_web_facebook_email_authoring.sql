@@ -48,8 +48,8 @@ BEGIN
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852"},
     {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697"},
-    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"759f3ee4809fa1b2d80de5c6bd703c4c"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"0d7537cd54f295ded2870715381a8174"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429"},
     {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75"},
     {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05"},
@@ -241,7 +241,8 @@ BEGIN
     RAISE EXCEPTION 'control_secondary_account_not_allowed';
   END IF;
   v_text := CASE WHEN jsonb_typeof(p_value) IN ('number', 'string') THEN btrim(p_value #>> '{}') END;
-  IF v_text IS NULL OR v_text !~ '^[0-9]{1,18}$' OR v_text::bigint <= 0 THEN
+  -- CASE: chỉ ép kiểu sau khi đã chắc là chuỗi chữ số (thứ tự tính của OR không được bảo đảm).
+  IF (CASE WHEN v_text IS NULL OR v_text !~ '^[0-9]{1,18}$' THEN true ELSE v_text::bigint <= 0 END) THEN
     RAISE EXCEPTION 'control_secondary_account_not_found';
   END IF;
   v_secondary_account_id := v_text::bigint;
@@ -299,7 +300,7 @@ BEGIN
   v_port_text := btrim(COALESCE(p_session->>'port', ''));
   IF v_port_text = '' AND COALESCE(jsonb_typeof(p_session->'port'), 'null') <> 'number' THEN
     v_port := CASE WHEN v_secure THEN 465 ELSE 587 END;
-  ELSIF v_port_text ~ '^[0-9]{1,5}$' AND v_port_text::integer BETWEEN 1 AND 65535 THEN
+  ELSIF (CASE WHEN v_port_text ~ '^[0-9]{1,5}$' THEN v_port_text::integer BETWEEN 1 AND 65535 ELSE false END) THEN
     v_port := v_port_text::integer;
   ELSE
     RAISE EXCEPTION 'invalid_control_email_account_payload';
@@ -1463,8 +1464,8 @@ BEGIN
     {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8","acl":"{postgres=X/postgres}"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"7d93bfa6922542a27d5e9784c8641697","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"759f3ee4809fa1b2d80de5c6bd703c4c","acl":"{postgres=X/postgres}"},
-    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"0d7537cd54f295ded2870715381a8174","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_resolve_secondary_account(bigint,bigint,text,text,bigint,jsonb)","target":"83a8d509fcb8b730d61dbad9a8c7da82","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_control_normalize_email_session(jsonb,text)","target":"58ddce1f4cfbc2b6c981c24e13560f0d","acl":"{postgres=X/postgres}"},
     {"signature":"private.aka_agent_control_email_account_view(public.auto_accounts)","target":"c6c2b3218cf5946c7d4fa3cc23d0f429","acl":"{postgres=X/postgres}"},
     {"signature":"public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)","target":"325b6bf48ecb8dd201535fa6d5eedc75","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)","target":"bc88995a45252ec3c2260646750d4a05","acl":"{postgres=X/postgres,service_role=X/postgres}"},

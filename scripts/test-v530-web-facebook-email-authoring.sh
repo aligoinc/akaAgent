@@ -2,9 +2,10 @@
 # v530 Web/iOS soạn chiến dịch Facebook/Email + tài khoản Email SMTP: test trên PostgreSQL cục bộ dùng một lần.
 # Không đọc credential ứng dụng, không kết nối ra ngoài.
 # Nền = fixtures V461 + migration V461 + V464 + V476 + V490 + phần production có mà chuỗi repo chưa dựng
-# (schema-extension.sql: create_control_campaign_v2 bản V482, aka_agent_campaign_config_version, quyền cột/RLS
-# phiên Desktop) + baseline.sql của v530; baseline-check.sql kiểm đúng md5 + ACL production 14/11/2026 của
-# 11 hàm v530 vá và 5 hàm phụ thuộc.
+# (schema-extension.sql: create_control_campaign_v2 bản V482, aka_agent_campaign_config_version, trigger khoá tài
+# nguyên tài khoản của V219, danh tính + trigger sở hữu + quyền cột + RLS phiên Desktop, đều nguyên văn production)
+# + baseline.sql của v530; baseline-check.sql kiểm đúng md5 + ACL production 14/11/2026 của 11 hàm v530 vá,
+# 5 hàm phụ thuộc và 4 hàm production chép vào fixture.
 # Ca:
 #   1. caller cũ (không token 'email', không trường mới) giống hệt trước apply, sau apply, sau rollback, sau apply lại;
 #   2. assertions (chính sách, xác thực, đọc/dừng/xoá Email, tạo/sửa/thêm data Facebook/Email, khoá bộ chạy sở hữu,
@@ -16,7 +17,12 @@
 #   6. script áp một lần dán: thành công giống hệt migration thường, ghi đúng một dòng sổ (md5 = file),
 #      chạy lại bị chặn, nguồn lệch thì dừng;
 #   7. smoke production sau apply;
-#   8. bản thử production trong giao dịch tự huỷ: kết thúc bằng 'v530_trial_ok', không đổi gì, không ghi sổ.
+#   8. bản thử production trong giao dịch tự huỷ (migration + smoke + mỗi đường ghi một lần): kết thúc bằng
+#      'v530_trial_ok' kèm kết quả từng bước, không đổi gì, không ghi sổ;
+#   9. khoá chéo: hai phiên thật chạy update_control_email_account_atomic xen với lượt ghi auto_accounts thường
+#      (trigger production khoá dòng trước, khoá nhóm dùng chung sau) và hai lượt chuyển nhóm ngược chiều; có đối
+#      chứng bằng thứ tự khoá cũ (phải ra "deadlock detected") để chắc bài kiểm bắt được lỗi;
+#  10. phát lại các lời gọi RPC do API WebApp thật tạo ra (scripts/v530-api-contract-replay.py).
 # Chạy: PG_TEST_BINDIR=/usr/lib/postgresql/16/bin scripts/test-v530-web-facebook-email-authoring.sh
 set -eu
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
@@ -239,6 +245,13 @@ trial_before=$(fingerprint trial)
 if ONE_MESSAGE_MIN_MESSAGES=notice one_message trial "$trial" >"$test_dir/trial.out" 2>&1; then echo 'trial must end with v530_trial_ok error'; exit 1; fi
 grep -q 'v530_trial_ok' "$test_dir/trial.out" || { cat "$test_dir/trial.out"; exit 1; }
 grep -q 'v530 production smoke passed' "$test_dir/trial.out" || { cat "$test_dir/trial.out"; echo 'trial smoke notice missing'; exit 1; }
+# Mọi đường ghi phải chạy thật trên nền test (nhân viên 302: app tắt, có tài khoản Email, có phiên Desktop).
+for step in 'staff=302 org=30 app_online=f' 'fb_create=ok' 'fb_update=ok' 'fb_add_rows=ok' 'email_account_create=ok' \
+  'email_account_update=ok' 'email_campaign_create=ok' 'email_account_delete=ok' 'find_data_link=ok' \
+  'desktop_merge=ok desktop_merge_foreign=denied' 'web_update_keeps_runtime_keys=ok'; do
+  grep -q "$step" "$test_dir/trial.out" || { cat "$test_dir/trial.out"; echo "trial step missing: $step"; exit 1; }
+done
+if grep -Eq 'FAILED|skipped|blocked|v530-trial-secret' "$test_dir/trial.out"; then cat "$test_dir/trial.out"; echo 'trial reported a failed/skipped step or a secret'; exit 1; fi
 test "$(fingerprint trial)" = "$trial_before" || { echo 'trial changed state'; exit 1; }
 test "$(new_objects trial)" = '0 0 ' || { echo 'trial left new objects'; exit 1; }
 test "$(run -d trial -At -c "select count(*) from supabase_migrations.schema_migrations")" = 0
@@ -246,5 +259,84 @@ run -d trial -c "alter function public.add_control_campaign_input_rows(bigint,bi
 if one_message trial "$trial" >"$test_dir/trial-drift.out" 2>&1; then echo 'trial drift should fail'; exit 1; fi
 grep -q 'v530_unexpected_definition' "$test_dir/trial-drift.out" || { cat "$test_dir/trial-drift.out"; exit 1; }
 test "$(new_objects trial)" = '0 0 ' || { echo 'trial drift left new objects'; exit 1; }
+# Không có phiên Desktop / không có chiến dịch tìm data: bước tương ứng ghi "skipped", vẫn kết thúc v530_trial_ok.
+run -d trial -c "alter function public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text) reset work_mem"
+run -d trial -c "delete from private.aka_agent_desktop_users; update auto_campaigns set is_delete = true where id = 30024"
+if one_message trial "$trial" >"$test_dir/trial-skip.out" 2>&1; then echo 'trial must end with an error'; exit 1; fi
+grep -q 'v530_trial_ok' "$test_dir/trial-skip.out" || { cat "$test_dir/trial-skip.out"; exit 1; }
+grep -q 'find_data_link=skipped' "$test_dir/trial-skip.out" && grep -q 'desktop_merge=skipped' "$test_dir/trial-skip.out" \
+  || { cat "$test_dir/trial-skip.out"; echo 'trial skip notes missing'; exit 1; }
+# Một bước ghi hỏng (trigger chặn thêm tài khoản): báo v530_trial_failed kèm bước hỏng, vẫn không đổi gì.
+run -d trial -c "create function public.v530_test_block_email() returns trigger language plpgsql as \$\$ begin if new.flatform_type = 'email' then raise exception 'blocked_by_test'; end if; return new; end \$\$; create trigger v530_test_block_email before insert on auto_accounts for each row execute function public.v530_test_block_email()"
+if one_message trial "$trial" >"$test_dir/trial-fail.out" 2>&1; then echo 'trial must end with an error'; exit 1; fi
+grep -q 'v530_trial_failed' "$test_dir/trial-fail.out" && grep -q 'email_account_create=FAILED(P0001 blocked_by_test)' "$test_dir/trial-fail.out" \
+  || { cat "$test_dir/trial-fail.out"; echo 'trial failure report missing'; exit 1; }
+test "$(run -d trial -At -c "select count(*) from auto_accounts where name like '[v530 trial]%'")" = 0
 echo 'v530: rollback trial passed'
+
+# 9. Khoá chéo với trigger production trg_lock_auto_account_control_resources, bằng các phiên thật chạy song song.
+#    Phiên giữ dòng (holder) khoá dòng tài khoản rồi ngủ; các phiên còn lại bắt đầu khi holder đang ngủ.
+wait_for_sleeper() {
+  tries=0
+  while [ "$(run -d "$1" -At -c "select count(*) from pg_stat_activity where datname = current_database() and wait_event = 'PgSleep'")" = 0 ]; do
+    tries=$((tries + 1))
+    [ "$tries" -lt 100 ] || { echo 'holder session did not reach pg_sleep'; exit 1; }
+    sleep 0.1
+  done
+}
+# race <db> <SQL của holder> <SQL phiên 1> [<SQL phiên 2>]: đặt race_result = ok | deadlock, kết quả từng phiên ở race-N.out.
+race() {
+  race_db=$1; holder_sql=$2; shift 2
+  rm -f "$test_dir"/race-*.out
+  run -d "$race_db" -At -c "$holder_sql" >"$test_dir/race-0.out" 2>&1 &
+  race_pids=$!
+  wait_for_sleeper "$race_db"
+  race_n=0
+  for race_sql in "$@"; do
+    race_n=$((race_n + 1))
+    run -d "$race_db" -At -c "$race_sql" >"$test_dir/race-$race_n.out" 2>&1 &
+    race_pids="$race_pids $!"
+  done
+  race_failed=0
+  for race_pid in $race_pids; do wait "$race_pid" || race_failed=$((race_failed + 1)); done
+  if cat "$test_dir"/race-*.out | grep -q 'deadlock detected'; then race_result=deadlock
+  elif [ "$race_failed" = 0 ]; then race_result=ok
+  else cat "$test_dir"/race-*.out; echo 'race session failed without a deadlock'; exit 1; fi
+}
+seed_db conc
+run -d conc -f "$migration" -f "$fixtures/concurrency.sql"
+hold_and_write="BEGIN; SELECT 1 FROM auto_accounts WHERE id = 3013 FOR UPDATE; SELECT pg_sleep(2); UPDATE auto_accounts SET proxy_id = 3951 WHERE id = 3013; COMMIT;"
+hold_both="BEGIN; SELECT 1 FROM auto_accounts WHERE id IN (3013, 3014) FOR UPDATE; SELECT pg_sleep(2); COMMIT;"
+rpc_update() { echo "SELECT public.update_control_email_account_atomic(301, 30, $1, (SELECT updated_at FROM auto_accounts WHERE id = $1), $2, NULL, NULL, NULL, $3)"; }
+# 9a. Đối chứng: thứ tự khoá cũ (khoá nhóm độc quyền trước dòng) khoá chéo với một lượt UPDATE proxy_id thường.
+race conc "$hold_and_write" "SELECT v530_test.old_lock_order_update(3013, 3901, 'Đối chứng')"
+test "$race_result" = deadlock || { cat "$test_dir"/race-*.out; echo 'control: old lock order should deadlock with a plain account update'; exit 1; }
+# 9b. Bản v530: đổi tên (nhóm giữ nguyên) trong lúc phiên khác giữ dòng rồi ghi proxy_id: cả hai xong, không khoá chéo.
+run -d conc -c "update auto_accounts set proxy_id = null, account_group_id = 3901, name = 'Email khoá chéo A' where id = 3013"
+race conc "$hold_and_write" "$(rpc_update 3013 "'Đổi tên khi phiên khác đang ghi'" 3901)"
+test "$race_result" = ok || { cat "$test_dir"/race-*.out; echo 'rename vs plain account update deadlocked'; exit 1; }
+grep -q '"updated": true' "$test_dir/race-1.out" || { cat "$test_dir/race-1.out"; echo 'rename did not update'; exit 1; }
+test "$(run -d conc -At -c "select name || '|' || proxy_id || '|' || account_group_id from auto_accounts where id = 3013")" = 'Đổi tên khi phiên khác đang ghi|3951|3901' \
+  || { echo 'rename/proxy final state wrong'; exit 1; }
+# 9c. Đối chứng: hai lượt chuyển nhóm ngược chiều (3901→3905 và 3905→3901) với thứ tự khoá cũ khoá chéo.
+race conc "$hold_both" "SELECT v530_test.old_lock_order_update(3013, 3905, NULL)" "SELECT v530_test.old_lock_order_update(3014, 3901, NULL)"
+test "$race_result" = deadlock || { cat "$test_dir"/race-*.out; echo 'control: opposite group moves should deadlock with the old lock order'; exit 1; }
+# 9d. Bản v530: hai lượt chuyển nhóm ngược chiều cùng xong.
+run -d conc -c "update auto_accounts set account_group_id = 3901 where id = 3013; update auto_accounts set account_group_id = 3905 where id = 3014"
+race conc "$hold_both" "$(rpc_update 3013 NULL 3905)" "$(rpc_update 3014 NULL 3901)"
+test "$race_result" = ok || { cat "$test_dir"/race-*.out; echo 'opposite group moves deadlocked'; exit 1; }
+grep -q '"updated": true' "$test_dir/race-1.out" && grep -q '"updated": true' "$test_dir/race-2.out" || { cat "$test_dir"/race-*.out; echo 'group move did not update'; exit 1; }
+test "$(run -d conc -At -c "select string_agg(id || ':' || account_group_id, ',' order by id) from auto_accounts where id in (3013, 3014)")" = '3013:3905,3014:3901' \
+  || { echo 'group move final state wrong'; exit 1; }
+# 9e. Sửa/xoá nhóm của Control Web (khoá độc quyền cùng key) vẫn bị loại trừ: lượt sửa tài khoản chờ tới khi nhả.
+race conc "BEGIN; SELECT pg_advisory_xact_lock(hashtextextended('control-zalo-account-group:3905', 0)); SELECT pg_sleep(2); UPDATE auto_account_groups SET is_delete = true WHERE id = 3905; COMMIT;" \
+  "$(rpc_update 3014 NULL 3905)"
+test "$race_result" = ok || { cat "$test_dir"/race-*.out; echo 'group delete race failed'; exit 1; }
+grep -q '"reason": "account_group_not_found"' "$test_dir/race-1.out" || { cat "$test_dir/race-1.out"; echo 'update did not wait for the exclusive group lock'; exit 1; }
+echo 'v530: lock order passed (control deadlocks reproduced, fixed order has none)'
+
+# 10. Hợp đồng API ⇄ SQL: phát lại các lời gọi RPC ghi do mã API WebApp thật tạo ra, trên DB mới đã apply v530.
+seed_db contract
+run -d contract -f "$migration"
+python3 "$script_dir/v530-api-contract-replay.py" "$pg_bin/psql" "$test_dir" "$port" contract "$fixtures/api-rpc-calls.json"
 echo "v530 web facebook/email authoring SQL tests passed"

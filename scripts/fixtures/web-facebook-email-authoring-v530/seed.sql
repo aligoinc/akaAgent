@@ -112,6 +112,8 @@ INSERT INTO auto_campaigns(id, name, action_id, account_id, secondary_account_id
   (30022, 'CD Email 302', 'email_send', 3022, NULL, 'tạm dừng', 302, 30, now() - interval '2 hours', false, '{}', NULL, NULL, NULL, NULL, ''),
   (30023, 'CD QR 302 còn lease (app tắt)', 'zalo_message_phone', 3023, NULL, 'tạm dừng', 302, 30, now() - interval '3 hours', false,
     '{}', '00000000-0000-0000-0000-0000000c3023', 'desktop', NULL, NULL, ''),
+  (30024, 'CD tìm data 302', 'facebook_find_data_search', 3021, NULL, 'tạm dừng', 302, 30, now() - interval '4 hours', false,
+    '{"isFindUid":true}', NULL, NULL, NULL, NULL, ''),
   (30031, 'CD FB 303 còn lease (chưa có presence)', 'facebook_group_post', 3031, NULL, 'tạm dừng', 303, 30, now() - interval '1 hour', false,
     '{}', NULL, NULL, '00000000-0000-0000-0000-0000000d3031', NULL, ''),
   (31101, 'CD Email tổ chức 31', 'email_send', 3111, NULL, 'chờ xử lý', 311, 31, now() - interval '1 hour', false, '{}', NULL, NULL, NULL, NULL, ''),
