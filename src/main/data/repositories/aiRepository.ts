@@ -157,6 +157,28 @@ export async function getFormAiConfig(section: FormAiSection, actionId: string, 
   }
 }
 
+/**
+ * Dòng cấu hình Agent lọc bạn bè Zalo (desktop_section_id `data_group.friend_agent`, phạm vi `all`; V539 đặt cột này cho
+ * đúng dòng Web đang dùng nên Web và Desktop chung prompt/model/schema). Model global; key ở API (proxy). Không có = null.
+ */
+export async function getDataGroupAgentAiConfig(section: string, signal: AbortSignal): Promise<AiUsingConfig | null> {
+  const { data: row, error } = await client().from('ai_form_configs').select('*')
+    .eq('desktop_section_id', section).eq('is_active', true).abortSignal(signal).maybeSingle()
+  if (error) throw new Error('Không thể tải cấu hình AI.')
+  if (!row || row.campaign_scope !== 'all') return null
+  const { data: model, error: modelError } = await client().from('ai_model').select(modelColumns())
+    .eq('id', row.model_id).eq('is_active', true).abortSignal(signal).maybeSingle().returns<Record<string, unknown>>()
+  if (modelError) throw new Error('Không thể tải cấu hình AI.')
+  if (!model || model.organization_id != null) return null
+  return {
+    using: mapUsing({ ...row, id: 0, prompt_id: 0, organization_id: null, is_system: true }),
+    prompt: mapPrompt({ ...row, id: 0, organization_id: null, is_system: true }),
+    model: mapModel(model),
+    formConfigId: row.id,
+    outputSchema: row.output_schema
+  }
+}
+
 export async function createAiLog(input: AiLogInput): Promise<number | null> {
   const payload = {
     ...(input.formConfigId == null ? {} : { form_config_id: input.formConfigId }),

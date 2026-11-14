@@ -89,6 +89,7 @@ import {
   isValidEmailInputDataValue,
   ZaloLabelOption
 } from '../../../../shared/types'
+import { useCampaignFriendAgent } from '../DataGroups/dataGroupAgent/useCampaignFriendAgent'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel, normalizeVietnamMobilePhone } from '../../../../shared/phone'
 import {
   IMAGE_FILE_ACCEPT,
@@ -8491,6 +8492,18 @@ export default function CampaignAgentFormModal({
     )
   }
 
+  // "Agent chọn bạn bè" (V533–V539): loại nhắn tin bạn bè Zalo ở chế độ "Chọn bạn bè để gửi", không có khi sửa chiến dịch
+  // đã lưu. Người khớp được thêm vào danh sách data như nút chọn tay (UID + tên); không ghi DB.
+  const friendAgent = useCampaignFriendAgent({
+    eligible: isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'selected' && !isEditingSavedCampaign,
+    rowCount: details.length,
+    accountIds: formData.accountIds,
+    appendRows: appendUniqueDetails,
+    onOpenScan: () => setDataScanPicker({
+      action: 'zalo_friends', mode: 'friends', initialStatusFilter: 'active', allowedActions: ['zalo_friends'], lockAccount: true
+    })
+  })
+
   const onFriendsSelected = (contacts: AutoAccountContact[]) => {
     const personContacts = contacts.filter(c => c.contactType === 'person')
     const newRows: Partial<CampaignInputData>[] = personContacts.map(c => ({
@@ -16797,6 +16810,7 @@ export default function CampaignAgentFormModal({
                           <Users size={14} /> {isZaloMessageFriendCampaign ? 'Chọn bạn bè Zalo' : isFacebookGroupInviteCampaign ? 'Chọn bạn bè cần mời' : 'Chọn bạn bè'}
                         </button>
                       )}
+                      {friendAgent.button}
                       {canPickZaloAddGroupMemberFriends && (
                         <button
                           className="btn btn-secondary"
@@ -16962,6 +16976,7 @@ export default function CampaignAgentFormModal({
                       </button>
                     </div>
                   )}
+                  {friendAgent.note}
 
                   {!isEditingSavedCampaign && importDuplicateNote && details.length > 0 && (
                     <InputDuplicateFormNote
@@ -17959,6 +17974,7 @@ export default function CampaignAgentFormModal({
           />
         </div>
       </div>
+      {friendAgent.dialog}
       {dataScanPicker && (formData.accountIds.length > 0 || dataScanPicker.mode === 'pageInboxPhones') && (
         <DataScanModal
           initialAction={dataScanPicker.action}

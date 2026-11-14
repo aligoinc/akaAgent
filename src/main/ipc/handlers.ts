@@ -36,6 +36,7 @@ import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
 import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
 import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandlers'
+import { registerDataGroupAgentHandlers } from './handlers/dataGroupAgentHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
 import { registerCampaignAccountActionsHandlers } from './handlers/campaignAccountActionsHandlers'
 import { registerAccountHandlers, type AccountZaloOperationController } from './handlers/accountHandlers'
@@ -364,6 +365,8 @@ export function registerIpcHandlers(
   )
   const campaignDiagnostics = registerCampaignDiagnosticsHandlers(mainWindow, campaignScheduler)
   const campaignFormAi = registerCampaignFormAiHandlers(mainWindow)
+  // "Thêm nhóm data bằng Agent" / "Agent chọn bạn bè" (V533–V539): kênh riêng, dừng cùng lúc với AI của form.
+  const dataGroupAgent = registerDataGroupAgentHandlers(mainWindow)
   const automationProcessor = new AutomationProcessor({
     runtimeTarget: 'desktop',
     onUpdated: event => emitAutomationUpdated(mainWindow, event)
@@ -811,6 +814,7 @@ export function registerIpcHandlers(
     campaignSupport.stop()
     campaignDiagnostics.stop()
     campaignFormAi.stop()
+    dataGroupAgent.stop()
     const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     await facebookStopped
@@ -1262,6 +1266,7 @@ export function registerIpcHandlers(
     campaignSupport.stop()
     campaignDiagnostics.stop()
     campaignFormAi.stop()
+    dataGroupAgent.stop()
     if (quitCleanupCompleted) return
     if (quitCleanupStarted) {
       event.preventDefault()
@@ -1361,6 +1366,7 @@ export function registerIpcHandlers(
     afterLogin: async ({ username, password }) => {
       campaignDiagnostics.stop()
       campaignFormAi.stop()
+      dataGroupAgent.stop()
       await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1453,6 +1459,7 @@ export function registerIpcHandlers(
       campaignSupport.stop()
       campaignDiagnostics.stop()
       campaignFormAi.stop()
+      dataGroupAgent.stop()
       const facebookStopped = facebookLogin.stop()
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)

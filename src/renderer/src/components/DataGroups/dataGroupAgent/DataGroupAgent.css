@@ -1,0 +1,117 @@
+/* Cửa sổ Agent lọc bạn bè Zalo trên Desktop (docs/DATA_GROUP_FRIEND_AGENT_DESKTOP.md). Lượt chat, ô nhập dùng lại lớp của
+   Agent chiến dịch (CampaignPanels/campaignAgent.css); phần riêng mang tiền tố dg-agent-. Bố cục theo bản Web. */
+.data-group-form-modal.dg-agent-modal { position: relative; width: min(1040px, 100%); height: min(760px, calc(100dvh - 40px)); }
+.dg-agent-content { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+/* Hộp hỏi lại phủ cả cửa sổ (kể cả nút Đóng ở đầu). */
+.dg-agent-confirm-layer {
+  position: absolute; inset: 0; z-index: 5; display: grid; place-items: center; padding: 16px;
+  background: var(--modal-backdrop-strong, rgba(0, 0, 0, 0.45));
+}
+.dg-agent-confirm {
+  width: min(420px, 100%); padding: 18px 20px; border: 1px solid var(--border-default); border-radius: 12px;
+  background: var(--bg-secondary); box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+}
+.dg-agent-confirm h3 { margin: 0 0 8px; font-size: 16px; color: var(--text-primary); }
+.dg-agent-confirm p { margin: 0; font-size: 13px; color: var(--text-secondary); line-height: 1.5; }
+.dg-agent-confirm-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.dg-agent-setup { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 12px; padding: 14px 20px 0; }
+.dg-agent-setup.is-single { grid-template-columns: minmax(0, 1fr); }
+.dg-agent-setup label { display: grid; gap: 6px; min-width: 0; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.dg-agent-setup select {
+  width: 100%; min-width: 0; height: 36px; padding: 6px 10px; border: 1px solid var(--border-default); border-radius: 8px;
+  background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px;
+}
+.dg-agent-banner {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 20px 0; padding: 8px 12px; border-radius: 8px;
+  background: var(--bg-primary); border: 1px solid var(--border-default); font-size: 12px; color: var(--text-secondary);
+}
+.dg-agent-banner.is-error { color: var(--accent-error); }
+.dg-agent-banner > svg { flex: none; }
+.dg-agent-banner-text { flex: 1 1 220px; min-width: 0; }
+.dg-agent-banner-warn { color: var(--accent-warning); }
+.dg-agent-banner .btn { margin-left: auto; }
+.dg-agent-banner-lock { display: inline-flex; align-items: center; gap: 5px; margin-left: auto; color: var(--text-tertiary); white-space: nowrap; }
+.dg-agent-banner.is-note { display: block; color: var(--text-primary); border-color: var(--accent-warning); line-height: 1.5; }
+.dg-agent-footer-note { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-secondary); }
+.dg-agent-tabs { display: none; }
+.dg-agent-body { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr); flex: 1; min-height: 0; margin-top: 12px; border-top: 1px solid var(--border-default); }
+.dg-agent-chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; border-right: 1px solid var(--border-default); }
+.dg-agent-welcome { display: grid; justify-items: center; gap: 8px; margin: auto 0; padding: 12px; text-align: center; color: var(--text-secondary); }
+.dg-agent-welcome h3 { margin: 0; font-size: 16px; color: var(--text-primary); }
+.dg-agent-welcome p { margin: 0; font-size: 12px; max-width: 420px; }
+.dg-agent-welcome .agent-suggestions { justify-content: center; margin-top: 6px; }
+.agent-turn.is-error .agent-turn-text { color: var(--accent-error); }
+.dg-agent-turn-notes { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); }
+.dg-agent-turn-notes li + li { margin-top: 4px; }
+.dg-agent-assumptions { margin-top: 8px; font-size: 12px; color: var(--text-secondary); }
+.dg-agent-assumptions summary { cursor: pointer; }
+.dg-agent-assumptions ul { margin: 6px 0 0; padding-left: 18px; }
+.dg-agent-questions { display: grid; gap: 8px; margin-top: 9px; }
+.dg-agent-question { padding: 10px 12px; border: 1px solid var(--border-default); border-radius: 9px; background: var(--bg-primary); }
+.dg-agent-question p { margin: 0; font-size: 12px; }
+.dg-agent-question-options { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.dg-agent-question-options button {
+  font: inherit; font-size: 12px; padding: 5px 10px; color: var(--accent-primary); background: var(--bg-accent-subtle);
+  border: 1px solid var(--border-default); border-radius: 14px; cursor: pointer;
+}
+.dg-agent-question-options button:disabled { opacity: .5; cursor: default; }
+.dg-agent-input-actions { display: flex; justify-content: flex-end; align-items: center; gap: 8px; margin-top: 6px; }
+.dg-agent-filter { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.dg-agent-filter-scroll { display: flex; flex-direction: column; gap: 10px; flex: 1; min-height: 0; padding: 16px 18px; overflow-y: auto; }
+.dg-agent-filter-footer { display: grid; gap: 8px; flex: none; padding: 12px 18px 14px; border-top: 1px solid var(--border-default); background: var(--bg-secondary); }
+.dg-agent-filter h3 { margin: 0; font-size: 14px; color: var(--text-primary); }
+.dg-agent-summary { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 13px; line-height: 1.5; color: var(--text-primary); }
+.dg-agent-summary li.is-nested { margin-left: 18px; list-style: circle; color: var(--text-secondary); }
+.dg-agent-empty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+.dg-agent-preview { display: grid; gap: 10px; padding-top: 10px; border-top: 1px dashed var(--border-default); }
+.dg-agent-count { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--text-primary); }
+.dg-agent-count strong { font-size: 16px; }
+.dg-agent-count .btn { margin-left: auto; }
+.dg-agent-notes { margin: 0; padding-left: 18px; font-size: 12px; color: var(--text-secondary); display: grid; gap: 3px; }
+.dg-agent-zero { margin: 0; font-size: 12px; color: var(--accent-warning); }
+.dg-agent-preview-error { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 12px; color: var(--accent-error); }
+.dg-agent-sample summary { cursor: pointer; font-size: 12px; color: var(--accent-primary); }
+.dg-agent-sample-scroll { max-height: 240px; overflow: auto; margin-top: 6px; border: 1px solid var(--border-default); border-radius: 8px; }
+.dg-agent-sample table { width: 100%; border-collapse: collapse; font-size: 12px; color: var(--text-primary); }
+.dg-agent-sample th, .dg-agent-sample td { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--border-default); vertical-align: top; }
+.dg-agent-sample th { position: sticky; top: 0; background: var(--bg-secondary); font-weight: 600; }
+.dg-agent-facts { display: block; margin-top: 4px; font-size: 12px; color: var(--text-secondary); }
+.dg-agent-name { display: grid; gap: 6px; font-size: 12px; font-weight: 500; color: var(--text-secondary); }
+.dg-agent-name input {
+  height: 36px; padding: 6px 10px; border: 1px solid var(--border-default); border-radius: 8px;
+  background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: 13px;
+}
+.dg-agent-create-error { margin: 0; font-size: 12px; color: var(--accent-error); }
+.dg-agent-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.dg-agent-modal .dg-agent-go-filter { display: none; }
+
+/* Cửa sổ app hẹp: hai thẻ Hội thoại / Bộ lọc thay cho hai cột. */
+@media (max-width: 760px) {
+  .data-group-form-modal.dg-agent-modal { height: calc(100dvh - 32px); }
+  .dg-agent-setup { grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 8px; padding: 12px 16px 0; }
+  .dg-agent-setup.is-single { grid-template-columns: minmax(0, 1fr); }
+  .dg-agent-banner { margin: 8px 16px 0; }
+  .dg-agent-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 10px 16px 0; }
+  .dg-agent-tabs button {
+    min-height: 36px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-primary);
+    color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer;
+  }
+  .dg-agent-tabs button[aria-selected="true"] { color: var(--accent-primary); border-color: var(--accent-primary); background: var(--bg-accent-subtle); }
+  .dg-agent-body { grid-template-columns: minmax(0, 1fr); margin-top: 8px; }
+  .dg-agent-body.is-chat .dg-agent-filter, .dg-agent-body.is-filter .dg-agent-chat { display: none; }
+  .dg-agent-chat { border-right: 0; }
+  .dg-agent-modal .dg-agent-go-filter { display: inline-flex; align-self: flex-start; }
+}
+
+/* Form chiến dịch: nút "Agent chọn bạn bè" (tím nhạt), dòng gợi ý khi danh sách trống, ghi chú nguồn (chỉ trong bộ nhớ). */
+.stepper-grid-toolbar .btn.campaign-friend-agent-button, .btn.btn-secondary.campaign-friend-agent-button { color: var(--accent-primary); border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-default)); background: var(--bg-accent-subtle); }
+.stepper-grid-toolbar .btn.campaign-friend-agent-button:not(:disabled):hover { border-color: var(--accent-primary); }
+.campaign-friend-agent-hint { margin: 6px 0 10px; color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.campaign-friend-agent-notes { display: grid; gap: 6px; margin: 6px 0 10px; }
+.campaign-friend-agent-notes p { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 8px 12px; color: var(--text-secondary); border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-tertiary); font-size: 12px; line-height: 1.5; }
+.campaign-friend-agent-notes svg { flex: none; margin-top: 2px; color: var(--accent-primary); }
+
+/* Quản lý nhóm data: nút "Thêm nhóm bằng Agent" dưới nút "Thêm nhóm". */
+.data-group-manager-sidebar-head .btn.data-group-manager-agent-button { margin-top: 6px; color: var(--accent-primary); background: var(--bg-accent-subtle);
+  border: 1px solid color-mix(in srgb, var(--accent-primary) 40%, var(--border-default)); }
+.data-group-manager-sidebar-head .btn.data-group-manager-agent-button:not(:disabled):hover { border-color: var(--accent-primary); }

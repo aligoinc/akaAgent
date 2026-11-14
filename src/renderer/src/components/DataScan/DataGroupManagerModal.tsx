@@ -40,6 +40,7 @@ import {
   RefreshCw,
   Save,
   Search,
+  Sparkles,
   Tag,
   Trash2,
   UserRound,
@@ -84,6 +85,10 @@ import type { DataGroupMatchOptions } from '../CampaignPanels/DataGroupMatchPick
 import { dataGroupSkippedSummary } from '../../../../shared/dataGroupImport'
 import type { DataGroupMatchContactType } from '../../../../shared/dataGroupMemberMatches'
 import type { DataScanAction, DataScanSelectionContext } from './DataScanModal'
+import DataGroupAgentDialog from '../DataGroups/dataGroupAgent/DataGroupAgentDialog'
+import { dataGroupAgentVisible } from '../../../../shared/dataGroupAgent'
+import type { DataGroupAgentSetting } from '../../../../shared/dataGroupAgentIpc'
+import { useAuthStore } from '../../stores/authStore'
 
 const LazyDataScanModal = lazy(() => import('./DataScanModal'))
 
@@ -543,6 +548,19 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   const { accounts, loadAccounts, updateCampaign } = useCampaignStore()
   const showAlert = useUiStore(state => state.showAlert)
   const showConfirm = useUiStore(state => state.showConfirm)
+  const authUser = useAuthStore(state => state.user)
+  // "Thêm nhóm data bằng Agent" (V533–V539): công tắc web.data_group_agent đọc một lượt khi mở cửa sổ (không theo nhịp).
+  const [agentSetting, setAgentSetting] = useState<DataGroupAgentSetting | null>(null)
+  const [agentOpen, setAgentOpen] = useState(false)
+  useEffect(() => {
+    if (selectionMode) return
+    let active = true
+    void window.electronAPI.dataGroupAgent({ kind: 'setting' }).then(result => {
+      if (active && result.ok) setAgentSetting(result.data)
+    }).catch(() => {})
+    return () => { active = false }
+  }, [selectionMode])
+  const agentVisible = !selectionMode && dataGroupAgentVisible(agentSetting?.audience, authUser?.isAdminAkabiz)
 
   const groupLoadSeqRef = useRef(0)
   const memberLoadSeqRef = useRef(0)
@@ -2005,7 +2023,7 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
     <div className="data-group-manager-backdrop" onMouseDown={event => {
       if (event.target === event.currentTarget) onClose()
     }}>
-      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}${fullscreen ? ' is-fullscreen' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null || externalSyncDialogOpen}>
+      <section className={`data-group-manager-modal${selectionMode ? ' is-picker' : ''}${fullscreen ? ' is-fullscreen' : ''}`} role="dialog" aria-modal="true" aria-label="Quản lý nhóm data" inert={creatingGroup || editingGroup !== null || externalSyncDialogOpen || agentOpen}>
         <header className="data-group-manager-header">
           <span className="data-group-manager-header-icon"><Folder size={19} /></span>
           <div className="data-group-manager-heading">
@@ -2066,6 +2084,10 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
               }}>
                 <Plus size={15} /> Thêm nhóm
               </button>
+              {agentVisible && <button type="button" className="btn btn-secondary data-group-manager-create-button data-group-manager-agent-button"
+                disabled={busyAction !== null} onClick={() => setAgentOpen(true)}>
+                <Sparkles size={15} /> Thêm nhóm bằng Agent
+              </button>}
             </div>
 
             <div className="data-group-manager-group-list">
@@ -2908,6 +2930,20 @@ export default function DataGroupManagerModal(props: DataGroupManagerModalProps)
   return createPortal(
     <>
       {modal}
+      {agentOpen && <DataGroupAgentDialog scope={`${authUser?.organizationId ?? ''}:${authUser?.staffId ?? ''}`}
+        onClose={() => setAgentOpen(false)}
+        onCreated={(result, name) => {
+          setAgentOpen(false)
+          setGroupSearch('')
+          setGroupPage(1)
+          activeGroupIdRef.current = result.groupId
+          setActiveGroupId(result.groupId)
+          setActiveGroupSnapshot(null)
+          void loadGroups({ silent: true })
+          showAlert(result.replayed ? `Nhóm "${name}" đã được tạo trước đó.`
+            : `Đã tạo nhóm "${name}" với ${result.inserted.toLocaleString('vi-VN')} bạn bè.`, 'success')
+          void notifyGroupsChanged()
+        }} />}
       {formOpen && <DataGroupFormDialog title={creatingGroup ? 'Tạo nhóm data' : 'Sửa nhóm data'} busy={formBusy} onClose={closeGroupForm}>
         <form className="data-group-form" onSubmit={event => {
           if (creatingGroup) void handleCreateGroup(event)

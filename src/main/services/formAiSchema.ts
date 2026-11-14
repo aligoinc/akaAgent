@@ -7,6 +7,7 @@ import { FORM_AI_SECTIONS, type FormAiSection } from '../../shared/campaignFormA
 import { SCHEDULE_AI_SCHEMA } from '../../shared/campaignScheduleAi'
 import { LIMITS_AI_SCHEMA } from '../../shared/campaignLimitsAi'
 import { AGENT_ROUTER_SCHEMA, AGENT_EXTRA_SCHEMA } from '../../shared/campaignAgent'
+import { DATA_GROUP_AGENT_SCHEMA } from '../../shared/dataGroupAgent'
 
 type Schema = Record<string, unknown>
 const record = (value: unknown): value is Schema => !!value && typeof value === 'object' && !Array.isArray(value)
@@ -14,6 +15,12 @@ const sorted = (value: unknown) => JSON.stringify(Array.isArray(value) ? [...val
 
 /** The DB may refine constraints/descriptions, but cannot change the form's wire contract. */
 function compatible(schema: Schema, contract: Schema): boolean {
+  // Agent lọc bạn bè: trường có thể null là anyOf [schema, null]; so từng nhánh theo thứ tự (như API Web).
+  if (Array.isArray(contract.anyOf)) {
+    return Array.isArray(schema.anyOf) && schema.anyOf.length === contract.anyOf.length
+      && contract.anyOf.every((item, index) => record(item) && record((schema.anyOf as unknown[])[index])
+        && compatible((schema.anyOf as unknown[])[index] as Schema, item))
+  }
   if (sorted(schema.type) !== sorted(contract.type)) return false
   if (contract.type === 'object') {
     if (schema.additionalProperties !== false || sorted(schema.required) !== sorted(contract.required)
@@ -44,6 +51,33 @@ export function compileFormAiSchema(schema: unknown, section: FormAiSection): (c
 }
 
 export function formAiStructuredOptions(provider: string, endpoint: string, schema: unknown, section: FormAiSection): Schema {
+  const facebook = Object.values(FACEBOOK_AI_SECTIONS).some(value => value === section)
+  const name = facebook || section.startsWith('campaign.agent.') ? section.replaceAll('.', '_') : section === FORM_AI_SECTIONS.exclusions ? 'campaign_send_exclusions' : section === FORM_AI_SECTIONS.content ? 'campaign_content' : section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
+  return structuredOptions(provider, endpoint, schema, name)
+}
+
+/**
+ * Agent lọc bạn bè Zalo (dòng `data_group.friend_agent`): schema DB phải giữ đúng hợp đồng `DATA_GROUP_AGENT_SCHEMA` (chép
+ * nguyên văn từ WebApp); giới hạn độ dài như API Web.
+ */
+export function compileDataGroupAgentSchema(schema: unknown): (content: string) => boolean {
+  if (!record(schema) || JSON.stringify(schema).length > 64_000 || !compatible(schema, DATA_GROUP_AGENT_SCHEMA as unknown as Schema)) {
+    throw new Error('JSON Schema không tương thích với Agent lọc bạn bè.')
+  }
+  const ajv = new Ajv({ strict: true, allowUnionTypes: true, allErrors: false, addUsedSchema: false })
+  const validate = ajv.compile(schema)
+  return content => {
+    if (content.length > 64_000) return false
+    try { return validate(JSON.parse(content)) === true } catch { return false }
+  }
+}
+
+/** Cùng tên định dạng với API Web (`data_group_friend_agent`). */
+export function dataGroupAgentStructuredOptions(provider: string, endpoint: string, schema: unknown): Schema {
+  return structuredOptions(provider, endpoint, schema, 'data_group_friend_agent')
+}
+
+function structuredOptions(provider: string, endpoint: string, schema: unknown, name: string): Schema {
   const url = new URL(endpoint)
   if (isFormAiClaude(provider) && url.protocol === 'https:' && /\/v1\/messages\/?$/.test(url.pathname)) {
     return { output_config: { format: { type: 'json_schema', schema } } }
@@ -52,8 +86,6 @@ export function formAiStructuredOptions(provider: string, endpoint: string, sche
     || !/\/(responses|chat\/completions)\/?$/.test(url.pathname)) {
     throw new Error('Model AI không tương thích Structured Outputs.')
   }
-  const facebook = Object.values(FACEBOOK_AI_SECTIONS).some(value => value === section)
-  const name = facebook || section.startsWith('campaign.agent.') ? section.replaceAll('.', '_') : section === FORM_AI_SECTIONS.exclusions ? 'campaign_send_exclusions' : section === FORM_AI_SECTIONS.content ? 'campaign_content' : section === FORM_AI_SECTIONS.schedule ? 'campaign_schedule' : 'campaign_action_limits'
   return {
     store: false,
     ...(/\/responses\/?$/.test(url.pathname)

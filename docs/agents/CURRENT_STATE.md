@@ -1,5 +1,12 @@
 # Trạng thái đã xác nhận — cập nhật 14/11/2026
 
+[Thêm nhóm data bằng Agent + Agent chọn bạn bè trên Desktop (V533–V539)](../DATA_GROUP_FRIEND_AGENT_DESKTOP.md):
+**V533–V538 đã apply akachat 14/11/2026** từ akaAgentWebApp (17:54–23:26 VN; md5 sổ = md5 tệp; không apply lại); tệp chép nguyên byte vào
+`migrations/` trên nhánh `claude_agent-chon-ban-be-desktop_from_dev_3_14_11` (chưa merge). **V539 CHƯA apply** (cấp EXECUTE bốn hàm cho
+`aka_agent_desktop`, hàm tạo nhóm chuyển mật khẩu tự động hóa vào `aka_agent_create_data_group_v2`, `desktop_section_id` cho dòng
+`ai_form_configs` id 25). Mã Desktop chưa merge/build/phát hành. Công tắc `web.data_group_agent` = `{"audience":"all"}` từ 23:50:28 VN
+14/11 (Web chưa deploy). Phát hành Desktop chỉ sau khi apply V539.
+
 [Engine v2 bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng (V527)](../ENGINE_V2_LEGACY_STALE_CLAIM_V527.md):
 **V527 đã apply akachat 14/11/2026 02:07:26 VN** (`20261113190717 / migration_v527_engine_claim_skip_stale_legacy_token`; md5 sổ = md5 tệp
 `40f62f5f…`; không apply lại). Chỉ thay thân `aka_agent_engine_claim_target_v1(jsonb)` (V507 `e09100fd…` → `f8935a5a…`; chủ sở hữu, quyền,

@@ -26,6 +26,9 @@ import {
   DATA_GROUP_MEMBER_MATCHES_IPC, type DataGroupMemberMatchesIpcRequest, type DataGroupMemberMatchesIpcResponses,
   type DataGroupMemberMatchesIpcResult
 } from '../shared/dataGroupMemberMatchesIpc'
+import {
+  DATA_GROUP_AGENT_IPC, type DataGroupAgentIpcRequest, type DataGroupAgentIpcResponses, type DataGroupAgentIpcResult
+} from '../shared/dataGroupAgentIpc'
 import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest, type FoundFacebookGroupCardsResult } from '../shared/foundFacebookGroupCardsIpc'
 import { CAMPAIGN_DIAGNOSTICS_IPC, type CampaignDiagnosticsRequest, type CampaignDiagnosticsAiRequest, type CampaignDiagnosticsSnapshot, type CampaignDiagnosticsAiResult } from '../shared/campaignDiagnostics'
 import { CAMPAIGN_SCHEDULE_AI_IPC, type ScheduleAiRequest, type ScheduleAiResult } from '../shared/campaignScheduleAi'
@@ -712,6 +715,10 @@ const electronAPI = {
   // Nhóm data → "Bỏ data đã có trong nhóm này / ở nhóm data khác" (V519/V522): công tắc và một lượt ≤ 2.000 định danh; không ném lỗi.
   dataGroupMemberMatches: <R extends DataGroupMemberMatchesIpcRequest>(request: R): Promise<DataGroupMemberMatchesIpcResult<DataGroupMemberMatchesIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(DATA_GROUP_MEMBER_MATCHES_IPC, request),
+  // "Thêm nhóm data bằng Agent" / "Agent chọn bạn bè" (V533–V539): công tắc, tài khoản, lượt chat, lọc, người nhận, tạo nhóm; không ném lỗi.
+  dataGroupAgent: <R extends DataGroupAgentIpcRequest>(request: R): Promise<DataGroupAgentIpcResult<DataGroupAgentIpcResponses[R['kind']]>> =>
+    ipcRenderer.invoke(DATA_GROUP_AGENT_IPC.request, request),
+  cancelDataGroupAgent: (requestId: string): Promise<void> => ipcRenderer.invoke(DATA_GROUP_AGENT_IPC.cancel, requestId),
   // Thêm data → xem trước data đã có trong chiến dịch này (chỉ đọc); không ném lỗi.
   campaignAddDataPreview: (request: CampaignAddDataPreviewRequest): Promise<CampaignAddDataPreviewResponse> =>
     ipcRenderer.invoke(CAMPAIGN_ADD_DATA_PREVIEW_IPC, request),
