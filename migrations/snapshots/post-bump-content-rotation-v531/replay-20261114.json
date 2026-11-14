@@ -1,0 +1,90 @@
+{
+  "window": {
+    "exportedAt": "2026-11-14T04:20:30.480244+00:00",
+    "inputs": 24790,
+    "ran": 15090,
+    "posts": 7640
+  },
+  "calibration": {
+    "comparedInputs": 12459,
+    "agreeWithProduction": 11654,
+    "rate": 0.9354,
+    "byAge": {
+      "createdInWindow": {
+        "compared": 11481,
+        "agree": 10771
+      },
+      "older": {
+        "compared": 978,
+        "agree": 883
+      }
+    }
+  },
+  "pendingOverdue": {
+    "inputs": 8139,
+    "campaigns": 333,
+    "byTargetStatus": {
+      "chờ xử lý": 821,
+      "tạm dừng": 7315,
+      "hoàn thành": 3
+    }
+  },
+  "enqueue": {
+    "sources": 456,
+    "batchesWithoutUniqueSource": 0,
+    "assignmentMismatch": 0,
+    "seeded": 24790
+  },
+  "rpcCalls": {
+    "old": 24809,
+    "new": 24809
+  },
+  "scope": {
+    "ran": {
+      "posts": 4854,
+      "multiTarget": 1896,
+      "oldDup": 2682,
+      "oldDupMulti": 1645,
+      "newDup": 617,
+      "newDupMulti": 121
+    },
+    "projected": {
+      "posts": 6729,
+      "multiTarget": 2368,
+      "newDup": 1405,
+      "newDupMulti": 321
+    }
+  },
+  "reasons": {
+    "nhiều lượt hơn số câu": 617
+  },
+  "reasonsProjected": {
+    "nhiều lượt hơn số câu": 1405
+  },
+  "examples": [],
+  "countVersusVariants": {
+    "liveSources": 611,
+    "countAboveVariants": 126,
+    "byGap": {
+      "3 lượt / 1 câu": 79,
+      "3 lượt / 2 câu": 15,
+      "10 lượt / 1 câu": 14,
+      "2 lượt / 1 câu": 7,
+      "10 lượt / 9 câu": 3,
+      "5 lượt / 3 câu": 3,
+      "5 lượt / 1 câu": 2,
+      "8 lượt / 7 câu": 2,
+      "10 lượt / 3 câu": 1
+    }
+  },
+  "sync": {
+    "createSources": 611,
+    "unchangedSaveWrites": 0,
+    "editedSources": 468,
+    "wouldUpdate": 1274,
+    "skipped": {
+      "đã xoá": 446
+    }
+  },
+  "seconds": 16
+}
