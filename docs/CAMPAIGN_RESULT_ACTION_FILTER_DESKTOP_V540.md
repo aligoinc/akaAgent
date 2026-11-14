@@ -8,12 +8,15 @@ Trạng thái (14/11/2026): mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ke
   không có dòng**. `migrations/migration_v539_campaign_result_actions.sql` là bản chép giống từng byte tệp đó
   (md5 `e845efc8b9b2f37f0793addd316a599f`). **Đừng chạy lại**: preflight từ chối (`campaign_result_actions_already_exists_do_not_overwrite`).
   Cần dòng sổ thì ghi riêng V539 với md5 tệp này.
-- **V540 chưa apply**: cấp quyền cho token Desktop. Chưa apply thì bộ lọc trên Desktop chỉ còn "Tất cả", kèm dòng
-  "Bộ lọc theo hành động đang được cập nhật". Danh sách kết quả "Tất cả" vẫn đọc hàm v2 như cũ.
+- **V540 ĐÃ apply akachat lúc 00:10:26 VN 15/11/2026** (`20261114171026 / migration_v540_campaign_result_actions_desktop`)
+  theo yêu cầu của người dùng; md5 sổ = md5 tệp `55a9e025328616e613a89402015706df`; **không apply lại** (preflight từ chối).
+  Biên nhận: [`migrations/snapshots/campaign-result-actions-desktop-v540/apply-receipt.json`](../migrations/snapshots/campaign-result-actions-desktop-v540/apply-receipt.json).
+  Sau khi apply không sửa tệp migration (sổ lưu nguyên văn). Nếu V540 bị gỡ, bộ lọc trên Desktop chỉ còn "Tất cả" kèm dòng
+  "Bộ lọc theo hành động đang được cập nhật"; danh sách kết quả "Tất cả" vẫn đọc hàm v2 như cũ.
 
-Kiểm số trước khi apply: sổ DB thật lúc 00:05 VN 15/11 có V532–V538, không có V530/V531/V539/V540. V530 đã có người giữ trên nhánh
-`claude_tao-sua-chien-dich-facebook-email_from_dev_3_14_11`; việc "Agent nhóm khách hàng" ghi số kế tiếp là V539 trở đi. Ai apply trước thì
-giữ số; trùng thì đổi số tệp của bên chưa apply.
+Số migration: lúc apply (00:09 VN 15/11) sổ có V532–V538, không có V530/V531/V539/V540, không nhánh `claude*` nào khác dùng V539/V540.
+V530 đã có người giữ trên nhánh `claude_tao-sua-chien-dich-facebook-email_from_dev_3_14_11`. Việc "Agent nhóm khách hàng" của WebApp ghi
+"số kế tiếp là V539 trở đi": số V539 (tệp, chưa có dòng sổ) và V540 (đã có dòng sổ) nay thuộc tính năng này, việc đó phải lấy V541 trở đi.
 
 Bản Web, hợp đồng, phương án, số đo DB thật, kiểm với dữ liệu thật: akaAgentWebApp `docs/CAMPAIGN_RESULT_ACTION_FILTER.md` và
 `docs/CAMPAIGN_RESULT_ACTION_FILTER_PLAN.md` (nhánh `claude/stoic-knuth-8jjyyf`, PR #237 vào `dev_1`).
@@ -125,8 +128,14 @@ tiến trình:
 - **Không có `COMMENT`/`NOTIFY`**: PostgREST không nạp lại schema.
 - **Xác thực không đổi**: hai hàm bắt đầu bằng `private.aka_agent_assert_request_ownership` (token Desktop phải đúng `p_staff_id`),
   rồi `auto_assert_automation_identity` (đúng username/password tự động hóa của staff).
-- **Đọc chỉ đọc trên production 14/11** (`pg_proc`): md5 và thuộc tính của hai hàm khớp. ACL `{postgres, service_role}`. Role
-  `aka_agent_desktop` có sẵn và đã EXECUTE được v2. Vậy preflight sẽ qua.
+- **Trước khi apply** (chỉ đọc, 00:09 VN 15/11): md5 `prosrc`/`pg_get_functiondef` và thuộc tính của hai hàm khớp; ACL
+  `{postgres, service_role}`; role `aka_agent_desktop` có sẵn và đã EXECUTE được v2. Chạy thử nguyên tệp với `ROLLBACK` thay `COMMIT`
+  trên production: preflight, hai GRANT, postflight đều qua; đọc lại ACL vẫn như cũ.
+- **Sau khi apply**: ACL hai hàm `{postgres, service_role, aka_agent_desktop}`, `anon`/`authenticated` vẫn không EXECUTE; md5
+  `prosrc`/`pg_get_functiondef`, cấu hình, chú thích (không có) giữ nguyên. Gọi thử bằng đúng role `aka_agent_desktop` (claim không có
+  `sub`, giao dịch tự hủy): cả hai hàm đi vào và bị chuỗi xác thực chặn bằng `42501 desktop_staff_scope_denied`, không còn
+  `permission denied for function`. PostgREST không nạp lại schema; 17:05–17:10 UTC 0 lỗi 5xx/503 (8–10 nghìn request/phút). Các dòng
+  "Thread killed by timeout manager" của PostgREST tăng từ 17:00 UTC, trước lúc apply, không liên quan.
 - **Gỡ**: `migrations/rollback_v540_campaign_result_actions_desktop.sql` chỉ `REVOKE` hai quyền Desktop. WebApp API (`service_role`)
   vẫn đọc được, Desktop chỉ còn "Tất cả".
 
@@ -158,6 +167,6 @@ tiến trình:
 - **Hồi quy**: bộ kiểm giao diện tab Báo cáo `run-campaign-run-report-ui-smoke.cjs` vẫn **10/10** sau khi chip truyền hành động.
 - **Typecheck và build**: `tsc -p tsconfig.node.json`, `tsc -p tsconfig.web.json` sạch; `npm run build` đạt.
 - **Chưa làm**:
-  - chưa chạy với DB thật bằng token Desktop (V540 chưa apply);
+  - chưa chạy app Desktop thật với token Desktop trên DB thật (V540 đã apply, nhưng bản Desktop có tính năng chưa build);
   - chưa chạy trên Windows/macOS thật;
   - chưa build bộ cài.
