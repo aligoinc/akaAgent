@@ -1266,6 +1266,11 @@ export interface CampaignDetailAutomationTrigger {
 export interface CampaignDetailPageQuery {
   includeFacebookGroupMetadata?: boolean
   engagementFilter?: EngagementFilter
+  /**
+   * Bộ lọc Hành động (V539/V540): bỏ trống = "Tất cả", gọi đúng hàm v2 như cũ; một mã = chỉ lượt của hành động đó;
+   * '' = lượt cũ chưa ghi hành động. Có giá trị thì đọc bằng `aka_agent_list_campaign_details_page_v3`.
+   */
+  actionCode?: string
   campaignId: number
   sort?: CampaignDetailSort
   search?: string

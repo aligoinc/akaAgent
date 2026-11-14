@@ -27,8 +27,11 @@ interface CampaignReportViewProps {
   active: boolean
   /** Phạm vi phiên đăng nhập: đổi phiên thì bỏ dữ liệu và kết quả muộn của phiên cũ. */
   sessionKey?: string
-  /** Mở tab Data ban đầu/Kết quả chạy đã lọc theo trạng thái (null = không lọc). */
-  onOpenTab?(tab: CampaignReportDrillTarget, status: string | null): void
+  /**
+   * Mở tab Data ban đầu/Kết quả chạy đã lọc theo trạng thái (null = không lọc). `action`: chip của một hành động mở Kết
+   * quả chạy lọc đúng hành động đó (mã "" = lượt chưa ghi hành động; như WebApp).
+   */
+  onOpenTab?(tab: CampaignReportDrillTarget, status: string | null, action?: { code: string; name: string }): void
   onAddData?(campaign: CampaignListItem): void
 }
 
@@ -193,12 +196,12 @@ function ActionRow({ action, first, onOpenTab }: { action: CampaignRunReportActi
         const style = GROUP_STYLE[status.group]
         const filterable = !!onOpenTab && (status.filterStatus !== null || status.key === 'pending')
         const title = status.key === 'pending'
-          ? 'Mở tab Kết quả chạy (không lọc được riêng lượt chờ xác nhận)'
-          : `Mở tab Kết quả chạy lọc "${status.filterStatus}". Bộ lọc ở đó không tách theo hành động và khớp cả trạng thái phụ, nên số dòng có thể nhiều hơn.`
+          ? `Mở tab Kết quả chạy lọc hành động ${action.name} (không lọc được riêng lượt chờ xác nhận)`
+          : `Mở tab Kết quả chạy lọc hành động ${action.name}, trạng thái "${status.filterStatus}". Bộ lọc trạng thái khớp cả trạng thái phụ, nên số dòng có thể nhiều hơn.`
         const body = <><ReportGlyph icon={style.icon} tone={style.tone} size={14} /><span>{status.label}</span><strong>{n(status.count)}</strong></>
         return <span key={status.key} className="rpt-chip-wrap">
           {filterable
-            ? <button type="button" className="rpt-chip" title={title} onClick={() => onOpenTab!('results', status.key === 'pending' ? null : status.filterStatus)}>{body}</button>
+            ? <button type="button" className="rpt-chip" title={title} onClick={() => onOpenTab!('results', status.key === 'pending' ? null : status.filterStatus, { code: action.code ?? '', name: action.name })}>{body}</button>
             : <span className="rpt-chip is-static">{body}</span>}
           {status.subStatuses.map(sub => <span key={sub.label} className="rpt-sub-status">↳ {sub.label} {n(sub.count)}</span>)}
         </span>

@@ -108,6 +108,8 @@ interface CampaignStore {
   campaignDetailPageItems: CampaignDetail[]
   campaignDetailPageTotal: number
   loadingCampaignDetailPage: boolean
+  /** Lỗi của lượt đọc trang kết quả gần nhất (null = đạt); tab Kết quả chạy chỉ hiện khi đang lọc theo hành động. */
+  campaignDetailPageError: string | null
   loadCampaignDetailPage: (campaignId: number, query?: Omit<CampaignDetailPageQuery, 'campaignId'>) => Promise<void>
 
   // Email campaign link tracking
@@ -947,6 +949,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
       campaignDetailPageItems: [],
       campaignDetailPageTotal: 0,
       loadingCampaignDetailPage: false,
+      campaignDetailPageError: null,
       emailCampaignLinkTrackings: [],
       emailCampaignLinkTrackingCampaignId: null,
       loadingEmailCampaignLinkTrackings: false,
@@ -1161,6 +1164,7 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
   campaignDetailPageItems: [],
   campaignDetailPageTotal: 0,
   loadingCampaignDetailPage: false,
+  campaignDetailPageError: null,
 
   loadCampaignDetails: async (campaignId) => {
     if (!window.electronAPI) return
@@ -1187,12 +1191,15 @@ export const useCampaignStore = create<CampaignStore>((set, get) => ({
         ...query
       })
       if (requestVersion === campaignDetailPageRequestVersion) {
-        set({ campaignDetailPageItems: page.items, campaignDetailPageTotal: page.total })
+        set({ campaignDetailPageItems: page.items, campaignDetailPageTotal: page.total, campaignDetailPageError: null })
       }
     } catch (err) {
       console.error('Failed to load campaign detail page:', err)
       if (requestVersion === campaignDetailPageRequestVersion) {
-        set({ campaignDetailPageItems: [], campaignDetailPageTotal: 0 })
+        set({
+          campaignDetailPageItems: [], campaignDetailPageTotal: 0,
+          campaignDetailPageError: err instanceof Error ? err.message : String(err)
+        })
       }
     } finally {
       if (requestVersion === campaignDetailPageRequestVersion) {
