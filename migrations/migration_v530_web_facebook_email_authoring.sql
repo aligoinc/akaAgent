@@ -42,7 +42,7 @@ DECLARE
   f oid;
 BEGIN
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
-    {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"31e5589203597806b03c077e87008f20"},
+    {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852"},
     {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6"},
     {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41"},
@@ -143,9 +143,8 @@ BEGIN
   END IF;
   RETURN jsonb_build_object(
     'enabled', v_enabled,
-    'emailOnlyLogin', v_enabled
-      AND jsonb_typeof(v_value->'emailOnlyLogin') = 'boolean'
-      AND (v_value->>'emailOnlyLogin')::boolean,
+    'emailOnlyLogin', v_enabled AND CASE WHEN jsonb_typeof(v_value->'emailOnlyLogin') = 'boolean'
+      THEN (v_value->>'emailOnlyLogin')::boolean ELSE false END,
     'authoring', jsonb_build_object('enabled', v_authoring_enabled)
   );
 END
@@ -870,7 +869,7 @@ DO $migration$
 DECLARE
   specs constant jsonb := $specs$[
     {"signature":"private.aka_agent_web_facebook_campaigns_policy(bigint)",
-     "source":"592f487518ef14f3bef6f0c7177f2ab5","target":"09917b7c45a14abe4f0d4a1af625631f"},
+     "source":"592f487518ef14f3bef6f0c7177f2ab5","target":"a49d994aa8f5847a0ccd35e4017504f1"},
     {"signature":"public.aka_agent_authenticate_control_session(text)",
      "source":"692e2a068ce51377f6bd71fec20a8b0c","target":"8012506f60ad1f00aab2b60f7bbec48c"},
     {"signature":"public.aka_agent_authenticate_control_session_chat_v2(text)",
@@ -955,12 +954,12 @@ BEGIN
       v_action_ids := NULL;
     END IF;
     IF v_authoring_enabled AND v_action_ids IS NOT NULL THEN
-      v_authoring_enabled := jsonb_typeof(v_action_ids) = 'array'
-        AND jsonb_array_length(v_action_ids) > 0
+      v_authoring_enabled := CASE WHEN jsonb_typeof(v_action_ids) = 'array' THEN
+        jsonb_array_length(v_action_ids) > 0
         AND NOT EXISTS (
           SELECT 1 FROM jsonb_array_elements(v_action_ids) AS item(value)
           WHERE jsonb_typeof(item.value) IS DISTINCT FROM 'string' OR btrim(item.value #>> '{}') = ''
-        );
+        ) ELSE false END;
     END IF;
   END IF;
   RETURN jsonb_build_object(
@@ -1385,7 +1384,7 @@ BEGIN
     END IF;
   END LOOP;
   FOR r IN SELECT * FROM jsonb_to_recordset($new_functions$[
-    {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"31e5589203597806b03c077e87008f20","acl":"{postgres=X/postgres}"},
+    {"signature":"private.aka_agent_web_email_campaigns_policy(bigint)","target":"2d131332e8d0fa54b4669f51a8fe92d8","acl":"{postgres=X/postgres}"},
     {"signature":"public.aka_agent_control_web_email_campaigns_policy(bigint)","target":"70616ad6489372725cca33b09da41852","acl":"{postgres=X/postgres,service_role=X/postgres}"},
     {"signature":"private.aka_agent_control_assert_campaign_inputs(text,jsonb)","target":"80972291d75cec5383aab3a28838b7b6","acl":"{postgres=X/postgres}"},
     {"signature":"private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)","target":"fa594cff527fcf2f553c9f376d67dc41","acl":"{postgres=X/postgres}"},

@@ -31,7 +31,7 @@ DO $guard$
 DECLARE r record; checksum text; at_baseline integer := 0;
 BEGIN
   FOR r IN SELECT * FROM (VALUES
-    ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', '09917b7c45a14abe4f0d4a1af625631f'),
+    ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', 'a49d994aa8f5847a0ccd35e4017504f1'),
     ('public.aka_agent_authenticate_control_session(text)', '692e2a068ce51377f6bd71fec20a8b0c', '8012506f60ad1f00aab2b60f7bbec48c'),
     ('public.aka_agent_authenticate_control_session_chat_v2(text)', '61e874b9b47b827d78e16c71bc9ef687', 'e481b2473aa9dda34f91092b98ffdfbe'),
     ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '367cf7ba9d72aff72c4907586cf1c3ba', '719fcf458eabe2b16fe536de07079c77'),
@@ -1805,7 +1805,7 @@ DO $postflight$
 DECLARE r record;
 BEGIN
   FOR r IN SELECT * FROM (VALUES
-    ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', '09917b7c45a14abe4f0d4a1af625631f'),
+    ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', 'a49d994aa8f5847a0ccd35e4017504f1'),
     ('public.aka_agent_authenticate_control_session(text)', '692e2a068ce51377f6bd71fec20a8b0c', '8012506f60ad1f00aab2b60f7bbec48c'),
     ('public.aka_agent_authenticate_control_session_chat_v2(text)', '61e874b9b47b827d78e16c71bc9ef687', 'e481b2473aa9dda34f91092b98ffdfbe'),
     ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '367cf7ba9d72aff72c4907586cf1c3ba', '719fcf458eabe2b16fe536de07079c77'),

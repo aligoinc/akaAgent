@@ -1,0 +1,266 @@
+{
+  "migration": "migrations/migration_v530_web_facebook_email_authoring.sql",
+  "ledgerName": "migration_v530_web_facebook_email_authoring",
+  "migrationFileMd5": "655a95257dd8047d22fc3b32ed17b737",
+  "project": "akachat / cgjbsmqtfhqvttudyjzq",
+  "baselineReadAt": "2026-11-14 11:16–11:25 VN (read-only qua MCP execute_sql)",
+  "ledgerTopAtBaseline": "20261114015453 migration_v529_desktop_server_on_fly_flag_route (không có migration_v53x nào)",
+  "patchedFunctions": [
+    {
+      "signature": "private.aka_agent_web_facebook_campaigns_policy(bigint)",
+      "sourceMd5": "592f487518ef14f3bef6f0c7177f2ab5",
+      "targetMd5": "a49d994aa8f5847a0ccd35e4017504f1",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public"
+      ],
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_authenticate_control_session(text)",
+      "sourceMd5": "692e2a068ce51377f6bd71fec20a8b0c",
+      "targetMd5": "8012506f60ad1f00aab2b60f7bbec48c",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_authenticate_control_session_chat_v2(text)",
+      "sourceMd5": "61e874b9b47b827d78e16c71bc9ef687",
+      "targetMd5": "e481b2473aa9dda34f91092b98ffdfbe",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
+      "sourceMd5": "367cf7ba9d72aff72c4907586cf1c3ba",
+      "targetMd5": "719fcf458eabe2b16fe536de07079c77",
+      "owner": "postgres",
+      "securityDefiner": false,
+      "volatility": "s",
+      "config": [
+        "search_path=public, pg_temp",
+        "statement_timeout=20s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)",
+      "sourceMd5": "db8942b09904e535987b94745b159ca3",
+      "targetMd5": "fac3ecfdf45dff239c319656a7365a7c",
+      "owner": "postgres",
+      "securityDefiner": false,
+      "volatility": "s",
+      "config": [
+        "search_path=public, pg_temp",
+        "statement_timeout=20s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)",
+      "sourceMd5": "6030f0d9c8429e36955a405920f751f9",
+      "targetMd5": "ed7f9d447f72019feca71d717fd4e1bd",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "s",
+      "config": [
+        "search_path=pg_catalog, public",
+        "statement_timeout=15s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)",
+      "sourceMd5": "87f7002ac924f647896a7635663562b5",
+      "targetMd5": "2d3fbc42cc31e57138cdc99554af9254",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=pg_catalog, public",
+        "lock_timeout=5s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.delete_control_campaign_atomic(bigint,bigint,bigint)",
+      "sourceMd5": "2af929cc5e02683e5e9dc16a48cc9bac",
+      "targetMd5": "2ede03119ec482102e1647c0b1bae220",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.create_control_campaign(bigint,bigint,text,jsonb,jsonb)",
+      "sourceMd5": "61a6b5c855fbcf86cafaf3c3c7ce6f0a",
+      "targetMd5": "252ae351970aa1c0b19d356faad94540",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.update_control_campaign_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
+      "sourceMd5": "a86278195e18d1ef8d0091b41d1d0c5b",
+      "targetMd5": "0d5eb4e8e8d8d0545daf3b4b82307c30",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.add_control_campaign_input_rows(bigint,bigint,bigint,text,integer,jsonb,timestamptz,text)",
+      "sourceMd5": "d283261c5e77558d10f5df86cd4d1127",
+      "targetMd5": "5fa5bcfd31f69db8114b82f3ade9b4a5",
+      "owner": "postgres",
+      "securityDefiner": true,
+      "volatility": "v",
+      "config": [
+        "search_path=public",
+        "statement_timeout=60s"
+      ],
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    }
+  ],
+  "dependenciesUnchanged": [
+    {
+      "signature": "public.create_control_campaign_v2(bigint,bigint,text,jsonb,jsonb,text)",
+      "md5": "661579fa2e8b6571f429079dd0b89c0a",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.update_control_campaign_by_config_version_atomic(bigint,bigint,bigint,timestamptz,jsonb,jsonb,boolean,text,integer,jsonb)",
+      "md5": "3e1e2f8b67697d36b3c8c3830586a6c2",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_campaign_logs(bigint,bigint,bigint,text[],jsonb)",
+      "md5": "26875e2b1652ca56cc8e59460df8cae1",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_web_facebook_campaigns_policy(bigint)",
+      "md5": "7f487421358f987502dc2bc6405dae0b",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_campaign_config_version(public.auto_campaigns)",
+      "md5": "5992a9958a3df3ccba087f9c9388ebb4",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "note": "IMMUTABLE; gồm cả extra_settings và secondary_account_id"
+    }
+  ],
+  "newFunctions": [
+    {
+      "signature": "private.aka_agent_web_email_campaigns_policy(bigint)",
+      "targetMd5": "2d131332e8d0fa54b4669f51a8fe92d8",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_web_email_campaigns_policy(bigint)",
+      "targetMd5": "70616ad6489372725cca33b09da41852",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "private.aka_agent_control_assert_campaign_inputs(text,jsonb)",
+      "targetMd5": "80972291d75cec5383aab3a28838b7b6",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.aka_agent_control_assert_secondary_account(bigint,bigint,text,text,bigint,bigint)",
+      "targetMd5": "fa594cff527fcf2f553c9f376d67dc41",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.aka_agent_control_normalize_email_session(jsonb,text)",
+      "targetMd5": "7068bce7f45562f1f4ebcb2fb902a89b",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "private.aka_agent_control_email_account_view(public.auto_accounts)",
+      "targetMd5": "c6c2b3218cf5946c7d4fa3cc23d0f429",
+      "acl": "{postgres=X/postgres}"
+    },
+    {
+      "signature": "public.create_control_email_account_atomic(bigint,bigint,text,jsonb,boolean,text,integer,bigint)",
+      "targetMd5": "496a0182daaa9c944119a9744fcf41eb",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.update_control_email_account_atomic(bigint,bigint,bigint,timestamptz,text,jsonb,boolean,text,bigint)",
+      "targetMd5": "6f0f9fefac37de258d34c55deebd2cfd",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.delete_control_email_account_atomic(bigint,bigint,bigint)",
+      "targetMd5": "b912bdab82a4669569b184e46f166da0",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_email_account_session(bigint,bigint,bigint)",
+      "targetMd5": "2ee2b490a2f9224a9d8ac63a1683040f",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_control_link_find_data_target(bigint,bigint,bigint[],bigint,text,boolean)",
+      "targetMd5": "84182eb3960fd1952037e80e183036fa",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}"
+    },
+    {
+      "signature": "public.aka_agent_desktop_merge_campaign_runtime_settings(bigint,jsonb,text[])",
+      "targetMd5": "2e3bf66477ad78cf90eba64e1626e8d2",
+      "acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}"
+    }
+  ],
+  "settings": {
+    "web.facebook_campaigns": {
+      "productionValue": "{\"enabled\":true,\"organizationIds\":[1],\"facebookOnlyLogin\":false}",
+      "note": "v530 không đổi giá trị; nhánh authoring mới đọc khoá con \"authoring\" (chưa có = tắt)"
+    },
+    "web.desktop_accounts": {
+      "productionValue": "{\"enabled\":true,\"organizationIds\":null,\"desktopOnlyLogin\":true}",
+      "note": "không đổi"
+    },
+    "web.email_campaigns": {
+      "productionValue": null,
+      "seededValue": "{\"enabled\":false,\"organizationIds\":null,\"emailOnlyLogin\":false,\"authoring\":{\"enabled\":false,\"organizationIds\":null}}",
+      "note": "v530 INSERT ... ON CONFLICT DO NOTHING; rollback DELETE"
+    }
+  },
+  "productionFacts": {
+    "defaultFunctionAclPublic": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}",
+    "defaultFunctionAclPrivate": "không có pg_default_acl (PUBLIC EXECUTE mặc định) → hàm private mới REVOKE PUBLIC",
+    "auto_campaigns_rls": "bật; RESTRICTIVE desktop_owned_resource (staff_id = private.aka_agent_staff_scope_for_request(), WITH CHECK kèm sở hữu account_id/secondary_account_id) + PERMISSIVE v435_existing_role_access",
+    "aka_agent_desktop_auto_campaigns": "UPDATE extra_settings/updated_at/is_delete, SELECT id/staff_id; role statement_timeout=3s, lock_timeout=8s, không BYPASSRLS",
+    "updateTriggersOnAutoCampaigns": [
+      "aaa_desktop_parent_ownership (BEFORE, mọi UPDATE, chỉ phiên Desktop)",
+      "auto_validate_campaign_send_exclusion (BEFORE UPDATE OF extra_settings, account_id, staff_id, organization_id)",
+      "app_access_guard_campaign_claim (BEFORE UPDATE OF status, account_id, secondary_account_id, runtime tokens; chỉ tổ chức tách quyền; lỗi app_access_denied 42501)",
+      "trg_auto_table_log (AFTER mọi INSERT/UPDATE)"
+    ]
+  }
+}

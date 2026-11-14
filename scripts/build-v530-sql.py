@@ -12,6 +12,12 @@
 3. migrations/tests/migration_v530_web_facebook_email_authoring_guarded_apply.sql
    Áp bằng MỘT LẦN DÁN vào Supabase SQL Editor (khi không bấm được thẻ xác nhận MCP): một giao dịch
    so sánh → chốt chặn → migration → ghi lịch sử migration giống apply_migration.
+4. migrations/tests/migration_v530_web_facebook_email_authoring_smoke.sql
+   Kiểm chỉ đọc trên production sau apply (md5/ACL, phạm vi đọc Email/Facebook, quyền), chạy trong
+   BEGIN ... ROLLBACK.
+5. migrations/tests/migration_v530_web_facebook_email_authoring_rollback_trial.sql
+   Thử trên production trong giao dịch tự huỷ: migration + smoke rồi RAISE 'v530_trial_ok' (không COMMIT,
+   không ghi sổ migration).
 
 Chạy lại mỗi khi sửa migration hoặc baseline:
     python3 scripts/build-v530-sql.py
@@ -400,7 +406,144 @@ SELECT check_name, staff_id, organization_id, ok, old_ms, new_ms, detail FROM v5
 (tests_dir / 'migration_v530_web_facebook_email_authoring_guarded_apply.sql').write_text(
     guarded_header + compare_body + guard + migration_body + record)
 
+# 4. Smoke production sau apply (chỉ đọc, chạy trong BEGIN ... ROLLBACK).
+new_values = ',\n'.join(f"    ('{f['signature']}', '{f['target']}', '{f['acl']}')" for f in new_functions)
+service_only = [f['signature'] for f in new_functions if f['acl'] == '{postgres=X/postgres,service_role=X/postgres}']
+assert len(service_only) == 6
+service_values = ',\n'.join(f"    ('{s}')" for s in service_only)
+smoke = f"""-- v530 KIỂM CHỈ ĐỌC TRÊN PRODUCTION SAU KHI APPLY. Chạy trong BEGIN ... ROLLBACK.
+-- File sinh tự động bởi scripts/build-v530-sql.py; đừng sửa tay.
+-- Không gọi hàm có ghi (xác thực, tạo/sửa/xoá, dừng/tiếp tục, liên kết, ghi khoá bộ chạy) và không in dữ liệu
+-- khách: chỉ so phạm vi đọc cũ/mới trên vài nhân viên có tài khoản Email/Facebook, kết quả là một NOTICE.
+SET LOCAL statement_timeout = '60s';
+SET LOCAL ROLE service_role;
+DO $smoke$
+DECLARE
+  r record;
+  legacy jsonb;
+  mixed jsonb;
+  em jsonb;
+  fb jsonb;
+  v_account bigint;
+  n_email integer := 0;
+  n_fb integer := 0;
+  c_legacy constant text[] := ARRAY['zalo','sms','zalo_qr','zalo_web','facebook'];
+  c_all constant text[] := ARRAY['zalo','sms','zalo_qr','zalo_web','facebook','email'];
+BEGIN
+  -- 11 hàm vá ở đúng md5 đích; 12 hàm mới đúng md5 và ACL.
+  FOR r IN SELECT * FROM (VALUES
+{spec_values}
+  ) AS x(signature, source_md5, target_md5) LOOP
+    ASSERT md5(pg_get_functiondef(r.signature::regprocedure)) = r.target_md5, 'target ' || r.signature;
+  END LOOP;
+  FOR r IN SELECT * FROM (VALUES
+{new_values}
+  ) AS x(signature, target_md5, acl) LOOP
+    ASSERT md5(pg_get_functiondef(r.signature::regprocedure)) = r.target_md5, 'new function ' || r.signature;
+    ASSERT (SELECT p.proacl::text FROM pg_proc p WHERE p.oid = r.signature::regprocedure) = r.acl, 'acl ' || r.signature;
+  END LOOP;
+
+  -- Email: token 'email' chỉ thêm dòng Email; caller không gửi token không thấy Email.
+  FOR r IN
+    SELECT a.staff_id, a.organization_id, max(a.id) AS account_id FROM public.auto_accounts a
+    WHERE a.is_delete = false AND a.flatform_type = 'email'
+      AND EXISTS (SELECT 1 FROM public.org_staff s WHERE s.id = a.staff_id AND s.organization_id = a.organization_id AND s.is_active IS TRUE)
+    GROUP BY 1, 2 ORDER BY max(a.id) DESC LIMIT 5
+  LOOP
+    n_email := n_email + 1;
+    legacy := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, c_legacy);
+    mixed := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, c_all);
+    em := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, ARRAY['email']);
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(legacy->'items') x WHERE x->>'platform' = 'email'), 'legacy page has no email';
+    ASSERT (mixed->>'campaignTotal')::integer = (legacy->>'campaignTotal')::integer + (em->>'campaignTotal')::integer, 'page union';
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(em->'items') x WHERE x->>'platform' <> 'email'
+      OR (x->>'isZaloServer')::boolean OR (x->>'isZaloShowWeb')::boolean), 'email page only email, desktop runtime';
+    legacy := public.aka_agent_control_account_snapshot(r.staff_id, r.organization_id, c_legacy);
+    em := public.aka_agent_control_account_snapshot(r.staff_id, r.organization_id, ARRAY['email']);
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(legacy->'items') x WHERE x->'metadata'->>'flatform_type' = 'email'),
+      'legacy snapshot has no email';
+    ASSERT jsonb_array_length(em->'items') > 0, 'email accounts listed';
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(em->'items') x WHERE x->'metadata'->>'flatform_type' <> 'email'),
+      'email snapshot only email';
+    ASSERT jsonb_typeof(em->'desktopPresence') = 'object', 'email snapshot has presence';
+    ASSERT position('email_session' in em::text) = 0, 'snapshot never returns smtp session';
+    em := public.aka_agent_control_desktop_activity(r.staff_id, r.organization_id, ARRAY['email']);
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(em->'items') x WHERE x->>'accountType' <> 'email'), 'email activity only';
+    -- Phiên SMTP chỉ đọc qua hàm riêng (không in ra): tài khoản của chính nhân viên thấy được, id lạ thì không.
+    ASSERT (public.aka_agent_control_email_account_session(r.staff_id, r.organization_id, r.account_id)->>'found')::boolean,
+      'email session readable';
+    ASSERT public.aka_agent_control_email_account_session(r.staff_id, r.organization_id, 9000000000000) = '{{"found": false}}'::jsonb,
+      'missing email account';
+  END LOOP;
+  ASSERT n_email > 0, 'requires staff with email accounts';
+
+  -- Facebook: token 'facebook' của v476 giữ nguyên phạm vi.
+  FOR r IN
+    SELECT a.staff_id, a.organization_id FROM public.auto_accounts a
+    WHERE a.is_delete = false AND a.flatform_type = 'facebook'
+      AND EXISTS (SELECT 1 FROM public.org_staff s WHERE s.id = a.staff_id AND s.organization_id = a.organization_id AND s.is_active IS TRUE)
+    GROUP BY 1, 2 ORDER BY max(a.id) DESC LIMIT 3
+  LOOP
+    n_fb := n_fb + 1;
+    legacy := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, ARRAY['zalo','sms','zalo_qr','zalo_web']);
+    mixed := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, c_legacy);
+    fb := public.aka_agent_control_campaign_page(r.staff_id, r.organization_id, ARRAY['facebook']);
+    ASSERT (mixed->>'campaignTotal')::integer = (legacy->>'campaignTotal')::integer + (fb->>'campaignTotal')::integer,
+      'facebook page union';
+    ASSERT NOT EXISTS (SELECT 1 FROM jsonb_array_elements(fb->'items') x WHERE x->>'platform' <> 'facebook'), 'facebook page only';
+  END LOOP;
+  ASSERT n_fb > 0, 'requires staff with facebook accounts';
+
+  -- Chính sách: đọc được; Email có dòng cấu hình; Facebook có nhánh authoring.
+  ASSERT public.aka_agent_control_web_email_campaigns_policy(1) ?& ARRAY['enabled','emailOnlyLogin','authoring'], 'email policy';
+  ASSERT jsonb_typeof(public.aka_agent_control_web_facebook_campaigns_policy(1)->'authoring') = 'object', 'facebook authoring';
+  ASSERT EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'web.email_campaigns'), 'email policy row';
+
+  -- Quyền: RPC Control chỉ service_role; RPC bộ chạy chỉ aka_agent_desktop (cần quyền cột + RLS của phiên).
+  FOR r IN SELECT * FROM (VALUES
+{service_values}
+  ) AS x(signature) LOOP
+    ASSERT has_function_privilege('service_role', r.signature, 'EXECUTE'), 'service_role ' || r.signature;
+    ASSERT NOT has_function_privilege('anon', r.signature, 'EXECUTE')
+      AND NOT has_function_privilege('authenticated', r.signature, 'EXECUTE')
+      AND NOT has_function_privilege('aka_agent_desktop', r.signature, 'EXECUTE')
+      AND NOT has_function_privilege('aka_agent_chat_api', r.signature, 'EXECUTE'), 'only service_role ' || r.signature;
+  END LOOP;
+  ASSERT has_function_privilege('aka_agent_desktop', 'public.aka_agent_desktop_merge_campaign_runtime_settings(bigint,jsonb,text[])', 'EXECUTE');
+  ASSERT NOT has_function_privilege('service_role', 'public.aka_agent_desktop_merge_campaign_runtime_settings(bigint,jsonb,text[])', 'EXECUTE');
+  ASSERT NOT has_function_privilege('anon', 'public.aka_agent_desktop_merge_campaign_runtime_settings(bigint,jsonb,text[])', 'EXECUTE');
+  ASSERT has_column_privilege('aka_agent_desktop', 'public.auto_campaigns', 'extra_settings', 'UPDATE')
+    AND has_column_privilege('aka_agent_desktop', 'public.auto_campaigns', 'updated_at', 'UPDATE'), 'desktop column privileges';
+  ASSERT NOT has_function_privilege('service_role', 'private.aka_agent_web_email_campaigns_policy(bigint)', 'EXECUTE');
+  RAISE NOTICE 'v530 production smoke passed (email staff %, facebook staff %)', n_email, n_fb;
+END
+$smoke$;
+"""
+(tests_dir / 'migration_v530_web_facebook_email_authoring_smoke.sql').write_text(smoke)
+
+# 5. Thử trên production trong giao dịch tự huỷ: migration + smoke rồi RAISE để huỷ toàn bộ (không COMMIT, không sổ).
+smoke_body = smoke[smoke.index('SET LOCAL statement_timeout'):]
+trial = f"""-- v530 THỬ TRÊN PRODUCTION TRONG GIAO DỊCH TỰ HUỶ. File sinh tự động bởi scripts/build-v530-sql.py; đừng sửa tay.
+-- Chạy migration v530 rồi smoke chỉ đọc trong MỘT giao dịch, cuối cùng RAISE để huỷ toàn bộ: không bao giờ COMMIT,
+-- không ghi sổ migration, NOTIFY nạp lại schema của PostgREST không được gửi (chỉ gửi khi COMMIT).
+-- Chỉ chạy ngoài 10:00–11:30 và 14:00–16:00 VN (CREATE OR REPLACE giữ khoá dòng pg_proc tới khi huỷ).
+-- Kết quả đạt: lỗi 'v530_trial_ok: ...'. Lỗi khác (v530_..., assertion) = bước đó không đạt; đều đã huỷ.
+BEGIN;
+{migration_body}
+{smoke_body}RESET ROLE;
+DO $trial$
+BEGIN
+  RAISE EXCEPTION 'v530_trial_ok: migration + smoke đạt, giao dịch đã huỷ (không COMMIT, không ghi sổ)';
+END
+$trial$;
+ROLLBACK;
+"""
+assert 'COMMIT;' not in trial.replace('không COMMIT', '').replace('khi COMMIT', '')
+(tests_dir / 'migration_v530_web_facebook_email_authoring_rollback_trial.sql').write_text(trial)
+
 for path in ('migrations/snapshots/web-facebook-email-authoring-v530/rollback.sql',
              'migrations/tests/migration_v530_web_facebook_email_authoring_compare.sql',
-             'migrations/tests/migration_v530_web_facebook_email_authoring_guarded_apply.sql'):
+             'migrations/tests/migration_v530_web_facebook_email_authoring_guarded_apply.sql',
+             'migrations/tests/migration_v530_web_facebook_email_authoring_smoke.sql',
+             'migrations/tests/migration_v530_web_facebook_email_authoring_rollback_trial.sql'):
     print(f'wrote {path} ({len((root / path).read_text())} bytes)')
