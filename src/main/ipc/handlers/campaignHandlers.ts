@@ -5,6 +5,7 @@ import * as campaignDraftRepo from '../../data/repositories/campaignDraftReposit
 import { syncCampaignRepeat } from '../../data/repositories/campaignRepeatRepository'
 import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
+import { syncPostBumpTargetContent } from '../../services/postBumpContentSync'
 import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest } from '../../../shared/foundFacebookGroupCardsIpc'
 import { handleFoundFacebookGroupCardsRequest } from '../../services/foundFacebookGroupCardService'
 
@@ -167,8 +168,9 @@ export function registerCampaignHandlers(
       return campaign
     }
     await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
+    let ready: Awaited<ReturnType<SupabaseService['getCampaignConfig']>> | undefined
     if (requireEditReady === true) {
-      const ready = await supabase.getCampaignConfig(id)
+      ready = await supabase.getCampaignConfig(id)
       if (ready?.status !== 'tạm dừng') {
         throw new Error('Chiến dịch chưa tạm dừng hoặc đã được tiếp tục ở phiên khác. Vui lòng tạm dừng rồi thử lại.')
       }
@@ -181,6 +183,11 @@ export function registerCampaignHandlers(
         expectedUpdatedAt = ready.updatedAt
       }
     }
+    // "Nội dung up tin" đổi thì chép sang các chiến dịch up tin đã tạo; cần bản trước khi lưu để biết khách có đổi.
+    const touchesPostBumpContent = !!payload.extraSettings && 'postBumpContent' in payload.extraSettings
+    const postBumpBefore = touchesPostBumpContent
+      ? (ready !== undefined ? ready : await supabase.getCampaignConfig(id).catch(() => null))
+      : null
     try {
       // Đọc cài đặt lặp trước khi sửa: vừa tắt lặp cũng phải gỡ đăng ký.
       const repeatBefore = payload.extraSettings !== undefined || payload.scheduleEndDate !== undefined || payload.scheduleType !== undefined
@@ -188,6 +195,10 @@ export function registerCampaignHandlers(
         : undefined
       const campaign = await supabase.updateCampaign(id, payload, requireEditReady === true, expectedUpdatedAt, retrySmsInputSchedule)
       await registerCampaignRepeat(id, repeatBefore, payload.extraSettings, (campaign as { extraSettings?: unknown } | null | undefined)?.extraSettings)
+      if (touchesPostBumpContent && postBumpBefore) {
+        await syncPostBumpTargetContent(supabase, postBumpBefore, campaign)
+          .catch(err => console.error('Failed sync post bump content:', err))
+      }
       realtimeRefreshController?.refreshSoon('campaign-updated')
       return campaign
     } catch (error) {
