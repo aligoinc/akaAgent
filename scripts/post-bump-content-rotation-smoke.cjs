@@ -6,23 +6,11 @@
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
-const ts = require('typescript')
+const harness = require('./fixtures/post-bump-content-rotation/harness.cjs')
 
-const root = path.resolve(__dirname, '..')
+const { root, loadTs, shared } = harness
 const results = []
 const check = (name, fn) => results.push({ name, fn })
-
-function loadTs(relativePath, modules = {}) {
-  const code = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS }
-  }).outputText
-  const module = { exports: {} }
-  const localRequire = id => (id in modules ? modules[id] : require(id))
-  new Function('module', 'exports', 'require', code)(module, module.exports, localRequire)
-  return module.exports
-}
-
-const shared = loadTs('src/shared/postBumpContent.ts')
 const rotationInsert = loadTs('src/main/data/campaignInputContentRotation.ts')
 const sync = loadTs('src/main/services/postBumpContentSync.ts', { '../../shared/postBumpContent': shared })
 
@@ -169,18 +157,7 @@ check('chèn data: gửi cột chỉ số, thiếu quyền (42501) thì chèn l�
 })
 
 // ---------------------------------------------------------------- bộ lập lịch thật
-const schedulerFile = path.join(root, 'src/main/services/campaignScheduler.ts')
-const schedulerSource = ts.createSourceFile(schedulerFile, fs.readFileSync(schedulerFile, 'utf8'), ts.ScriptTarget.Latest, true)
-const schedulerClass = schedulerSource.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
-const methods = ['enqueuePostBumpAfterGroupPost', 'normalizePostBumpCount', 'normalizePostBumpMinutes', 'normalizePostBumpRotationIndex']
-  .map(name => {
-    const method = schedulerClass.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(schedulerSource) === name)
-    assert.ok(method, name)
-    return method.getText(schedulerSource)
-  }).join('\n')
-const Harness = new Function('planPostBumpContentIndexes', 'POST_BUMP_COMMENT_ACTION_CODE',
-  `${ts.transpileModule(`class Harness { ${methods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText}; return Harness`)(
-  shared.planPostBumpContentIndexes, shared.POST_BUMP_COMMENT_ACTION_CODE)
+const Harness = harness.loadEnqueueHarness()
 
 function enqueueFixture(extra, targetIds) {
   const campaign = { id: 7, name: 'Đăng nhóm', actionId: 'facebook_group_post', extraSettings: { enablePostBump: true, ...extra } }
@@ -289,45 +266,10 @@ check('PGlite: RPC thật — không chọn trước thì 3 tài khoản cùng c
 
 // ---------------------------------------------------------------- PGlite harness
 async function withDb(fn) {
-  const { PGlite } = require(require.resolve('@electric-sql/pglite', {
-    paths: [root, process.env.AKA_CHAT_REPO || path.resolve(root, '../akaAgentChatApi')]
-  }))
-  const snapshot = JSON.parse(fs.readFileSync(path.join(root, 'migrations/snapshots/post-bump-content-rotation-v531/source.json'), 'utf8'))
-  const db = new PGlite()
-  try {
-    await db.exec(`
-      CREATE ROLE anon; CREATE ROLE authenticated; CREATE ROLE service_role; CREATE ROLE aka_agent_desktop;
-      CREATE SCHEMA private;
-      CREATE FUNCTION private.aka_agent_assert_request_ownership(bigint,bigint,bigint) RETURNS void LANGUAGE sql AS 'SELECT';
-      CREATE FUNCTION public.aka_agent_lock_campaign_input_serialization(bigint) RETURNS void LANGUAGE sql AS 'SELECT';
-      CREATE TABLE org_staff(id bigint PRIMARY KEY, organization_id bigint, is_active boolean);
-      CREATE TABLE auto_accounts(id bigint PRIMARY KEY, staff_id bigint, organization_id bigint, status text,
-        login_status text, is_active boolean, is_delete boolean);
-      CREATE TABLE auto_campaigns(id bigint PRIMARY KEY, account_id bigint, staff_id bigint, organization_id bigint,
-        status text, action_id text, extra_settings jsonb, is_delete boolean DEFAULT false, runtime_claim_token uuid,
-        runtime_claim_target text, runtime_unit_token uuid, runtime_unit_claimed_at timestamptz,
-        runtime_unit_input_data_ids bigint[] DEFAULT '{}', content_rotation_indexes jsonb NOT NULL DEFAULT '{}');
-      CREATE TABLE auto_campaign_input_data(id bigserial PRIMARY KEY, campaign_id bigint, status text,
-        is_delete boolean DEFAULT false, uid text, note text, content_rotation_indexes jsonb NOT NULL DEFAULT '{}',
-        CONSTRAINT auto_campaign_input_data_content_rotation_indexes_object CHECK (jsonb_typeof(content_rotation_indexes) = 'object'));
-      GRANT USAGE ON SCHEMA public TO aka_agent_desktop, anon;
-      GRANT SELECT ON auto_campaign_input_data TO aka_agent_desktop;
-      GRANT INSERT (campaign_id, status, uid, note) ON auto_campaign_input_data TO aka_agent_desktop;
-      GRANT UPDATE (status, note) ON auto_campaign_input_data TO aka_agent_desktop;
-      GRANT USAGE ON SEQUENCE auto_campaign_input_data_id_seq TO aka_agent_desktop;
-      INSERT INTO org_staff VALUES (3, 1, true);
-      INSERT INTO auto_accounts VALUES (21,3,1,'đang chạy','đã đăng nhập',true,false), (22,3,1,'đang chạy','đã đăng nhập',true,false),
-        (23,3,1,'đang chạy','đã đăng nhập',true,false);
-      INSERT INTO auto_campaigns(id,account_id,staff_id,organization_id,status,action_id,extra_settings,runtime_claim_token,
-        runtime_claim_target,runtime_unit_token,runtime_unit_claimed_at)
-      SELECT 100+n, 20+n, 3, 1, 'đang chạy', 'facebook_comment_seeding_post', '{}',
-        ('10000000-0000-4000-8000-00000000000'||n)::uuid, 'desktop', ('20000000-0000-4000-8000-00000000000'||n)::uuid, now()
-      FROM generate_series(1,3) n;`)
-    await db.exec(snapshot.functiondef)
-    const md5 = (await db.query(`SELECT md5(prosrc) AS m FROM pg_proc WHERE oid = $1::regprocedure`, [snapshot.signature])).rows[0].m
-    assert.equal(md5, snapshot.prosrc_md5, 'PGlite giữ nguyên thân RPC production')
+  await harness.withPostBumpDb(async db => {
+    await harness.addClaimedCampaigns(db, [101, 102, 103])
     const helpers = {
-      snapshot,
+      snapshot: harness.snapshot,
       asDesktop: async sql => { try { await db.exec(`SET ROLE aka_agent_desktop; ${sql}`) } finally { await db.exec('RESET ROLE') } },
       failures: async (fn, pattern) => {
         await assert.rejects(fn, pattern)
@@ -349,17 +291,13 @@ async function withDb(fn) {
       take: async (campaignId, inputId, count) => {
         await db.query(`UPDATE auto_campaign_input_data SET status='đang chạy' WHERE id=$1`, [inputId])
         await db.query(`UPDATE auto_campaigns SET runtime_unit_input_data_ids = array_append(runtime_unit_input_data_ids, $2::bigint) WHERE id=$1`, [campaignId, inputId])
-        const c = (await db.query('SELECT account_id, runtime_claim_token, runtime_unit_token FROM auto_campaigns WHERE id=$1', [campaignId])).rows[0]
-        return (await db.query(`SELECT public.aka_agent_take_campaign_content_index($1,$2,3,'desktop',$3,$4,$5,'fb_comment',$6) AS i`,
-          [campaignId, c.account_id, c.runtime_claim_token, c.runtime_unit_token, inputId, count])).rows[0].i
+        return harness.takeContentIndex(db, campaignId, inputId, count)
       },
       campaignCursors: async () => Object.fromEntries((await db.query(
         `SELECT id, (content_rotation_indexes->>'fb_comment')::int AS c FROM auto_campaigns ORDER BY id`)).rows.map(r => [r.id, r.c]))
     }
     await fn(db, helpers)
-  } finally {
-    await db.close()
-  }
+  })
 }
 
 ;(async () => {

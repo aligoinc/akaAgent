@@ -52,3 +52,27 @@ Gỡ: [rollback_v531](../migrations/rollback_v531_post_bump_content_rotation_des
 - kiểm cách chèn dự phòng và dịch vụ đồng bộ.
 
 Bỏ phần giao câu ở bộ lập lịch thì 2 nhóm kiểm bộ lập lịch FAIL. Chưa chạy trên Electron thật với Facebook thật.
+
+## Phát lại dữ liệu thật (14/11/2026)
+
+Dữ liệu 21 ngày tới 11:20 VN 14/11, xuất chỉ đọc bằng [export.sql](../scripts/fixtures/post-bump-content-rotation/export.sql): 2.261 chiến dịch nguồn, 8.057 chiến dịch up tin, 24.790 lượt up, 15.475 kết quả comment. File xuất có nội dung khách nên để ngoài repo. Kết quả (chỉ số đếm): [replay-20261114.json](../migrations/snapshots/post-bump-content-rotation-v531/replay-20261114.json).
+
+```bash
+AKA_CHAT_REPO=../akaAgentChatApi node scripts/post-bump-content-rotation-replay.cjs <file xuất> --out <tóm tắt.json>
+```
+
+Bộ phát lại làm ba việc:
+- **Hiệu chỉnh mô hình.** Chạy cách cũ qua RPC thật trên PGlite, theo đúng thứ tự và số lần chạy lại của từng lượt, rồi so với chỉ số câu production đã dùng. Chỉ số này đọc được từ `content_rotation_indexes` của dòng data, bằng chỉ số dùng lần cuối + 1. Kết quả khớp từng lượt ở 1.629/1.686 chiến dịch up tin (93,5% số lượt). 56 chiến dịch lệch vì có lượt đã lấy câu nhưng không ghi kết quả, nên không biết lượt đó chạy lúc nào. 1 chiến dịch lệch vì một lần chạy lại không ghi kết quả.
+- **Cách mới.** Mỗi bài chạy hàm thật `enqueuePostBumpAfterGroupPost`, giữ đúng tài khoản nhận từng lượt như production (24.790/24.790 lượt khớp tài khoản). Sau đó gọi RPC thật cho mọi lần lấy câu, kể cả lần chạy lại.
+- **Đồng bộ "Nội dung up tin".** Lưu không đổi nội dung thì không ghi chiến dịch up tin nào: 0/611 chiến dịch đăng nhóm chế độ tạo mới. Giả lập đổi nội dung ở 468 chiến dịch có chiến dịch up tin: 1.274 chiến dịch up tin được ghi, 446 bị bỏ qua vì đã xoá, 0 chiến dịch khác loại hay của nhân viên khác.
+
+Bài có ≥ 2 lượt đã lấy câu, có lượt trùng câu:
+
+| | Số bài | Cách cũ | Cách mới |
+|---|---|---|---|
+| Mọi bài | 4.854 | 2.682 (55%) | 617 (12,7%) |
+| Lượt chia cho ≥ 2 tài khoản | 1.896 | 1.645 (86,8%) | 121 (6,4%) |
+
+Tính cả 6.729 bài còn lượt chưa chạy thì cách mới có 1.405 bài trùng. Mọi bài còn trùng ở cách mới đều do số lượt nhiều hơn số câu; không có ca trùng nào khác. Đang có 126/611 chiến dịch đăng nhóm bật up tin đặt số lượt/bài nhiều hơn số câu: 79 chiến dịch đặt 3 lượt cho 1 câu, 15 chiến dịch 3 lượt cho 2 câu, 14 chiến dịch 10 lượt cho 1 câu.
+
+Phát hiện riêng, không do bản sửa: 8.139 lượt up quá giờ hẹn hơn 1 ngày vẫn ở `chờ xử lý`, trên 333 chiến dịch up tin. 7.315 lượt trong số đó thuộc chiến dịch up tin đang `tạm dừng`, vì `refreshPostBumpTargetCampaignSchedule` chỉ mở lại chiến dịch `hoàn thành` (đã ghi ở CLAUDE.md từ 06/11).
