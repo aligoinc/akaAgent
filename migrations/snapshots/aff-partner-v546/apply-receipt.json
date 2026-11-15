@@ -1,0 +1,127 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "15/11/2026 ~12:40 VN, \"Hãy tự run sql\"",
+  "tool": "Supabase MCP apply_migration, mỗi file một lượt gọi, query = nguyên văn file; công cụ tự ghi sổ migration",
+  "order": [
+    "aff_partner_program (CRM, SqlServerDashboard supabase/migrations/20261115100000_aff_partner_program.sql)",
+    "migration_v546_aff_partner_app (repo này)"
+  ],
+  "precheck": {
+    "at_vn": "2026-11-15 13:15:08 (Chủ nhật)",
+    "aff_tables": "không có bảng public.aff_*",
+    "aff_functions": "không có hàm aff_* hay aka_agent_*aff_partner*",
+    "ledger": "chưa có dòng %aff_partner% hay migration_v546_%; mới nhất: migration_v545_today_sent_counter 20261115040616, migration_v541_ai_chat_answer_mode",
+    "setting_row": "auto_system_settings chưa có key affiliate.program",
+    "db_load": "0 backend đang chạy, 0 backend chờ khoá; default_transaction_read_only = off",
+    "files": "hai file không có khoảng trắng cuối dòng, tab hay CR; Unicode NFC"
+  },
+  "crm_migration": {
+    "name": "aff_partner_program",
+    "file": "SqlServerDashboard supabase/migrations/20261115100000_aff_partner_program.sql",
+    "file_md5": "e019451d4c2100e443298ee0396e7397",
+    "file_bytes": 31792,
+    "ledger": {
+      "version": "20261115061705",
+      "statements": 1,
+      "statements_md5": "e019451d4c2100e443298ee0396e7397",
+      "statements_chars": 30760,
+      "created_by": "tài khoản của kết nối MCP"
+    },
+    "applied_at_vn": "2026-11-15 13:17:05",
+    "verify": {
+      "at_vn": "2026-11-15 13:17:19",
+      "tables_rls_on": [
+        "aff_commissions",
+        "aff_link_clicks",
+        "aff_page_links",
+        "aff_partners",
+        "aff_payouts",
+        "aff_product_rates",
+        "aff_referrals",
+        "aff_visits"
+      ],
+      "functions": [
+        "aff_admin_stats()",
+        "aff_cleanup(integer, integer)",
+        "aff_partner_overview(bigint, boolean)",
+        "aff_payout_cancel(bigint, bigint, text, text)",
+        "aff_payout_create(bigint, bigint[], bigint, text, text, text, text)",
+        "aff_program_settings()",
+        "aff_touch_updated_at()"
+      ],
+      "indexes": 26,
+      "triggers": 6,
+      "privileges": "anon / authenticated / aka_agent_desktop / aka_agent_chat_api không có quyền bảng hay quyền gọi hàm nào; service_role gọi được cả 7 hàm",
+      "setting": {
+        "id": 121,
+        "key": "affiliate.program",
+        "value": "{\"audience\":\"off\",\"visitWindowDays\":90,\"purchaseWindowDays\":90,\"purchaseRate\":0.1,\"trialReward\":20000,\"trialRewardMonthlyCap\":30,\"holdDays\":7,\"minPayout\":200000}",
+        "is_active": true
+      },
+      "page_links": 3,
+      "rows": "aff_partners / aff_referrals / aff_commissions / aff_visits đều 0 dòng",
+      "aff_partner_overview(1, false)": "{\"enabled\": false, \"reason\": \"off\"}"
+    },
+    "postgrest_schema_reload": "nhận lệnh 13:17:06.04, truy vấn schema 4.682,8 ms, nạp xong 13:17:11.14 (522 relations, 832 functions)"
+  },
+  "v546": {
+    "name": "migration_v546_aff_partner_app",
+    "file": "migrations/migration_v546_aff_partner_app.sql",
+    "file_md5": "d5b18ab738fabf6425f3638d9a79bfae",
+    "file_bytes": 13108,
+    "ledger": {
+      "version": "20261115061827",
+      "statements": 1,
+      "statements_md5": "d5b18ab738fabf6425f3638d9a79bfae",
+      "statements_chars": 12632,
+      "created_by": "tài khoản của kết nối MCP"
+    },
+    "applied_at_vn": "2026-11-15 13:18:27",
+    "verify": {
+      "at_vn": "2026-11-15 13:18:39",
+      "functions": [
+        {
+          "signature": "private.aka_agent_aff_partner_view(bigint, boolean)",
+          "prosrc_md5": "47647c3586698dd58716ac4514a03655",
+          "security_definer": true,
+          "config": ["search_path=pg_catalog, public", "statement_timeout=8s"],
+          "execute": "không role ứng dụng nào"
+        },
+        {
+          "signature": "public.aka_agent_control_aff_partner(bigint, bigint, boolean)",
+          "prosrc_md5": "abdb7fd9dbf2093c93e2f3d3c13968bb",
+          "security_definer": true,
+          "config": ["search_path=pg_catalog, public, private", "statement_timeout=8s"],
+          "execute": "chỉ service_role"
+        },
+        {
+          "signature": "public.aka_agent_aff_partner(boolean)",
+          "prosrc_md5": "407c69589aec3bf03b509fe1982d7076",
+          "security_definer": true,
+          "config": ["search_path=pg_catalog, public, private", "statement_timeout=8s"],
+          "execute": "chỉ aka_agent_desktop"
+        }
+      ],
+      "calls": {
+        "aka_agent_aff_partner(false) ngoài phiên Desktop": "{\"enabled\": false, \"reason\": \"no_session\"}",
+        "aka_agent_control_aff_partner(null, null, false)": "{\"enabled\": false, \"reason\": \"staff_inactive\"}",
+        "aka_agent_control_aff_partner(<nhân viên thật>, <đúng tổ chức>, true)": "{\"enabled\": false, \"reason\": \"off\"}",
+        "aka_agent_control_aff_partner(<nhân viên thật>, <sai tổ chức>, true)": "{\"enabled\": false, \"reason\": \"staff_inactive\"}"
+      },
+      "aff_partners_rows_after_calls": 0,
+      "setting_unchanged": "affiliate.program vẫn audience off"
+    },
+    "postgrest_schema_reload": "nhận lệnh 13:18:27.35, truy vấn schema 1.935,3 ms, nạp xong 13:18:29.61 (834 functions)"
+  },
+  "edge_logs_rest_v1": {
+    "note": "theo phút, giờ VN; hai phút 13:15 và 13:16 là mốc trước khi chạy",
+    "13:15": { "requests": 28855, "http_5xx": 0, "p50_ms": 46, "p99_ms": 144, "over_1s": 1 },
+    "13:16": { "requests": 29512, "http_5xx": 0, "p50_ms": 46, "p99_ms": 125, "over_1s": 2 },
+    "13:17": { "requests": 28142, "http_5xx": 1, "http_503": 0, "p50_ms": 47, "p99_ms": 293, "over_1s": 67 },
+    "13:18": { "requests": 26494, "http_5xx": 0, "http_503": 0, "p50_ms": 47, "p99_ms": 253, "over_1s": 26 },
+    "the_one_500": "13:17:01 GET /rest/v1/aka_app_settings từ một Edge Function của CRM (supabase-js-deno), chạy 8.118 ms rồi chạm trần 8 giây. Câu đọc này vốn mất 6,2–7,1 giây ở lượt chậm nhất mỗi giờ trong 6 giờ trước đó (0 lỗi), nên phút chạy migration đẩy nó qua trần. Không có lỗi 503, không mất schema cache."
+  },
+  "program_state": "TẮT (audience off). Chưa bản app nào gọi hàm: CRM, API/Web chưa deploy, Desktop chưa phát hành.",
+  "not_done": "chưa gọi hàm bằng phiên Desktop thật (role aka_agent_desktop có JWT); chưa cấp mã nào trên dữ liệu thật vì chương trình tắt",
+  "rollback": "theo thứ tự ngược: migrations/rollback_v546_aff_partner_app.sql rồi SqlServerDashboard supabase/rollbacks/20261115100000_aff_partner_program.sql (xoá cả 8 bảng aff_* và dữ liệu trong đó)"
+}

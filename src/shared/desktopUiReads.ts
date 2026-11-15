@@ -1,6 +1,7 @@
 import type { AutoAccount, CampaignListItem } from './types'
 import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
 import type { RenewalReminderSettings } from './renewalReminder'
+import type { AffPartnerAudience } from './affPartner'
 
 export const DESKTOP_POLL_KEYS = {
   campaigns: 'desktop.campaigns.poll_interval_seconds',
@@ -27,8 +28,13 @@ export interface DesktopPollingSettings {
    * chính dùng để tính thông báo; renderer không cần đọc (trạng thái nhắc đi kênh riêng). Thiếu/sai = tắt.
    */
   renewalReminder?: RenewalReminderSettings
+  /**
+   * Giới thiệu nhận hoa hồng (`affiliate.program`, docs/AFF_PARTNER_DESKTOP.md): chỉ để ẩn/hiện mục trong menu tài khoản.
+   * Đọc chung câu này, không thêm request. Thiếu dòng/sai JSON = `off` = ẩn.
+   */
+  affPartnerAudience?: AffPartnerAudience
 }
-export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false }
+export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, affPartnerAudience: 'off' }
 export function parseDesktopPollSeconds(value: unknown): number {
   const text = String(value ?? '').trim()
   const seconds = Number(text)
