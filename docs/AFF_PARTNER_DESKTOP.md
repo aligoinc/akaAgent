@@ -1,6 +1,8 @@
-# Giới thiệu nhận hoa hồng trên Desktop
+# Đối tác akaBiz trên Desktop
 
-Mục "Giới thiệu nhận hoa hồng" trong menu tài khoản mở một hộp thoại. Hộp thoại hiện mã giới thiệu, link trang giới thiệu riêng (`https://crm.akabiz.net/gt/<MÃ>`), số liệu tóm tắt, mức hoa hồng theo từng sản phẩm và cách tính. Nút "Mở trang quản lý hoa hồng" mở cổng CRM `/gia-han/doi-tac` bằng trình duyệt ngoài. Trang đó quản lý người đã giới thiệu, lịch sử hoa hồng và tài khoản nhận tiền.
+Từ 15/11/2026 (người dùng chốt "tính năng cơ bản, không cần cài đặt"): menu tài khoản có mục **"Đối tác akaBiz"**, mọi tài khoản đều thấy, không theo công tắc nào. Bấm là mở cổng CRM `/gia-han/doi-tac` bằng trình duyệt ngoài (vé V521, không được vé thì khách đăng nhập cổng). Trang đó có mã, 12 link trang giới thiệu (`https://crm.akabiz.net/gt/<MÃ>[/<mẫu>]`), số liệu, người đã giới thiệu, lịch sử hoa hồng và tài khoản nhận tiền; chưa có mã thì cổng cấp ở lần mở đầu tiên.
+
+Không mở được cổng (mất mạng, không gọi được trình duyệt) thì app hiện hộp thoại cũ `AffPartnerModal`: mã, link, số liệu tóm tắt, câu báo lỗi và nút "Mở trang quản lý hoa hồng" để thử lại. Trước 15/11 chiều, mục menu tên "Giới thiệu nhận hoa hồng", ẩn theo công tắc `affiliate.program` và luôn mở hộp thoại này.
 
 ## Thành phần
 
@@ -14,15 +16,15 @@ Mục "Giới thiệu nhận hoa hồng" trong menu tài khoản mở một hộ
 | Kênh | Việc | Kết quả |
 |---|---|---|
 | `aff-partner:summary` | Gọi `aka_agent_aff_partner(p_create => true)`. Chưa có mã thì DB cấp mã. | `{ ok: true, data: { summary } }` |
-| `aff-partner:open-portal` | Đọc lại tóm tắt chỉ đọc (`p_create => false`), xin vé `aka_agent_renewal_link_ticket(null)`, kiểm link rồi `shell.openExternal`. | `{ ok: true, data: { signed } }` |
+| `aff-partner:open-portal` | Đọc tóm tắt chỉ đọc (`p_create => false`) để lấy địa chỉ cổng (chưa có mã, chương trình tắt, đọc lỗi thì dùng `https://crm.akabiz.net/gia-han/doi-tac`), xin vé `aka_agent_renewal_link_ticket(null)`, kiểm link rồi `shell.openExternal`. | `{ ok: true, data: { signed } }` |
 
 Mọi kênh trả `{ ok: false, code, message }` khi lỗi, không ném ra renderer. Link có vé chỉ đi trong tiến trình chính. Tiến trình chính chỉ mở link `https:` cùng origin với `portalUrl` trong tóm tắt, không kèm tên hay mật khẩu trong URL.
 
 ## Khi nào gọi DB
 
-- Ẩn hay hiện mục menu: đọc khoá `affiliate.program` trong cùng câu đọc cài đặt lúc đăng nhập (`getDesktopPollingSettings`). Không thêm request.
-- Mở hộp thoại: 1 request. Bấm "Thử lại": thêm 1 request.
-- Bấm "Mở trang quản lý hoa hồng": 2 request (tóm tắt chỉ đọc, xin vé).
+- Mục menu luôn hiện: không gọi gì. Khoá `affiliate.program` vẫn nằm trong câu đọc cài đặt lúc đăng nhập (`getDesktopPollingSettings`) nhưng không còn dùng để ẩn mục.
+- Bấm "Đối tác akaBiz": 2 request (tóm tắt chỉ đọc, xin vé).
+- Hộp thoại dự phòng: 1 request khi mở, thêm 1 request mỗi lần "Thử lại"; bấm "Mở trang quản lý hoa hồng" 2 request.
 - Không có đồng hồ hẹn giờ, không đọc lúc đăng nhập.
 
 ## Công tắc `affiliate.program`

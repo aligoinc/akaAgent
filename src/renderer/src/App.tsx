@@ -152,6 +152,17 @@ export default function App() {
   // Đăng xuất / đổi tài khoản thì đóng hộp thoại giới thiệu để không mở lại cho tài khoản khác.
   const affPartnerScope = user ? `${user.organizationId}:${user.staffId}` : null
   useEffect(() => { setShowAffPartner(false) }, [affPartnerScope])
+  // Mục "Đối tác akaBiz": mở thẳng trang đối tác của cổng bằng trình duyệt ngoài. Không mở được (mất mạng, không gọi được
+  // trình duyệt) thì hiện hộp thoại trong app: có mã, link, câu báo lỗi và nút thử lại.
+  const affPartnerOpening = useRef(false)
+  const openAffPartnerPortal = useCallback(() => {
+    if (affPartnerOpening.current) return
+    affPartnerOpening.current = true
+    const open = window.electronAPI?.affPartnerOpenPortal
+    void (open ? open() : Promise.resolve({ ok: false as const }))
+      .then(result => { if (!result.ok) setShowAffPartner(true) }, () => setShowAffPartner(true))
+      .finally(() => { affPartnerOpening.current = false })
+  }, [])
 
   const openNotifications = useCallback((notificationId?: number) => {
     if (notificationId) setNotificationSelectRequest({ notificationId, requestId: ++notificationSelectRequestSeq.current })
@@ -469,7 +480,7 @@ export default function App() {
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
-          onOpenAffPartner={() => setShowAffPartner(true)}
+          onOpenAffPartner={openAffPartnerPortal}
           onOpenNotifications={openNotifications}
           currentVersion={localVersion}
           availableUpdateVersion={availableUpdate?.remoteVersion}
