@@ -1,10 +1,11 @@
 # V545: bộ đếm "Đã gửi hôm nay" cho trang Chiến dịch của WebApp
 
-**Trạng thái (15/11/2026): đã viết và kiểm trên PostgreSQL 16 cục bộ, CHƯA apply lên akachat.** Nhánh
+**Trạng thái (15/11/2026): đã apply akachat 11:06:16 VN (`20261115040616 / migration_v545_today_sent_counter`, md5 sổ =
+md5 tệp `579d6382f3b0dfcc7b5e01a893313b9b`, không apply lại) và bật đếm 11:07:36 VN** (`{"enabled":true,
+"countingSince":"2026-11-15T04:07:36Z"}`) theo duyệt của người dùng sau khi xem số đo. Nhánh
 `claude_bo-dem-da-gui-hom-nay_from_dev_3_15_11` (tách `dev_3` `06de94f`), chưa tạo PR. Phần API/Web ở WebApp nhánh
-`claude/serene-gauss-3nadaj` (chưa gộp, chưa deploy); DB chưa có hàm thì API bỏ qua và Web không hiện ô, nên apply và
-deploy theo thứ tự nào cũng được. Người dùng đồng ý phương án 15/11/2026; theo phương án đó, áp lên DB thật cần người dùng
-duyệt sau khi xem số đo dưới đây.
+`claude/serene-gauss-3nadaj` (chưa gộp, chưa deploy): tới khi deploy, DB đếm nhưng chưa nơi nào đọc. Hậu kiểm ở mục
+"Biên nhận apply" cuối tài liệu.
 
 - Migration: `migrations/migration_v545_today_sent_counter.sql`; rollback: `migrations/rollback_v545_today_sent_counter.sql`.
 - Kiểm thử (ở WebApp, đọc migration qua `AKA_AGENT_REPO`, như các bộ kiểm SQL khác):
@@ -82,7 +83,7 @@ nên chi phí nền thật cao hơn). 20.000 dòng mỗi lượt, ba lượt, đ
 
 ## Bật, tắt, gỡ
 
-Apply (khi người dùng duyệt): chạy nguyên tệp migration lúc vắng; `lock_timeout` 2 giây báo lỗi thì chạy lại. Rồi bật:
+Apply: chạy nguyên tệp migration (đã chạy 15/11/2026, xem biên nhận); `lock_timeout` 2 giây báo lỗi thì chạy lại. Rồi bật:
 
 ```sql
 UPDATE public.auto_system_settings
@@ -107,4 +108,25 @@ câu đếm bù một ngày trên bảng kết quả nặng như đã đo ở tr
 - Kết quả đổi qua lại thành công → thất bại → thành công bị đếm hai lần (hiếm).
 - Kết quả ghi trước lúc bật công tắc (hoặc trước khi có trigger) không được đếm; `TRUNCATE`/xoá dòng kết quả không trừ số.
 - Danh sách hành động gửi tin cố định trong `WHEN`.
-- Chưa chạy trên DB thật.
+
+## Biên nhận apply (15/11/2026)
+
+- Đọc trước (chỉ đọc, 11:05 VN): sổ migration mới nhất `20261115020925 / migration_v541_ai_chat_answer_mode`, chưa có dòng
+  nào tên v545; chưa có bảng, hàm, trigger, job, dòng công tắc của V545; 7 trigger sẵn có trên `auto_campaign_details`.
+- Apply qua công cụ apply migration của Supabase (nguyên văn tệp, cả `BEGIN`/`COMMIT`, như V540) lúc 11:06:16 VN, không
+  vướng `lock_timeout`. Sổ: `20261115040616 / migration_v545_today_sent_counter`, md5 `statements` = md5 tệp
+  `579d6382f3b0dfcc7b5e01a893313b9b`.
+- Hậu kiểm: 9 trigger trên `auto_campaign_details` đều bật (7 cũ + 2 mới); hàm trigger SECURITY DEFINER, `search_path =
+  pg_catalog, pg_temp`, ACL `{postgres=X}`; hàm đọc INVOKER, STABLE, `search_path = pg_catalog, pg_temp`,
+  `statement_timeout = 5s`, ACL `{postgres, service_role}`, chủ `postgres`; anon, authenticated, `aka_agent_desktop` không
+  EXECUTE; bảng ACL `{postgres, service_role=r}`, RLS bật; sequence chỉ `postgres`; job `aka-agent-today-sent-cleanup`
+  `41 20 * * *` bật; công tắc `{"enabled":false}`.
+- Chạy thử trong một khối tự huỷ (RAISE cuối khối, toàn bộ rollback; dùng một chiến dịch đã hoàn thành, không giữ claim):
+  công tắc tắt thì ghi kết quả không sinh dòng đếm; bật trong khối: gửi tin thành công +1, "Tìm SĐT" không tính,
+  "đang chạy → thành công" +1, "thành công → đã nhận" không tính lại, hàm đọc (role `service_role`) trả `todaySent` 0 → 2.
+  Một lệnh INSERT kết quả thật (với mọi trigger sẵn có) 1,9 ms. Sau khối: công tắc vẫn tắt, 0 dòng đếm, 0 dòng thử còn lại.
+- Bật 11:07:36 VN. Đối chiếu với số đếm thẳng trên `auto_campaign_details` (cùng điều kiện, `created_at` từ lúc bật):
+  sau 11 giây 20/20, sau 50 giây 77/77.
+- Nhật ký Postgres 10:30–11:10 VN: không có lỗi, chờ khoá, deadlock hay huỷ câu lệnh mới (một dòng lúc 11:05 là câu đọc
+  của người kiểm viết sai kiểu, không liên quan).
+- Hàm đọc cho nhân viên nhiều tài khoản nhất: khoảng 5 ms (702 trang đệm, không đọc đĩa).

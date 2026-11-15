@@ -1,6 +1,6 @@
 # Nội dung chuyển từ AGENTS.md — 28/10/2026
 
-- [V545: bộ đếm "Đã gửi hôm nay" (bảng chỉ thêm dòng + hai trigger theo dòng trên auto_campaign_details + hàm đọc cho trang Chiến dịch của WebApp); CHƯA apply, chờ người dùng duyệt](../TODAY_SENT_COUNTER_V545.md).
+- [V545: bộ đếm "Đã gửi hôm nay" (bảng chỉ thêm dòng + hai trigger theo dòng trên auto_campaign_details + hàm đọc cho trang Chiến dịch của WebApp); đã apply akachat 15/11/2026 11:06 VN, bật đếm 11:07 VN, không apply lại](../TODAY_SENT_COUNTER_V545.md).
 - [V454: indexable held lookup, Agent guard reuse và legacy run-control fast path; đã apply, giữ quyền/ACL/cleanup](../audits/app-access-split/GUARD_PERFORMANCE_V454_20261103.md).
 
 Các ghi nhận deployment trong tài liệu chuyển là lịch sử tại thời điểm ghi. Đọc [trạng thái hiện tại](CURRENT_STATE.md) trước khi áp dụng; các ràng buộc nghiệp vụ vẫn phải giữ trừ khi đã có quyết định mới hơn.

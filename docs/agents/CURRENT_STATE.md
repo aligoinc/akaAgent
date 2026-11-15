@@ -1,4 +1,12 @@
-# Trạng thái đã xác nhận — cập nhật 14/11/2026
+# Trạng thái đã xác nhận — cập nhật 15/11/2026
+
+[Bộ đếm "Đã gửi hôm nay" cho trang Chiến dịch của WebApp (V545)](../TODAY_SENT_COUNTER_V545.md): **V545 đã apply akachat 15/11/2026
+11:06:16 VN** (`20261115040616 / migration_v545_today_sent_counter`, md5 sổ = md5 tệp `579d6382…`, không apply lại) và **bật đếm
+11:07:36 VN** (`auto_system_settings` `campaigns.today_sent`). Hai trigger theo dòng mới trên `auto_campaign_details`
+(`trg_aka_agent_today_sent_insert`/`_update`) chỉ THÊM dòng vào `private.auto_account_sent_events`; tắt nhanh bằng
+`{"enabled":false}`, gỡ bằng `migrations/rollback_v545_today_sent_counter.sql`. Đối chiếu sau bật khớp số đếm thẳng (77/77).
+Migration ở nhánh `claude_bo-dem-da-gui-hom-nay_from_dev_3_15_11`, chưa PR; phần đọc ở WebApp chưa deploy. Số tiếp theo cho
+việc khác là V546 trở đi (V542–V544 có thể đang được nhánh khác giữ: kiểm sổ trước khi dùng).
 
 [Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (V539/V540)](../CAMPAIGN_RESULT_ACTION_FILTER_DESKTOP_V540.md):
 Mã Desktop trên nhánh `claude_bo-loc-hanh-dong-ket-qua-chay_from_dev_3_14_11` (PR #684 vào `dev_3`), **chưa merge, chưa build/phát hành**. Hai hàm chỉ đọc
