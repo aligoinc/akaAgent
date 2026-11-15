@@ -53,6 +53,8 @@ import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../shared/aiChatDesktop'
+import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
+import type { AffPartnerResponse } from '../shared/affPartner'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
@@ -243,6 +245,12 @@ const electronAPI = {
 
   aiChatCall: (action: AiChatDesktopAction, payload: Record<string, unknown>): Promise<AiChatIpcResult> =>
     ipcRenderer.invoke(AI_CHAT_IPC.call, action, payload),
+
+  // Giới thiệu nhận hoa hồng (docs/AFF_PARTNER_DESKTOP.md): đọc DB chỉ khi mở hộp thoại / bấm mở trang quản lý.
+  affPartnerSummary: (): Promise<AffPartnerIpcResult<AffPartnerResponse>> =>
+    ipcRenderer.invoke(AFF_PARTNER_IPC.summary),
+  affPartnerOpenPortal: (): Promise<AffPartnerIpcResult<AffPartnerOpenPortalResult>> =>
+    ipcRenderer.invoke(AFF_PARTNER_IPC.openPortal),
 
   openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),

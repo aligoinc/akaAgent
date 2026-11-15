@@ -26777,3 +26777,156 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
   font-size: 11px;
   font-weight: 700;
 }
+
+/* Giới thiệu nhận hoa hồng (components/AffPartner/AffPartnerModal.tsx) */
+.aff-partner-modal {
+  width: min(600px, calc(100vw - 32px));
+  max-height: 88vh;
+}
+
+.aff-partner-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aff-partner-body {
+  display: grid;
+  gap: 16px;
+}
+
+.aff-partner-state {
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px 8px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+}
+
+.aff-partner-state p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.aff-partner-state .btn,
+.aff-partner-actions .btn,
+.aff-partner-code-row .btn,
+.aff-partner-portal-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.aff-partner-code-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.aff-partner-label {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.aff-partner-code-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.aff-partner-code {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  color: var(--accent-primary);
+  user-select: all;
+}
+
+.aff-partner-link {
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-all;
+  user-select: all;
+}
+
+.aff-partner-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.aff-partner-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.aff-partner-stat {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.aff-partner-stat span {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.aff-partner-stat strong {
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.aff-partner-notice {
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent-info) 12%, transparent);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.aff-partner-notice-warning {
+  background: color-mix(in srgb, var(--accent-warning) 16%, transparent);
+}
+
+.aff-partner-heading {
+  margin: 0 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.aff-partner-rates {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.aff-partner-rates th,
+.aff-partner-rates td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border-default);
+  text-align: left;
+}
+
+.aff-partner-rates th {
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.aff-partner-howto {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}

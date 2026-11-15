@@ -24,6 +24,7 @@ import DataGroupManagerModal from './components/DataScan/DataGroupManagerModal'
 import GeneralSettingsModal, { type GeneralSettingsMenu, type GeneralSettingsOpenOptions, type OpenGeneralSettings } from './components/Settings/GeneralSettingsModal'
 import ContentTemplateManagerModal from './components/Settings/ContentTemplateManagerModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
+import AffPartnerModal from './components/AffPartner/AffPartnerModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
@@ -135,6 +136,7 @@ export default function App() {
   const notificationSelectRequestSeq = useRef(0)
   const [generalSettingsRequest, setGeneralSettingsRequest] = useState<(GeneralSettingsOpenOptions & { menu: GeneralSettingsMenu; returnFocusTo: HTMLElement | null }) | null>(null)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showAffPartner, setShowAffPartner] = useState(false)
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
@@ -147,6 +149,9 @@ export default function App() {
   const hasZaloServerAccounts = accounts.some(account => account.isZaloServer)
   useDesktopUiPolling(user ? `${user.organizationId}:${user.staffId}` : null, activePage === 'campaigns', hasZaloServerAccounts)
   useNotificationUnreadSync(user ? `${user.organizationId}:${user.staffId}` : null, activePage)
+  // Đăng xuất / đổi tài khoản thì đóng hộp thoại giới thiệu để không mở lại cho tài khoản khác.
+  const affPartnerScope = user ? `${user.organizationId}:${user.staffId}` : null
+  useEffect(() => { setShowAffPartner(false) }, [affPartnerScope])
 
   const openNotifications = useCallback((notificationId?: number) => {
     if (notificationId) setNotificationSelectRequest({ notificationId, requestId: ++notificationSelectRequestSeq.current })
@@ -464,6 +469,7 @@ export default function App() {
           onOpenAccountInfo={() => setShowAccountProfile(true)}
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
+          onOpenAffPartner={() => setShowAffPartner(true)}
           onOpenNotifications={openNotifications}
           currentVersion={localVersion}
           availableUpdateVersion={availableUpdate?.remoteVersion}
@@ -619,6 +625,9 @@ export default function App() {
       )}
       {showChangePassword && (
         <ChangePasswordModal onClose={() => setShowChangePassword(false)} />
+      )}
+      {showAffPartner && user && (
+        <AffPartnerModal onClose={() => setShowAffPartner(false)} />
       )}
       {showAccountProfile && (
         <AccountProfileModal onClose={() => setShowAccountProfile(false)} />
