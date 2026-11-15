@@ -34,6 +34,8 @@ Dòng `auto_system_settings` key `affiliate.program`, JSON `{"audience": "off" |
 1. CRM `20261115100000_aff_partner_program.sql` (bảng và quy tắc chương trình).
 2. akaAgent V546 `migrations/migration_v546_aff_partner_app.sql` (hàm `aka_agent_aff_partner`).
 
+Cả hai đã apply akachat ngày 15/11/2026 lúc 13:17:05 và 13:18:27 giờ VN (`20261115061705 / aff_partner_program`, `20261115061827 / migration_v546_aff_partner_app`). Không apply lại, không sửa hai file. md5 trong sổ bằng md5 file (V546 `d5b18ab7…`). Chương trình vẫn tắt. [Biên nhận](../migrations/snapshots/aff-partner-v546/apply-receipt.json).
+
 Vé mở cổng dùng V521 đã có trên production.
 
 ## Khi hàm chưa có
@@ -52,6 +54,6 @@ Smoke kiểm md5 hợp đồng và so với WebApp nếu có, repository với S
 
 ## Giới hạn
 
-- Chưa chạy trên Electron thật, chưa gọi hàm V546 trên DB thật.
+- Chưa chạy trên Electron thật. Hàm V546 đã có trên DB thật nhưng mới gọi thử ngoài phiên Desktop (trả `no_session`); chưa gọi bằng phiên Desktop thật.
 - Trang quản lý mở bằng trình duyệt ngoài, không mở trong cửa sổ Gia hạn của app: cửa sổ đó gắn với lượt gia hạn và lời nhắc, dùng chung một phân vùng.
 - Renderer không nhận link có vé: kênh `aff-partner:open-portal` để tiến trình chính tự mở link và chỉ trả `{ signed }`.
