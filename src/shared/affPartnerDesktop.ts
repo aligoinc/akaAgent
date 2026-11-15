@@ -1,4 +1,4 @@
-// Phần riêng của Desktop cho "Giới thiệu nhận hoa hồng" (docs/AFF_PARTNER_DESKTOP.md). `affPartner.ts` chép nguyên văn từ
+// Phần riêng của Desktop cho mục "Đối tác akaBiz" (docs/AFF_PARTNER_DESKTOP.md). `affPartner.ts` chép nguyên văn từ
 // akaAgentWebApp `packages/control-api/src/affPartner.ts` (sửa ở WebApp trước rồi chép lại); tệp này chỉ nối hợp đồng đó với IPC.
 
 export const AFF_PARTNER_IPC = {
@@ -15,7 +15,7 @@ export type AffPartnerDesktopErrorCode =
   | 'aff_partner_unavailable'
 
 const MESSAGES: Record<AffPartnerDesktopErrorCode, string> = {
-  aff_partner_not_partner: 'Tài khoản này chưa có mã giới thiệu. Anh/chị mở lại mục Giới thiệu nhận hoa hồng rồi thử lại.',
+  aff_partner_not_partner: 'Tài khoản này chưa có mã giới thiệu. Anh/chị mở lại mục Đối tác akaBiz rồi thử lại.',
   aff_partner_invalid_link: 'Chưa mở được trang quản lý hoa hồng. Anh/chị thử lại sau ít phút.',
   aff_partner_open_failed: 'Không mở được trình duyệt. Anh/chị thử lại giúp em nhé.',
   aff_partner_unavailable: 'Chưa tải được thông tin chương trình giới thiệu. Anh/chị thử lại sau ít phút.'

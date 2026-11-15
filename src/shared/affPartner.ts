@@ -7,10 +7,13 @@
  * không import file khác. Desktop chép NGUYÊN VĂN sang akaAgent `src/shared/affPartner.ts` (sửa ở WebApp trước rồi chép lại).
  *
  * Trang quản lý hoa hồng đầy đủ (người đã giới thiệu, lịch sử hoa hồng, tài khoản nhận tiền) nằm ở cổng khách của CRM:
- * `/gia-han/doi-tac`. App chỉ hiện mã, link, số liệu tóm tắt, mức hoa hồng theo sản phẩm và nút mở trang đó.
+ * `/gia-han/doi-tac`. Từ 15/11/2026 app chỉ có mục menu "Đối tác akaBiz" mở thẳng trang đó (mã được cấp ở lần mở đầu tiên);
+ * phần tóm tắt (`AffPartnerSummary`) còn dùng cho API và hộp thoại dự phòng của Desktop.
  * Quy tắc và bảng dữ liệu: SqlServerDashboard `docs/affiliate-doi-tac-gioi-thieu-phuong-an-2026-11-15.md`.
  */
 
+/** Tên mục menu trong app (Web, Desktop). Bấm là mở trang đối tác của cổng ở tab / trình duyệt mới; mọi tài khoản đều thấy. */
+export const AFF_PARTNER_MENU_LABEL = 'Đối tác akaBiz'
 export const AFF_PARTNER_PORTAL_ORIGIN = 'https://crm.akabiz.net'
 /** Trang đăng nhập của cổng; nhận `?t=<vé>` và `?next=<trang trong cổng>`. */
 export const AFF_PARTNER_PORTAL_LOGIN_PATH = '/gia-han'

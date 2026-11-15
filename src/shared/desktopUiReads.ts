@@ -29,7 +29,7 @@ export interface DesktopPollingSettings {
    */
   renewalReminder?: RenewalReminderSettings
   /**
-   * Giới thiệu nhận hoa hồng (`affiliate.program`, docs/AFF_PARTNER_DESKTOP.md): chỉ để ẩn/hiện mục trong menu tài khoản.
+   * Đối tác akaBiz (`affiliate.program`, docs/AFF_PARTNER_DESKTOP.md): từ 15/11/2026 mục menu luôn hiện, giá trị này không còn dùng để ẩn/hiện.
    * Đọc chung câu này, không thêm request. Thiếu dòng/sai JSON = `off` = ẩn.
    */
   affPartnerAudience?: AffPartnerAudience

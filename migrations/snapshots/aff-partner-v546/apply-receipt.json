@@ -123,5 +123,26 @@
   },
   "program_state": "TẮT (audience off). Chưa bản app nào gọi hàm: CRM, API/Web chưa deploy, Desktop chưa phát hành.",
   "not_done": "chưa gọi hàm bằng phiên Desktop thật (role aka_agent_desktop có JWT); chưa cấp mã nào trên dữ liệu thật vì chương trình tắt",
-  "rollback": "theo thứ tự ngược: migrations/rollback_v546_aff_partner_app.sql rồi SqlServerDashboard supabase/rollbacks/20261115100000_aff_partner_program.sql (xoá cả 8 bảng aff_* và dữ liệu trong đó)"
+  "rollback": "theo thứ tự ngược: migrations/rollback_v546_aff_partner_app.sql rồi SqlServerDashboard supabase/rollbacks/20261115100000_aff_partner_program.sql (xoá cả 8 bảng aff_* và dữ liệu trong đó)",
+  "program_switch": {
+    "requested_by_user": "15/11/2026 tối, \"áp dụng trang này cho mọi khách hàng. Đây là tính năng cơ bản nên không cần cài đặt gì\"",
+    "tool": "Supabase MCP execute_sql, một câu UPDATE có điều kiện audience = 'off'",
+    "changed_at_vn": "2026-11-15 23:02:41",
+    "row": "auto_system_settings id 121, key affiliate.program",
+    "before": {
+      "audience": "off"
+    },
+    "after": {
+      "audience": "all",
+      "holdDays": 7,
+      "minPayout": 200000,
+      "trialReward": 20000,
+      "purchaseRate": 0.1,
+      "visitWindowDays": 90,
+      "purchaseWindowDays": 90,
+      "trialRewardMonthlyCap": 30
+    },
+    "verify": "đọc lại chỉ đọc bằng service_role: aka_agent_control_aff_partner(khách thường, false) trả {enabled:true, audience:all, partner:null}; aff_partners 0 dòng",
+    "turn_off": "đặt audience về off; không cần deploy"
+  }
 }

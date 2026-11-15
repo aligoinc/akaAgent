@@ -3,10 +3,10 @@ import { requireCurrentUser } from '../currentUser'
 import { issueRenewalLinkTicket } from './renewalReminderRepository'
 import { parseRenewalLinkTicket } from '../../../shared/renewalReminder'
 import {
+  AFF_PARTNER_PORTAL_ORIGIN, AFF_PARTNER_PORTAL_PATH,
   affPartnerPortalLink, isAffPartnerActive, parseAffPartnerSummary,
   type AffPartnerPortalLink, type AffPartnerSummary
 } from '../../../shared/affPartner'
-import { AffPartnerDesktopError } from '../../../shared/affPartnerDesktop'
 
 const client = () => getSupabaseClient()
 const AFF_PARTNER_TIMEOUT_MS = 15_000
@@ -39,14 +39,17 @@ export interface AffPartnerDesktopPortalLink extends AffPartnerPortalLink {
   portalUrl: string
 }
 
+const DEFAULT_PORTAL_URL = `${AFF_PARTNER_PORTAL_ORIGIN}${AFF_PARTNER_PORTAL_PATH}`
+
 /**
- * Đọc tóm tắt ở chế độ chỉ đọc, rồi xin vé dùng một lần (`aka_agent_renewal_link_ticket`, V521, không truyền sản phẩm).
+ * Mục menu "Đối tác akaBiz": mọi tài khoản đều mở được trang đối tác của cổng; chưa có mã thì cổng cấp ở lần mở đầu tiên.
+ * Đọc tóm tắt ở chế độ chỉ đọc chỉ để lấy địa chỉ cổng (chưa có mã, chương trình tắt hoặc đọc lỗi thì dùng địa chỉ mặc
+ * định), rồi xin vé dùng một lần (`aka_agent_renewal_link_ticket`, V521, không truyền sản phẩm).
  * Không được vé (DB chưa có hàm, lỗi mạng, vé sai dạng) thì trả link không vé: khách đăng nhập cổng bằng mật khẩu.
- * Chưa phải đối tác có mã → ném `AffPartnerDesktopError('aff_partner_not_partner')`.
  */
 export async function getAffPartnerPortalLink(): Promise<AffPartnerDesktopPortalLink> {
   const summary = await getAffPartnerSummary(false)
-  if (!isAffPartnerActive(summary)) throw new AffPartnerDesktopError('aff_partner_not_partner')
+  const portalUrl = isAffPartnerActive(summary) ? summary.portalUrl : DEFAULT_PORTAL_URL
   const ticket = parseRenewalLinkTicket(await issueRenewalLinkTicket(null))
-  return { ...affPartnerPortalLink(summary.portalUrl, ticket), portalUrl: summary.portalUrl }
+  return { ...affPartnerPortalLink(portalUrl, ticket), portalUrl }
 }

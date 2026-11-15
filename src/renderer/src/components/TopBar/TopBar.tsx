@@ -10,7 +10,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
-  HandCoins,
+  Handshake,
   Images,
   Info,
   KeyRound,
@@ -36,8 +36,7 @@ import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/d
 import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
 import NotificationBell from '../Notifications/NotificationBell'
-import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
-import { affPartnerVisibleFor } from '../../../../shared/affPartner'
+import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
@@ -53,7 +52,7 @@ interface TopBarProps {
   onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
-  /** Mở hộp thoại "Giới thiệu nhận hoa hồng". */
+  /** Mục "Đối tác akaBiz": mở trang đối tác của cổng bằng trình duyệt ngoài. */
   onOpenAffPartner: () => void
   /** Mở trang Thông báo; truyền id để mở sẵn chi tiết một thông báo. */
   onOpenNotifications: (notificationId?: number) => void
@@ -107,9 +106,6 @@ export default function TopBar({
   const canOpenChat = user?.chatWebEnabledAtLogin === true
   const canOpenCrm = user?.organizationId === 1
   const canOpenAdmin = canAccessAdmin(user)
-  // Công tắc `affiliate.program` đọc chung lượt đọc cài đặt lúc đăng nhập; không thêm request.
-  const affPartnerAudience = useDesktopPollingStore(state => state.settings.affPartnerAudience ?? 'off')
-  const canOpenAffPartner = !!user && affPartnerVisibleFor(affPartnerAudience, isAdminAkabiz)
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -395,8 +391,9 @@ export default function TopBar({
               {canManageStaff(user) && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onPageChange('staff-management') }}>
                 <Users size={18} /><span>Quản lý nhân viên</span>
               </button>}
-              {canOpenAffPartner && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onOpenAffPartner() }}>
-                <HandCoins size={16} /><span>Giới thiệu nhận hoa hồng</span>
+              {/* Tính năng cơ bản: mọi tài khoản đều thấy, không theo công tắc nào. */}
+              {user && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onOpenAffPartner() }}>
+                <Handshake size={16} /><span>{AFF_PARTNER_MENU_LABEL}</span>
               </button>}
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenChangePassword} role="menuitem">
                 <KeyRound size={16} />

@@ -10,7 +10,7 @@ const { join, resolve } = require('node:path')
 const { build } = require('esbuild')
 
 const ROOT = resolve(__dirname, '..')
-const CONTRACT_MD5 = '98aa5a8355fcd9bd0ba0e087d20ac844'
+const CONTRACT_MD5 = '961f1c04f1fa727e3dadfa9ba8f1927a'
 let failed = 0
 let passed = 0
 
@@ -129,11 +129,15 @@ async function main() {
       assert.equal(new URL(link.url).searchParams.has('t'), false)
     })
 
-    await group('link quản lý: không phải đối tác → lỗi, không xin vé', async () => {
+    await group('link quản lý: chưa có mã hoặc chương trình tắt → vẫn có link tới trang đối tác mặc định', async () => {
       for (const data of [{ enabled: false, reason: 'off' }, { enabled: true, partner: null }]) {
-        reset(() => ({ data, error: null }))
-        await assert.rejects(m.getAffPartnerPortalLink(), error => error.code === 'aff_partner_not_partner' && /mã giới thiệu/.test(error.message))
-        assert.deepEqual(globalThis.__affCalls.map(c => c.name), ['aka_agent_aff_partner'])
+        reset(name => name === 'aka_agent_aff_partner' ? { data, error: null } : { data: { ok: true, token: TICKET }, error: null })
+        const link = await m.getAffPartnerPortalLink()
+        assert.equal(link.signed, true)
+        assert.equal(link.url, `https://crm.akabiz.net/gia-han?t=${TICKET}&next=%2Fgia-han%2Fdoi-tac`)
+        assert.equal(link.portalUrl, 'https://crm.akabiz.net/gia-han/doi-tac')
+        assert.equal(m.affPartnerSafePortalUrl(link.url, link.portalUrl), link.url)
+        assert.deepEqual(globalThis.__affCalls.map(c => c.name), ['aka_agent_aff_partner', 'aka_agent_renewal_link_ticket'])
       }
     })
 
@@ -149,15 +153,16 @@ async function main() {
       assert.equal(m.affPartnerSafePortalUrl(null, portal), null)
     })
 
-    await group('ẩn/hiện mục menu theo cài đặt affiliate.program', () => {
-      const visible = (raw, admin) => m.affPartnerVisibleFor(m.parseAffPartnerAudience(raw), admin)
-      assert.equal(visible(undefined, true), false, 'thiếu dòng = ẩn')
-      assert.equal(visible('{bad', true), false, 'sai JSON = ẩn')
-      assert.equal(visible('{"audience":"off"}', true), false)
-      assert.equal(visible('{"audience":"admin_akabiz"}', true), true)
-      assert.equal(visible('{"audience":"admin_akabiz"}', false), false)
-      assert.equal(visible('{"audience":"all"}', false), true)
-      // Renderer nhận `affPartnerAudience` đã parse rồi parse lại dạng object.
+    await group('mục menu "Đối tác akaBiz" luôn hiện, không theo công tắc; bấm là mở cổng, lỗi mới hiện hộp thoại', () => {
+      const topBar = readFileSync(join(ROOT, 'src/renderer/src/components/TopBar/TopBar.tsx'), 'utf8')
+      assert.ok(topBar.includes('<span>{AFF_PARTNER_MENU_LABEL}</span>'))
+      assert.ok(!/affPartnerAudience|affPartnerVisibleFor|canOpenAffPartner/.test(topBar), 'mục menu không còn phụ thuộc cài đặt')
+      const contract = readFileSync(join(ROOT, 'src/shared/affPartner.ts'), 'utf8')
+      assert.ok(contract.includes("export const AFF_PARTNER_MENU_LABEL = 'Đối tác akaBiz'"))
+      const app = readFileSync(join(ROOT, 'src/renderer/src/App.tsx'), 'utf8')
+      assert.ok(app.includes('onOpenAffPartner={openAffPartnerPortal}'))
+      assert.ok(/affPartnerOpenPortal[\s\S]{0,400}if \(!result\.ok\) setShowAffPartner\(true\)/.test(app), 'không mở được cổng thì hiện hộp thoại trong app')
+      // Công tắc vẫn được parse cho hộp thoại và báo cáo trạng thái.
       assert.equal(m.parseAffPartnerAudience({ audience: 'all' }), 'all')
       assert.equal(m.parseAffPartnerAudience({ audience: 'lạ' }), 'off')
     })
