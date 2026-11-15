@@ -320,5 +320,8 @@ export interface AffPartnerResponse {
   summary: AffPartnerSummary
 }
 
-/** `POST /aff/partner/link` (Web / iOS) và IPC `aff-partner:portal-link` (Desktop). */
+/**
+ * `POST /aff/partner/link` (Web / iOS). Desktop không trả link về giao diện: IPC `aff-partner:open-portal` để tiến trình
+ * chính tự mở link bằng trình duyệt ngoài và chỉ trả `{ signed }`.
+ */
 export type AffPartnerLinkResponse = AffPartnerPortalLink

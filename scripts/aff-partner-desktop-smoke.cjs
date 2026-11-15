@@ -10,7 +10,7 @@ const { join, resolve } = require('node:path')
 const { build } = require('esbuild')
 
 const ROOT = resolve(__dirname, '..')
-const CONTRACT_MD5 = 'eda39f06a405c03b1a7a241352d4fd0c'
+const CONTRACT_MD5 = '98aa5a8355fcd9bd0ba0e087d20ac844'
 let failed = 0
 let passed = 0
 

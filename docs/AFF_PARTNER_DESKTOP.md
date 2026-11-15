@@ -54,4 +54,4 @@ Smoke kiểm md5 hợp đồng và so với WebApp nếu có, repository với S
 
 - Chưa chạy trên Electron thật, chưa gọi hàm V546 trên DB thật.
 - Trang quản lý mở bằng trình duyệt ngoài, không mở trong cửa sổ Gia hạn của app: cửa sổ đó gắn với lượt gia hạn và lời nhắc, dùng chung một phân vùng.
-- Hợp đồng ghi tên kênh `aff-partner:portal-link`; Desktop dùng `aff-partner:open-portal` vì tiến trình chính tự mở link và renderer không nhận URL có vé.
+- Renderer không nhận link có vé: kênh `aff-partner:open-portal` để tiến trình chính tự mở link và chỉ trả `{ signed }`.
