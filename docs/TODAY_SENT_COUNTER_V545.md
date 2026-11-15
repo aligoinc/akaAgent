@@ -126,7 +126,7 @@ câu đếm bù một ngày trên bảng kết quả nặng như đã đo ở tr
   "đang chạy → thành công" +1, "thành công → đã nhận" không tính lại, hàm đọc (role `service_role`) trả `todaySent` 0 → 2.
   Một lệnh INSERT kết quả thật (với mọi trigger sẵn có) 1,9 ms. Sau khối: công tắc vẫn tắt, 0 dòng đếm, 0 dòng thử còn lại.
 - Bật 11:07:36 VN. Đối chiếu với số đếm thẳng trên `auto_campaign_details` (cùng điều kiện, `created_at` từ lúc bật):
-  sau 11 giây 20/20, sau 50 giây 77/77.
+  sau 11 giây 20/20, sau 50 giây 77/77, sau 13 phút 1.731/1.731.
 - Nhật ký Postgres 10:30–11:10 VN: không có lỗi, chờ khoá, deadlock hay huỷ câu lệnh mới (một dòng lúc 11:05 là câu đọc
   của người kiểm viết sai kiểu, không liên quan).
 - Hàm đọc cho nhân viên nhiều tài khoản nhất: khoảng 5 ms (702 trang đệm, không đọc đĩa).
