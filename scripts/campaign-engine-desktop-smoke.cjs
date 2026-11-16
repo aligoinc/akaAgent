@@ -323,6 +323,26 @@ async function main() {
     assert.ok(r2c.lines.some(l => /Tìm SĐT: .*\(NET01\)$/u.test(l)), r2c.lines.join('\n'))
     pass('Desktop: lỗi trước khi gọi Zalo (đọc tài khoản / phiên từ DB, đăng nhập lại bằng phiên) là "chưa gửi": data về hàng đợi (NET01), không đóng UNK01')
 
+    // D2c: lớp bọc media (CampaignMediaExecution) đánh dấu lỗi mạng ở bước tải tệp lên khi chưa có yêu cầu gửi nào tới Zalo
+    // (Symbol.for dùng chung với src/main/services/campaignMediaExecution.ts). Cổng xếp "chưa gửi": NET01, data về hàng đợi, giữ
+    // tín hiệu errno. Cùng lỗi mạng không có dấu vẫn là UNK01 như D2.
+    const markUploadNotSent = error => Object.defineProperty(error, Symbol.for('aka-agent.campaign-media.upload-not-sent'), { value: true, configurable: true })
+    const f2d = await makeCampaign({ phones: ['0922000012'], extra, content: 'Chào #{FULL_NAME}' })
+    const uploadReset = markUploadNotSent(Object.assign(
+      new Error('request to https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2 failed, reason: read ECONNRESET'),
+      { code: 'ECONNRESET', type: 'system' }))
+    const r2d = await runWith(f2d, { '0922000012': { name: 'Khang', textError: uploadReset } })
+    assert.equal((await r2d.run()).reason, 'end_unit')
+    assert.equal((await inputRow(f2d.ids['0922000012'])).status, 'chờ xử lý', 'data về hàng đợi để gửi lại')
+    assert.deepEqual((await details(f2d.ids['0922000012'])).map(d => [d.action_code, d.status]), [['zalo_find_phone_user', 'thành công']],
+      'không ghi dòng "thất bại" cho lần chưa gửi')
+    const o2d = (await db.query(`SELECT phase, error_code, delivery_state, signal->>'code' AS code FROM public.auto_engine_outcomes
+      WHERE input_data_id = $1 AND action_code = 'zalo_message_stranger'`, [f2d.ids['0922000012']])).rows
+    assert.deepEqual(o2d.map(o => [o.phase, o.error_code, o.delivery_state, o.code]), [['before_send', 'err_network_offline', 'not_delivered', 'ECONNRESET']])
+    assert.ok(r2d.lines.some(l => /Nhắn tin người lạ: .*\(NET01\)$/u.test(l)), r2d.lines.join('\n'))
+    assert.ok(!r2d.lines.some(l => /UNK01/.test(l)))
+    pass('Desktop: lỗi mạng ở bước tải tệp lên trước mọi yêu cầu gửi (lớp bọc media đánh dấu) là "chưa gửi": NET01, data về hàng đợi, không UNK01')
+
     // D3: tạm dừng từ Desktop khi đang chạy (yêu cầu còn trong RAM): xong data hiện tại thì dừng, hoàn tất tạm dừng, data sau giữ nguyên.
     const f3 = await makeCampaign({ phones: ['0922000006', '0922000007'], extra, content: 'Chào #{FULL_NAME}' })
     const r3 = await runWith(f3, { '0922000006': { name: 'Em', onSend: () => r3.pauses.add(f3.campaign.id) } })

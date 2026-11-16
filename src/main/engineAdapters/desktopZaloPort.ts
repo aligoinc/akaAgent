@@ -25,6 +25,7 @@ import {
 } from '../../../packages/campaign-engine/src/index'
 import { cleanupCampaignMediaTempFiles, isCampaignMediaResolveError, resolveCampaignMediaSource } from '../services/campaignMediaSource'
 import { isZaloPreCallError } from '../services/zaloPreCallError'
+import { isCampaignMediaUploadNotSent } from '../services/campaignMediaExecution'
 import { engineMaterialize, engineSendExclusion, engineSmsPush, takeEngineContentIndex } from './desktopEngineData'
 
 export interface DesktopZaloPortHost {
@@ -89,7 +90,9 @@ function sendFailure(error: unknown): Error {
   if (!zaloAnswered(error) && (LOCAL_BEFORE_CALL.test(message) || LOCAL_LABEL_INPUT.test(message))) {
     return zaloPortErrorFrom(error, { phase: 'before_send' })
   }
-  return zaloPortErrorFrom(error, { operation: 'send', answered: zaloAnswered(error) })
+  // Lớp bọc media đánh dấu lỗi mạng ở bước tải tệp lên khi chưa có yêu cầu gửi nào tới Zalo: chưa gửi gì (NET01, data về hàng
+  // đợi) chứ không phải "không rõ đã tới" (UNK01). Chỉ đổi pha của lỗi đường truyền; mã Zalo, HTTP giữ nguyên.
+  return zaloPortErrorFrom(error, { operation: 'send', answered: zaloAnswered(error), notSent: isCampaignMediaUploadNotSent(error) })
 }
 
 /**
