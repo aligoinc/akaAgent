@@ -478,7 +478,19 @@ async function messagePhoneCases(E, env) {
     assert.equal(ps.phase, 'in_flight'); assert.deepEqual(ps.evidence, { deliveryState: 'unknown' })
     // Không truyền operation: giữ đúng cách cũ.
     assert.equal(E.zaloPortErrorFrom(err('x', { code: 'ECONNRESET' }), { phase: 'after_send' }).phase, 'after_send')
-    pass('phân loại lỗi Zalo theo loại thao tác: lỗi mạng của tra số là chưa gửi, của gửi tin là không rõ trừ lỗi mở kết nối/429')
+    // knownNotSent / notSent (lớp bọc media thấy lỗi mạng ở bước tải tệp lên trước mọi yêu cầu gửi): lỗi đường truyền của thao tác
+    // gửi thành chưa gửi, giữ nguyên tín hiệu errno; mã Zalo, HTTP, câu không phải lỗi đường truyền thì không đổi.
+    const k = (e, answered = false) => { const r = E.classifyZaloError(e, 'send', answered, true); return [r.signal.kind, r.signal.code ?? null, r.phase, r.deliveryUnknown] }
+    assert.deepEqual(k(fetchFailed(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET', syscall: 'read' }))), ['errno', 'ECONNRESET', 'before_send', false])
+    assert.deepEqual(k(err('request to https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2 failed, reason: read ECONNRESET',
+      { code: 'ECONNRESET', type: 'system' })), ['errno', 'ECONNRESET', 'before_send', false])
+    assert.deepEqual(k(fetchFailed(Object.assign(new Error('other side closed'), { code: 'UND_ERR_SOCKET' }))), ['errno', 'UND_ERR_SOCKET', 'before_send', false])
+    assert.deepEqual(k(err('Người nhận chặn', { code: 122 }), true), ['zalo_code', '122', 'after_send', false])
+    assert.deepEqual(k(err('Request failed with status code 502'), true), ['http_status', '502', 'in_flight', true])
+    assert.deepEqual(k(err('Gửi tin nhắn Zalo đến người dùng quá thời gian chờ (90 giây)')), ['message_like', null, 'in_flight', true])
+    const pn = E.zaloPortErrorFrom(fetchFailed(Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' })), { operation: 'send', notSent: true })
+    assert.equal(pn.phase, 'before_send'); assert.equal(pn.evidence, undefined); assert.deepEqual(pn.signal.code, 'ECONNRESET')
+    pass('phân loại lỗi Zalo theo loại thao tác: lỗi mạng của tra số là chưa gửi, của gửi tin là không rõ trừ lỗi mở kết nối/429 hoặc đã biết chắc chưa gửi')
   }
 
   const portError = spec => E.zaloPortErrorFrom(Object.assign(new Error(spec.message || 'Zalo error'), spec.code === undefined ? {} : { code: spec.code }),

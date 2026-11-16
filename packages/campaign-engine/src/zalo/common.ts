@@ -230,9 +230,11 @@ function causeMessage(error: unknown): string {
  * - câu lỗi khác: Zalo trả lời không kèm mã (answered) thì after_send; không phải câu trả lời của Zalo (hết giờ
  *   chờ, chưa có phiên…) thì thao tác đọc là chưa gửi, còn gửi thì không rõ (không biết lỗi xảy ra trước hay sau
  *   khi yêu cầu đi, như cổng Desktop trước đây; chỉ lỗi chắc chắn trước khi gửi mới được trả về hàng đợi).
+ * `knownNotSent`: nơi gọi biết chắc chưa có yêu cầu gửi nào đi (lớp bọc media thấy lỗi mạng ở bước tải tệp lên trước mọi yêu cầu
+ * gửi), nên lỗi đường truyền của thao tác gửi cũng là chưa gửi. Lỗi khác (mã Zalo, HTTP) không đổi.
  * Pha before_send/in_flight để DB xếp lỗi hạ tầng (NET01, UNK01) thay vì lỗi nghiệp vụ Zalo.
  */
-export function classifyZaloError(error: unknown, operation: ZaloOperation, answered: boolean):
+export function classifyZaloError(error: unknown, operation: ZaloOperation, answered: boolean, knownNotSent = false):
   { signal: Signal; phase: Phase; deliveryUnknown: boolean } {
   const message = zaloErrorText(error)
   const rawCode = (error as { code?: unknown } | null)?.code
@@ -262,7 +264,7 @@ export function classifyZaloError(error: unknown, operation: ZaloOperation, answ
     const signal: Signal = errno ? { kind: 'errno', code: errno.code, message: text } : { kind: 'message_like', message: text }
     const preConnect = errno !== null && (PRE_CONNECT_ERRNO.has(errno.code) || errno.syscall === 'connect' || errno.syscall === 'getaddrinfo')
       || PRE_CONNECT_MESSAGE.test(message) || PRE_CONNECT_MESSAGE.test(detail)
-    return { signal, ...(read || preConnect ? notSent : unknown) }
+    return { signal, ...(read || preConnect || knownNotSent ? notSent : unknown) }
   }
 
   if (UNREADABLE_RESPONSE_MESSAGE.test(message)) {
@@ -276,11 +278,12 @@ export function classifyZaloError(error: unknown, operation: ZaloOperation, answ
 /**
  * Lỗi gốc của nền tảng → ZaloPortError theo đúng cách Desktop đọc mã (getZaloErrorCode): mã số là mã Zalo,
  * mã chữ là errno (không có luật riêng thì về luật bắt-tất-cả như hôm nay), không có mã thì là câu lỗi.
- * Có `operation` thì pha theo classifyZaloError (`answered`: lỗi do Zalo trả về, như ZaloApiError của zca-js).
+ * Có `operation` thì pha theo classifyZaloError (`answered`: lỗi do Zalo trả về, như ZaloApiError của zca-js; `notSent`: nơi gọi
+ * biết chắc chưa có yêu cầu gửi nào đi, xem knownNotSent).
  * Huỷ / hết giờ của lõi được ném tiếp nguyên vẹn.
  */
 export function zaloPortErrorFrom(error: unknown,
-  options: { phase?: Phase; deliveryUncertain?: boolean; operation?: ZaloOperation; answered?: boolean } = {}): Error {
+  options: { phase?: Phase; deliveryUncertain?: boolean; operation?: ZaloOperation; answered?: boolean; notSent?: boolean } = {}): Error {
   if (error instanceof ZaloPortError || error instanceof CancelledError || error instanceof DeadlineError) return error as Error
   // Huỷ từ AbortSignal (fetch, zca-js) không phải kết quả của Zalo.
   if ((error as { name?: unknown } | null)?.name === 'AbortError') return new CancelledError('zalo')
@@ -288,7 +291,7 @@ export function zaloPortErrorFrom(error: unknown,
   const rawCode = (error as { code?: unknown } | null)?.code
   const code = rawCode === null || rawCode === undefined ? '' : String(rawCode).trim()
   if (options.operation) {
-    const classified = classifyZaloError(error, options.operation, options.answered === true)
+    const classified = classifyZaloError(error, options.operation, options.answered === true, options.notSent === true)
     // `code` giữ đúng mã của lỗi gốc (không lấy errno của cause): bước tra số dùng nó để quyết định thử reqSrc 40 như Desktop.
     return new ZaloPortError(message, {
       code, signal: classified.signal, phase: classified.phase,

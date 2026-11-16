@@ -5,6 +5,58 @@ type UploadCallback = (data: { fileUrl: string; fileId: string }) => unknown;
 interface MediaExecution {
   controller: AbortController;
   cleanup: Set<() => void>;
+  /** A Zalo request other than a file upload (a send, or an unreadable URL) has started: later failures may follow a send. */
+  zaloRequestStarted: boolean;
+  /** A file upload failed with a transport error before any other Zalo request started. */
+  uploadFailedBeforeSend: boolean;
+}
+
+/**
+ * Marks the error of a campaign media send whose file upload failed (connection reset, socket closed…) before any other Zalo
+ * request: zca-js only calls the send endpoint after every upload finished, so nothing reached the recipient. The engine v2
+ * port reads it to classify the failure as "not sent" (NET01) instead of "delivery unknown" (UNK01). Symbol.for so that every
+ * bundle of this module shares the key; the same key is used by akaAgentChatApi's runtime copy of this class.
+ */
+export const CAMPAIGN_MEDIA_UPLOAD_NOT_SENT = Symbol.for("aka-agent.campaign-media.upload-not-sent");
+
+export function isCampaignMediaUploadNotSent(error: unknown): boolean {
+  return typeof error === "object" && error !== null &&
+    (error as Record<symbol, unknown>)[CAMPAIGN_MEDIA_UPLOAD_NOT_SENT] === true;
+}
+
+function markUploadNotSent(error: unknown): void {
+  if (typeof error !== "object" || error === null) return;
+  try {
+    Object.defineProperty(error, CAMPAIGN_MEDIA_UPLOAD_NOT_SENT, { value: true, configurable: true });
+  } catch {
+    // A frozen error keeps the old classification (delivery unknown), never the reverse.
+  }
+}
+
+/** zca-js uploadAttachment / upthumb endpoints (…/api/message|group/photo_original/upload, asyncfile/upload, upthumb). */
+const ZALO_UPLOAD_PATH = /^\/api\/(?:message|group)\/(?:photo_original\/upload|asyncfile\/upload|upthumb)\/?$/i;
+const ZALO_HOST = /(?:^|\.)zalo\.me$/i;
+
+function requestUrl(input: Parameters<typeof fetch>[0]): URL | null {
+  try {
+    if (typeof input === "string") return new URL(input);
+    if (input instanceof URL) return input;
+    const url = (input as { url?: unknown } | null)?.url;
+    return typeof url === "string" ? new URL(url) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * upload: a zca-js file upload (nothing is sent to the recipient yet); zalo: any other Zalo API request, including sends, or a
+ * URL that cannot be read (treated as a possible send); other: a non-Zalo request such as downloading the campaign file.
+ */
+function zaloRequestKind(input: Parameters<typeof fetch>[0]): "upload" | "zalo" | "other" {
+  const url = requestUrl(input);
+  if (!url) return "zalo";
+  if (ZALO_UPLOAD_PATH.test(url.pathname)) return "upload";
+  return ZALO_HOST.test(url.hostname) || url.pathname.startsWith("/api/") ? "zalo" : "other";
 }
 
 // One async hook for all API sessions. A store contains only owners nested in
@@ -62,8 +114,16 @@ export class CampaignMediaExecution {
     const signal = previousSignal
       ? AbortSignal.any([scope.controller.signal, previousSignal])
       : scope.controller.signal;
+    const kind = zaloRequestKind(input);
+    if (kind === "zalo") scope.zaloRequestStarted = true;
     // Both upload and delivery requests (and SDK redirects) pass this fence.
-    return this.fetcher(input, { ...init, signal });
+    try {
+      return await this.fetcher(input, { ...init, signal });
+    } catch (error) {
+      // fetch rejects only on transport failure or abort; aborts (deadline, stop) keep the fence's own result.
+      if (kind === "upload" && !scope.zaloRequestStarted && !signal.aborted) scope.uploadFailedBeforeSend = true;
+      throw error;
+    }
   };
 
   public trackUploadCallbacks(callbacks: Map<string, UploadCallback>): void {
@@ -92,7 +152,9 @@ export class CampaignMediaExecution {
 
   public async run<T>(operation: () => Promise<T>, timeoutMs: number): Promise<T> {
     if (this.stopped) throw closedError();
-    const scope: MediaExecution = { controller: new AbortController(), cleanup: new Set() };
+    const scope: MediaExecution = {
+      controller: new AbortController(), cleanup: new Set(), zaloRequestStarted: false, uploadFailedBeforeSend: false
+    };
     this.active.add(scope);
     const timeout = setTimeout(() => scope.controller.abort(new CampaignMediaTimeoutError(timeoutMs)), timeoutMs);
     timeout.unref();
@@ -104,6 +166,12 @@ export class CampaignMediaExecution {
     return this.runInScope(scope, async () => {
       try {
         return await Promise.race([Promise.resolve().then(operation), cancelled]);
+      } catch (error) {
+        // Checked before `finally` closes the scope: an abort here is the deadline or a stop, which keep their own codes.
+        if (scope.uploadFailedBeforeSend && !scope.zaloRequestStarted && !scope.controller.signal.aborted) {
+          markUploadNotSent(error);
+        }
+        throw error;
       } finally {
         clearTimeout(timeout);
         scope.controller.signal.removeEventListener("abort", onAbort);
