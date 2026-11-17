@@ -19,8 +19,8 @@
 > Q23 mỗi mã lỗi một câu cho khách dùng chung mọi chỗ, kèm câu bước tiếp theo, anh duyệt từng câu; Q22 không gửi báo giám sát,
 > anh hỏi trong phiên thì chạy hàm kiểm (16/11).
 >
-> **Tình trạng code (16–17/11, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, PR [aligoinc/akaAgent#690](https://github.com/aligoinc/akaAgent/pull/690) vào `dev_3` mở 17/11, chưa merge, chưa apply gì):**
-> - Migration (chưa apply): V556 p1/p2 (bảng, thiết lập, hàm tra lỗi / ảnh lỗi; bỏ bảng T4 "việc sau kết quả" theo anh chốt), V557 (lượt
+> **Tình trạng code (16–17/11, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, PR [aligoinc/akaAgent#690](https://github.com/aligoinc/akaAgent/pull/690) vào `dev_3` mở 17/11, chưa merge, chưa phát hành Desktop; V556–V560 đã apply production 17/11 16:29–16:32 VN, `engine.facebook` bật tổ chức 1 từ 16:34 VN, [biên nhận](../migrations/snapshots/engine-facebook-v556-v560/apply-receipt.json)):**
+> - Migration (đã apply production 17/11 16:29–16:32 VN, biên nhận ở mục cuối khối này): V556 p1/p2 (bảng, thiết lập, hàm tra lỗi / ảnh lỗi; bỏ bảng T4 "việc sau kết quả" theo anh chốt), V557 (lượt
 >   theo lịch), V558 (thân hàm engine; `resolve_policy` giải `inherit` đúng như bộ cũ; claim nhận đúng danh sách data trong lượt đang giữ
 >   lease; `report_v1` nhận dòng "Tìm data" không gắn thao tác; gỡ V558 từ chối khi còn chính sách `inherit`), **V559 bản nháp chính sách
 >   FB** (4 mã FB42–FB45, 15 luật phân loại, 86 dòng chính sách = đúng bộ cũ trừ Q6 / Q20 và 4 mã có dấu hiệu (17/11, như mã hôm nay), dòng thiết lập `facebook.error_signs`; anh duyệt xong bảng 17/11
@@ -108,6 +108,23 @@
 >   chờ báo ERR_FAILED, nên block treo (Q20) trước đó không thoát dù cửa sổ đã bị huỷ. Sửa: vết thao tác kết thúc mọi lời gọi đang chờ
 >   (`PageTrace.abandonPending`) khi bộ chạy huỷ cửa sổ hoặc thấy cửa sổ đã đóng, bằng câu lỗi không thuộc nhóm "chắc chắn chưa gửi" (cú gửi
 >   đang dở là không rõ kết quả, không gửi lại); `page-trace-smoke` 6/6. Bộ cũ không đổi.
+> - **Thử thật trên Facebook 17/11** (mục 9 bước 6; anh bảo "thử test thật", chọn apply ngay; tài khoản fb LD id 135 của staff nhutlq, tổ chức 1,
+>   app chạy từ nhánh trên máy anh; chỉ 4 nhóm thử, quangnhut27 và trang LD): apply V556–V560 16:29–16:32 VN (preflight đọc lại khớp; lúc V556
+>   phần 1 có 2 lượt `report_v1` của engine Zalo quá giờ 3 giây, engine tự báo lại), bật `engine.facebook` cho tổ chức 1. Chạy bằng engine và ra đúng
+>   dòng lịch sử như bộ cũ: nhắn tin + kết bạn UID ("Nhắn tin thành công đến quangnhut27", "Đã gửi lời mời kết bạn trước đó…"), đăng trang cá nhân
+>   (lượt theo lịch), tìm data trong nhóm (dòng "Tìm data"), tham gia nhóm (đã tham gia ×2), comment seeding trang LD, comment vào bài, đăng nhóm +
+>   comment 4 nhóm (khớp lượt bộ cũ 57570 cùng 4 nhóm: 3 đăng + comment thành công, nhóm mua bán bỏ qua FB40), lướt newsfeed chỉ lướt, mời vào
+>   nhóm ("Đã là thành viên của group"). Tải DB lượt 4 nhóm: engine 1.152 request / 68,8 s, bộ cũ 1.281 / 83,0 s (cùng máy, cửa sổ 5 phút).
+>   **Bốn lỗi chỉ thử thật mới lộ, đã sửa** (bộ cũ không đổi): (1) chiến dịch FB đầu tiên sau đăng nhập chạy hết bằng bộ cũ vì danh mục engine nạp
+>   lười và lượt đó trả `catalog_loading` → nạp lúc đăng nhập, đang nạp thì bộ lập lịch chờ lượt quét sau, nạp lỗi (`catalog_unavailable`) mới chạy
+>   bộ cũ; (2) mời vào nhóm: bộ cũ chạy đường riêng truyền biến lô (`facebookGroupInviteTargetGroupUrl`, `facebookGroupInviteTargets`…), engine thiếu
+>   nên block báo "Link group nhận lời mời không hợp lệ" → truyền lô một người, thiếu group thì CFG02; (3) mời vào nhóm: block trả `results` riêng mà
+>   bộ dựng chung không đọc, engine chốt FB45 không ghi dòng → dựng dòng như `processFacebookGroupInviteOutput` (bấm gửi lỗi thì data về hàng đợi;
+>   block không trả kết quả thì dòng "lỗi"); (4) newsfeed chỉ lướt không có thao tác, lõi dừng lượt `no_actions` mà không chốt lượt đã nhận → lease
+>   không nhả, chiến dịch / tài khoản kẹt "đang chạy" tới khi `aka_agent_engine_close_stale_v1` đóng sau 10 phút → tên kết quả "Lướt newsfeed" (chốt
+>   im lặng FB45 như bộ cũ không ghi dòng), lõi luôn chốt lượt đã nhận. `desktop-fb-smoke` thêm ca cho cả bốn (block giả theo khuôn block production).
+>   Chưa thử thật: Page (không có Page), tìm data bằng search, đăng nhóm kèm chia sẻ, newsfeed có like, Up tin tự sinh, tạm dừng / tắt app giữa
+>   lượt trên Facebook thật (bộ kịch bản sự cố đã phủ).
 >
 > Nguồn: kế hoạch engine v2 (`~/.claude/plans/t-i-mu-n-t-ch-c-composed-wolf.md`, mục 4 quyết định 11, 5.4, 8.2, 10 giai đoạn 7),
 > [thiết kế](CAMPAIGN_OUTCOME_ENGINE.md), [phủ Zalo](CAMPAIGN_OUTCOME_ENGINE_ZALO_COVERAGE.md),

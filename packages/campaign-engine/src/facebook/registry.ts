@@ -44,9 +44,15 @@ export interface FacebookCampaign {
  */
 export const FACEBOOK_FIND_DATA_RESULT_NAME = 'Tìm data'
 
-/** Tên ghi lịch sử cho kết quả không gắn thao tác của loại chiến dịch (chỉ tìm data), không có thì undefined. */
+/** Tên kết quả không gắn thao tác của newsfeed chỉ lướt (không like / comment: không có thao tác nào, bộ cũ không ghi dòng lịch sử). */
+export const FACEBOOK_NEWSFEED_RESULT_NAME = 'Lướt newsfeed'
+
+/** Tên ghi lịch sử cho kết quả không gắn thao tác của loại chiến dịch (tìm data, newsfeed), không có thì undefined. */
 export function facebookResultName(actionId: string): string | undefined {
-  return actionId === FB_FIND_DATA_GROUP || actionId === FB_FIND_DATA_SEARCH ? FACEBOOK_FIND_DATA_RESULT_NAME : undefined
+  if (actionId === FB_FIND_DATA_GROUP || actionId === FB_FIND_DATA_SEARCH) return FACEBOOK_FIND_DATA_RESULT_NAME
+  // Thử thật 17/11: newsfeed chỉ lướt không có thao tác nào; thiếu tên này lõi dừng lượt "no_actions" mà không chốt lượt đang mở.
+  if (actionId === FB_NEWSFEED) return FACEBOOK_NEWSFEED_RESULT_NAME
+  return undefined
 }
 
 /** Tên thao tác ghi lịch sử, đúng getAccountActionName của Desktop. */

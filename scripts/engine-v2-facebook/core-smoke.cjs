@@ -254,10 +254,17 @@ async function main() {
       assert.notEqual(result.reason, 'error', JSON.stringify(result))
       const row = await one(`SELECT action_code, action_name, status FROM public.auto_campaign_details WHERE campaign_id = $1`, [entry.campaign])
       assert.deepEqual([row.action_code, row.action_name], [null, 'Tìm data'], 'no_outcome ghi dòng "Tìm data" như mọi loại')
+      // Thiếu cả thao tác lẫn tên (cấu hình không lường trước; thử thật 17/11: newsfeed chỉ lướt từng rơi vào đây): lõi vẫn chạy và chốt lượt bằng
+      // tên chung, không bỏ lượt mở (trước đó lượt mở làm lease không nhả, chiến dịch / tài khoản kẹt "đang chạy" tới khi hàm dọn đóng sau 10 phút).
       const missing = await makeCampaign({ actionId: 'facebook_find_data_group', targets: 1 })
       const noName = await run(missing, { runTarget: async () => ({ done: true }) }, { actions: [] })
-      assert.equal(noName.result.reason, 'error', 'không thao tác mà không có tên kết quả thì lỗi cấu hình của nơi chạy')
-      await db.query(`UPDATE public.auto_engine_target_runs SET completed_at = now() WHERE campaign_id = $1 AND completed_at IS NULL`, [missing.campaign])
+      assert.notEqual(noName.result.reason, 'error', JSON.stringify(noName.result))
+      assert.equal(noName.result.released, true, 'lượt đã chốt nên nhả được lease')
+      const open = await one(`SELECT count(*)::int AS n FROM public.auto_engine_target_runs WHERE campaign_id = $1 AND completed_at IS NULL`, [missing.campaign])
+      assert.equal(open.n, 0)
+      const generic = await one(`SELECT action_code FROM public.auto_engine_outcomes o JOIN public.auto_engine_target_runs r ON r.id = o.target_run_id
+        WHERE r.campaign_id = $1`, [missing.campaign])
+      assert.equal(generic.action_code, '', 'kết quả không gắn thao tác (tên chung)')
     })
 
     await check('mất lease khi ghi dấu: dừng ngay, không bấm', async () => {

@@ -741,11 +741,14 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
   const runWorkflowTarget = async (claim: Claimed, workflow: WorkflowUnitConfig): Promise<TargetEnd> => {
     const inputDataId = claim.target.id == null ? null : Number(claim.target.id)
     deps.events.progress(targetStartProgress(cfg.campaignId, inputDataId as number, labelOf(claim.target), cfg.campaignName))
-    // Loại không có thao tác (tìm data Facebook): kết quả mặc định của lõi không gắn thao tác, ghi tên workflow.resultName.
+    // Loại không có thao tác (tìm data, newsfeed chỉ lướt của Facebook): kết quả mặc định của lõi không gắn thao tác, ghi tên
+    // workflow.resultName. Thiếu cả hai (cấu hình không lường trước) vẫn chạy và chốt bằng tên chung, KHÔNG bỏ lượt đang mở (thử thật
+    // 17/11: lượt bị bỏ không nhả được lease, chiến dịch / tài khoản kẹt "đang chạy" tới khi hàm dọn đóng lượt sau 10 phút).
     const firstAction = cfg.actions[0]?.code ?? ''
-    if (!firstAction && !workflow.resultName) return { stop: true, reason: 'error', detail: { error: 'no_actions' } }
+    const resultName = workflow.resultName ?? (firstAction ? undefined : 'Chạy chiến dịch')
+    if (!firstAction && !workflow.resultName) deps.events.trace({ type: 'workflow_no_actions_error', targetRunId: claim.targetRunId })
     const fallbackStep = (key: string): WorkflowMilestone =>
-      firstAction || !workflow.resultName ? { key, actionCode: firstAction } : { key, actionCode: '', actionName: workflow.resultName }
+      firstAction || !resultName ? { key, actionCode: firstAction } : { key, actionCode: '', actionName: resultName }
     let reported = 0
     let closed: ReportSuccess | null = null
     let stopped: WorkflowStop | null = null
@@ -1103,8 +1106,9 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
         const issue = (await cfg.validateCampaign?.())?.find(item => item.scope === 'campaign')
         if (issue) {
           deps.events.progress(configIssueProgress(cfg.campaignId, issue))
-          // Loại không có thao tác (tìm data): kết quả không gắn thao tác, ghi tên workflow.resultName.
-          const resultName = cfg.workflow?.resultName
+          // Loại không có thao tác (tìm data, newsfeed chỉ lướt): kết quả không gắn thao tác, ghi tên workflow.resultName; chế độ workflow
+          // thiếu cả thao tác lẫn tên vẫn chốt được lượt bằng tên chung (như runWorkflowTarget), không để lượt mở.
+          const resultName = cfg.workflow?.resultName ?? (cfg.workflow && !cfg.actions[0]?.code ? 'Chạy chiến dịch' : undefined)
           const action = cfg.actions[0]?.code ?? (resultName ? '' : 'unknown')
           const res = handleResponse(claim, await send(claim, [toReport(claim, { key: '__config', actionCode: action,
             ...(!action && resultName ? { actionName: resultName } : {}) },

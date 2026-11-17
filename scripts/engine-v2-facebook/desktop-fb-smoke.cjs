@@ -235,13 +235,27 @@ const workflow = () => ({
   ]
 })
 
-// Mời bạn vào nhóm: một block trả nhiều kết quả (actionResults) cho cùng một data (block 2819 production làm theo lô).
+// Mời bạn vào nhóm: một block trả nhiều kết quả (actionResults) cho cùng một data (block 2819 production làm theo lô). Như block production,
+// block đọc group nhận lời mời và danh sách người mời từ biến (thử thật 17/11: engine từng không truyền các biến này).
 const INVITE_WORKFLOW_ID = 5003
+const INVITE_GROUP = { facebookGroupInviteTargetGroupUrl: 'https://www.facebook.com/groups/164469482423151', facebookGroupInviteTargetGroupUid: '164469482423151',
+  facebookGroupInviteTargetGroupName: 'Nhóm thử' }
 const INVITE_BLOCK = { id: 2819, name: 'fb_group_invite', code: `
-return { actionResults: [
-  { actionCode: 'fb_group_invite', statusCode: 'campaign_detail_invitation_sent', operationState: 'committed', inputDataId: vars.inputDataId, message: 'Đã mời Bạn A' },
-  { actionCode: 'fb_group_invite', statusCode: 'campaign_detail_already_member', operationState: 'committed', inputDataId: vars.inputDataId, message: 'Bạn B đã là thành viên' },
-  { actionCode: 'fb_group_invite', statusCode: 'campaign_detail_failed', operationState: 'committed', inputDataId: vars.inputDataId, message: 'Không mời được Bạn C' }
+const groupUrl = String(vars.facebookGroupInviteTargetGroupUrl || '').trim()
+const groupName = String(vars.facebookGroupInviteTargetGroupName || '')
+const targets = Array.isArray(vars.facebookGroupInviteTargets) ? vars.facebookGroupInviteTargets : []
+if (!groupUrl) throw new Error('Link group nhận lời mời không hợp lệ')
+if (targets.length !== 1 || Number(targets[0].inputDataId) !== Number(vars.inputDataId) || Number(vars.facebookGroupInviteQuotaCapacity) !== 1
+  || !groupName.startsWith('Nhóm thử')) throw new Error('Biến mời vào nhóm sai: ' + JSON.stringify({ targets, cap: vars.facebookGroupInviteQuotaCapacity }))
+const id = Number(targets[0].inputDataId)
+// Khuôn kết quả của block 2819 production: results theo lô (thử thật 17/11), không phải actionResult.
+if (groupName === 'Nhóm thử trống') return { ok: true, submitOk: true, groupUrl, groupName, processedCount: 0, results: [] }
+if (groupName === 'Nhóm thử gửi lỗi') return { ok: true, submitOk: false, groupUrl, groupName, processedCount: 1,
+  results: [{ inputDataId: id, name: 'Bạn A', status: 'selected', selected: true, message: 'Chưa gửi được lời mời cho Bạn A' }] }
+return { ok: true, submitOk: true, groupUrl, groupName, processedCount: 3, results: [
+  { inputDataId: id, name: 'Bạn A', status: 'selected', selected: true },
+  { inputDataId: id, name: 'Bạn B', status: 'đã là thành viên', message: 'Đã là thành viên của group', countsTowardLimit: false },
+  { inputDataId: id, name: 'Bạn C', status: 'không mời được', message: 'Không mời được Bạn C' }
 ] }` }
 const inviteWorkflow = () => ({ id: INVITE_WORKFLOW_ID, name: '[engine] Mời vào nhóm', defaultVariables: {}, edges: [],
   nodes: [{ id: 'group_invite', blockId: 2819, blockName: 'fb_group_invite', config: {} }] })
@@ -254,6 +268,12 @@ return { uids: ['100001', '100002'], phones: ['0901234567'], linkGroupZalos: [],
   groupUrl: 'https://www.facebook.com/groups/g1', total: 3 }` }
 const findWorkflow = () => ({ id: FIND_WORKFLOW_ID, name: '[engine] Tìm data trong group', defaultVariables: {}, edges: [],
   nodes: [{ id: 'summary', blockId: 2605, blockName: 'fb_find_group_data_summary', config: {} }] })
+
+// Newsfeed chỉ lướt (không like / comment): không có thao tác nào, bộ cũ không ghi dòng lịch sử (thử thật 17/11).
+const NEWSFEED_WORKFLOW_ID = 5005
+const NEWSFEED_BLOCK = { id: 9650, name: 'fb_newsfeed_browse_test', code: `return { browsed: true, liked: 0, commented: 0 }` }
+const newsfeedWorkflow = () => ({ id: NEWSFEED_WORKFLOW_ID, name: '[engine] Lướt newsfeed', defaultVariables: {}, edges: [],
+  nodes: [{ id: 'browse', blockId: 9650, blockName: 'fb_newsfeed_browse_test', config: {} }] })
 
 // Đăng trang cá nhân: loại không có dòng data, mỗi mốc lịch một lượt (V558 campaign_slot). Dòng lịch sử "Đăng bài" của bộ cũ lấy từ
 // bước fb_click_post_button thành công (posted: true).
@@ -288,7 +308,7 @@ async function main() {
     await db.query(`INSERT INTO public.org_organization_product (organization_id, product_id, package_type, expiration_date)
       VALUES ($1, 3, 'paid', now() + interval '30 days')`, [ORG])
     await db.query(`UPDATE public.auto_system_settings SET value = $1 WHERE key = 'engine.facebook'`, [JSON.stringify({ mode: 'orgs', organizationIds: [ORG] })])
-    for (const block of [...BLOCKS, INVITE_BLOCK, FIND_BLOCK]) {
+    for (const block of [...BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK]) {
       await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, [block.id, block.name, block.code])
     }
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Đăng nhóm', '[]', '[]')`, [WORKFLOW_ID])
@@ -303,6 +323,8 @@ async function main() {
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_timeline_post', $1)`, [TIMELINE_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Tìm data trong group', '[]', '[]')`, [FIND_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_find_data_group', $1)`, [FIND_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Lướt newsfeed', '[]', '[]')`, [NEWSFEED_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_newsfeed_interaction', $1)`, [NEWSFEED_WORKFLOW_ID])
     // Cùng block nút Đăng, riêng workflow trang cá nhân: thao tác của mốc là fb_post_my_profile (dòng ghi đè theo workflow).
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, workflow_id, step_kind, action_code, commit_level, send_ops)
       VALUES (30, $1, 'delivery', 'fb_post_my_profile', 2, '["click:fb_post_button"]')`, [TIMELINE_WORKFLOW_ID])
@@ -312,9 +334,9 @@ async function main() {
       userData, client: fakeClient(db), runs: [], runSteps: [], elements: ELEMENTS,
       user: { staffId: STAFF, organizationId: ORG, facebookEngineV2: true, campaignEngineV2: false,
         entitlements: { facebookCore: true, facebookFanpage: false, email: false, zalo: false, sms: false } },
-      blocks: new Map([...BLOCKS, INVITE_BLOCK, FIND_BLOCK].map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
+      blocks: new Map([...BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK].map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
       workflows: new Map([[WORKFLOW_ID, workflow()], [TIMELINE_WORKFLOW_ID, timelineWorkflow()], [INVITE_WORKFLOW_ID, inviteWorkflow()],
-        [FIND_WORKFLOW_ID, findWorkflow()]]),
+        [FIND_WORKFLOW_ID, findWorkflow()], [NEWSFEED_WORKFLOW_ID, newsfeedWorkflow()]]),
       runtimeSettings: null
     }
     const progress = []
@@ -420,7 +442,7 @@ async function main() {
       const { mod: repo } = { mod: null }
       void repo
       const entry = await makeCampaign()
-      // Lần đầu danh mục chưa nạp: chạy bộ cũ lượt này, nạp nền.
+      // Lần đầu danh mục chưa nạp: catalog_loading (bộ lập lịch chờ lượt quét sau, không chạy bộ cũ; thử thật 17/11), nạp nền.
       let support = scheduler.engineRunner.support(entry.account, entry.campaign)
       if (!support.ok) {
         assert.equal(support.reason, 'catalog_loading')
@@ -691,18 +713,52 @@ async function main() {
       assert.equal((await details(entry.campaign.id)).length, 1)
     })
 
-    await check('mời vào nhóm theo lô: một block trả 3 kết quả cho cùng data → 3 dòng lịch sử đúng trạng thái, dấu gửi được giải, data hoàn thành', async () => {
-      const entry = await makeCampaign({ actionId: 'facebook_group_invite', extra: {} })
+    await check('newsfeed chỉ lướt (không like / comment, không có thao tác): chạy workflow, chốt im lặng FB45, không ghi lịch sử, không bỏ lượt mở', async () => {
+      const entry = await makeCampaign({ targets: 0, actionId: 'facebook_newsfeed_interaction',
+        extra: { enablePostLike: false, newsfeedLikeLimit: 0, enableComment: false, newsfeedCommentLimit: 0, newsfeedTimeMinutes: 1 } })
+      assert.deepEqual(scheduler.engineRunner.support(entry.account, entry.campaign), { ok: true })
+      const { result } = await run(entry)
+      assert.equal(result.targets, 1, JSON.stringify(result))
+      assert.equal((await details(entry.campaign.id)).length, 0)
+      const runs = (await db.query(`SELECT slot_at, completed_at, final_error_code FROM public.auto_engine_target_runs WHERE campaign_id = $1`,
+        [entry.campaign.id])).rows
+      assert.equal(runs.length, 1); assert.ok(runs[0].slot_at); assert.ok(runs[0].completed_at, 'lượt đã chốt, không để mở')
+      assert.deepEqual((await outcomes(entry.campaign.id)).map(o => [o.action_code, o.error_code]), [['', 'err_engine_fb_no_history']])
+      assert.equal((await facade.getCampaign(entry.campaign.id)).status, 'hoàn thành')
+    })
+
+    await check('mời vào nhóm theo lô: block nhận đủ biến của bộ cũ (lô một người), trả 3 kết quả cho cùng data → 3 dòng lịch sử đúng trạng thái, dấu gửi được giải, data hoàn thành; thiếu group nhận lời mời → lỗi cấu hình', async () => {
+      const entry = await makeCampaign({ actionId: 'facebook_group_invite', extra: { ...INVITE_GROUP } })
       const { result } = await run(entry)
       assert.equal(result.targets, 1, JSON.stringify(result))
       const rows = await details(entry.campaign.id)
-      assert.deepEqual(rows.map(r => [r.action_code, r.status]), [['fb_group_invite', 'đã gửi lời mời'], ['fb_group_invite', 'đã là thành viên'],
-        ['fb_group_invite', 'thất bại']])
+      // Như processFacebookGroupInviteOutput của bộ cũ: "selected" + gửi được = thành công (câu tự dựng), câu của block giữ nguyên.
+      assert.deepEqual(rows.map(r => [r.action_code, r.status, r.log.replace(/ \([A-Z]+[0-9]+\)$/, '')]), [
+        ['fb_group_invite', 'thành công', 'Đã gửi lời mời vào group "Nhóm thử" cho "Nhóm 1"'],
+        // Dòng lỗi: câu đã duyệt của SYS99 (Q23) như mọi dòng lỗi của engine; câu của block giữ trong data.signal.message.
+        ['fb_group_invite', 'đã là thành viên', 'Đã là thành viên của group'], ['fb_group_invite', 'lỗi', 'Có lỗi xảy ra']])
       assert.equal(new Set(rows.map(r => r.result_key)).size, 3, 'mỗi kết quả một khoá')
-      // Dấu gửi được giải ở dòng đầu; DB không coi "đã gửi lời mời" (nhóm "bỏ qua") là đã giao nên dấu là not_delivered. Data vẫn hoàn thành,
-      // không gửi lại (chính sách của cả ba trạng thái đều hoàn thành data).
+      // Dấu gửi được giải ở dòng đầu. Data hoàn thành, không gửi lại (chính sách của cả ba trạng thái đều hoàn thành data).
       assert.deepEqual((await marks(entry.campaign.id)).map(m => [m.actionCode, m.state !== 'pending']), [['fb_group_invite', true]])
       assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      // Bấm gửi lỗi mà người này đã được chọn: như bộ cũ, data về hàng đợi, không ghi dòng.
+      const submitFail = await makeCampaign({ actionId: 'facebook_group_invite', extra: { ...INVITE_GROUP, facebookGroupInviteTargetGroupName: 'Nhóm thử gửi lỗi' } })
+      await run(submitFail)
+      assert.equal((await details(submitFail.campaign.id)).length, 0)
+      assert.equal((await inputs(submitFail.campaign.id))[0].status, 'chờ xử lý')
+      // Block không trả kết quả cho data: như bộ cũ ghi dòng "lỗi" (bộ cũ còn tạm dừng ngay; engine dừng theo chuỗi lỗi).
+      const empty = await makeCampaign({ actionId: 'facebook_group_invite', extra: { ...INVITE_GROUP, facebookGroupInviteTargetGroupName: 'Nhóm thử trống' } })
+      await run(empty)
+      assert.deepEqual((await details(empty.campaign.id)).map(r => [r.action_code, r.status]), [['fb_group_invite', 'lỗi']])
+      // Thiếu group nhận lời mời: lỗi cấu hình như bộ cũ (câu của bộ cũ), không chạy data nào.
+      const noGroup = await makeCampaign({ actionId: 'facebook_group_invite', extra: {} })
+      const second = await run(noGroup)
+      assert.equal(second.result.reason, 'config_invalid', JSON.stringify(second.result))
+      assert.equal((await details(noGroup.campaign.id)).length, 0)
+      assert.equal((await inputs(noGroup.campaign.id))[0].status, 'chờ xử lý')
+      const noted = (await db.query('SELECT note FROM public.auto_campaigns WHERE id = $1', [noGroup.campaign.id])).rows[0]
+      // Ghi chú theo câu đã duyệt của CFG02 như mọi lỗi cấu hình của engine (bộ cũ ghi câu riêng, không dừng chiến dịch).
+      assert.match(String(noted.note), /\(CFG02\)/)
     })
 
     await check('nút "Lý do đang chờ" hiểu engine (R17): tài khoản còn token bộ cũ → câu chờ lượt trước; chạy được rồi thì quên', async () => {

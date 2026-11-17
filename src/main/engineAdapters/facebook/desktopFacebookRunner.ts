@@ -12,7 +12,7 @@ import {
   facebookCampaignV2Support, facebookClaimPlan, facebookResultName, facebookSlotMode, facebookTargetLabel, FACEBOOK_ACTION_NAMES,
   type ConfigIssue, type FacebookCampaign, type ReportSuccess, type UnitResult, type V2Support, type WorkflowTargetApi, type WorkflowTargetEnd
 } from '../../../../packages/campaign-engine/src/index'
-import { cachedFacebookEngineCatalog, loadFacebookEngineCatalog } from '../../data/repositories/facebookEngineRepository'
+import { cachedFacebookEngineCatalog, facebookEngineCatalogUnavailable, loadFacebookEngineCatalog } from '../../data/repositories/facebookEngineRepository'
 
 /** Phiên của một lượt (mở trước claim đầu, đóng sau khi lượt kết thúc và đã nhả lease). */
 export interface FacebookUnitSession {
@@ -47,8 +47,10 @@ export function toFacebookCampaign(campaign: Campaign): FacebookCampaign {
 }
 
 /**
- * Chiến dịch FB có chạy bằng engine ở bản cài này không. Danh mục chưa nạp thì nạp nền và chạy bộ cũ lượt này (chỉ xảy ra ngay sau đăng
- * nhập); loại chưa có workflow cho engine (chưa chép "[engine] …") thì chạy bộ cũ.
+ * Chiến dịch FB có chạy bằng engine ở bản cài này không. Danh mục nạp lúc đăng nhập; chưa nạp xong thì nạp nền và trả `catalog_loading`:
+ * bộ lập lịch bỏ qua chiến dịch tới lượt quét sau, KHÔNG chạy bộ cũ (thử thật 17/11: trước đó chiến dịch FB đầu tiên sau đăng nhập luôn chạy
+ * hết bằng bộ cũ). Nạp lỗi mà chưa có bản nào thì `catalog_unavailable` = bộ cũ, như thiết lập tắt. Loại chưa có workflow cho engine (chưa
+ * chép "[engine] …") thì chạy bộ cũ.
  */
 export function facebookEngineSupport(host: DesktopFacebookHost | undefined, disabled: ReadonlySet<number>, account: AutoAccount,
   campaign: Campaign): V2Support {
@@ -59,8 +61,9 @@ export function facebookEngineSupport(host: DesktopFacebookHost | undefined, dis
   if (!support.ok) return support
   const catalog = cachedFacebookEngineCatalog()
   if (!catalog) {
+    const unavailable = facebookEngineCatalogUnavailable()
     void loadFacebookEngineCatalog().catch(error => console.warn('[CampaignEngine] Không nạp được danh mục engine Facebook:', error))
-    return { ok: false, reason: 'catalog_loading' }
+    return { ok: false, reason: unavailable ? 'catalog_unavailable' : 'catalog_loading' }
   }
   if (!catalog.workflows.has(campaign.actionId)) return { ok: false, reason: 'engine_workflow_missing' }
   return { ok: true }

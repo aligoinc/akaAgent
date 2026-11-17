@@ -28,7 +28,7 @@ import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
 import { resolveZaloServerOnFlyAtLogin } from '../../../shared/zaloServerOnFly'
 import { loadCampaignEngineV2Enabled } from './campaignEngineFlagRepository'
-import { loadFacebookEngineEnabled } from './facebookEngineRepository'
+import { loadFacebookEngineCatalog, loadFacebookEngineEnabled } from './facebookEngineRepository'
 
 const client = () => getSupabaseClient()
 
@@ -181,6 +181,8 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   // V556: engine v2 cho Facebook theo thiết lập engine.facebook; chỉ hỏi khi tổ chức có quyền Facebook.
   const facebookEngineV2 = entitlements.facebookCore === true || entitlements.facebookFanpage === true
     ? await loadFacebookEngineEnabled() : false
+  // Nạp sẵn danh mục engine Facebook (workflow "[engine]", danh mục bước) để chiến dịch FB đầu tiên của phiên không phải chờ.
+  if (facebookEngineV2) void loadFacebookEngineCatalog(true).catch(error => console.warn('[auth] Không nạp được danh mục engine Facebook:', error))
   const zaloServerOnFly = resolveZaloServerOnFlyAtLogin({
     isChatSync,
     separateAccess: appAccess.separateAccess,

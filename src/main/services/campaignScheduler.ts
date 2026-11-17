@@ -106,7 +106,7 @@ import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, s
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
 import { mapCampaignInputDataFromDB } from '../data/mappers'
 import type { ConfigIssue, DeliveryState, Phase, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop, WorkflowTargetApi, WorkflowTargetEnd } from '../../../packages/campaign-engine/src/index'
-import { FACEBOOK_FIND_DATA_RESULT_NAME, facebookDefaultActionCodes } from '../../../packages/campaign-engine/src/facebook/registry'
+import { FACEBOOK_FIND_DATA_RESULT_NAME, facebookDefaultActionCodes, facebookResultName } from '../../../packages/campaign-engine/src/facebook/registry'
 import {
   CampaignMediaResolveError, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName, getMediaDownloadExtension,
   hasDeclaredMediaSource, resolveCampaignMediaSource
@@ -2226,7 +2226,10 @@ export class CampaignScheduler {
       }
       if (!this.running) break
       // Engine v2: loại chiến dịch đã tách sang lõi chạy bằng bộ mới (DB quyết định kết quả); bộ cũ bỏ qua chiến dịch đó.
-      if (this.engineRunner?.support(account, currentCampaign).ok) {
+      const engineSupport = this.engineRunner?.support(account, currentCampaign)
+      // Danh mục engine Facebook đang nạp (ngay sau đăng nhập): chờ lượt quét sau, không để bộ cũ chạy chiến dịch của tổ chức đã bật engine.
+      if (engineSupport && !engineSupport.ok && engineSupport.reason === 'catalog_loading') continue
+      if (this.engineRunner && engineSupport?.ok) {
         this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
         let engineResult: Awaited<ReturnType<DesktopEngineRunner['run']>> = null
         try {
@@ -5514,6 +5517,25 @@ export class CampaignScheduler {
     await this.releaseRunningAccount(account.id)
   }
 
+  /**
+   * Mời vào group chạy bằng engine: bộ cũ mời theo lô (runFacebookGroupInviteBatch, block đọc danh sách người mời và group nhận lời mời từ
+   * biến), engine chạy từng data nên truyền lô một người với đúng các biến đó. Thử thật 17/11: thiếu các biến này thì block báo
+   * "Link group nhận lời mời không hợp lệ" ở mọi data.
+   */
+  private facebookGroupInviteEngineVariables(campaign: Campaign, detail: CampaignInputData): Record<string, unknown> {
+    const extra = campaign.extraSettings || {}
+    const groupUrl = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)
+    const target = this.createFacebookGroupInviteTarget(detail)
+    return {
+      facebookGroupInviteTargetGroupUrl: groupUrl,
+      facebookGroupInviteTargetGroupName: this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupName, groupUrl),
+      facebookGroupInviteTargetGroupUid: this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUid),
+      // Lượt engine đã nhận hạn mức cho đúng một lời mời.
+      facebookGroupInviteQuotaCapacity: 1,
+      facebookGroupInviteTargets: [{ inputDataId: target.inputDataId, name: target.name, uid: target.uid, url: target.url, inputData: target.inputData }]
+    }
+  }
+
   private createFacebookGroupInviteTarget(detail: CampaignInputData): FacebookGroupInviteTarget {
     const uid = this.firstNonEmptyString(detail.uid)
     const name = this.firstNonEmptyString(detail.name, uid)
@@ -5641,6 +5663,10 @@ export class CampaignScheduler {
       if (shareError || (workflow && workflow.defaultVariables.groupPostShareWorkflowVersion !== GROUP_POST_SHARE_WORKFLOW_VERSION)) {
         issue('err_campaign_config_invalid', 'CFG02', shareError || 'Workflow chưa hỗ trợ chia sẻ bài viết vào nhóm', 'sourceLinks')
       }
+    }
+    if (campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
+      && !this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)) {
+      issue('err_campaign_config_invalid', 'CFG02', 'Vui lòng chọn group nhận lời mời trước khi chạy chiến dịch', 'facebookGroupInviteTargetGroupUrl')
     }
     const restBrowse = facebookRestBrowseSettings(extra.facebookRestBrowse)
     const restBrowseError = supportsFacebookRestBrowse(campaign.actionId) ? validateFacebookRestBrowse(restBrowse) : null
@@ -5874,10 +5900,12 @@ export class CampaignScheduler {
     const findData = campaign.actionId === FIND_DATA_GROUP_ACTION_ID || campaign.actionId === FIND_DATA_SEARCH_ACTION_ID
     // Thao tác chính theo thứ tự của loại chiến dịch (đăng bài trước comment): khoá của api.actions là jsonb, không giữ thứ tự.
     const configured = facebookDefaultActionCodes({ actionId: campaign.actionId, extraSettings: (campaign.extraSettings ?? {}) as Record<string, unknown> })
+    // Loại có kết quả không gắn thao tác (tìm data; newsfeed chỉ lướt): thao tác chính rỗng, tên theo loại (facebookResultName).
+    const resultName = facebookResultName(campaign.actionId)
     const firstAction = configured.find(code => code in api.actions) || Object.keys(api.actions)[0]
-      || (findData ? '' : this.getPostActionCode(campaign) || 'fb_post_group')
+      || (findData || resultName ? '' : this.getPostActionCode(campaign) || 'fb_post_group')
     const milestone = (key: string, actionCode: string, actionName?: string) =>
-      ({ key, actionCode, ...(actionName ? { actionName } : !actionCode ? { actionName: FACEBOOK_FIND_DATA_RESULT_NAME } : {}) })
+      ({ key, actionCode, ...(actionName ? { actionName } : !actionCode ? { actionName: resultName ?? FACEBOOK_FIND_DATA_RESULT_NAME } : {}) })
     const name = this.getInputDataDisplayName(campaign, detail)
     const progress = (text: string): void => { void this.logCampaignProgress(campaign, text, { engine: true }).catch(() => {}) }
     if (detail) unit.tried.add(detail.id)
@@ -5957,6 +5985,7 @@ export class CampaignScheduler {
         enableGroupPostShareToJoinedGroups: share.targets.length > 0 && share.maxCount > 0,
         groupPostShareTargets: share.targets, groupPostShareMaxCount: share.maxCount,
         ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID ? { allowNewsfeedLike: allowLike, allowNewsfeedComment: allowComment } : {}),
+        ...(campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID && detail ? this.facebookGroupInviteEngineVariables(campaign, detail) : {}),
         // Mã lượt data của engine trong auto_runs.variables: tra một lỗi từ lượt workflow sang lượt data và ngược lại (R1).
         engineTargetRunId: api.targetRunId
       }
@@ -6470,7 +6499,10 @@ export class CampaignScheduler {
       const summary = this.createMilestoneSummary()
       for (const step of steps) {
         current = step
-        if (this.hasExplicitActionResult(step)) {
+        if (campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID && step.blockName === FACEBOOK_GROUP_INVITE_ACTION_CODE
+          && step.status === 'success' && !this.hasExplicitActionResult(step)) {
+          await this.writeFacebookGroupInviteEngineRows(campaign, detail, accountId, step, ctx)
+        } else if (this.hasExplicitActionResult(step)) {
           await this.logExplicitActionResultStep(campaign, detail, accountId, step, summary, allSteps, new Set())
         } else if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
           await this.logNewsfeedMilestoneStep(campaign, detail, accountId, step)
@@ -6485,6 +6517,53 @@ export class CampaignScheduler {
         if (line.message.startsWith('❌')) continue
         await this.logCampaignProgress(campaign, line.message, { ...line.options, engine: true })
       }
+    }
+  }
+
+  /**
+   * Mời vào group chạy bằng engine: block trả results theo lô (không theo khuôn actionResult); bộ cũ dựng dòng lịch sử bằng
+   * processFacebookGroupInviteOutput. Engine chạy lô một người nên dựng đúng các dòng đó cho data đang chạy rồi báo lên engine qua
+   * writeCampaignDetail (thử thật 17/11: thiếu đoạn này engine chốt FB45, không ghi dòng "Đã là thành viên của group" như bộ cũ).
+   * Bấm gửi lỗi mà người này đã được chọn: bộ cũ trả data về hàng đợi kèm ghi chú, không ghi dòng → engine báo "chưa gửi, về hàng đợi".
+   * Block không trả kết quả cho data: bộ cũ ghi dòng "lỗi" (rồi tạm dừng ngay); engine ghi dòng "lỗi" như vậy, dừng theo chuỗi lỗi.
+   */
+  private async writeFacebookGroupInviteEngineRows(campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2,
+    ctx: { report: (key: string, actionCode: string, raw: RawOutcome, actionName?: string) => Promise<ReportSuccess | null>
+      placeRow: (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null) => { key: string; phase: Phase | null } }): Promise<void> {
+    if (!detail) return
+    const output = (step.output ?? {}) as FacebookGroupInviteBlockOutput
+    const extra = campaign.extraSettings || {}
+    const groupUrl = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)
+    const groupName = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupName, groupUrl)
+    const groupUid = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUid)
+    const target = this.createFacebookGroupInviteTarget(detail)
+    const actionCode = FACEBOOK_GROUP_INVITE_ACTION_CODE
+    const actionName = this.getAccountActionName(actionCode)
+    const runId = step.runId != null ? String(step.runId) : undefined
+    const rows = (Array.isArray(output.results) ? output.results : []).filter(raw => Number(raw?.inputDataId) === detail.id)
+    for (const raw of rows) {
+      const status = this.normalizeFacebookGroupInviteDetailStatus(raw, output)
+      const message = this.getFacebookGroupInviteDetailMessage(status, raw, target, groupName)
+      if (output.submitOk === false && raw.selected === true) {
+        const res = await ctx.report(ctx.placeRow(step, actionCode, null).key, actionCode, { ok: false, phase: 'before_send',
+          signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled', message } }, actionName)
+        if (!res) throw new FacebookEngineReportStop()
+        continue
+      }
+      await this.writeCampaignDetail({
+        inputDataId: detail.id, campaignId: campaign.id, accountId, actionCode, actionName, status,
+        errorCode: status === 'lỗi' ? 'err_undefined' : undefined, log: message,
+        data: { groupUrl, groupName, groupUid, target: { inputDataId: detail.id, name: target.name, uid: target.uid, url: target.url },
+          selected: raw.selected === true, submitOk: output.submitOk === true, runId, rawResult: raw as Record<string, unknown> },
+        shouldCountAction: status === 'thành công' && raw.countsTowardLimit !== false
+      })
+    }
+    if (rows.length === 0) {
+      await this.writeCampaignDetail({
+        inputDataId: detail.id, campaignId: campaign.id, accountId, actionCode, actionName, status: 'lỗi', errorCode: 'err_undefined',
+        log: output.error || output.message || 'Workflow mời vào group không trả về kết quả target',
+        data: { groupUrl, groupName, groupUid, runId }, shouldCountAction: false
+      })
     }
   }
 

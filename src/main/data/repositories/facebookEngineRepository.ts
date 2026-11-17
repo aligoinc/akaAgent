@@ -36,6 +36,8 @@ export interface FacebookEngineCatalog {
 
 let cached: FacebookEngineCatalog | null = null
 let loading: Promise<FacebookEngineCatalog> | null = null
+/** Lần nạp gần nhất lỗi mà chưa có bản nào (0 = chưa lỗi). */
+let loadFailedAt = 0
 
 /** Danh mục đã nạp gần nhất (đọc đồng bộ khi chọn bộ chạy); null khi chưa nạp lần nào. */
 export function cachedFacebookEngineCatalog(): FacebookEngineCatalog | null {
@@ -68,15 +70,22 @@ export async function loadFacebookEngineCatalog(force = false): Promise<Facebook
         if (mapped) rows.push(mapped)
       }
       cached = { loadedAt: Date.now(), workflows: map, steps: rows }
+      loadFailedAt = 0
       return cached
     } catch (error) {
       if (cached) return cached
+      loadFailedAt = Date.now()
       throw error
     } finally {
       loading = null
     }
   })()
   return loading
+}
+
+/** Chưa có danh mục và lần nạp gần nhất đã lỗi (DB lỗi / chưa có V556): chọn bộ chạy coi như tắt engine, không chờ. */
+export function facebookEngineCatalogUnavailable(): boolean {
+  return !cached && !loading && loadFailedAt > 0
 }
 
 /** Đổi phiên đăng nhập: bỏ danh mục của phiên trước. */
