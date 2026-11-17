@@ -1,0 +1,532 @@
+{
+  "version": "9.9.0",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-9.9.0",
+  "worktree_used": true,
+  "source_branch": "codex/release-9.9.0",
+  "source_commit": "c6d417910f052264903bfb5771890ce50e3cee58",
+  "source_base_commit": "0ca740cf5490ef1e3633a23558e221b2d7d8d0d0",
+  "source_base_ref": "origin/dev_3 (sau PR #693)",
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "dependencies": "npm ci trong worktree 21:03:26–21:03:38 VN 17/11; better-sqlite3 dựng lại cho Electron arm64, checksum ced697fc… như repo chính",
+  "build_window_vn": {
+    "desktop": "2026-11-17 21:09:22 - 21:12:42"
+  },
+  "build_input_manifest": {
+    "files": 1556,
+    "scope": "file Git theo dõi dưới src/, scripts/, build/, packages/ và 9 file cấu hình gốc",
+    "sha256_before": "c86d7a6f8e3a1eae1bf46f14e7dc2757508512c8a31a5671eb0c919fcb32d688",
+    "sha256_after": "c86d7a6f8e3a1eae1bf46f14e7dc2757508512c8a31a5671eb0c919fcb32d688",
+    "identical": true
+  },
+  "checks_passed": [
+    "typecheck-node",
+    "typecheck-web",
+    "snapshot-smoke",
+    "idle-reads-smoke",
+    "share-repeat-smoke",
+    "server-rest-smoke",
+    "listener-stop-smoke",
+    "session-clock-skew-smoke",
+    "media-timeout-smoke",
+    "engine-desktop-smoke",
+    "renewal-reminder-smoke",
+    "member-matches-smoke",
+    "zalo-server-on-fly-login-smoke",
+    "account-snapshot-chat-sync-smoke",
+    "result-actions-service-smoke",
+    "result-actions-ui-smoke",
+    "engine-check-all",
+    "repeat-scheduler-smoke",
+    "repeat-v561-smoke",
+    "repeat-ui-smoke",
+    "repeat-runtime-e2e",
+    "fb-sql-smoke",
+    "fb-copy-smoke",
+    "fb-core-smoke",
+    "fb-error-signs-smoke",
+    "fb-policy-parity-smoke",
+    "fb-legacy-catalog-smoke",
+    "fb-v563-smoke",
+    "fb-desktop-fb-smoke",
+    "fb-workflow-hooks-smoke",
+    "fb-page-trace-smoke",
+    "fb-screenshots-smoke",
+    "fb-autocheck-smoke",
+    "fb-wait-reason-smoke",
+    "fb-replay",
+    "fb-scenarios",
+    "engine-scenarios-fb-repeat"
+  ],
+  "checks_failed_explained": {
+    "message-status-sync-smoke": "Lỗi có sẵn, giống hệt 9.8.0 (so log bỏ đường dẫn: trùng): 24 nhóm đạt rồi hỏng ở \"file nối DB, Desktop\" (\"phải có hẹn giờ gửi lô\"). Có từ nhánh #672; tính năng đang tắt (chưa có dòng zalo.message_status_sync.enabled), V525/V526 chưa apply.",
+    "aff-partner-smoke": "7/8 nhóm đạt lúc build. Nhóm còn lại dò câu đọc cài đặt bằng regex đòi AFF_PARTNER_SETTING_KEY đứng cuối danh sách; #690 (6070f98f) thêm FACEBOOK_MAX_COMMENTS_KEY sau nó. Khoá affiliate.program vẫn trong cùng câu đọc (desktopUiRepository.ts dòng 38), không thêm request: lỗi của smoke, không phải của app. Smoke sửa ở commit sau build trên nhánh release, chạy lại 8/8."
+  },
+  "desktop": {
+    "checks": {
+      "typecheck_node": "passed",
+      "typecheck_renderer": "passed",
+      "packaged_output_parity": "passed",
+      "desktop_secret_absence": "passed",
+      "existing_installers_preserved": true,
+      "host_native_restored": true
+    },
+    "source_markers_in_main": [
+      "aka_agent_engine_facebook_enabled_v1",
+      "engine-facebook-identity",
+      "aka_agent_campaign_repeat_decide_v1",
+      "aka_agent_campaign_repeat_sync_v1",
+      "aka-agent.campaign-media.upload-not-sent",
+      "aff-partner:summary",
+      "aka_agent_aff_partner",
+      "aka_agent_read_campaign_result_recipients",
+      "aka_agent_engine_desktop_enabled_v1",
+      "startZaloListenerGuarded",
+      "stopZaloListenerGuarded"
+    ],
+    "absent_from_main": [
+      "aka_agent_zalo_server_on_fly_v1 (V498, bỏ ở #679)"
+    ],
+    "artifacts": [
+      {
+        "id": "win",
+        "platform": "Windows x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgent-Setup-9.9.0.exe",
+        "version": "9.9.0",
+        "resource_version": "9.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 627,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "pe_versions": {
+          "installer": {
+            "version": "9.9.0",
+            "machine": "14c",
+            "authenticode_present": false
+          },
+          "app": {
+            "version": "9.9.0",
+            "machine": "8664",
+            "authenticode_present": false
+          }
+        },
+        "installer_payload_parity": true,
+        "bytes": 153288365,
+        "sha256": "15bd1b2ea7dc7147f8887b2cf1732e4105b5116b17cb7e6369c12688282de0b6",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgent-Setup-9.9.0.exe"
+      },
+      {
+        "id": "arm",
+        "platform": "macOS ARM64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgent.dmg",
+        "version": "9.9.0",
+        "resource_version": "9.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "arm64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 183047219,
+        "sha256": "9e5c3f9e0278bf9106efe27c8e7a02a02d7e36bd7b7669cf3cbe4b5c973021d7",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgent.dmg"
+      },
+      {
+        "id": "intel",
+        "platform": "macOS Intel x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgentIntel.dmg",
+        "version": "9.9.0",
+        "resource_version": "9.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "x86_64",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 190194376,
+        "sha256": "a4a72acca4b3c37551881b365bb8b46b4dcafb2ce94d9e6afcebd89be3852457",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-9.9.0/akaAgentIntel.dmg"
+      }
+    ]
+  },
+  "app_server": {
+    "built": false,
+    "graph_files": 241,
+    "changed_files": [
+      "packages/campaign-engine/src/contracts.ts",
+      "packages/campaign-engine/src/facebook/registry.ts",
+      "packages/campaign-engine/src/index.ts",
+      "packages/campaign-engine/src/progress.ts",
+      "packages/campaign-engine/src/runUnit.ts",
+      "packages/campaign-engine/src/zalo/common.ts",
+      "src/main/data/repositories/campaignRepeatRepository.ts",
+      "src/main/data/repositories/campaignRepository.ts",
+      "src/main/data/repositories/campaignResultActionsRepository.ts",
+      "src/main/data/repositories/desktopUiRepository.ts",
+      "src/main/data/repositories/facebookEngineRepository.ts",
+      "src/main/domain/reports/reportReadFlights.ts",
+      "src/main/engineAdapters/desktopEngineRunner.ts",
+      "src/main/engineAdapters/desktopZaloPort.ts",
+      "src/main/engineAdapters/engineWaitReason.ts",
+      "src/main/engineAdapters/facebook/desktopFacebookRunner.ts",
+      "src/main/engineAdapters/facebook/errorScreenshots.ts",
+      "src/main/engineAdapters/facebook/errorSigns.ts",
+      "src/main/engineAdapters/facebook/identityMarker.ts",
+      "src/main/engineAdapters/facebook/milestoneOutcomes.ts",
+      "src/main/engineAdapters/facebook/pageTrace.ts",
+      "src/main/engineAdapters/facebook/stepCatalog.ts",
+      "src/main/services/campaignMediaExecution.ts",
+      "src/main/services/campaignPendingReasonService.ts",
+      "src/main/services/campaignScheduler.ts",
+      "src/main/services/supabase.ts",
+      "src/main/v2/runtime/blockHelpers.ts",
+      "src/main/v2/runtime/pageController.ts",
+      "src/main/v2/runtime/workflowEngine.ts",
+      "src/shared/affPartner.ts",
+      "src/shared/campaignRepeat.ts",
+      "src/shared/campaignResultActions.ts",
+      "src/shared/desktopUiReads.ts",
+      "src/shared/types.ts",
+      "src/shared/v2Types.ts",
+      "src/shared/zaloServerOnFly.ts"
+    ],
+    "reason": "36/241 file trong gói Server đổi từ Server 9.7.0 (17d94bde); xem README mục App Server. Anh chỉ yêu cầu build Desktop."
+  },
+  "existing_installers": {
+    "checked_unchanged": 60,
+    "note": "Bộ cài .exe/.dmg trong dist/ và dist-server/ của repo chính giữ nguyên checksum sau build"
+  },
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "time_vn": "21:04:31-21:04:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "time_vn": "21:04:38-21:05:10",
+      "result": "exit=0"
+    },
+    {
+      "label": "snapshot-smoke",
+      "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+      "time_vn": "21:05:10-21:05:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "idle-reads-smoke",
+      "command": "node scripts/desktop-ui-idle-reads-logic-smoke.cjs",
+      "time_vn": "21:05:11-21:05:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "share-repeat-smoke",
+      "command": "node scripts/zalo-share-repeat-smoke-test.cjs",
+      "time_vn": "21:05:11-21:05:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "time_vn": "21:05:11-21:05:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "listener-stop-smoke",
+      "command": "node scripts/zalo-listener-stop-retry-smoke.cjs",
+      "time_vn": "21:05:11-21:05:22",
+      "result": "exit=0"
+    },
+    {
+      "label": "session-clock-skew-smoke",
+      "command": "node scripts/desktop-session-rls/session-clock-skew-smoke.cjs",
+      "time_vn": "21:05:22-21:05:22",
+      "result": "exit=0"
+    },
+    {
+      "label": "media-timeout-smoke",
+      "command": "node scripts/campaign-media-timeout-smoke-test.cjs",
+      "time_vn": "21:05:22-21:05:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-desktop-smoke",
+      "command": "node scripts/campaign-engine-desktop-smoke.cjs",
+      "time_vn": "21:05:23-21:05:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "renewal-reminder-smoke",
+      "command": "node scripts/renewal-reminder-desktop-smoke.cjs",
+      "time_vn": "21:05:30-21:05:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "member-matches-smoke",
+      "command": "node scripts/data-group-member-matches-service-smoke.cjs",
+      "time_vn": "21:05:30-21:05:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "message-status-sync-smoke",
+      "command": "node scripts/zalo-message-status-sync-smoke.cjs",
+      "time_vn": "21:05:31-21:05:31",
+      "result": "exit=1"
+    },
+    {
+      "label": "zalo-server-on-fly-login-smoke",
+      "command": "node scripts/zalo-server-on-fly-login-smoke.cjs",
+      "time_vn": "21:05:31-21:05:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-snapshot-chat-sync-smoke",
+      "command": "node scripts/desktop-account-snapshot-chat-sync-smoke.cjs",
+      "time_vn": "21:05:31-21:05:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-service-smoke",
+      "command": "node scripts/campaign-result-actions-service-smoke.cjs",
+      "time_vn": "21:05:31-21:05:32",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-ui-smoke",
+      "command": "node scripts/run-campaign-result-actions-ui-smoke.cjs",
+      "time_vn": "21:05:32-21:05:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "aff-partner-smoke",
+      "command": "node scripts/aff-partner-desktop-smoke.cjs",
+      "time_vn": "21:05:38-21:05:38",
+      "result": "exit=1"
+    },
+    {
+      "label": "engine-check-all",
+      "command": "node scripts/campaign-outcome-engine-check-all.cjs",
+      "time_vn": "21:05:38-21:06:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-scheduler-smoke",
+      "command": "node scripts/campaign-repeat-scheduler-smoke.cjs",
+      "time_vn": "21:06:58-21:06:59",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-v561-smoke",
+      "command": "node scripts/campaign-repeat-v561-smoke.cjs",
+      "time_vn": "21:06:59-21:07:02",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-ui-smoke",
+      "command": "node scripts/run-campaign-repeat-ui-smoke.cjs",
+      "time_vn": "21:07:02-21:07:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-runtime-e2e",
+      "command": "node scripts/campaign-repeat-runtime-e2e.cjs",
+      "time_vn": "21:07:07-21:07:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-sql-smoke",
+      "command": "node scripts/engine-v2-facebook/sql-smoke.cjs",
+      "time_vn": "21:07:11-21:07:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-copy-smoke",
+      "command": "node scripts/engine-v2-facebook/copy-smoke.cjs",
+      "time_vn": "21:07:14-21:07:17",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-core-smoke",
+      "command": "node scripts/engine-v2-facebook/core-smoke.cjs",
+      "time_vn": "21:07:17-21:07:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-signs-smoke",
+      "command": "node scripts/engine-v2-facebook/error-signs-smoke.cjs",
+      "time_vn": "21:07:20-21:07:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-policy-parity-smoke",
+      "command": "node scripts/engine-v2-facebook/policy-parity-smoke.cjs",
+      "time_vn": "21:07:20-21:07:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-legacy-catalog-smoke",
+      "command": "node scripts/engine-v2-facebook/legacy-catalog-smoke.cjs",
+      "time_vn": "21:07:27-21:07:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v563-smoke",
+      "command": "node scripts/engine-v2-facebook/v563-smoke.cjs",
+      "time_vn": "21:07:30-21:07:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-desktop-fb-smoke",
+      "command": "node scripts/engine-v2-facebook/desktop-fb-smoke.cjs",
+      "time_vn": "21:07:43-21:07:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-workflow-hooks-smoke",
+      "command": "node scripts/engine-v2-facebook/workflow-hooks-smoke.cjs",
+      "time_vn": "21:07:49-21:07:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-page-trace-smoke",
+      "command": "node scripts/engine-v2-facebook/page-trace-smoke.cjs",
+      "time_vn": "21:07:50-21:07:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-screenshots-smoke",
+      "command": "node scripts/engine-v2-facebook/screenshots-smoke.cjs",
+      "time_vn": "21:07:50-21:07:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-autocheck-smoke",
+      "command": "node scripts/engine-v2-facebook/autocheck-smoke.cjs",
+      "time_vn": "21:07:52-21:07:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-wait-reason-smoke",
+      "command": "node scripts/engine-v2-facebook/wait-reason-smoke.cjs",
+      "time_vn": "21:07:52-21:07:53",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-replay",
+      "command": "node scripts/engine-v2-facebook/replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/153fb415-f05a-4446-b2d5-6bc06f070915/scratchpad/fbreplay/engine-v2-fb-replay-2026-11-16.json",
+      "time_vn": "21:07:53-21:08:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-scenarios",
+      "command": "node scripts/engine-v2-facebook/scenarios.cjs",
+      "time_vn": "21:08:06-21:08:36",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-fb-repeat",
+      "command": "env SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 node scripts/engine-v2-scenarios/run.cjs --skip-general",
+      "time_vn": "21:08:36-21:08:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "win",
+      "command": "npm run build:win",
+      "time_vn": "2026-11-17 21:09:22 - 2026-11-17 21:10:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "arm",
+      "command": "npm run build:mac",
+      "time_vn": "2026-11-17 21:10:51 - 2026-11-17 21:11:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "intel",
+      "command": "npm run build:mac:intel",
+      "time_vn": "2026-11-17 21:11:48 - 2026-11-17 21:12:42",
+      "result": "exit=0"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "feed_changed": false,
+  "database_changed": false,
+  "services_deployed_by_build": false,
+  "settings_read_at_build": {
+    "read_at_vn": "2026-11-17 21:04:44",
+    "affiliate.program": "{\"audience\": \"all\", \"holdDays\": 7, \"minPayout\": 200000, \"trialReward\": 20000, \"purchaseRate\": 0.1, \"visitWindowDays\": 90, \"purchaseWindowDays\": 90, \"trialRewardMonthlyCap\": 30}",
+    "campaign.repeat_after_completion": "{\"audience\":\"admin_akabiz\",\"sweeper\":true}",
+    "campaign.wait_note_minutes": "10",
+    "desktop.updates.startup_prompt_max_version": null,
+    "engine.facebook": "{\"mode\":\"orgs\",\"organizationIds\":[1]}",
+    "facebook.block_hang_minutes": "10",
+    "facebook.max_comments": "20",
+    "renewal.reminder": "{\"audience\":\"all\",\"bell\":true,\"legacyBanner\":true}",
+    "zalo.campaign_engagement.enabled": "true",
+    "zalo.message_status_sync.enabled": "chưa có dòng (tắt)",
+    "facebook.error_signs (md5)": "7e25dd65faab148bcf55b93654852a16",
+    "migrations_needed_present": [
+      "migration_v513_engine_desktop_flag",
+      "migration_v529_desktop_server_on_fly_flag_route",
+      "migration_v540_campaign_result_actions_desktop",
+      "migration_v546_aff_partner_app",
+      "migration_v556_engine_facebook_p1",
+      "migration_v556_engine_facebook_p2",
+      "migration_v557_engine_slot_runs_p1",
+      "migration_v557_engine_slot_runs_p2a_index",
+      "migration_v557_engine_slot_runs_p2b_index",
+      "migration_v557_engine_slot_runs_p3",
+      "migration_v558_engine_facebook_functions",
+      "migration_v559_engine_facebook_policies",
+      "migration_v560_engine_facebook_copies",
+      "migration_v561_campaign_repeat_after_completion_p1",
+      "migration_v561_campaign_repeat_after_completion_p2",
+      "migration_v563_engine_facebook_signs_search"
+    ]
+  },
+  "limitations": [
+    "Windows chưa ký Authenticode, chưa cài/chạy trên Windows thật.",
+    "Mac ký ad-hoc, chưa notarize; Intel chỉ thử SQLite qua Rosetta.",
+    "Chưa chạy luồng đăng nhập, chiến dịch hay Facebook / Zalo thật trên bộ cài (engine Facebook đã thử thật 17/11 bằng app chạy từ nhánh, không phải bộ cài).",
+    "App Server không build lại (giữ 9.7.0).",
+    "Smoke zalo-message-status-sync hỏng sẵn từ nhánh #672 (xem checks_failed_explained)."
+  ]
+}

@@ -46,6 +46,16 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop 9.9.0](../audits/akaagent-9.9.0-20261117/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
+Không build App Server** (36/241 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
+`release-9.9.0`, nhánh `codex/release-9.9.0` `c6d41791` (nền `origin/dev_3` `0ca740cf` sau PR #693, commit chỉ đổi version). Mới so
+với 9.8.0: engine v2 cho chiến dịch Facebook (#690; chạy khi tổ chức nằm trong `engine.facebook`, lúc build chỉ tổ chức 1; V556–V560,
+V563 đã apply), áp cho mọi khách: trần "Số comment tối đa" theo `facebook.max_comments` (20), AutoCheck chỉ nâng tài khoản checkpoint khi
+Facebook xác nhận, presence v2; lặp lại sau khi chạy xong (#689/#691; `campaign.repeat_after_completion` lúc build `admin_akabiz`, V561 đã
+apply). Smoke `zalo-message-status-sync` hỏng sẵn như 9.7.0; `aff-partner-desktop-smoke` lệch regex do #690 (app đúng), sửa sau build.
+Không DB/deploy service trong bước build. [Receipt](../audits/akaagent-9.9.0-20261117/build-receipt.json).
+
 [Build akaAgent Desktop 9.8.0](../audits/akaagent-9.8.0-20261116/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 23:32:52–23:36:10 VN, 16/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
 Không build App Server** (12/229 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
