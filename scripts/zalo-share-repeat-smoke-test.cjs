@@ -68,7 +68,6 @@ function fixture({ now = vn('09:20'), actionId = 'zalo_message_group', server = 
     getDatabaseBusinessNow: async () => now,
     handleZaloRealtimeGroupCompletion: async () => false,
     handleRerunAfterCompletion: async () => false,
-    handleCampaignRepeatAfterCompletion: async () => false,
     transitionCampaignToCompleted: async () => { calls.push('complete'); campaign.status = 'hoàn thành'; return true },
     logCampaignProgress: async (_campaign, message) => { logs.push(message) },
     updateCampaignAndBroadcast: async (_id, patch) => { calls.push({ update: patch }); Object.assign(campaign, patch); return campaign },

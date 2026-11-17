@@ -3,14 +3,16 @@
  * lúc chạy xong), tới khi đủ số lượt tối đa (tính cả lượt đầu) hoặc tới ngày kết thúc.
  *
  * Lưu trong `auto_campaigns.extra_settings`: `repeatAfterCompletionEnabled`, `repeatAfterCompletionEvery`,
- * `repeatAfterCompletionUnit`, `repeatAfterCompletionMaxRuns`; ngày kết thúc ở `schedule_end_date`. Bộ đếm lượt và luật chạy
- * nằm trong DB (akaAgent V556, docs/CAMPAIGN_REPEAT_V556.md). Hợp đồng dùng chung Web / API / iOS ở file này; akaAgent chép
+ * `repeatAfterCompletionUnit`, `repeatAfterCompletionMaxRuns`; ngày kết thúc ở `schedule_end_date`.
+ *
+ * File này chỉ phục vụ phần CÀI ĐẶT: ô trên form, kiểm tra và chuẩn hoá lúc lưu, dòng hiển thị ở chi tiết chiến dịch. Phần làm
+ * cho chiến dịch thật sự chạy lại (bộ chạy, bộ đếm lượt) chưa có. Hợp đồng dùng chung Web / API / iOS ở file này; akaAgent chép
  * nguyên văn sang `src/shared/campaignRepeat.ts` (sửa ở WebApp trước rồi chép lại). Xem docs/CAMPAIGN_REPEAT.md.
  */
 
 /**
- * Công tắc: `auto_system_settings` key này, value JSON `{"audience":"off"|"admin_akabiz"|"all","sweeper":true|false}`.
- * Thiếu dòng, `is_active=false` hoặc sai định dạng = ẩn với mọi tài khoản. `sweeper` chỉ DB đọc (tắt khẩn bộ quét).
+ * Công tắc hiển thị: `auto_system_settings` key này, value JSON `{"audience":"off"|"admin_akabiz"|"all"}`.
+ * Thiếu dòng, `is_active=false` hoặc sai định dạng = ẩn với mọi tài khoản.
  */
 export const CAMPAIGN_REPEAT_SETTING_KEY = 'campaign.repeat_after_completion'
 export type CampaignRepeatAudience = 'off' | 'admin_akabiz' | 'all'
@@ -18,7 +20,7 @@ export type CampaignRepeatUnit = 'minute' | 'hour' | 'day'
 
 export const CAMPAIGN_REPEAT_UNITS: readonly CampaignRepeatUnit[] = ['minute', 'hour', 'day']
 export const CAMPAIGN_REPEAT_UNIT_LABELS: Record<CampaignRepeatUnit, string> = { minute: 'phút', hour: 'giờ', day: 'ngày' }
-/** Giới hạn của "x" theo đơn vị (DB kiểm cùng khoảng). */
+/** Giới hạn của "x" theo đơn vị. */
 export const CAMPAIGN_REPEAT_EVERY_LIMITS: Record<CampaignRepeatUnit, { min: number; max: number }> = {
   minute: { min: 5, max: 1439 },
   hour: { min: 1, max: 168 },
@@ -209,46 +211,4 @@ export function resolveCampaignRepeatSettings(input: CampaignRepeatResolveInput)
   settings.repeatAfterCompletionUnit = config.unit
   settings.repeatAfterCompletionMaxRuns = config.maxRuns
   return { settings, error: null }
-}
-
-/** Bộ đếm lượt DB trả về (`aka_agent_campaign_repeat_state_v1`). */
-export interface CampaignRepeatState {
-  campaignId: number
-  runsDone: number
-  maxRuns: number
-  every: number
-  unit: CampaignRepeatUnit
-  nextRunAt: string | null
-  lastCompletedAt: string | null
-  finishing: boolean
-  /** `max_runs` | `end_date` | `no_rerun_data` | `error`; null khi vòng lặp còn chạy. */
-  endedReason: string | null
-  endedAt: string | null
-}
-
-/** Chuẩn hoá một dòng của `aka_agent_campaign_repeat_state_v1`; null khi dòng không dùng được. */
-export function parseCampaignRepeatState(row: unknown): CampaignRepeatState | null {
-  if (!row || typeof row !== 'object' || Array.isArray(row)) return null
-  const value = row as Record<string, unknown>
-  const unit = parseCampaignRepeatUnit(value.unit)
-  const campaignId = Number(value.campaignId)
-  const runsDone = Number(value.runsDone)
-  const maxRuns = Number(value.maxRuns)
-  const every = Number(value.every)
-  if (!unit || !Number.isSafeInteger(campaignId) || !Number.isInteger(runsDone) || !Number.isInteger(maxRuns) || !Number.isInteger(every)) return null
-  const text = (item: unknown) => (typeof item === 'string' && item ? item : null)
-  return {
-    campaignId, runsDone, maxRuns, every, unit,
-    nextRunAt: text(value.nextRunAt), lastCompletedAt: text(value.lastCompletedAt),
-    finishing: value.finishing === true, endedReason: text(value.endedReason), endedAt: text(value.endedAt),
-  }
-}
-
-/** Câu trạng thái lượt cho chi tiết chiến dịch: "Đã chạy 2/5 lượt", "Đã chạy đủ 5 lượt"… */
-export function campaignRepeatProgressLabel(state: Pick<CampaignRepeatState, 'runsDone' | 'maxRuns' | 'endedReason'>): string {
-  if (state.endedReason === 'max_runs') return `Đã chạy đủ ${state.maxRuns} lượt`
-  if (state.endedReason === 'end_date') return `Đã chạy ${state.runsDone}/${state.maxRuns} lượt, dừng vì tới ngày kết thúc`
-  if (state.endedReason === 'no_rerun_data') return `Đã chạy ${state.runsDone}/${state.maxRuns} lượt, dừng vì không còn người nhận để chạy lại`
-  if (state.endedReason === 'error') return `Đã chạy ${state.runsDone}/${state.maxRuns} lượt, dừng lặp vì không mở lại được chiến dịch`
-  return `Đã chạy ${state.runsDone}/${state.maxRuns} lượt`
 }

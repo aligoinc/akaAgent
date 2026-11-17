@@ -4,7 +4,6 @@ import * as accountRepo from '../data/repositories/accountRepository'
 import * as accountGroupRepo from '../data/repositories/accountGroupRepository'
 import * as proxyRepo from '../data/repositories/proxyRepository'
 import * as campaignRepo from '../data/repositories/campaignRepository'
-import * as campaignRepeatRepo from '../data/repositories/campaignRepeatRepository'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import * as campaignActionRepo from '../data/repositories/campaignActionRepository'
 import * as accountContactRepo from '../data/repositories/accountContactRepository'
@@ -397,8 +396,6 @@ export class SupabaseService {
     return campaignRepo.addCampaignInputDataRows(request, onProgress)
   }
   resetCampaignInputDataForRerun(campaignId: number) { return campaignRepo.resetCampaignInputDataForRerun(campaignId) }
-  /** "Lặp lại sau khi chạy xong" (V556): DB đếm lượt và trả quyết định; null khi DB chưa có V556. */
-  decideCampaignRepeat(campaignId: number) { return campaignRepeatRepo.decideCampaignRepeat(campaignId) }
   clearCampaignInputData(campaignId: number) { return campaignRepo.clearCampaignInputData(campaignId) }
   deleteCampaignInputData(id: number) { return campaignRepo.deleteCampaignInputData(id) }
   deleteCampaignInputDataBatch(ids: number[]) { return campaignRepo.deleteCampaignInputDataBatch(ids) }

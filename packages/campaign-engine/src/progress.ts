@@ -66,19 +66,13 @@ export function formatVietnamDateTime(iso: string): string {
  * deferCampaignUntilFutureInput / transitionCampaignToCompleted. Lý do không có câu (còn data chờ trong khung giờ, không đổi gì) → null.
  */
 export function finishProgress(campaignId: number, campaignName: string, finished: { reason?: unknown; schedule?: unknown; slot?: unknown;
-  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown; repeat?: unknown }, runtime: 'desktop' | 'fly',
+  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown }, runtime: 'desktop' | 'fly',
   formatDateTime: (iso: string) => string = formatVietnamDateTime): ProgressLine | null {
   const name = `"${campaignName}"`
   const done = (suffix = ''): ProgressLine => line(campaignId, null, `✅ Hoàn thành chiến dịch ${name}${suffix}`, 'success')
   const at = typeof finished.schedule === 'string' ? formatDateTime(finished.schedule) : ''
-  // "Lặp lại sau khi chạy xong" (V556): finish_campaign_v2 trả kèm { run, maxRuns, reason } của lượt vừa xong.
-  const repeat = finished.repeat && typeof finished.repeat === 'object' ? finished.repeat as { run?: unknown; maxRuns?: unknown; reason?: unknown } : null
-  const repeatRun = repeat && Number.isInteger(repeat.run) && Number.isInteger(repeat.maxRuns) ? `${Number(repeat.run)}/${Number(repeat.maxRuns)}` : ''
   switch (finished.reason) {
-    case 'completed':
-      if (repeat?.reason === 'max_runs' && repeatRun) return done(` (đã chạy đủ ${Number(repeat.maxRuns)} lượt)`)
-      if (repeat?.reason === 'end_date') return done(' (lượt lặp kế tiếp đã qua ngày kết thúc)')
-      return done()
+    case 'completed': return done()
     case 'completed_end_date': return done(' (hết ngày kết thúc)')
     case 'completed_no_slot': return done(' (không còn khung giờ chạy trong hôm nay)')
     case 'completed_slot_after_cutoff': return done(` (khung giờ ${String(finished.slot ?? '')} vượt quá giờ dừng trong ngày)`)
@@ -88,7 +82,6 @@ export function finishProgress(campaignId: number, campaignName: string, finishe
     case 'slot_advanced':
       return line(campaignId, null, `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch ${name} ở khung giờ ${String(finished.slot ?? '')} (${at})`, 'info')
     case 'repeat_scheduled':
-      if (repeatRun) return line(campaignId, null, `⏳ Đã chạy xong lượt ${repeatRun}, hẹn chạy lại chiến dịch ${name} lúc ${at}`, 'info')
       return line(campaignId, null, `⏳ Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch ${name} lúc ${at}`, 'info')
     case 'rescheduled_future_input':
       return line(campaignId, null, `⏳ Hẹn chạy tiếp chiến dịch lúc ${at}`, 'info')

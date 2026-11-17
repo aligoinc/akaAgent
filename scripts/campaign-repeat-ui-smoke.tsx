@@ -1,4 +1,4 @@
-// "Lặp lại sau khi chạy xong" (docs/CAMPAIGN_REPEAT_V556.md): form Desktop thật với IPC giả lập; không kết nối production.
+// "Lặp lại sau khi chạy xong" (docs/CAMPAIGN_REPEAT_DESKTOP_UI.md): form Desktop thật với IPC giả lập; không kết nối production.
 import React, { useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import CampaignFormModal from '../src/renderer/src/components/CampaignPanels/CampaignFormModal'
