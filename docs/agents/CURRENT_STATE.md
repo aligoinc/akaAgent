@@ -1,5 +1,15 @@
 # Trạng thái đã xác nhận — cập nhật 14/11/2026
 
+[Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (V539/V540)](../CAMPAIGN_RESULT_ACTION_FILTER_DESKTOP_V540.md):
+Mã Desktop đã merge `dev_3` qua PR #684, **có trong bản build 9.8.0 (16/11/2026), chưa phát hành**. Hai hàm chỉ đọc
+`aka_agent_list_campaign_details_page_v3` và `aka_agent_read_campaign_result_recipients` **đã có trên akachat** từ tối 14/11/2026 (người dùng
+chạy tệp WebApp bằng SQL Editor; thân hàm khớp tệp, md5 `prosrc` `4e5c3003…` / `3fe7e598…`, ACL `{postgres, service_role}`), **sổ migration
+không có dòng**: `migration_v539_campaign_result_actions.sql` là bản chép giống từng byte tệp đó (md5 `e845efc8…`), đừng chạy lại (preflight
+từ chối). **V540 (GRANT hai hàm cho `aka_agent_desktop`) đã apply akachat 15/11/2026 00:10:26 VN** (`20261114171026`, md5 sổ = tệp
+`55a9e025…`, không apply lại; [biên nhận](../../migrations/snapshots/campaign-result-actions-desktop-v540/apply-receipt.json)); hậu kiểm:
+ACL `{postgres, service_role, aka_agent_desktop}`, thân hàm không đổi, role Desktop đi vào hàm và bị chặn đúng `desktop_staff_scope_denied`,
+0 lỗi 5xx. Số tiếp theo cho việc khác là V541 trở đi (V539 đã dùng làm tên tệp dù chưa có dòng sổ).
+
 [Engine v2 bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng (V527)](../ENGINE_V2_LEGACY_STALE_CLAIM_V527.md):
 **V527 đã apply akachat 14/11/2026 02:07:26 VN** (`20261113190717 / migration_v527_engine_claim_skip_stale_legacy_token`; md5 sổ = md5 tệp
 `40f62f5f…`; không apply lại). Chỉ thay thân `aka_agent_engine_claim_target_v1(jsonb)` (V507 `e09100fd…` → `f8935a5a…`; chủ sở hữu, quyền,
@@ -35,6 +45,26 @@ md5 sổ = md5 tệp `2e561485…`; không apply lại). Chỉ thêm hàm đọc
 nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa, 1.000 giá trị 139 ms; 0 lỗi 5xx/503 quanh phút apply.
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
+
+[Build akaAgent Desktop 9.9.0](../audits/akaagent-9.9.0-20261117/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
+Không build App Server** (36/241 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
+`release-9.9.0`, nhánh `codex/release-9.9.0` `c6d41791` (nền `origin/dev_3` `0ca740cf` sau PR #693, commit chỉ đổi version; version và
+biên nhận đã merge `dev_3` qua PR #694 ngày 17/11). Mới so
+với 9.8.0: engine v2 cho chiến dịch Facebook (#690; chạy khi tổ chức nằm trong `engine.facebook`, lúc build chỉ tổ chức 1; V556–V560,
+V563 đã apply), áp cho mọi khách: trần "Số comment tối đa" theo `facebook.max_comments` (20), AutoCheck chỉ nâng tài khoản checkpoint khi
+Facebook xác nhận, presence v2; lặp lại sau khi chạy xong (#689/#691; `campaign.repeat_after_completion` lúc build `admin_akabiz`, V561 đã
+apply). Smoke `zalo-message-status-sync` hỏng sẵn như 9.7.0; `aff-partner-desktop-smoke` lệch regex do #690 (app đúng), sửa sau build.
+Không DB/deploy service trong bước build. [Receipt](../audits/akaagent-9.9.0-20261117/build-receipt.json).
+
+[Build akaAgent Desktop 9.8.0](../audits/akaagent-9.8.0-20261116/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 23:32:52–23:36:10 VN, 16/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
+Không build App Server** (12/229 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
+`release-9.8.0`, nhánh `codex/release-9.8.0` `7707bacc` (nền `origin/dev_3` `0ae0d6f2` sau PR #687, commit chỉ đổi version). Mới so
+với 9.7.0: engine v2 Desktop xếp lỗi mạng khi tải tệp lên trước khi gửi là NET01 (#687), mục "Đối tác akaBiz" cho mọi tài khoản
+(#685/#686; `affiliate.program` lúc build là `audience: all`), bộ lọc Hành động ở tab Kết quả chạy (#684), nơi chạy tài khoản Server theo
+cờ engine v2 lúc đăng nhập (#679), "Đăng xuất Zalo" cho tài khoản Server trên Fly (#681). Smoke `zalo-message-status-sync` hỏng sẵn
+như 9.7.0. Không DB/deploy service. [Receipt](../audits/akaagent-9.8.0-20261116/build-receipt.json).
 
 [Build akaAgent Desktop và App Server 9.7.0](../audits/akaagent-9.7.0-20261114/README.md):
 **Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 01:07:02–01:11:11 VN và App Server Windows x64 nội bộ lúc

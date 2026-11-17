@@ -63,9 +63,73 @@ Chưa chạy trên production: chưa có bản Desktop, Web, iOS hay ChatApi nà
 3. **Phát hành Desktop**: cùng bản engine v2. Phải chờ duyệt bảng mã lỗi trước khi phát hành rộng.
 4. **Phát hành iOS** khi có đợt phát hành app.
 
+## V529: Desktop chọn nơi chạy như Web (14/11/2026)
+
+**Đã apply akachat 14/11/2026 08:55:07 VN** (`20261114015453 / migration_v529_desktop_server_on_fly_flag_route`; không apply lại;
+md5 sổ = file `a1217f23…`; [biên nhận](../migrations/snapshots/desktop-server-on-fly-flag-route-v529/apply-receipt.json)).
+
+- **Lỗi.** V498 `aka_agent_zalo_server_on_fly_v1()` chỉ đúng khi tổ chức có Chat hoặc đã có dòng `to_fly`. Web, ChatApi và
+  runtime Fly thì dùng `aka_agent_zalo_server_flag_route(org)`. Tổ chức bật cờ có gói Server mà chưa có tài khoản Server nào
+  (tổ chức mới tạo qua V528) chưa có dòng `to_fly`. Vì vậy Desktop ≥ 9.6.0 tạo và quét QR tài khoản Server đầu tiên trên App
+  Server.
+- **Hệ quả.** Ngay sau đó ChatApi tạo dòng `to_fly` và App Server thả tổ chức trong ≤ 60 giây. Lượt quét đang dở thì bị cắt;
+  quét xong rồi thì phiên bị chép sang Fly, đúng loại phiên bị Zalo đá sáng 14/11.
+- **Sửa.**
+  - [V529](../migrations/migration_v529_desktop_server_on_fly_flag_route.sql) thêm `OR aka_agent_zalo_server_flag_route(org)`
+    vào hàm, giữ hai điều kiện cũ (có Chat; còn dòng `to_fly`).
+  - Quyền và thuộc tính hàm giữ nguyên (chỉ `aka_agent_desktop` gọi; SECURITY DEFINER; STABLE).
+  - Lúc apply chỉ 12 tổ chức đổi kết quả, đều bật cờ, có gói Server, chưa có tài khoản Server: 1422, 2095, 2104, 2114, 2116,
+    2126, 2127, 2128, 2129, 2133, 2137, 2140.
+- **Kiểm.**
+  - `node scripts/test-v529-desktop-server-on-fly-flag-route.cjs`: 9 nhóm trên PG17. Fixture khớp md5 bản live của V498 và
+    `aka_agent_zalo_server_flag_route`.
+  - Sau apply, gọi thử bằng phiên Desktop thật trong giao dịch tự huỷ: tổ chức 1422 trả `true`; tổ chức 465 (chỉ Desktop,
+    không gói Server) trả `false`.
+  - PostgREST nạp lại schema mất 7,1 giây (sát trần 8 giây). Trong khoảng đó 495 request quá 1 giây; không có lỗi 5xx.
+- **Gỡ.** [rollback](../migrations/rollback_v529_desktop_server_on_fly_flag_route.sql) trả đúng thân V498 (md5 `0e8f19b1…`).
+- **Desktop chọn theo cờ** (code 14/11/2026, sau 9.7.0, chưa phát hành).
+  - V529 chỉ có tác dụng khi Desktop gọi hàm. Desktop ≤ 9.7.0 chỉ gọi V498/V529 lúc đăng nhập, và chỉ khi lúc đó tổ chức đã có quyền
+    Server. Vì vậy gói Server được thêm giữa phiên vẫn đi App Server cho tới khi đăng nhập lại: lượt đọc lại gói 30 giây cập nhật
+    quyền nhưng giữ `zaloServerOnFly` cũ.
+  - Anh chốt: chỉ theo cờ, bật = Fly, tắt = App Server, không xét gói. `AuthUser.zaloServerOnFly` lấy từ cờ engine v2 đã đọc lúc
+    đăng nhập (V513, `resolveZaloServerOnFlyAtLogin` trong `src/shared/zaloServerOnFly.ts`). Desktop bỏ lượt gọi V498 (xoá
+    `zaloServerOnFlyRepository.ts`), nên mỗi lần đăng nhập bớt một request.
+  - `isServerOnFlyUser` vẫn đòi quyền Server. Tổ chức chưa có gói Server thì không có gì để chuyển. Gói đến giữa phiên thì lượt
+    đọc lại 30 giây khởi động lại kết nối và tài khoản Server đi ChatApi ngay, không cần đăng nhập lại.
+  - Kiểm: `node scripts/zalo-server-on-fly-login-smoke.cjs` (5 nhóm), `node scripts/run-zalo-chat-realtime-only-smoke-test.cjs`
+    (8 nhóm), hai typecheck, `electron-vite build`.
+  - Hàm DB V498/V529 vẫn giữ cho máy cài 9.6.0/9.7.0.
+
+## Màn tài khoản Desktop: "có phiên Zalo" của tài khoản Server (14/11/2026, code sau 9.7.0, chưa phát hành)
+
+- **Lỗi.** Màn tài khoản lấy danh sách bằng `aka_agent_desktop_account_snapshot`. Phần `states` (trạng thái từng tài khoản) được
+  ghép đè lên phần `catalog` ([campaignStore.ts:259](../src/renderer/src/stores/campaignStore.ts:259)), nên `hasZaloSession` do DB
+  tính thắng giá trị của `mapAccountFromDB`. DB tính `hasZaloSession` của tài khoản Server theo `p_access.chatSync`: true thì theo
+  `login_status` (phiên ở ChatApi), false thì theo `auto_accounts.zalo_session_updated_at` (phiên App Server). Desktop gửi
+  `chatSync: user.isChatSync`, nên tổ chức không Chat chạy trên Fly theo cờ bị tính theo phiên App Server.
+- **Khách thấy.** Giá trị này chỉ đổi menu chuột phải của tài khoản Server
+  ([AccountContextMenu.tsx:200](../src/renderer/src/components/CampaignPanels/AccountContextMenu.tsx:200)); bộ kiểm phiên định kỳ bỏ
+  qua tài khoản Server, còn cửa sổ sửa tài khoản đọc bản trả về của `updateAccount` (đã đúng).
+  - Tài khoản quét QR trên Fly (không có phiên App Server) đang đăng nhập: menu ghi "Đăng nhập Zalo trên server" thay vì
+    "Đăng nhập lại…", không có "Đăng xuất Zalo".
+  - Tài khoản còn mốc phiên từ thời App Server nhưng đã mất phiên: menu vẫn ghi "Đăng nhập lại…" và còn "Đăng xuất Zalo".
+  - Đo 12:15 VN 14/11: 86 tổ chức không Chat chạy trên Fly theo cờ, 131 tài khoản Server. 1 tài khoản đang đăng nhập không có
+    phiên App Server, 119 tài khoản đã mất phiên nhưng còn mốc phiên App Server.
+- **Sửa.** [desktopUiRepository.ts](../src/main/data/repositories/desktopUiRepository.ts) gửi
+  `chatSync: serverAccountsUseChatApi(user)`, cùng điều kiện với `mapAccountFromDB`. Trong DB chỉ
+  `aka_agent_desktop_account_snapshot` đọc `p_access.chatSync` (dò `pg_proc` 14/11), nên các RPC khác dùng chung `scope()`
+  (trang chiến dịch, chi tiết, lịch sử) không đổi. Tổ chức có Chat, tổ chức chạy trên App Server và tổ chức tách quyền app gửi
+  như cũ.
+- **Kiểm.** `node scripts/desktop-account-snapshot-chat-sync-smoke.cjs` (5 ca; dựng `desktopUiRepository.ts` thật với Supabase
+  giả). Truyền đường dẫn một bản `desktopUiRepository.ts` khác để đối chứng: bản `dev_3` trước sửa sai đúng ca tổ chức chạy trên
+  Fly. Kèm hai typecheck và `electron-vite build`.
+- **Còn lại.** Máy cài 9.6.0/9.7.0 vẫn tính sai tới khi phát hành bản mới. Muốn sửa ngay cho máy đã cài thì phải sửa chính hàm DB
+  (tự xét `aka_agent_zalo_server_flag_route(org)` thay vì tin cờ Desktop gửi); chưa làm.
+
 ## Giới hạn
 
-- Desktop chốt cờ lúc đăng nhập. Bật hoặc tắt cờ của tổ chức thì Desktop phải đăng nhập lại mới đổi đường.
+- Desktop chốt cờ lúc đăng nhập. Bật hoặc tắt cờ của tổ chức thì Desktop phải đăng nhập lại mới đổi đường. Gói Server được
+  thêm giữa phiên thì tự đổi đường trong ≤ 30 giây, nhưng chỉ ở bản Desktop sau 9.7.0 (mục V529).
 - Web đọc `/me` mỗi lần tải. iOS đọc theo nhịp làm mới phiên của app.
 - Lý do đang chờ và tab Hành động của tổ chức theo cờ đi theo đường chat. Riêng chiến dịch do engine v2 chạy (`zalo_message_phone` chỉ chữ), giới hạn được tính trong claim theo công thức Desktop. Màn này có thể lệch một chút với loại chiến dịch đó; xem kế hoạch mục 12.4.
 - Luồng chuyển chế độ staff kiểu cũ giữa Desktop và App Server (`requestRuntimeHandoff`, `requestDesktopHandoffReady`) không đổi. Luồng này không áp dụng cho tổ chức theo cờ, vì định tuyến theo tổ chức, không theo chế độ staff.

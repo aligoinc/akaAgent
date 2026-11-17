@@ -1,0 +1,119 @@
+{
+  "migration": "migrations/migration_v563_engine_facebook_signs_search.sql",
+  "ledger": {
+    "version": "20261117130301",
+    "name": "migration_v563_engine_facebook_signs_search",
+    "statementsMd5": "7b2346ed363ae76dd2662702ebc7ceaf",
+    "createdBy": null
+  },
+  "fileMd5": "7b2346ed363ae76dd2662702ebc7ceaf",
+  "appliedAtUtc": "2026-11-17T13:03:02Z",
+  "appliedAtVn": "2026-11-17 20:03:02",
+  "approvedBy": "anh (\"Apply rồi thử thật\", 17/11)",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT); chỉ dữ liệu, không DDL",
+  "preApply": {
+    "readAtUtc": "2026-11-17T13:02:52Z",
+    "ledgerMax": "migration_v562_campaign_agent_prompt_ios",
+    "blocks": {
+      "2909": "91e809e62911aea2c2391ae14676dc3b",
+      "2851": "30126bae87ff755164c80dbffda9d263",
+      "2874": "ffeb17c8967ab564098da8f641650674",
+      "2723": "91e809e62911aea2c2391ae14676dc3b",
+      "34": "30126bae87ff755164c80dbffda9d263",
+      "2627": "ffeb17c8967ab564098da8f641650674"
+    },
+    "signsMd5": "9eae00aad9c77a7b1e248f3a52ba73c0",
+    "fb40Md5": "7ead85c5fa88a906d167ce52f46ecc03",
+    "groupPostCommentRows": 0,
+    "fb11PostRows": 0,
+    "runningFacebookEngineTargets": 0,
+    "engineFacebook": "{\"mode\":\"orgs\",\"organizationIds\":[1]}"
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-17T13:03:16.893761+00:00",
+    "blocks": {
+      "2627": "ffeb17c8967ab564098da8f641650674",
+      "2723": "91e809e62911aea2c2391ae14676dc3b",
+      "2851": "06889369d1c9f77ef62c846fa8e27e82",
+      "2874": "f7c07500e06511bee20f1c409c185211",
+      "2909": "499445e4406d2095c951b5c1c9aef03d",
+      "34": "30126bae87ff755164c80dbffda9d263"
+    },
+    "steps2851": [
+      {
+        "commit": 2,
+        "id": 6,
+        "md5": "06889369d1c9f77ef62c846fa8e27e82",
+        "ops": [
+          "press:Enter"
+        ]
+      }
+    ],
+    "signsMd5": "7e25dd65faab148bcf55b93654852a16",
+    "policies": [
+      {
+        "action": "fb_post_group",
+        "camp": null,
+        "camp_eff": "none",
+        "err": "err_fb_group_cannot_post_not_member",
+        "id": 361,
+        "log": "Tài khoản chưa vào nhóm này nên chưa đăng bài được",
+        "run": "continue",
+        "streak": "ignore"
+      },
+      {
+        "action": "fb_comment",
+        "camp": "facebook_group_post",
+        "camp_eff": null,
+        "err": null,
+        "id": 362,
+        "log": null,
+        "run": null,
+        "streak": "ignore"
+      },
+      {
+        "action": "fb_comment",
+        "camp": "facebook_group_post",
+        "camp_eff": "none",
+        "err": "err_comment_frequency_limit",
+        "id": 363,
+        "log": null,
+        "run": "continue",
+        "streak": null
+      }
+    ],
+    "effective": {
+      "err_undefined|fb_comment|facebook_group_post|after_send.target_streak_effect": "ignore",
+      "err_undefined|fb_comment|facebook_comment_seeding|after_send.target_streak_effect": "increment",
+      "err_comment_frequency_limit|fb_comment|facebook_group_post|after_send": {
+        "campaign_effect": "none",
+        "run_effect": "continue",
+        "target_streak_effect": "ignore"
+      }
+    }
+  },
+  "scope": "Chỉ engine Facebook (engine.facebook bật riêng tổ chức 1). Bộ cũ không nạp block \"[engine]\", không đọc facebook.error_signs, không đọc auto_outcome_policies; block nguồn 34 / 2723 / 2627 giữ nguyên md5.",
+  "rollback": "migrations/rollback_v563_engine_facebook_signs_search.sql (chỉ chạy khi đang đúng bản V563)",
+  "doNotReapply": true,
+  "realTestsAfterApply": {
+    "account": "fb LD (auto_accounts 135, tổ chức 1), nhóm \"Nhóm private 1\" (164469482423151), app chạy từ nhánh claude/fb-engine-v2-error-fixes",
+    "campaigns": [
+      {
+        "id": 57682,
+        "setup": "10 ảnh + 1 video, comment bài của mình",
+        "result": "đăng thành công, không lấy được link; câu ⚠️ bỏ qua comment bài của mình; không bước / dòng comment; một outcome fb_post_group; hoàn thành"
+      },
+      {
+        "id": 57686,
+        "setup": "10 ảnh, comment tất cả, tối đa 2",
+        "result": "link posts/1421359133400840; comment 1 permalink/1421359133400840 (đúng bài vừa đăng), comment 2 permalink/1421199990083421 (bài khác); xem trên Facebook đúng"
+      },
+      {
+        "id": 57688,
+        "setup": "chạy bằng Page Flyby, không comment",
+        "result": "danh tính ban đầu Lee Danh → Flyby → đăng posts/1421362446733842 (Facebook: Bài viết của Flyby) → lượt trả danh tính về Lee Danh"
+      }
+    ],
+    "atVn": "2026-11-17 20:04–20:15"
+  }
+}

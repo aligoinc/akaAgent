@@ -26,8 +26,9 @@ import { isRenewalPortalUrl, type RenewalRequirement } from '../../../shared/ren
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
-import { loadZaloServerOnFly } from './zaloServerOnFlyRepository'
+import { resolveZaloServerOnFlyAtLogin } from '../../../shared/zaloServerOnFly'
 import { loadCampaignEngineV2Enabled } from './campaignEngineFlagRepository'
+import { loadFacebookEngineCatalog, loadFacebookEngineEnabled } from './facebookEngineRepository'
 
 const client = () => getSupabaseClient()
 
@@ -174,14 +175,19 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   const { entitlements, zaloAccountCapabilities, chatSyncEnabled } = entitlementAccess
   const appAccess = await loadAppAccessForStaff(staffRow.id, staffRow.username, staffRow.password)
   const isChatSync = appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled
-  // V498: chỉ hỏi khi tổ chức không Chat có quyền Server (thêm một lượt gọi lúc đăng nhập).
-  // V513: cờ engine v2 chọn bộ chạy chiến dịch Zalo QR/Web của bản này; chỉ hỏi khi tổ chức có quyền Zalo. Hai lượt gọi chạy song song.
-  const [zaloServerOnFly, campaignEngineV2] = await Promise.all([
-    !isChatSync && !appAccess.separateAccess && entitlements.zalo === true && zaloAccountCapabilities.server === true
-      ? loadZaloServerOnFly()
-      : Promise.resolve(false),
-    entitlements.zalo === true ? loadCampaignEngineV2Enabled() : Promise.resolve(false)
-  ])
+  // V513: cờ engine v2 của tổ chức; chỉ hỏi khi tổ chức có quyền Zalo. Cờ chọn bộ chạy chiến dịch Zalo QR/Web của bản này, và
+  // chọn nơi chạy tài khoản Zalo Server: bật = Fly (ChatApi), tắt = App Server (không còn hỏi V498 lúc đăng nhập).
+  const campaignEngineV2 = entitlements.zalo === true ? await loadCampaignEngineV2Enabled() : false
+  // V556: engine v2 cho Facebook theo thiết lập engine.facebook; chỉ hỏi khi tổ chức có quyền Facebook.
+  const facebookEngineV2 = entitlements.facebookCore === true || entitlements.facebookFanpage === true
+    ? await loadFacebookEngineEnabled() : false
+  // Nạp sẵn danh mục engine Facebook (workflow "[engine]", danh mục bước) để chiến dịch FB đầu tiên của phiên không phải chờ.
+  if (facebookEngineV2) void loadFacebookEngineCatalog(true).catch(error => console.warn('[auth] Không nạp được danh mục engine Facebook:', error))
+  const zaloServerOnFly = resolveZaloServerOnFlyAtLogin({
+    isChatSync,
+    separateAccess: appAccess.separateAccess,
+    orgEngineFlag: campaignEngineV2
+  })
 
   return {
     staffId: staffRow.id,
@@ -201,6 +207,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     isChatSync,
     zaloServerOnFly,
     campaignEngineV2,
+    facebookEngineV2,
     appAccess,
     chatSyncProducts,
     deviceLabel: deviceRecord.device_label || null,

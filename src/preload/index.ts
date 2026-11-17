@@ -18,6 +18,9 @@ import { EFFECTIVENESS_IPC, type EffectivenessIpcRequest, type EffectivenessIpcR
 import { DATA_REPORT_IPC, type DataReportIpcRequest, type DataReportIpcResponses, type DataReportIpcResult } from '../shared/dataReportIpc'
 import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type CampaignRunReportIpcResult } from '../shared/campaignRunReportIpc'
 import {
+  CAMPAIGN_RESULT_ACTIONS_IPC, type CampaignResultActionsIpcRequest, type CampaignResultActionsIpcResponses, type CampaignResultActionsIpcResult
+} from '../shared/campaignResultActionsIpc'
+import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
@@ -50,6 +53,8 @@ import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../shared/aiChatDesktop'
+import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
+import type { AffPartnerResponse } from '../shared/affPartner'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
@@ -240,6 +245,12 @@ const electronAPI = {
 
   aiChatCall: (action: AiChatDesktopAction, payload: Record<string, unknown>): Promise<AiChatIpcResult> =>
     ipcRenderer.invoke(AI_CHAT_IPC.call, action, payload),
+
+  // Giới thiệu nhận hoa hồng (docs/AFF_PARTNER_DESKTOP.md): đọc DB chỉ khi mở hộp thoại / bấm mở trang quản lý.
+  affPartnerSummary: (): Promise<AffPartnerIpcResult<AffPartnerResponse>> =>
+    ipcRenderer.invoke(AFF_PARTNER_IPC.summary),
+  affPartnerOpenPortal: (): Promise<AffPartnerIpcResult<AffPartnerOpenPortalResult>> =>
+    ipcRenderer.invoke(AFF_PARTNER_IPC.openPortal),
 
   openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),
@@ -705,6 +716,10 @@ const electronAPI = {
 
   campaignRunReport: (request: CampaignRunReportIpcRequest): Promise<CampaignRunReportIpcResult> =>
     ipcRenderer.invoke(CAMPAIGN_RUN_REPORT_IPC, request),
+
+  // Tab Kết quả chạy → bộ lọc Hành động / "Gộp hành động vào một dòng" (V539/V540); không ném lỗi.
+  campaignResultActions: <R extends CampaignResultActionsIpcRequest>(request: R): Promise<CampaignResultActionsIpcResult<CampaignResultActionsIpcResponses[R['kind']]>> =>
+    ipcRenderer.invoke(CAMPAIGN_RESULT_ACTIONS_IPC, request),
 
   // Upload dữ liệu → "Lọc trùng dữ liệu" (V491/V493): công tắc và một lượt đối chiếu ≤ 2.000 SĐT; không ném lỗi.
   campaignInputDuplicates: <R extends CampaignInputDuplicatesIpcRequest>(request: R): Promise<CampaignInputDuplicatesIpcResult<CampaignInputDuplicatesIpcResponses[R['kind']]>> =>

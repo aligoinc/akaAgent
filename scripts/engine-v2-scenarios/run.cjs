@@ -20,6 +20,7 @@ const { spawnSync } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const { ROOT, MIGRATION, buildFixture, startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
 const W = require('./world.cjs')
+const { bootstrap } = require('./bootstrap.cjs')
 const { makePort } = require('./port.cjs')
 
 const args = process.argv.slice(2)
@@ -62,77 +63,6 @@ async function loadEngine() {
 // DB thử
 // ---------------------------------------------------------------------------------------------------------------------------
 
-async function bootstrap(db, notes) {
-  const build = n => require(`../build-v${n}-sql.cjs`).migration
-  await buildFixture(db, [])
-  await db.query(MIGRATION)
-  await db.query(build(499))
-  await db.query(fs.readFileSync(path.join(ROOT, 'migrations/migration_v500_zalo_error_policies.sql'), 'utf8'))
-  for (const n of [501, 503, 504, 505, 506, 507, 508, 509, 512]) await db.query(build(n))
-  for (const f of ['migration_v513_engine_desktop_flag.sql', 'migration_v514_status_system_group_guard.sql']) {
-    try { await db.query(fs.readFileSync(path.join(ROOT, 'migrations', f), 'utf8')); notes.push(`${f}: đã apply`) } catch (error) {
-      await db.query('ROLLBACK').catch(() => {})
-      notes.push(`${f}: không apply được trên fixture (${String(error.message).slice(0, 140)})`)
-    }
-  }
-  // Theo thứ tự production: V515 (sửa B, C, D của bộ thử 13/11) rồi V517 (dọn bảng, decision chỉ còn result + contrib); V527 (claim bỏ
-  // qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng; apply production 14/11 02:07 VN, không phụ thuộc V515 / V517).
-  // SCENARIO_SKIP_MIGRATIONS=515,517,527 để chạy trên DB trước các bản đó (so trước / sau); bỏ V515 thì phải bỏ cả V517.
-  const skip = new Set(String(process.env.SCENARIO_SKIP_MIGRATIONS || '').split(',').map(s => s.trim()).filter(Boolean).map(Number))
-  if (skip.has(515) && !skip.has(517)) throw new Error('SCENARIO_SKIP_MIGRATIONS: V517 dựng trên V515, bỏ V515 thì bỏ cả 517')
-  for (const n of [515, 517, 527]) {
-    if (skip.has(n)) { notes.push(`V${n}: bỏ qua (SCENARIO_SKIP_MIGRATIONS)`); continue }
-    await db.query(build(n))
-    notes.push(`V${n}: đã apply`)
-  }
-  // Nhóm data: hàm kết thúc thật của production + bảng nguồn tối thiểu (như replay.cjs).
-  await db.query(`CREATE TABLE public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,
-    organization_id bigint, status text NOT NULL, stopped_at timestamptz, stop_reason text, updated_at timestamptz DEFAULT now())`)
-  await db.query(`CREATE FUNCTION public.aka_agent_internal_require_staff_tenant(p_staff_id bigint, p_organization_id bigint) RETURNS void
-    LANGUAGE plpgsql AS $$ BEGIN END $$`)
-  await db.query(`CREATE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint) RETURNS void LANGUAGE sql
-    AS $$ SELECT pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0)) $$`)
-  await db.query(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/campaign-outcome-engine/data-group-finalizer-v219.sql'), 'utf8'))
-  // Chỉ ở DB thử: "thời gian trôi 70 phút" giữa hai vòng: khoá thao tác hết hạn trong 70 phút tới coi như đã mở (khoá theo ngày giữ nguyên).
-  await db.query(`CREATE FUNCTION public.aka_agent_scenario_time_passes(p_accounts bigint[]) RETURNS integer LANGUAGE sql AS $f$
-    WITH u AS (UPDATE public.auto_account_action_status SET date_enable = now() - interval '1 second'
-      WHERE account_id = ANY(p_accounts) AND is_disable AND date_enable IS NOT NULL AND date_enable <= now() + interval '70 minutes' RETURNING 1)
-    SELECT count(*)::integer FROM u $f$`)
-  // Chống gửi lặp N ngày: hàm của production không có trong fixture; bản thay theo đúng hợp đồng (V367: chỉ tính lần gửi thành công,
-  // cùng tài khoản hoặc mọi tài khoản của nhân viên, tạm dừng data kèm câu "đã gửi tin trước đó ngày …").
-  await db.query(`CREATE FUNCTION public.aka_agent_apply_campaign_delivery_cooldown(p_campaign_id bigint, p_account_id bigint, p_staff_id bigint, p_input_data_ids bigint[])
-    RETURNS TABLE(input_data_id bigint, decision text, note text, last_sent_at timestamptz, eligible_date date, source_campaign_id bigint, source_campaign_name text)
-    LANGUAGE plpgsql AS $f$
-    DECLARE d record; c record; v_days integer; v_all boolean; v_last record; v_note text;
-    BEGIN
-      SELECT * INTO c FROM public.auto_campaigns WHERE id = p_campaign_id;
-      v_days := greatest(1, coalesce(nullif(c.extra_settings->>'recentDeliveryCooldownDays', '')::integer, 3));
-      v_all := coalesce((c.extra_settings->>'recentDeliveryCooldownAllAccounts')::boolean, false);
-      FOR d IN SELECT x.* FROM public.auto_campaign_input_data x WHERE x.id = ANY(p_input_data_ids) ORDER BY x.id FOR UPDATE LOOP
-        IF d.status <> 'chờ xử lý' THEN
-          RETURN QUERY SELECT d.id, 'not_pending'::text, 'Data không còn ở trạng thái chờ xử lý.'::text, NULL::timestamptz, NULL::date, NULL::bigint, NULL::text;
-          CONTINUE;
-        END IF;
-        SELECT det.created_at, det.campaign_id, cc.name INTO v_last
-          FROM public.auto_campaign_details det JOIN public.auto_campaign_input_data i ON i.id = det.input_data_id
-          JOIN public.auto_campaigns cc ON cc.id = det.campaign_id
-         WHERE det.status = 'thành công' AND det.action_code IN ('zalo_message_stranger', 'zalo_message_friend', 'zalo_add_friend')
-           AND i.id <> d.id AND coalesce(nullif(i.phone, ''), i.uid) = coalesce(nullif(d.phone, ''), d.uid)
-           AND det.created_at > now() - make_interval(days => v_days)
-           AND CASE WHEN v_all THEN cc.staff_id = c.staff_id ELSE det.account_id = p_account_id END
-         ORDER BY det.created_at DESC LIMIT 1;
-        IF FOUND THEN
-          v_note := 'Tạm dừng: đã gửi tin trước đó ngày ' || to_char(v_last.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh', 'DD/MM/YYYY') || '. Gửi lại từ '
-            || to_char((v_last.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date + v_days, 'DD/MM/YYYY') || '.';
-          UPDATE public.auto_campaign_input_data SET status = 'tạm dừng', note = v_note WHERE id = d.id;
-          RETURN QUERY SELECT d.id, 'paused_recent_delivery'::text, v_note, v_last.created_at, ((v_last.created_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date + v_days),
-            v_last.campaign_id, v_last.name;
-        ELSE
-          RETURN QUERY SELECT d.id, 'allowed'::text, NULL::text, NULL::timestamptz, NULL::date, NULL::bigint, NULL::text;
-        END IF;
-      END LOOP;
-    END $f$`)
-}
 
 async function insertRows(db, table, rows) {
   if (!rows.length) return
@@ -780,6 +710,47 @@ async function faultScenarios(run, db, E) {
     const rb = await runCampaignToRest(run, b, { ...quiet, scenario: 'S15b' })
     const sentB = sendsOf(b.campaignId).filter(s => s.part === 'text').length
     ok('S15 chống gửi lặp: chiến dịch thứ hai không gửi lại số đã gửi', sentB === 0, { reason: rb.result?.reason, sentB, statusesB: await closedNotes(b.targetIds) })
+  }
+  // S30–S31: "Lặp lại sau khi chạy xong" (V561; chỉ khi SCENARIO_CAMPAIGN_REPEAT=1): lõi thật chạy một chiến dịch lặp 1 giờ, tối đa 3 lượt,
+  // trên Desktop và Fly; giữa hai lượt tua thời gian tới giờ lượt kế. Mỗi lượt gửi đúng một lần cho mỗi data, câu tiến trình có "lượt i/3",
+  // lượt 3 hoàn thành "(đã chạy đủ 3 lượt)". Gửi lặp giữa các lượt là đúng cài đặt nên ghi vào nhật ký riêng, không đưa vào bất biến I1.
+  if (process.env.SCENARIO_CAMPAIGN_REPEAT === '1') {
+    const repeatLog = { sends: [], events: [], lines: [], traces: [], units: [], db: [] }
+    const rrun = { ...run, log: repeatLog }
+    const vnDay = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10)
+    const repeatExtra = { repeatAfterCompletionEnabled: true, repeatAfterCompletionEvery: 1, repeatAfterCompletionUnit: 'hour', repeatAfterCompletionMaxRuns: 3 }
+    for (const [id, rt] of [[9030, 'desktop'], [9031, 'fly']]) {
+      const e = await mk(id, rt, 4, repeatExtra, { original_schedule: `${vnDay}T00:05:00+07:00`, daily_stop_time: null })
+      await db.query(`SELECT public.aka_agent_campaign_repeat_sync_v1($1, $2)`, [e.staffId, e.campaignId])
+      const rounds = []
+      for (let round = 1; round <= 3; round++) {
+        const sendFrom = repeatLog.sends.length
+        const lineFrom = repeatLog.lines.length
+        const r = await runCampaignToRest(rrun, e, { ...quiet, scenario: `S${id - 9000}r${round}` })
+        const c = (await db.query(`SELECT status, schedule, repeat_runs_done FROM public.auto_campaigns WHERE id = $1`, [e.campaignId])).rows[0]
+        const st = await statusOf(e.targetIds)
+        const texts = repeatLog.sends.slice(sendFrom).filter(x => x.campaignId === e.campaignId && x.part === 'text')
+        const perTarget = new Map()
+        for (const x of texts) perTarget.set(x.inputDataId, (perTarget.get(x.inputDataId) || 0) + 1)
+        const lines = repeatLog.lines.slice(lineFrom).filter(l => l.campaignId === e.campaignId).map(l => l.text)
+        rounds.push({ round, reason: r.result?.reason, status: c.status, runsDone: c.repeat_runs_done, texts: texts.length,
+          once: e.targetIds.every(t => perTarget.get(t) === 1), data: st.map(t => t.status), lines: lines.filter(t => /lượt|Hoàn thành/.test(t)) })
+        if (round < 3) {
+          // Thời gian trôi tới giờ lượt kế: lịch đến hạn, lịch sử ra khỏi khung hạn mức giờ, khoá theo phút hết hạn.
+          await db.query(`UPDATE public.auto_campaigns SET schedule = now() - interval '1 minute' WHERE id = $1`, [e.campaignId])
+          await db.query(`UPDATE public.auto_campaign_details SET created_at = created_at - interval '70 minutes' WHERE campaign_id = $1`, [e.campaignId])
+          await db.query(`SELECT public.aka_agent_scenario_time_passes($1::bigint[])`, [[e.accountId]])
+        }
+      }
+      const state = (await db.query(`SELECT private.aka_agent_campaign_repeat_state(c) AS s FROM public.auto_campaigns c WHERE c.id = $1`, [e.campaignId])).rows[0].s
+      const midOk = rounds.slice(0, 2).every((x, i) => x.status === 'chờ xử lý' && x.runsDone === i + 1 && x.once && x.texts === 4
+        && x.data.every(d => d === 'chờ xử lý') && x.lines.some(t => t.includes(`⏳ Đã chạy xong lượt ${i + 1}/3, hẹn chạy lại chiến dịch`)))
+      const last = rounds[2]
+      const lastOk = last.status === 'hoàn thành' && last.runsDone === 3 && last.once && last.texts === 4 && last.data.every(d => d === 'hoàn thành')
+        && last.lines.some(t => t.includes('(đã chạy đủ 3 lượt)')) && state.endedReason === 'max_runs'
+      ok(`S${id - 9000} lặp lại sau khi chạy xong (${rt}): 3 lượt, mỗi lượt gửi mỗi data một lần, lượt 3 hoàn thành`, midOk && lastOk,
+        { rounds, state: { runsDone: state.runsDone, endedReason: state.endedReason } })
+    }
   }
   return out
 }

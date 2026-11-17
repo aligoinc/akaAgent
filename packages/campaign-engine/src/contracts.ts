@@ -19,6 +19,15 @@ export interface Signal {
   message?: string
   /** Mã nội bộ đã biết chắc (auto_error.error_code), ví dụ do luật kiểm cấu hình sinh ra. */
   errorCode?: string
+  /**
+   * Facebook: toàn bộ vết thao tác của block lỗi (trần 200 thao tác / 64 KB, anh chốt Q15). DB giữ ở auto_engine_outcomes.signal
+   * (dọn sau 30 ngày), không chép vào dòng lịch sử khách xem (V558).
+   */
+  trace?: unknown
+  /** Facebook: mã ảnh lỗi lưu trên máy khách (lấy về theo yêu cầu chẩn đoán, anh chốt Q12). */
+  screenshotId?: string
+  /** Facebook: mã lượt workflow (auto_runs.id) để tra từ lượt data sang các bước (R1, aka_agent_engine_trace_v1). */
+  runId?: string
 }
 
 export interface Evidence {
@@ -53,6 +62,11 @@ export type RawOutcome =
       signal: Signal
       evidence?: Evidence
       data?: Record<string, unknown>
+      /**
+       * Trạng thái lịch sử do block trả (Facebook: actionResult.statusCode). Chính sách detail_mode = inherit (V558) ghi dòng lịch sử theo
+       * trạng thái này; DB từ chối trạng thái lạ (status_unknown). Zalo không gửi.
+       */
+      statusCode?: string
     }
 
 /** Một kết quả gửi lên aka_agent_engine_report_v1. result_key ổn định nên gửi bù là idempotent. */
@@ -98,7 +112,8 @@ export interface ReportSuccess {
   pace: { mode: PaceMode; seconds: number | null } | null
   outcomes: OutcomeDecision[]
   target: { done: boolean; status: string | null; note: string | null; schedule: string | null; morePending?: boolean | null }
-  streak?: { effect: string; count: number | null; threshold: number | null; source: string | null } | null
+  /** lastErrorCode: mã lỗi cuối của data vừa chốt (V558, Q11); bản DB cũ không có trường này. */
+  streak?: { effect: string; count: number | null; threshold: number | null; source: string | null; lastErrorCode?: string | null } | null
   campaign: { effect: string; note: string | null }
   account: { effect: string; loginEffect: string }
   safety: Array<Record<string, unknown>>
@@ -135,6 +150,13 @@ export interface ClaimContext {
     quota?: boolean }>
   /** Cần ít nhất một thao tác trong nhóm không phải chờ; cả nhóm chờ thì không nhận data. */
   requireAny?: string[]
+  /** V558: loại không có dòng data (trang cá nhân, newsfeed Facebook): nhận lượt theo lịch, mỗi mốc lịch một lượt. */
+  mode?: 'campaign_slot'
+  /**
+   * V558: chỉ nhận đúng các data này của chiến dịch (nhận thêm vào lượt đang chạy, cần leaseToken; tối đa 50): đăng nhóm kèm chia sẻ sang
+   * các nhóm đã chọn trong hộp đăng bài.
+   */
+  inputDataIds?: number[]
   // Hạn mức không do bộ chạy truyền: DB tính trong claim theo đúng công thức Desktop/VPS (aka_agent_engine_action_limit).
 }
 
@@ -176,7 +198,9 @@ export type ClaimResponse =
    * dataGroup: chiến dịch theo Nhóm data (chờ data mới, không tự hoàn thành).
    */
   | { status: 'no_target'; leaseToken: string; nextSchedule: string | null; runningTargets: number; hasTargets?: boolean; dueTried?: number; dataGroup?: boolean;
-      cooldownPaused?: CooldownPause[] }
+      cooldownPaused?: CooldownPause[]
+      /** V558: lượt theo lịch: mốc lịch này đã chạy (hoặc đang có lượt mở). */
+      slot?: boolean; slotAt?: string | null }
   | { status: 'not_due'; leaseToken: string; schedule: string }
   | { status: 'campaign_paused' | 'campaign_not_runnable'; leaseToken: string; campaignStatus?: string }
   /** Chiến dịch đang nạp data ban đầu (provisioning_state khác ready). */

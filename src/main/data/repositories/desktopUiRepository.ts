@@ -1,3 +1,4 @@
+import { CAMPAIGN_REPEAT_SETTING_KEY, parseCampaignRepeatAudience } from '../../../shared/campaignRepeat'
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { loadCurrentUserEffectiveEntitlements, loadCurrentUserZaloAccountCapabilities } from './entitlementRepository'
@@ -6,13 +7,15 @@ import type { CampaignConfig, CampaignLogSnapshot } from '../../../shared/types'
 import { validateHistoryQuery, type CampaignHistoryQuery, type CampaignHistoryPage } from '../../../shared/campaignHistory'
 import { listCampaignSummariesForPage, attachCampaignSecondaryAccountNames, attachCampaignDataGroupSourceSummaries } from './campaignRepository'
 import {
-  DEFAULT_DESKTOP_POLLING, DESKTOP_POLL_KEYS, DESKTOP_UI_TUNING_KEYS, DESKTOP_UI_TUNING_RANGES,
+  DEFAULT_DESKTOP_POLLING, DESKTOP_POLL_KEYS, DESKTOP_UI_TUNING_KEYS, DESKTOP_UI_TUNING_RANGES, FACEBOOK_MAX_COMMENTS_KEY, parseFacebookMaxComments,
   normalizeDesktopCampaignPageReadOptions, parseDesktopPollSeconds, parseDesktopUiFlag, parseDesktopUiSeconds,
   type DesktopAccountSnapshot, type DesktopCampaignPage, type DesktopCampaignPageQuery,
   type DesktopCampaignSelection, type DesktopCampaignSelectionQuery, type DesktopPollingSettings
 } from '../../../shared/desktopUiReads'
 import { ZALO_SHARE_REPEAT_SETTING_KEY, parseZaloShareRepeatSetting } from '../../../shared/zaloShareRepeat'
 import { RENEWAL_REMINDER_SETTING_KEY, parseRenewalReminderSettings } from '../../../shared/renewalReminder'
+import { serverAccountsUseChatApi } from '../../../shared/zaloServerOnFly'
+import { AFF_PARTNER_SETTING_KEY, parseAffPartnerAudience } from '../../../shared/affPartner'
 
 async function scope() {
   const user = requireCurrentUser()
@@ -21,7 +24,10 @@ async function scope() {
   return {
     p_staff_id: user.staffId, p_organization_id: user.organizationId,
     p_auth_username: auth.username, p_auth_password: auth.password,
-    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: user.isChatSync === true }
+    // `chatSync` chỉ dùng ở `aka_agent_desktop_account_snapshot` để tính `hasZaloSession` của tài khoản Server: true thì theo
+    // `login_status` (phiên nằm ở ChatApi), false thì theo `auto_accounts.zalo_session` (phiên App Server). Tài khoản Server của
+    // tổ chức chạy trên Fly theo cờ cũng giữ phiên ở ChatApi, nên dùng cùng điều kiện với `mapAccountFromDB`.
+    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: serverAccountsUseChatApi(user) }
   }
 }
 
@@ -29,7 +35,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY, FACEBOOK_MAX_COMMENTS_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
@@ -37,13 +43,18 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       campaigns: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.campaigns)),
       accounts: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.accounts)),
       zaloShareRepeatEnabled: parseZaloShareRepeatSetting(values.get(ZALO_SHARE_REPEAT_SETTING_KEY)),
+      campaignRepeatAudience: parseCampaignRepeatAudience(values.get(CAMPAIGN_REPEAT_SETTING_KEY)),
+      // Trần số comment Facebook (Q10): cùng câu đọc, thiếu dòng / sai = 20.
+      facebookMaxComments: parseFacebookMaxComments(values.get(FACEBOOK_MAX_COMMENTS_KEY)),
       // Giảm đọc khi không ai nhìn/khi số không đổi: cùng câu đọc này, thiếu dòng hoặc sai = tắt (như trước).
       hiddenPauseEnabled: parseDesktopUiFlag(values.get(DESKTOP_UI_TUNING_KEYS.hiddenPauseEnabled)),
       idleAfterSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idleAfterSeconds), DESKTOP_UI_TUNING_RANGES.idleAfterSeconds),
       idlePollSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idlePollSeconds), DESKTOP_UI_TUNING_RANGES.idlePollSeconds),
       progressRecountSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.progressRecountSeconds), DESKTOP_UI_TUNING_RANGES.progressRecountSeconds),
       // Nhắc gia hạn: cùng câu đọc, thiếu dòng/sai định dạng = tắt (docs/RENEWAL_REMINDER_DESKTOP.md).
-      renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY))
+      renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY)),
+      // Giới thiệu nhận hoa hồng: cùng câu đọc, thiếu dòng/sai JSON = ẩn mục menu (docs/AFF_PARTNER_DESKTOP.md).
+      affPartnerAudience: parseAffPartnerAudience(values.get(AFF_PARTNER_SETTING_KEY))
     }
   } catch { return { ...DEFAULT_DESKTOP_POLLING } }
 }

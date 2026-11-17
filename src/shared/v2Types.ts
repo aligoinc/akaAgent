@@ -140,6 +140,8 @@ export interface RunStepV2 {
   durationMs?: number
   startedAt?: string
   completedAt?: string
+  /** Khoá mốc của lần chạy node: nodeId, trong vòng lặp thêm #i (lồng nhau #i.j). Engine v2 Facebook gắn kết quả theo khoá này. */
+  stepKey?: string
 }
 
 export interface RunV2 {

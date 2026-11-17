@@ -161,7 +161,13 @@ import {
   ZALO_SHARE_REPEAT_DEFAULT_MINUTES, ZALO_SHARE_REPEAT_MAX_MINUTES, ZALO_SHARE_REPEAT_MIN_MINUTES,
   ZALO_SHARE_REPEAT_MINUTES_ERROR, parseZaloShareRepeatMinutes
 } from '../../../../shared/zaloShareRepeat'
+import {
+  CAMPAIGN_REPEAT_DEFAULTS, CAMPAIGN_REPEAT_EVERY_LIMITS, CAMPAIGN_REPEAT_MAX_RUNS, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_UNIT_LABELS,
+  campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
+} from '../../../../shared/campaignRepeat'
+import { campaignRepeatFromLegacyRerun } from '../../../../shared/campaignRepeatDesktop'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
+import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
 import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
@@ -1694,6 +1700,11 @@ export default function CampaignAgentFormModal({
   const authUser = useAuthStore(state => state.user)
   // Công tắc hiển thị "Gửi lặp lại sau mỗi x phút" (cùng công tắc với Web, đọc một lần khi đăng nhập).
   const zaloShareRepeatFeatureEnabled = useDesktopPollingStore(state => state.settings.zaloShareRepeatEnabled === true)
+  // Q10: trần số comment / số bài cần comment của Facebook (facebook.max_comments, mặc định 20).
+  const facebookMaxComments = useDesktopPollingStore(state => state.settings.facebookMaxComments ?? DEFAULT_FACEBOOK_MAX_COMMENTS)
+  // Công tắc "Lặp lại sau khi chạy xong" (campaign.repeat_after_completion, cùng công tắc với Web, đọc một lần khi đăng nhập).
+  const campaignRepeatAudience = useDesktopPollingStore(state => state.settings.campaignRepeatAudience)
+  const campaignRepeatFeatureVisible = campaignRepeatVisible(campaignRepeatAudience, authUser?.isAdminAkabiz === true)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -1889,6 +1900,23 @@ export default function CampaignAgentFormModal({
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     zaloShareRepeatEnabled: campaign?.extraSettings?.zaloShareRepeatEnabled === true,
     zaloShareRepeatAfterMinutes: String(parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes) ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES),
+    // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts): số giữ dạng chuỗi như ô nhập; ngày kết thúc chỉ có khi đang bật lặp.
+    ...(() => {
+      const stored = readCampaignRepeat(campaign?.extraSettings as Record<string, unknown> | undefined)
+      // Bốn loại Facebook đang lưu "Chạy lại sau mỗi x giờ" kiểu cũ: mở form là đổi sang cài đặt mới (src/shared/campaignRepeatDesktop.ts).
+      const legacy = campaignRepeatFeatureVisible ? campaignRepeatFromLegacyRerun(campaign ? {
+        actionId: campaign.actionId, scheduleType: campaign.scheduleType, dataTargetSourceMode: campaign.dataTargetSourceMode,
+        extraSettings: campaign.extraSettings as Record<string, unknown> | undefined
+      } : null) : null
+      const saved = legacy ? { enabled: true, ...legacy } : stored
+      return {
+        repeatAfterCompletionEnabled: saved.enabled,
+        repeatAfterCompletionEvery: String(saved.every ?? CAMPAIGN_REPEAT_DEFAULTS.every),
+        repeatAfterCompletionUnit: (saved.unit ?? CAMPAIGN_REPEAT_DEFAULTS.unit) as CampaignRepeatUnit,
+        repeatAfterCompletionMaxRuns: String(saved.maxRuns ?? CAMPAIGN_REPEAT_DEFAULTS.maxRuns),
+        repeatEndDate: stored.enabled && campaign?.scheduleEndDate ? formatScheduleVietnam(new Date(campaign.scheduleEndDate)).slice(0, 10) : ''
+      }
+    })(),
     content: initialManualDraft.content,
     formattedContentEnabled: initialManualDraft.formattedContentEnabled,
     advancedContentEnabled: hasSavedAdvancedGroupSnapshot
@@ -3453,6 +3481,24 @@ export default function CampaignAgentFormModal({
   // Ô đang ẩn (công tắc tắt) vẫn giữ cài đặt đã lưu, trừ khi người dùng bật nhiều khung giờ hoặc chống gửi lặp.
   const usesZaloShareRepeat = supportsZaloShareRepeatOption && formData.zaloShareRepeatEnabled === true &&
     !usesMultiDailyTimeSlots && !recentDeliveryCooldownActive
+  // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts): lịch Hàng ngày, data nhập trực tiếp, chọn một trong hai với nhiều
+  // khung giờ. Đơn vị theo loại chiến dịch; mảng rỗng = loại này không có nhóm lặp.
+  const campaignRepeatSupportedUnits = isMobileManagedSmsCampaign ? [] : campaignRepeatUnits(formData.actionId, {
+    zaloMessageSendMode: isZaloShareMessageMode ? 'share' : undefined,
+    dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
+    scheduleType: isZaloMessageGroupRealtimeCampaign ? 'daily' : formData.scheduleType
+  })
+  const showCampaignRepeat = campaignRepeatFeatureVisible && campaignRepeatSupportedUnits.length > 0
+  const campaignRepeatActive = showCampaignRepeat && formData.repeatAfterCompletionEnabled === true && !usesMultiDailyTimeSlots
+  // Đơn vị đã lưu không còn hợp loại chiến dịch thì dùng đơn vị ngày (đơn vị cuối của danh sách).
+  const campaignRepeatUnit: CampaignRepeatUnit = campaignRepeatSupportedUnits.includes(formData.repeatAfterCompletionUnit)
+    ? formData.repeatAfterCompletionUnit
+    : (campaignRepeatSupportedUnits[campaignRepeatSupportedUnits.length - 1] ?? CAMPAIGN_REPEAT_DEFAULTS.unit)
+  const campaignRepeatEvery = parseCampaignRepeatInteger(formData.repeatAfterCompletionEvery,
+    CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit].min, CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit].max)
+  const campaignRepeatMaxRuns = parseCampaignRepeatInteger(formData.repeatAfterCompletionMaxRuns, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_MAX_RUNS)
+  // Nhóm đang ẩn vì công tắc (không phải vì loại chiến dịch) vẫn giữ cài đặt đã lưu, trừ khi người dùng bật nhiều khung giờ.
+  const usesCampaignRepeat = campaignRepeatSupportedUnits.length > 0 && formData.repeatAfterCompletionEnabled === true && !usesMultiDailyTimeSlots
   const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 ||
     isCommentSeedingFeedCampaign
   const canUseFacebookRestBrowse = supportsFacebookRestBrowse(formData.actionId)
@@ -6212,7 +6258,7 @@ export default function CampaignAgentFormModal({
         })
       )
 
-      const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
+      const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : clampFacebookCommentCount(formData.postsPerTarget, facebookMaxComments)
       const effectiveEnableMessage = (
         isMessageFriendCampaign ||
         isPageInboxMessageCampaign ||
@@ -6247,8 +6293,11 @@ export default function CampaignAgentFormModal({
       const formOriginalSchedule = isEditingSavedCampaign && usesMultiDailyTimeSlots && preservedDraftSchedule?.multiSlotStart
         ? (campaign?.originalSchedule ?? formSchedule)
         : formSchedule
-      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
+      // Lịch Hàng ngày chỉ có ngày kết thúc khi đang bật "Lặp lại sau khi chạy xong" và người dùng có đặt.
+      const normalizedScheduleEndDate = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
         ? null
+        : formData.scheduleType === 'daily'
+          ? (usesCampaignRepeat && formData.repeatEndDate ? new Date(formData.repeatEndDate + 'T23:59:59+07:00').toISOString() : null)
         : (preservedDraftSchedule?.end?.iso
           ?? (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59+07:00').toISOString() : null))
       const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign ? 'daily' : formData.scheduleType
@@ -6460,7 +6509,7 @@ export default function CampaignAgentFormModal({
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
-            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
+            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : clampFacebookCommentCount(formData.commentCount, facebookMaxComments),
             commentContent: formData.commentContent,
             rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
             enablePostLike: formData.enablePostLike,
@@ -6663,7 +6712,8 @@ export default function CampaignAgentFormModal({
             searchGroupMineOnly: isFindDataSearchCampaign ? formData.searchGroupMineOnly : false,
             minSearchGroupMembers: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupMembers) || 0) : 0,
             minSearchGroupPostsPerDay: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupPostsPerDay) || 0) : 0,
-            findDataRerunEnabled: !isDataGroupSource && canUseRerunAfterCompletion ? formData.findDataRerunEnabled : false,
+            // Khung "Lặp lại sau khi chạy xong" đang hiện cho loại này (lịch Hàng ngày) thì cài đặt cũ tắt: hai cách không chạy cùng lúc.
+            findDataRerunEnabled: !isDataGroupSource && canUseRerunAfterCompletion && !showCampaignRepeat ? formData.findDataRerunEnabled : false,
             findDataRerunAfterHours: canUseRerunAfterCompletion
               ? normalizeHourValue(formData.findDataRerunAfterHours)
               : DEFAULT_FIND_DATA_RERUN_AFTER_HOURS,
@@ -6678,6 +6728,11 @@ export default function CampaignAgentFormModal({
                 ?? parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes)
                 ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES
             } : {}),
+            // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts).
+            repeatAfterCompletionEnabled: usesCampaignRepeat,
+            repeatAfterCompletionEvery: campaignRepeatEvery ?? CAMPAIGN_REPEAT_DEFAULTS.every,
+            repeatAfterCompletionUnit: campaignRepeatUnit,
+            repeatAfterCompletionMaxRuns: campaignRepeatMaxRuns ?? CAMPAIGN_REPEAT_DEFAULTS.maxRuns,
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
             postKeywords: canUsePostContentConditionsForSave ? formData.postKeywords : '',
             isFindPostByContentAI: canUsePostContentConditionsForSave ? formData.isFindPostByContentAI : false,
@@ -7153,6 +7208,21 @@ export default function CampaignAgentFormModal({
       showAlert(ZALO_SHARE_REPEAT_MINUTES_ERROR, 'error')
       return
     }
+    if (campaignRepeatActive) {
+      const repeatError = campaignRepeatError(
+        { unit: campaignRepeatUnit, every: campaignRepeatEvery, maxRuns: campaignRepeatMaxRuns },
+        campaignRepeatSupportedUnits,
+        recentDeliveryCooldownActive
+          ? { recentDeliveryCooldownEnabled: true, recentDeliveryCooldownDays: formData.recentDeliveryCooldownDays }
+          : {}
+      ) ?? (formData.repeatEndDate && formData.repeatEndDate < String(formData.schedule || '').slice(0, 10)
+        ? 'Ngày kết thúc phải từ ngày chạy trở đi.'
+        : null)
+      if (repeatError) {
+        showAlert(repeatError, 'error')
+        return
+      }
+    }
     let validatedMultiDailyTimeSlots: string[] | null = null
     if (usesMultiDailyTimeSlots) {
       const { slots, invalidItems } = parseDailyTimeSlots(formData.multiDailyTimeSlots)
@@ -7212,7 +7282,7 @@ export default function CampaignAgentFormModal({
       ? dedupeCampaignDataForSplit(formData.actionId, normalizedDetails).rows
       : normalizedDetails
     const findDataRerunHours = Math.floor(Number(formData.findDataRerunAfterHours))
-    if (!isDataGroupSource && canUseRerunAfterCompletion && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
+    if (!isDataGroupSource && canUseRerunAfterCompletion && !showCampaignRepeat && formData.findDataRerunEnabled && (!Number.isFinite(findDataRerunHours) || findDataRerunHours < 1)) {
       showAlert('Vui lòng nhập số giờ chạy lại lớn hơn hoặc bằng 1.', 'error')
       return
     }
@@ -8917,6 +8987,9 @@ export default function CampaignAgentFormModal({
         }
         setFormData(current => {
           const next = { ...current, ...patch }
+          // Q10: AI cũng không đặt quá trần số comment / số bài cần comment.
+          if (patch.commentCount !== undefined) next.commentCount = clampFacebookCommentCount(next.commentCount, facebookMaxComments)
+          if (patch.postsPerTarget !== undefined) next.postsPerTarget = clampFacebookCommentCount(next.postsPerTarget, facebookMaxComments)
           return kind === 'search' ? normalizeFindDataFlagState(next, { isSearchCampaign: isFindDataSearchCampaign }) : next
         })
       }
@@ -12979,7 +13052,7 @@ export default function CampaignAgentFormModal({
       const next = { ...current, actionLimitsByCode: { ...current.actionLimitsByCode } }
       if (patch.sleepBetweenActions !== undefined) next.sleepBetweenActions = patch.sleepBetweenActions
       if (patch.continueWhenActionLimitReached !== undefined) next.continueWhenActionLimitReached = patch.continueWhenActionLimitReached
-      if (patch.postsPerTarget !== undefined) next.postsPerTarget = Math.max(1, patch.postsPerTarget)
+      if (patch.postsPerTarget !== undefined) next.postsPerTarget = clampFacebookCommentCount(patch.postsPerTarget, facebookMaxComments)
       for (const { actionCode, values } of actions) {
         next.actionLimitsByCode[actionCode] = {
           ...(current.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, current)), ...values,
@@ -13207,8 +13280,9 @@ export default function CampaignAgentFormModal({
                   <input
                     type="number"
                     min={1}
+                    max={facebookMaxComments}
                     value={formData.commentCount} data-agent-field="commentCount" data-agent-filled={agent.changed('commentCount')}
-                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                    onChange={e => setFormData(p => ({ ...p, commentCount: clampFacebookCommentCount(e.target.value, facebookMaxComments) }))}
                     className="stepper-input"
                     style={{ width: 120 }}
                     disabled={formData.commentType !== 'others'}
@@ -13231,8 +13305,9 @@ export default function CampaignAgentFormModal({
                   <input
                     type="number"
                     min={1}
+                    max={facebookMaxComments}
                     value={formData.commentCount} data-agent-field="commentCount" data-agent-filled={agent.changed('commentCount')}
-                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                    onChange={e => setFormData(p => ({ ...p, commentCount: clampFacebookCommentCount(e.target.value, facebookMaxComments) }))}
                     className="stepper-input"
                     style={{ width: 120 }}
                     disabled={formData.commentType !== 'all'}
@@ -13486,7 +13561,7 @@ export default function CampaignAgentFormModal({
             <input
               type="checkbox"
               checked={formData.multiDailyTimeSlotsEnabled} data-agent-field="multiDailyTimeSlotsEnabled" data-agent-filled={agent.changed('multiDailyTimeSlotsEnabled')}
-              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked, ...(e.target.checked && showZaloShareRepeat ? { zaloShareRepeatEnabled: false } : {}) }))}
+              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked, ...(e.target.checked && showZaloShareRepeat ? { zaloShareRepeatEnabled: false } : {}), ...(e.target.checked && showCampaignRepeat ? { repeatAfterCompletionEnabled: false } : {}) }))}
             />
             <span>Chạy trong nhiều khung giờ trong 1 ngày</span>
           </label>
@@ -13555,6 +13630,71 @@ export default function CampaignAgentFormModal({
             </div>
           </>
         )}
+      </div>
+    )
+  }
+
+  // "Lặp lại sau khi chạy xong": cùng nội dung và câu chữ với Form 1 của Web (akaAgentWebApp CampaignRepeatFields).
+  const renderCampaignRepeatSection = () => {
+    if (!showCampaignRepeat) return null
+    const limits = CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit]
+    const rowStyle = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 } as const
+    const numberStyle = { width: 96, maxWidth: 96, marginTop: 0 } as const
+    return (
+      <div className="schedule-multi-window-panel schedule-repeat-panel">
+        <div className="schedule-multi-window-header"><span>Lặp lại sau khi chạy xong</span></div>
+        <div className="schedule-multi-window-body">
+          <label className="schedule-checkbox-label schedule-multi-window-checkbox">
+            <input
+              type="checkbox"
+              checked={campaignRepeatActive}
+              onChange={e => setFormData(p => ({
+                ...p,
+                repeatAfterCompletionEnabled: e.target.checked,
+                ...(e.target.checked ? { multiDailyTimeSlotsEnabled: false, zaloShareRepeatEnabled: false } : {})
+              }))}
+            />
+            <span>Chạy hết danh sách thì tự chạy lại <span className="schedule-hint-inline">(Không bật: chạy hết danh sách là hoàn thành chiến dịch)</span></span>
+          </label>
+          {campaignRepeatActive && (
+            <>
+              <div className="schedule-share-repeat-row" style={rowStyle}>
+                <span>Chạy lại sau mỗi</span>
+                <input
+                  type="number" inputMode="numeric" aria-label="Khoảng lặp lại" className="stepper-input" style={numberStyle}
+                  min={limits.min} max={limits.max} step={1}
+                  value={formData.repeatAfterCompletionEvery ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionEvery: e.target.value, repeatAfterCompletionUnit: campaignRepeatUnit }))}
+                />
+                {campaignRepeatSupportedUnits.length > 1 ? (
+                  <select
+                    aria-label="Đơn vị lặp lại" className="stepper-input" style={{ width: 110, maxWidth: 110, marginTop: 0 }}
+                    value={campaignRepeatUnit}
+                    onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionUnit: e.target.value as CampaignRepeatUnit }))}
+                  >
+                    {campaignRepeatSupportedUnits.map(unit => <option key={unit} value={unit}>{CAMPAIGN_REPEAT_UNIT_LABELS[unit]}</option>)}
+                  </select>
+                ) : <span>{CAMPAIGN_REPEAT_UNIT_LABELS[campaignRepeatUnit]}</span>}
+              </div>
+              <div className="schedule-share-repeat-row" style={rowStyle}>
+                <span>Số lượt tối đa</span>
+                <input
+                  type="number" inputMode="numeric" aria-label="Số lượt tối đa" className="stepper-input" style={numberStyle}
+                  min={CAMPAIGN_REPEAT_MIN_RUNS} max={CAMPAIGN_REPEAT_MAX_RUNS} step={1}
+                  value={formData.repeatAfterCompletionMaxRuns ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionMaxRuns: e.target.value }))}
+                />
+                <span>lượt, tính cả lượt đầu</span>
+              </div>
+              <div className="schedule-multi-window-notes">
+                <div>- Chạy hết danh sách thì nghỉ đủ khoảng trên rồi chạy lại từ đầu. Thời gian tính từ lúc chạy xong lượt trước.</div>
+                <div>- Dừng khi đủ số lượt tối đa hoặc tới "Ngày kết thúc" của lịch (nếu có đặt), điều kiện nào tới trước thì dừng.</div>
+                <div>- Lượt kế tiếp luôn nằm trong khung giờ chạy. Data đang tạm dừng không được chạy lại.</div>
+                <div>- Mỗi lượt vẫn tính vào giới hạn trong ngày của tài khoản.</div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     )
   }
@@ -17479,6 +17619,19 @@ export default function CampaignAgentFormModal({
                         className="stepper-input"
                       />
                     </div>
+                    {formData.scheduleType === 'daily' && campaignRepeatActive && (
+                      <div className="stepper-form-group schedule-end-date-field">
+                        <label>Ngày kết thúc</label>
+                        <input
+                          type="date" aria-label="Ngày kết thúc"
+                          min={String(formData.schedule || '').slice(0, 10) || undefined}
+                          value={formData.repeatEndDate ?? ''}
+                          onChange={e => setFormData(p => ({ ...p, repeatEndDate: e.target.value }))}
+                          className="stepper-input"
+                        />
+                        <span className="schedule-hint">Để trống: chỉ dừng khi đủ số lượt tối đa.</span>
+                      </div>
+                    )}
                     {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign && (
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
@@ -17493,7 +17646,7 @@ export default function CampaignAgentFormModal({
                         </span>}
                       </div>
                     )}
-                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && (
+                    {(formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign) && !(formData.scheduleType === 'daily' && campaignRepeatActive) && (
                       <div className="stepper-form-group schedule-end-date-field schedule-placeholder-field" aria-hidden="true" />
                     )}
                   </div>
@@ -17588,7 +17741,7 @@ export default function CampaignAgentFormModal({
                     />
                   </div>}
 
-                  {!isDataGroupSource && canUseRerunAfterCompletion && (
+                  {!isDataGroupSource && canUseRerunAfterCompletion && !showCampaignRepeat && (
                     <div className="stepper-form-group" style={{ maxWidth: 360 }}>
                       <label className="schedule-checkbox-label">
                         <input
@@ -17623,6 +17776,7 @@ export default function CampaignAgentFormModal({
                   )}
 
                   {!isMobileManagedSmsCampaign && renderMultiDailyTimeSlotsSection()}
+                  {renderCampaignRepeatSection()}
                 </div>
               )}
             </div>
@@ -17704,8 +17858,9 @@ export default function CampaignAgentFormModal({
                           <input
                             type="number"
                             min={1}
+                            max={facebookMaxComments}
                             value={formData.postsPerTarget} data-agent-field="postsPerTarget" data-agent-filled={agent.changed('postsPerTarget')}
-                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: clampFacebookCommentCount(Number(e.target.value) || 1, facebookMaxComments) }))}
                             className="stepper-input stepper-input-with-unit"
                           />
                           <span className="stepper-input-unit">bài</span>

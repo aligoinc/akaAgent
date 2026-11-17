@@ -1,0 +1,45 @@
+{
+ "migration": "migration_v532_engine_aux_step_pause_claim_order",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "14/11/2026: \"Sửa cả hai\" (~15:35 VN, sau kiểm sức khoẻ engine v2), chốt giờ \"Tối nay sau 21h\", rồi ~20:00 VN \"apply luôn đi\" (gồm cho 49746, 50194 chạy lại)",
+ "tool": "node scripts/make-migration-ledger-apply.cjs migrations/migration_v532_engine_aux_step_pause_claim_order.sql migration_v532_engine_aux_step_pause_claim_order <tệp ra>; supabase db query --linked --workdir /Users/lequangnhut/Repos/akaAgent -f <tệp ra> (migration + dòng sổ cùng một giao dịch; statements[1] = nguyên văn tệp)",
+ "file_md5": "e89902cd395926f51556148bfd146f7b",
+ "file_bytes": 80362,
+ "rollback_file_md5": "8da9ba2c3fd649c160dbe22989912364",
+ "source_commit": "911b8112 (nhánh claude/engine-v532-aux-pause-claim-order, chưa merge lúc apply)",
+ "ledger": {
+  "version": "20261114130144",
+  "name": "migration_v532_engine_aux_step_pause_claim_order",
+  "statements_md5": "e89902cd395926f51556148bfd146f7b",
+  "statements_count": 1
+ },
+ "applied_at_vn": "2026-11-14 20:01:44–20:01:47 (exit 0, preflight / postflight trong tệp đạt)",
+ "what": "Chỉ thay thân public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean) và public.aka_agent_engine_claim_target_v1(jsonb). report_v1: hiệu ứng chiến dịch có ngưỡng chỉ áp qua nhánh ngưỡng (kết quả cộng chuỗi và đủ ngưỡng); bước phụ gắn tag / đổi tên lỗi NET01, NET03, lỗi code… không còn tạm dừng chiến dịch ngay. claim_target_v1: câu chọn data sắp theo d.id + 0 để không quét auto_campaign_input_data_pkey. Không đổi bảng, dữ liệu, chính sách, thiết lập, quyền.",
+ "precheck": {
+  "at_vn": "2026-11-14 20:01:15",
+  "ledger_v532": 0,
+  "ledger_tail": [
+   "20261114105422 migration_v533_data_group_friend_filter",
+   "20261114110620 migration_v534_data_group_friend_filter_bind_after_ingest",
+   "20261114111113 migration_v535_data_group_friend_agent_config"
+  ],
+  "report_before": {"prosrc_md5": "21afaaf3b1300cea2bf282e3cb9650c3", "def_md5": "12b0bc8ee9c3b578d10fe134c6d1b31f"},
+  "claim_before": {"prosrc_md5": "f8935a5a986f5ac4bcc1bde34284bbd6", "def_md5": "43e14ce4f69832d374d19d7ea5a0b1d5"},
+  "acl_both": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+  "active_ddl": 0,
+  "campaigns_to_resume": "49746, 50194: 'tạm dừng', ghi chú 'Kết nối mạng tạm thời gián đoạn (NET01)', không claim / unit token, không lease, 0 data đang chạy, tài khoản đã đăng nhập; 55619, 55806 (Desktop) khách đã tự chạy lại trước đó",
+  "edge_logs_rest_baseline": "12:40–13:00 UTC: ~120 nghìn request / 5 phút, p50 45 ms, p99 113–126 ms; lỗi 5xx chỉ là claim của Desktop chạm trần 3 giây, 2 lượt / phút (p99 claim 3.032–3.107 ms)"
+ },
+ "verify": {
+  "at_vn": "2026-11-14 20:01:56",
+  "ledger_statements_md5_equal_file": true,
+  "report_after": {"prosrc_md5": "5d9ffe2160fd653fc443f777103b36b1", "def_md5": "bc39ed663474fefd61de0d8c20454168"},
+  "claim_after": {"prosrc_md5": "d7c5aa16cb94d1955823a2ae2090c009", "def_md5": "f8ae40ad89e10800c79e02b4c1a53a30"},
+  "owner_secdef_config_acl_unchanged": true,
+  "postgrest_logs": "nhận lệnh nạp lại schema 13:01:46 UTC, truy vấn schema 5.105,7 ms, nạp xong 13:01:51 UTC; không có PGRST lỗi",
+  "edge_logs_rest": "13:01 UTC (phút apply): p99 295 ms, 63 request quá 1 giây, 5xx 2 (claim chạm trần trước apply); 13:02–13:06 UTC: 0 lỗi 5xx, 0 claim lỗi 500, p99 claim 105–174 ms, p99 REST 105–140 ms",
+  "resume": "20:02:05 VN: câu UPDATE có điều kiện như aka_agent_set_zalo_server_campaign_status ('tạm dừng' → 'chờ xử lý', note = NULL), đổi đúng 49746 và 50194",
+  "engine_after_apply": "13:01:47–13:06:43 UTC: 21 lượt data Fly, 117 lượt data Desktop; chiến dịch 34061 (cả ngày chưa chạy được lượt nào vì claim chạm trần) chạy 3 lượt, lượt cuối 20:04:46 VN; 49746 đang chạy, 6 lượt tới 20:06:23 VN; 50194 'chờ xử lý' do đạt giới hạn trong ngày của khách (LIM01, chạy tiếp 00:00 15/11); 0 kết quả có ngưỡng áp ngay ở bước phụ, 0 chiến dịch tạm dừng vì NET01 kể từ lúc apply"
+ },
+ "rollback": "migrations/rollback_v532_engine_aux_step_pause_claim_order.sql (trả report_v1 thân V517, claim_target_v1 thân V527; preflight đòi hai thân V532; DDL làm PostgREST nạp lại schema)"
+}

@@ -1,0 +1,59 @@
+{
+  "migration": "migration_v540_campaign_result_actions_desktop",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "ledger_version": "20261114171026",
+  "applied_at_vn": "2026-11-15T00:10:26+07:00",
+  "applied_via": "Supabase MCP apply_migration (file content verbatim)",
+  "authorized_by": "user reply 'có' (15/11/2026 ~00:08 VN) to 'tạo PR vào dev_3, và áp V540 lên akachat'",
+  "file_md5": "55a9e025328616e613a89402015706df",
+  "ledger_statements_md5": "55a9e025328616e613a89402015706df",
+  "ledger_rows_named_v540": 1,
+  "rollback_file": "migrations/rollback_v540_campaign_result_actions_desktop.sql",
+  "rollback_md5": "06b64be274a4c0768bc5324baf82fcca",
+  "v539_ledger_row": "none: the V539 SQL (WebApp scripts/sql/campaign-result-actions/migration_campaign_result_actions.sql, md5 e845efc8b9b2f37f0793addd316a599f) was run by the user in the SQL Editor on the evening of 14/11/2026 without a ledger row; not recorded here",
+  "preflight_read_only_at_vn": "2026-11-15T00:09:22+07:00",
+  "preflight": {
+    "ledger_last": "20261114162628 / migration_v538_data_group_friend_agent_prompt_campaign_recipients",
+    "ledger_rows_named_v539_or_v540": 0,
+    "other_branches_with_v539_v540": "none (all origin claude* branches of akaAgent scanned)",
+    "aka_agent_list_campaign_details_page_v3": {
+      "prosrc_md5": "4e5c300305409908295c49d5d1941224",
+      "functiondef_md5": "c876b7c6975f3438ff2bc5846b0ca528",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "config": ["search_path=pg_catalog, public", "statement_timeout=60s", "jit=off"],
+      "security_definer": true, "volatility": "stable", "owner": "postgres", "comment": null,
+      "aka_agent_desktop_execute": false
+    },
+    "aka_agent_read_campaign_result_recipients": {
+      "prosrc_md5": "3fe7e5982398b42cc73fcc0433109b05",
+      "functiondef_md5": "c402074db9df7d1ad18454e4a47cde21",
+      "acl": "{postgres=X/postgres,service_role=X/postgres}",
+      "config": ["search_path=pg_catalog, public", "statement_timeout=60s", "jit=off"],
+      "security_definer": true, "volatility": "stable", "owner": "postgres", "comment": null,
+      "aka_agent_desktop_execute": false
+    },
+    "active_client_backends": 63
+  },
+  "dry_run": "file body with the final COMMIT replaced by ROLLBACK, executed on production before the apply: preflight, both GRANTs and postflight passed; ACL read again afterwards was unchanged {postgres, service_role}",
+  "postflight": {
+    "acl_both": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+    "execute_both": { "aka_agent_desktop": true, "service_role": true, "anon": false, "authenticated": false },
+    "prosrc_md5_unchanged": ["4e5c300305409908295c49d5d1941224", "3fe7e5982398b42cc73fcc0433109b05"],
+    "functiondef_md5_unchanged": ["c876b7c6975f3438ff2bc5846b0ca528", "c402074db9df7d1ad18454e4a47cde21"],
+    "config_unchanged": ["search_path=pg_catalog, public", "statement_timeout=60s", "jit=off"],
+    "comment_unchanged": null,
+    "desktop_role_smoke": "BEGIN; SET LOCAL ROLE aka_agent_desktop; claims {\"role\":\"aka_agent_desktop\"} without sub; both readers entered and were refused by the identity chain with 42501 desktop_staff_scope_denied (not 'permission denied for function'); the block ended with RAISE so nothing was written"
+  },
+  "postgrest_reload": "none (GRANT does not fire pgrst_ddl_watch); postgrest_logs 16:40-17:16 UTC have no schema cache/PGRST/reload lines",
+  "edge_logs_17_05_17_10_utc": {
+    "requests_per_minute": "8,060-9,942",
+    "http_5xx": 0,
+    "http_503": 0
+  },
+  "postgrest_background": "'Warp server error: Thread killed by timeout manager' lines rise from 17:00 UTC (16 in 17:00-17:05, 57 in 17:05-17:10, 8 in 17:10-17:16), i.e. before the 17:10:26 UTC apply; unrelated to the grant",
+  "compatibility": [
+    "Grant only: no function body, attribute, table, index, policy, role/global timeout, pool or connection change.",
+    "Desktop builds without the action filter never call the two readers; Desktop 'Tất cả' keeps calling v2.",
+    "Rollback revokes only the two Desktop grants; the WebApp API (service_role) keeps working and Desktop falls back to 'Tất cả' with the 'đang được cập nhật' notice."
+  ]
+}

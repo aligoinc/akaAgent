@@ -72,9 +72,10 @@ import {
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
 import { isRecentDeliveryCooldownEnabled } from '../../shared/campaignDeliveryCooldown'
 import { parseZaloShareRepeatMinutes, supportsZaloShareRepeat } from '../../shared/zaloShareRepeat'
-import { IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
+import { CAMPAIGN_REPEAT_NO_DATA_ACTIONS, campaignRepeatUnits } from '../../shared/campaignRepeat'
+import { BlockResult, IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
-import { BlockScreenshotCaptureRequest, WorkflowEngineV2 } from '../v2/runtime/workflowEngine'
+import { BlockScreenshotCaptureRequest, WorkflowEngineV2, type RunResult, type WorkflowNodeHookInfo } from '../v2/runtime/workflowEngine'
 import type { BlockRuntimeHelpers, BlockRuntimeMetadata, GroupPendingContentCheckOptions, GroupPendingContentCheckResult } from '../v2/runtime/blockHelpers'
 import { BackgroundPageManager } from '../v2/runtime/backgroundPageManager'
 import {
@@ -94,6 +95,19 @@ import {
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
 import { DesktopEngineRunner } from '../engineAdapters/desktopEngineRunner'
+import { ENGINE_OBSERVATION_TTL_MS, engineWaitMessage, isEngineWaitingReason, type EngineClaimObservation } from '../engineAdapters/engineWaitReason'
+import { takeEngineContentIndex } from '../engineAdapters/desktopEngineData'
+import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters/facebook/desktopFacebookRunner'
+import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
+import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
+import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
+import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
+import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
+import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, saveErrorScreenshot, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
+import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
+import { mapCampaignInputDataFromDB } from '../data/mappers'
+import type { ConfigIssue, DeliveryState, Phase, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop, WorkflowTargetApi, WorkflowTargetEnd } from '../../../packages/campaign-engine/src/index'
+import { FACEBOOK_FIND_DATA_RESULT_NAME, facebookDefaultActionCodes, facebookResultName } from '../../../packages/campaign-engine/src/facebook/registry'
 import {
   CampaignMediaResolveError, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName, getMediaDownloadExtension,
   hasDeclaredMediaSource, resolveCampaignMediaSource
@@ -353,6 +367,90 @@ interface FailedCampaignRun {
   campaignName: string
   payload: CampaignFailureCleanupPayload
   cleanup: CampaignFailureCleanup
+}
+
+/** Engine v2 Facebook: lõi dừng giữa lúc báo dòng lịch sử (mất lease, DB từ chối): dừng bộ dựng, không làm việc kèm theo. */
+class FacebookEngineReportStop extends Error {
+  constructor() { super('Engine dừng khi đang báo kết quả'); this.name = 'FacebookEngineReportStop' }
+}
+
+/** Một lượt engine Facebook của một chiến dịch (mở lúc đầu lượt, đóng sau khi nhả lease). */
+interface FacebookEngineUnit {
+  account: AutoAccount
+  campaign: Campaign
+  catalog: FacebookEngineCatalog
+  workflow: import('../../shared/v2Types').WorkflowDef | null
+  workflowId: number
+  pageIdentity: FacebookCampaignPageIdentity | null
+  settings: FacebookRuntimeSettings
+  sourceLinks: string[]
+  sourceLinkIndex: number
+  pageInboxOpened: boolean
+  loggedSkipped: Set<string>
+  inputOrder: number[] | null
+  lastTarget: CampaignInputData | null
+  closed: boolean
+  /** Đăng nhóm kèm chia sẻ: data của chiến dịch đọc một lần mỗi lượt, như bộ cũ đọc một lần mỗi lần chạy (executeCampaign). */
+  shareDetails: CampaignInputData[] | null
+  /** Data đã có lượt trong lượt engine này (data chính và nhóm chia sẻ): claim không nhận lại data đã thử với lease này. */
+  tried: Set<number>
+}
+
+/** Khoá mốc "sắp gửi" của nhóm chia sẻ kèm (mỗi nhóm một lượt data riêng). */
+const FACEBOOK_SHARE_STEP_KEY = 'share_post'
+
+/** Đăng nhóm kèm chia sẻ trong một data: ứng viên, nhóm đã chọn trong hộp đăng bài, lượt data của từng nhóm, kết quả cú bấm Đăng. */
+interface FacebookEngineShare {
+  targets: GroupPostShareTarget[]
+  maxCount: number
+  /** Nhóm block fb_select_group_post_share_targets đã chọn (null: block chưa chạy). */
+  selected: GroupPostShareTarget[] | null
+  runs: Map<number, { targetRunId: number; target: GroupPostShareTarget; done: boolean }>
+  /** Khoá mốc bấm Đăng của data chính (beforeNode của bước gửi đăng nhóm). */
+  mainKey: string | null
+  postDelivery: DeliveryState | null
+  /** Không nhận / không ghi dấu được nhóm đã chọn: không bấm Đăng. */
+  aborted: boolean
+}
+
+function safePageUrl(page: PageController | null): string {
+  try { return page?.getURL() ?? '' } catch { return '' }
+}
+
+/** Chữ trên trang để so dấu hiệu lỗi (errorSigns.ts); đọc lỗi / quá 2 giây thì null, kết quả như hôm nay. */
+async function readFacebookPageSignTexts(page: PageController): Promise<string[] | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    const texts = await Promise.race([page.evaluate<unknown>(PAGE_SIGN_TEXTS_SCRIPT),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), PAGE_SIGN_TIMEOUT_MS) })])
+    return Array.isArray(texts) ? texts.filter((text): text is string => typeof text === 'string').slice(0, 300) : null
+  } catch {
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+interface FacebookEngineStepInfo {
+  step: ResolvedEngineStep
+  failure: (ReturnType<PageTrace['failureSignal']> & { threw: boolean; error: string | null }) | null
+  sendAttempted: boolean | null
+  pageState: Signal | null
+  /** Ảnh lỗi chụp sau block lỗi (lưu trên máy, mục 12). */
+  screenshotId?: string | null
+  /** Chữ trên trang đọc ngay sau block lỗi / trả mã lỗi, khi có dấu hiệu `page` cho thao tác (errorSigns.ts). */
+  pageTexts?: string[] | null
+}
+
+interface FacebookEngineTargetState {
+  stopped: WorkflowStop | null
+  refused: { key: string; actionCode: string; reason: string } | null
+  browserGone: 'browser_gone' | 'block_hang' | null
+  reportCount: number
+  /** Số mốc gửi của data chính đã ghi dấu "sắp gửi" (0: chưa tới mốc gửi nào). */
+  marked: number
+  /** auto_runs.id của lượt workflow (có ngay khi workflow tạo dòng lượt). */
+  runId: number | null
 }
 
 class CampaignRunUnitOwnershipLostError extends Error {
@@ -832,6 +930,8 @@ export class CampaignScheduler {
   private pauseRequests = new Set<number>()
   private serverZaloPauseBoundaries = new Map<number, ZaloServerPauseBoundary>()
   private preclaimLimitSkips = new Map<number, PreclaimLimitSkip>()
+  /** Engine v2: lần nhận lượt gần nhất mà chiến dịch còn phải chờ (RAM, theo chiến dịch), cho nút "Lý do đang chờ". */
+  private engineObservations = new Map<number, EngineClaimObservation>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
     signature: string; write: Promise<CampaignDetail | null>; helperDetail?: ZaloActionDetailOutput | null
@@ -861,6 +961,12 @@ export class CampaignScheduler {
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
   private campaignContentPreparationRuns = new Set<number>()
   private campaignContentMediaPaths = new Map<number, string[]>()
+  /** Engine v2 Facebook: chiến dịch đang báo dòng lịch sử lên engine (bộ dựng của bộ cũ chạy ở chế độ thu lại). */
+  private facebookEngineSinks = new Map<number, (action: CreateCampaignDetailInput) => Promise<CampaignDetail | null>>()
+  /** Engine v2 Facebook: câu tiến trình của bộ dựng đang thu lại (in sau khi báo kết quả). */
+  private facebookEngineProgress = new Map<number, Array<{ message: string; options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } }>>()
+  /** Engine v2: lấy vị trí nội dung xoay vòng theo lease engine thay cho token của bộ cũ. */
+  private engineContentIndexTakers = new Map<number, (actionCode: string, variantCount: number) => Promise<number>>()
   private activeCampaignRunUnits = new Map<number, CampaignRunUnitLease>()
   private failedCampaignRuns = new Map<number, FailedCampaignRun>()
   private attemptedRunErrorPolicies = new Set<number>()
@@ -901,7 +1007,7 @@ export class CampaignScheduler {
       engineEnabled: () => getCurrentUser()?.campaignEngineV2 === true,
       zaloRuntimeBlocked: () => this.zaloRuntimeBlockedForRestart || this.zaloRuntimeStopRequested,
       acceptingWork: () => this.running && !this.zaloRuntimeStopRequested,
-      logProgress: (campaign, text) => this.logCampaignProgress(campaign, text),
+      logProgress: (campaign, text) => this.logCampaignProgress(campaign, text, { engine: true }),
       broadcastCampaign: async campaignId => {
         const current = await this.supabase.getCampaign(campaignId)
         if (current) this.broadcastCampaignUpdate(current)
@@ -956,7 +1062,8 @@ export class CampaignScheduler {
         const rewritten = this.stripAiCodeFence(result.content)
         if (result.ok && rewritten) return rewritten
         throw new Error(result.error || 'AI trả về nội dung không hợp lệ.')
-      }
+      },
+      facebook: this.createFacebookEngineHost()
     })
     if (this.runtimeTarget === 'desktop' && this.proxyRuntime) this.webEnrichment = new WebEnrichmentService({
       ready: account => this.running && !this.isAccountStartupPending?.(account)
@@ -1074,11 +1181,24 @@ export class CampaignScheduler {
         const limit = await this.getCampaignPreclaimLimitStatus(account, campaign, action)
         signal.throwIfAborted()
         return limit ? this.buildLimitPreflightNote(limit) : null
+      },
+      // Chỉ RAM: kết quả nhận lượt gần nhất của engine cho đúng chiến dịch + tài khoản này (không gọi support() để khỏi nạp danh mục).
+      engineReason: (account, campaign) => {
+        const observation = this.engineObservations.get(campaign.id)
+        if (!observation || observation.accountId !== account.id) return null
+        const label = account.flatformType === 'facebook' ? 'Facebook' : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
+        return engineWaitMessage(observation, Date.now(), label)
       }
     }
   }
 
   start(options: SchedulerStartOptions = {}): void {
+    // Ảnh lỗi trên máy (engine v2 FB + block-screenshots của bộ cũ): giữ 14 ngày / 1 GB (anh chốt Q14).
+    if (this.runtimeTarget === 'desktop') {
+      void cleanupScreenshots().catch(() => undefined)
+      // Trần comment (Q10) và các ngưỡng FB đọc một lần lúc chạy bộ lập lịch (đọc lại sau 10 phút khi cần).
+      void loadFacebookRuntimeSettings().catch(() => undefined)
+    }
     if (this.running) return
     this.running = true
     this.lastTickAccounts = []
@@ -1781,6 +1901,12 @@ export class CampaignScheduler {
         }
 
         if (account.status !== 'chờ xử lý' || account.loginStatus !== 'đã đăng nhập') {
+          // Q21: đến lịch quá lâu mà chưa chạy được thì nói ra (bộ cũ bỏ qua im lặng).
+          const waitReason = account.status === 'tạm dừng' ? 'Tài khoản đang tạm dừng'
+            : account.status !== 'chờ xử lý' ? null
+              : account.loginStatus === 'checkpoint' ? 'Tài khoản đang bị Facebook yêu cầu xác minh (checkpoint)'
+                : 'Tài khoản chưa đăng nhập'
+          if (waitReason) await this.noteOverdueCampaignWaits(campaigns, waitReason, accountClock.dbNow)
           continue
         }
 
@@ -1800,6 +1926,8 @@ export class CampaignScheduler {
           || (account.flatformType === 'zalo' && account.isZaloShowWeb === true)
         if (hasBrowserCampaigns && !this.webviewRegistry.isRegistered(account.id)) {
           this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
+          await this.noteOverdueCampaignWaits(campaigns.filter(campaign => !this.isBrowserlessCampaign(campaign)),
+            'Tài khoản chưa mở tab trình duyệt', accountClock.dbNow)
           continue
         }
 
@@ -2099,7 +2227,10 @@ export class CampaignScheduler {
       }
       if (!this.running) break
       // Engine v2: loại chiến dịch đã tách sang lõi chạy bằng bộ mới (DB quyết định kết quả); bộ cũ bỏ qua chiến dịch đó.
-      if (this.engineRunner?.support(account, currentCampaign).ok) {
+      const engineSupport = this.engineRunner?.support(account, currentCampaign)
+      // Danh mục engine Facebook đang nạp (ngay sau đăng nhập): chờ lượt quét sau, không để bộ cũ chạy chiến dịch của tổ chức đã bật engine.
+      if (engineSupport && !engineSupport.ok && engineSupport.reason === 'catalog_loading') continue
+      if (this.engineRunner && engineSupport?.ok) {
         this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
         let engineResult: Awaited<ReturnType<DesktopEngineRunner['run']>> = null
         try {
@@ -2113,7 +2244,13 @@ export class CampaignScheduler {
         } finally {
           if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
         }
+        if (engineResult) this.observeEngineResult(account, currentCampaign, engineResult)
         if (engineResult?.reason === 'wait') await this.rememberEngineWait(account, currentCampaign, engineResult)
+        // Như bộ cũ: chiến dịch FB vừa chạy xong lượt thì cho lướt / làm giàu dữ liệu sau chiến dịch.
+        if (engineResult && account.flatformType === 'facebook' && ['no_target', 'not_due', 'end_unit', 'max_targets'].includes(engineResult.reason)) {
+          this.webEnrichment?.campaignFinished(account.id)
+          completedCampaignId = currentCampaign.id
+        }
         if (engineResult?.reason === 'concurrency_limit') {
           // Như concurrency_limit_reached của bản cũ: ghi câu chờ (khi đổi) rồi nhường hàng đợi của tài khoản.
           const note = browserRunLimitWaitNote(account)
@@ -2406,6 +2543,10 @@ export class CampaignScheduler {
     }
 
     if (await this.handleZaloShareRepeatAfterCompletion(campaign, now)) {
+      return
+    }
+
+    if (await this.handleCampaignRepeatAfterCompletion(campaign, now)) {
       return
     }
 
@@ -2705,6 +2846,63 @@ export class CampaignScheduler {
     return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
       emptyDataSuffix: 'ở lượt gửi lặp kế tiếp',
       scheduledLog: `⏳ Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
+    })
+  }
+
+  /**
+   * "Lặp lại sau khi chạy xong" (V561, docs/CAMPAIGN_REPEAT_V561.md): chiến dịch lịch Hàng ngày chạy hết danh sách thì hẹn chạy
+   * lại sau x phút / giờ / ngày, tới khi đủ số lượt tối đa hoặc tới ngày kết thúc. DB đếm lượt và tính giờ lượt kế
+   * (aka_agent_campaign_repeat_decide_v1); ở đây chỉ gọi khi lượt này thật sự chạy hết và còn data để chạy lại, rồi đặt lại data
+   * và hẹn lịch bằng phần chung với "nhiều khung giờ". Lượt kế có thể ở ngày sau: lịch tương lai không bị bước cập nhật lịch đầu
+   * ngày đụng tới.
+   *
+   * Bộ chạy trên App Server (runtimeTarget 'server') không gọi: hàm chuyển lượt của Zalo Server chỉ nhận nhắn bạn bè / group, nên
+   * chiến dịch hoàn thành như thường và bộ quét dự phòng trong DB mở lại. DB chưa có V561 hoặc lỗi gọi hàm: hoàn thành như
+   * thường (bộ quét vẫn mở lại nếu chiến dịch đã đăng ký lặp).
+   */
+  private async handleCampaignRepeatAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    const extra = campaign.extraSettings
+    if (extra?.repeatAfterCompletionEnabled !== true || this.runtimeTarget === 'server') return false
+    if (extra.multiDailyTimeSlotsEnabled === true) return false
+    const units = campaignRepeatUnits(campaign.actionId, {
+      zaloMessageSendMode: extra.zaloMessageSendMode,
+      dataTargetSourceMode: campaign.dataTargetSourceMode,
+      scheduleType: campaign.scheduleType || 'daily'
+    })
+    if (units.length === 0) return false
+
+    const details = (await this.supabase.listCampaignInputData(campaign.id)).filter(detail => !detail.isDelete)
+    // Còn data chờ (mới thêm giữa lượt) thì lượt này chưa xong: để bước hoàn thành thường xử lý, không đếm lượt.
+    if (details.some(detail => detail.status === 'chờ xử lý')) return false
+    const resettableCount = details.filter(detail => detail.status !== 'tạm dừng').length
+    // Không còn data để chạy lại thì không lặp; riêng đăng trang cá nhân và lướt newsfeed chạy không cần data.
+    if (details.length > 0 ? resettableCount === 0 : !CAMPAIGN_REPEAT_NO_DATA_ACTIONS.includes(campaign.actionId)) return false
+
+    let decision: Awaited<ReturnType<SupabaseService['decideCampaignRepeat']>>
+    try {
+      decision = await this.supabase.decideCampaignRepeat(campaign.id)
+    } catch (error) {
+      console.warn('[CampaignScheduler] campaign repeat decision failed:', campaign.id, error)
+      return false
+    }
+    if (!decision?.ok || decision.enabled !== true) return false
+
+    if (decision.repeat !== true || !decision.next) {
+      const reason = decision.reason === 'max_runs' && Number.isInteger(decision.maxRuns)
+        ? ` (đã chạy đủ ${decision.maxRuns} lượt)`
+        : decision.reason === 'end_date' ? ' (lượt lặp kế tiếp đã qua ngày kết thúc)' : ''
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"${reason}`)
+      }
+      return true
+    }
+
+    const nextSchedule = new Date(decision.next)
+    if (Number.isNaN(nextSchedule.getTime())) return false
+    return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
+      emptyDataSuffix: 'ở lượt lặp kế tiếp',
+      scheduledLog: `⏳ Đã chạy xong lượt ${decision.run}/${decision.maxRuns}, hẹn chạy lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
     })
   }
 
@@ -3576,12 +3774,28 @@ export class CampaignScheduler {
     })
   }
 
+  /** Nhớ (RAM) lần nhận lượt gần nhất mà chiến dịch vẫn phải chờ, để nút "Lý do đang chờ" / tab Chẩn đoán giải thích (R17). */
+  private observeEngineResult(account: AutoAccount, campaign: Campaign, result: { reason: string; detail?: Record<string, unknown> }): void {
+    if (!isEngineWaitingReason(result.reason)) {
+      this.engineObservations.delete(campaign.id)
+      return
+    }
+    const claim = result.detail?.claim
+    this.engineObservations.set(campaign.id, { accountId: account.id, reason: result.reason, at: Date.now(),
+      claim: claim && typeof claim === 'object' ? claim as Record<string, unknown> : null })
+    if (this.engineObservations.size > 2000) {
+      const cutoff = Date.now() - ENGINE_OBSERVATION_TTL_MS
+      for (const [id, observation] of this.engineObservations) if (observation.at < cutoff) this.engineObservations.delete(id)
+    }
+  }
+
   /**
    * Engine v2 chờ khoá/hạn mức: claim không dời lịch chiến dịch (V501, như bản cũ) nên nhớ tới wait.until, tối đa 5 phút,
    * để không hỏi DB mỗi tick. Khoá theo updated_at sau lượt (claim chỉ ghi câu chờ khi đổi); sửa chiến dịch thì kiểm lại ngay.
    */
   private async rememberEngineWait(account: AutoAccount, campaign: Campaign, result: { detail?: Record<string, unknown> }): Promise<void> {
-    if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo') return
+    const platform = String(account.flatformType || '').trim().toLowerCase()
+    if (platform !== 'zalo' && platform !== 'facebook') return
     const claim = result.detail?.claim as { wait?: { until?: string | null } } | undefined
     const until = claim?.wait?.until ? Date.parse(claim.wait.until) : Number.NaN
     const waitMs = Number.isFinite(until) ? Math.min(until - Date.now(), PRECLAIM_LIMIT_RECHECK_MAX_MS) : PRECLAIM_LIMIT_RECHECK_MAX_MS
@@ -5366,6 +5580,25 @@ export class CampaignScheduler {
     await this.releaseRunningAccount(account.id)
   }
 
+  /**
+   * Mời vào group chạy bằng engine: bộ cũ mời theo lô (runFacebookGroupInviteBatch, block đọc danh sách người mời và group nhận lời mời từ
+   * biến), engine chạy từng data nên truyền lô một người với đúng các biến đó. Thử thật 17/11: thiếu các biến này thì block báo
+   * "Link group nhận lời mời không hợp lệ" ở mọi data.
+   */
+  private facebookGroupInviteEngineVariables(campaign: Campaign, detail: CampaignInputData): Record<string, unknown> {
+    const extra = campaign.extraSettings || {}
+    const groupUrl = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)
+    const target = this.createFacebookGroupInviteTarget(detail)
+    return {
+      facebookGroupInviteTargetGroupUrl: groupUrl,
+      facebookGroupInviteTargetGroupName: this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupName, groupUrl),
+      facebookGroupInviteTargetGroupUid: this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUid),
+      // Lượt engine đã nhận hạn mức cho đúng một lời mời.
+      facebookGroupInviteQuotaCapacity: 1,
+      facebookGroupInviteTargets: [{ inputDataId: target.inputDataId, name: target.name, uid: target.uid, url: target.url, inputData: target.inputData }]
+    }
+  }
+
   private createFacebookGroupInviteTarget(detail: CampaignInputData): FacebookGroupInviteTarget {
     const uid = this.firstNonEmptyString(detail.uid)
     const name = this.firstNonEmptyString(detail.name, uid)
@@ -5444,6 +5677,957 @@ export class CampaignScheduler {
     }
 
     return { ok: true, capacity }
+  }
+
+  // ============================================================
+  // ENGINE V2 FACEBOOK (docs/CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_PLAN.md, cách C)
+  // Workflow cho engine (auto_engine_workflows) chạy từ DB như bộ cũ; lõi engine giữ lease, dấu "sắp gửi" theo mốc và chỉ thị của DB.
+  // Dòng lịch sử dựng bằng chính bộ dựng của bộ cũ ở chế độ thu lại (writeCampaignDetail) rồi báo lên engine theo khoá mốc; DB quyết
+  // định chính sách lỗi, hạn mức, data đi đâu. Mọi việc của một data giữ đúng thứ tự bộ cũ (executeCampaignV2).
+  // ============================================================
+
+  /** Host của bộ chạy engine Facebook (engineAdapters/facebook/desktopFacebookRunner.ts). */
+  private createFacebookEngineHost(): DesktopFacebookHost {
+    return {
+      enabled: () => getCurrentUser()?.facebookEngineV2 === true,
+      limitCheckActionCodes: async campaign => {
+        const action = await this.supabase.getCampaignAction(campaign.actionId)
+        return action && Array.isArray(action.limitCheckActionCodes) ? action.limitCheckActionCodes : null
+      },
+      sleepBetweenActionsSeconds: (account, campaign) => this.getEffectiveSleepBetweenActions(account, campaign.extraSettings?.actionLimits),
+      openUnit: (account, campaign, signal) => this.openFacebookEngineUnit(account, campaign, signal)
+    }
+  }
+
+  /** createCampaignDetail của bộ dựng lịch sử: chiến dịch đang chạy bằng engine thì báo kết quả lên engine thay vì ghi thẳng DB. */
+  private writeCampaignDetail(action: CreateCampaignDetailInput): Promise<CampaignDetail | null> {
+    const sink = action.campaignId != null ? this.facebookEngineSinks.get(Number(action.campaignId)) : undefined
+    return sink ? sink(action) : this.supabase.createCampaignDetail(action)
+  }
+
+  private async openFacebookEngineUnit(account: AutoAccount, campaign: Campaign, signal: AbortSignal): Promise<FacebookUnitSession> {
+    const issues: ConfigIssue[] = []
+    const issue = (errorCode: string, publicCode: string, message: string, field = 'config'): void => {
+      issues.push({ errorCode, publicCode, scope: 'campaign', field, message })
+    }
+    const [catalog, settings] = await Promise.all([loadFacebookEngineCatalog(), loadFacebookRuntimeSettings()])
+    signal.throwIfAborted()
+    const engineWorkflow = catalog.workflows.get(campaign.actionId)
+    const workflow = engineWorkflow ? await getWorkflow(engineWorkflow.workflowId) : null
+    if (!workflow) issue('err_system_block_load', 'SYS03', 'Chưa tải được workflow chạy chiến dịch này, vui lòng thử lại sau', 'workflow')
+    const extra = campaign.extraSettings || {}
+    const postWithBackground = !isNativeGroupPostShare(campaign.actionId, extra) && !this.isFormattedContentCampaign(campaign)
+      && extra.postWithBackground === true && (campaign.actionId === 'facebook_timeline_post'
+        || (campaign.actionId === PAGE_POST_ACTION_ID && (extra.pagePostMode || 'api') === 'ui') || campaign.actionId === GROUP_POST_ACTION_ID)
+    const advancedError = this.getAdvancedContentConfigError(campaign, !postWithBackground)
+    if (advancedError) issue('err_cfg_advanced_content_invalid', 'CFG16', advancedError, 'content')
+    if (isNativeGroupPostShare(campaign.actionId, extra)) {
+      const shareError = validateGroupPostShareLinks(extra.sourceLinks)
+      if (shareError || (workflow && workflow.defaultVariables.groupPostShareWorkflowVersion !== GROUP_POST_SHARE_WORKFLOW_VERSION)) {
+        issue('err_campaign_config_invalid', 'CFG02', shareError || 'Workflow chưa hỗ trợ chia sẻ bài viết vào nhóm', 'sourceLinks')
+      }
+    }
+    if (campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID
+      && !this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)) {
+      issue('err_campaign_config_invalid', 'CFG02', 'Vui lòng chọn group nhận lời mời trước khi chạy chiến dịch', 'facebookGroupInviteTargetGroupUrl')
+    }
+    const restBrowse = facebookRestBrowseSettings(extra.facebookRestBrowse)
+    const restBrowseError = supportsFacebookRestBrowse(campaign.actionId) ? validateFacebookRestBrowse(restBrowse) : null
+    if (restBrowseError) issue('err_campaign_config_invalid', 'CFG02', restBrowseError, 'facebookRestBrowse')
+    let pageIdentity: FacebookCampaignPageIdentity | null = null
+    if (workflow && extra.runAsPage === true) {
+      try {
+        await validateCampaignPageIdentity(campaign)
+        pageIdentity = new FacebookCampaignPageIdentity(campaign, workflow)
+        this.facebookPageIdentities.set(campaign.id, pageIdentity)
+      } catch (error) {
+        issue('err_campaign_config_invalid', 'CFG02', getErrorMessage(error) || 'Cấu hình chạy bằng Page chưa hợp lệ', 'runAsPage')
+      }
+    }
+    // Danh tính Page của lượt trước bị bỏ dở (app tắt giữa chừng, phương án mục 7.6): chuyển về trước khi nhận data.
+    const pendingRestore = readFacebookIdentityMarker(account.id)
+    if (pendingRestore && issues.length === 0) {
+      const restored = await this.restoreAbandonedFacebookIdentity(account, pendingRestore).catch(error => error as Error)
+      if (restored instanceof Error) {
+        issue('err_fb_identity_restore_failed', 'FB07', `Không chuyển về được danh tính ban đầu của tài khoản: ${restored.message}`, 'identity')
+      }
+    }
+    if (workflow?.defaultVariables.campaignContentPreparationVersion === 1) this.campaignContentPreparationRuns.add(campaign.id)
+    const shouldRotateSourceLink = !postWithBackground && (
+      (campaign.actionId === 'facebook_timeline_post' && (extra.copyContentFromSource === true || extra.sharePost === true)) ||
+      (campaign.actionId === PAGE_POST_ACTION_ID && extra.copyContentFromSource === true) ||
+      (campaign.actionId === GROUP_POST_ACTION_ID && (extra.copyContentFromSource === true || isNativeGroupPostShare(campaign.actionId, extra))))
+    const sourceLinks = shouldRotateSourceLink ? String(extra.sourceLinks || '').split(/[,\r\n]+/).map(s => s.trim()).filter(Boolean) : []
+    const unit: FacebookEngineUnit = {
+      account, campaign, catalog, workflow: workflow ?? null, workflowId: workflow?.id ?? 0, pageIdentity, settings,
+      sourceLinks, sourceLinkIndex: sourceLinks.length > 0 ? (((Number(extra.sourceLinkIndex || 0) % sourceLinks.length) + sourceLinks.length) % sourceLinks.length) : 0,
+      pageInboxOpened: false, loggedSkipped: new Set(), inputOrder: null, lastTarget: null, closed: false, shareDetails: null, tried: new Set()
+    }
+    return {
+      issues,
+      runTarget: api => this.runFacebookEngineTarget(unit, api),
+      onTargetEnd: async () => undefined,
+      reviseCampaignNote: (info, reviseSignal) => this.reviseFacebookEnginePauseNote(unit, info, reviseSignal),
+      close: result => this.closeFacebookEngineUnit(unit, result)
+    }
+  }
+
+  /**
+   * Q11 (anh chốt 16/11; 17/11: chỉ SYS99): chiến dịch FB chạy engine bị tạm dừng theo chuỗi data lỗi chưa phân loại (SYS99) thì AI đọc ảnh
+   * lỗi trên máy viết câu lý do, như bộ cũ (diagnoseUndefinedErrorWithScreenshot, cùng mã AI). Ghi lại ghi chú chiến dịch chỉ khi chiến dịch
+   * còn tạm dừng với đúng câu DB vừa ghi; không có ảnh, AI không trả câu hay lỗi thì giữ câu của DB (câu đã duyệt). Trả câu mới hoặc null.
+   */
+  private async reviseFacebookEnginePauseNote(unit: FacebookEngineUnit,
+    info: { targetRunId: number; inputDataId: number; response: ReportSuccess }, signal: AbortSignal): Promise<string | null> {
+    const { campaign: effect, streak } = info.response
+    const dbNote = effect.note
+    if (effect.effect !== 'pause' || !dbNote || !streak || streak.lastErrorCode !== 'err_undefined') return null
+    if (streak.count == null || streak.threshold == null || streak.count < streak.threshold) return null
+    const { account, campaign } = unit
+    // Ảnh của data vừa dừng; không có (trần ảnh, không chụp được) thì ảnh lỗi mới nhất của chiến dịch trong 30 phút.
+    const shot = findErrorScreenshots({ targetRunId: info.targetRunId }, 1)[0]
+      ?? findErrorScreenshots({ campaignId: campaign.id, from: new Date(Date.now() - 30 * 60_000).toISOString() }, 1)[0]
+    if (!shot || signal.aborted) return null
+    try {
+      const descriptor = this.getCampaignExecutableActionDescriptors(campaign)[0]
+      const message = shot.meta.message || dbNote
+      const result = await callAiUsing(CAMPAIGN_ERROR_SCREENSHOT_DIAGNOSIS_AI_CODE, {
+        source: 'aka_agent',
+        campaignName: campaign.name,
+        campaignActionId: campaign.actionId,
+        actionCode: descriptor?.code || '',
+        actionName: descriptor?.name || '',
+        errorMessage: message,
+        fullLog: message,
+        browserUrl: shot.meta.url,
+        screenshotEventId: shot.meta.id,
+        imageDataUrl: readErrorScreenshotDataUrl(shot.jpegPath)
+      }, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id,
+        campaignInputDataId: shot.meta.inputDataId ?? undefined,
+        blockName: shot.meta.blockName ?? undefined
+      })
+      if (signal.aborted) return null
+      if (!result.ok) {
+        console.warn('[CampaignEngine] AI đọc ảnh lỗi không trả câu:', result.error || 'unknown error')
+        return null
+      }
+      const reason = this.normalizeAiDiagnosisText(result.content)
+      if (!reason) return null
+      const note = `Dừng sau ${streak.count} data lỗi/thất bại liên tiếp (ngưỡng ${streak.threshold}): ${reason} (SYS99)`
+      const updated = await this.supabase.reviseEnginePausedCampaignNote(campaign.id, dbNote, note)
+      if (!updated) return null
+      this.broadcastCampaignUpdate(updated)
+      return note
+    } catch (error) {
+      console.warn('[CampaignEngine] AI đọc ảnh lỗi thất bại:', getErrorMessage(error))
+      return null
+    }
+  }
+
+  private async closeFacebookEngineUnit(unit: FacebookEngineUnit, result: UnitResult | null): Promise<void> {
+    if (unit.closed) return
+    unit.closed = true
+    const { account, campaign } = unit
+    try {
+      if (unit.pageIdentity) {
+        await this.restoreFacebookPageIdentity(campaign.id).then(() => clearFacebookIdentityMarker(account.id))
+          .catch(error => console.error('[CampaignEngine] Facebook identity restore failed:', error))
+      }
+      // Nghỉ / lướt FB trước khi chờ hạn mức giờ (browseFacebookBeforeHourlyWait của bộ cũ): lượt dừng vì hết lượt trong giờ.
+      const wait = (result?.detail?.claim as { wait?: { gate?: string; errorCode?: string | null } } | undefined)?.wait
+      if (result?.reason === 'wait' && unit.lastTarget && wait?.gate === 'quota' && wait.errorCode === LIMIT_IN_HOUR_ERROR_CODE && this.running) {
+        await this.browseFacebookBeforeEngineWait(account, campaign, unit.lastTarget).catch(() => undefined)
+      }
+    } finally {
+      this.stopBackgroundPreview(account.id, campaign.id)
+      this.facebookPageIdentities.delete(campaign.id)
+      this.facebookPageRestoreFailures.delete(campaign.id)
+      this.campaignContentPreparationRuns.delete(campaign.id)
+      this.campaignContentMediaPaths.delete(campaign.id)
+      this.explicitMilestoneWrites.delete(campaign.id)
+      this.engineContentIndexTakers.delete(campaign.id)
+    }
+  }
+
+  /**
+   * Q21 (16/11/2026): chiến dịch đến lịch quá N phút (campaign.wait_note_minutes, mặc định 10) mà tài khoản chưa chạy được thì ghi lý do
+   * vào ghi chú chiến dịch và tiến trình, chỉ khi lý do đổi (ghi chú giữ nguyên thì không ghi gì). Dùng chung cho Zalo và Facebook.
+   */
+  private async noteOverdueCampaignWaits(campaigns: Campaign[], note: string, dbNow: string): Promise<void> {
+    if (this.runtimeTarget !== 'desktop') return
+    const now = Date.parse(dbNow)
+    const overdue = campaigns.filter(campaign => {
+      const due = Date.parse(String(campaign.schedule ?? ''))
+      return campaign.status === 'chờ xử lý' && !campaign.isDelete && Number.isFinite(due) && now - due >= 60_000
+        && String(campaign.note ?? '').trim() !== note
+    })
+    if (overdue.length === 0) return
+    const minutes = (await loadFacebookRuntimeSettings()).waitNoteMinutes
+    for (const campaign of overdue) {
+      if (now - Date.parse(String(campaign.schedule)) < minutes * 60_000) continue
+      if (!this.isWithinCampaignDispatchSchedule(campaign, new Date(dbNow))) continue
+      await this.updateUnclaimedCampaignPreflightNote(campaign, note).catch(error => console.warn('[Scheduler] wait note failed:', error))
+    }
+  }
+
+  /** Như browseFacebookBeforeHourlyWait, sau khi lượt engine đã nhả lease (chỉ lướt, không ghi kết quả). */
+  private async browseFacebookBeforeEngineWait(account: AutoAccount, campaign: Campaign, lastTarget: CampaignInputData): Promise<void> {
+    const settings = facebookRestBrowseSettings(campaign.extraSettings?.facebookRestBrowse)
+    if (!supportsFacebookRestBrowse(campaign.actionId) || !settings.enabled || validateFacebookRestBrowse(settings)) return
+    const abort = new AbortController()
+    const isCancelled = () => !this.running || this.isCampaignPauseRequested(campaign.id)
+    this.activeFacebookRestBrowses.add(campaign.id)
+    try {
+      await runFacebookRestBrowse({
+        settings,
+        targetUrl: facebookRestBrowseTarget(campaign.actionId, lastTarget.uid),
+        signal: abort.signal,
+        isCancelled,
+        checkControl: async () => {
+          const [accountReason, current] = await Promise.all([
+            this.getAccountRunBlockReason(account.id, 'chờ xử lý'), this.supabase.getCampaign(campaign.id)
+          ])
+          if (abort.signal.aborted || isCancelled()) return { allowed: false, remainingMs: 0 }
+          const allowed = !accountReason && !!current && current.status === 'chờ xử lý' && current.isDelete !== true
+          return { allowed, remainingMs: allowed ? Number.MAX_SAFE_INTEGER : 0 }
+        },
+        // Q7: engine chạy bản "[engine]" của workflow nghỉ / lướt FB (danh mục rest_browse); chưa chép thì dùng bản cũ.
+        loadWorkflow: async () => {
+          const engineCopy = (await loadFacebookEngineCatalog().catch(() => null))?.workflows.get('rest_browse')
+          return (engineCopy ? await getWorkflow(engineCopy.workflowId) : null) ?? getWorkflowByName(FACEBOOK_REST_BROWSE_WORKFLOW)
+        },
+        createPage: () => this.backgroundPages.createTemporary(account.id, 'facebook'),
+        runWorkflow: (workflow, variables, page, signal, onStarted) => this.engineV2.run(workflow, variables, page, {
+          campaignId: campaign.id, accountId: account.id, organizationId: campaign.organizationId,
+          persist: false, signal, blockTimeoutMs: 10_000,
+          onStepProgress: step => { if (step.status === 'running') onStarted() },
+          onLog: entry => { if (!signal.aborted) void this.logCampaignProgress(campaign, entry.line, { engine: true }).catch(() => {}) }
+        }),
+        log: message => { void this.logCampaignProgress(campaign, message, { engine: true }).catch(() => {}) },
+        preview: page => {
+          if (page) {
+            this.setBackgroundPreviewOverride(account.id, campaign.id, page, 'Nghỉ và lướt Facebook')
+            this.startBackgroundPreview(account.id, campaign.id, page)
+          } else {
+            this.stopBackgroundPreview(account.id, campaign.id)
+          }
+        }
+      })
+    } finally {
+      abort.abort()
+      this.activeFacebookRestBrowses.delete(campaign.id)
+    }
+  }
+
+  /** Danh tính Page của lượt trước bị bỏ dở: chạy nhánh khôi phục có sẵn trong workflow (pageIdentityRestoreOnly). */
+  private async restoreAbandonedFacebookIdentity(account: AutoAccount, marker: FacebookIdentityMarker): Promise<void> {
+    const campaign = await this.supabase.getCampaign(marker.campaignId)
+    const workflow = await getWorkflow(marker.workflowId)
+    if (!campaign || !workflow) { clearFacebookIdentityMarker(account.id); return }
+    const identity = new FacebookCampaignPageIdentity(campaign, workflow)
+    identity.originalIdentityName = marker.originalIdentityName
+    identity.switchAttempted = true
+    identity.page = (await this.getAutomationPage(account, campaign.id)).page
+    await identity.restore((wf, variables, page, context) => this.engineV2.run(wf, variables, page, context), {
+      accountId: account.id, campaignId: campaign.id, organizationId: campaign.organizationId, persist: true
+    })
+    clearFacebookIdentityMarker(account.id)
+    await this.logCampaignProgress(campaign, `ℹ️ Đã chuyển tài khoản "${account.name}" về danh tính ban đầu sau lượt chạy bị gián đoạn`, { engine: true })
+  }
+
+  /** Vị trí nội dung kiểu cũ (resolveCampaignContentRotation): trang cá nhân / Page theo con trỏ lưu; loại khác theo vị trí data. */
+  private async resolveFacebookEngineContentRotation(unit: FacebookEngineUnit, detail: CampaignInputData | null): Promise<{ index: number; count: number }> {
+    const { campaign } = unit
+    if (campaign.actionId === 'facebook_timeline_post' || campaign.actionId === PAGE_POST_ACTION_ID || !detail) {
+      return this.resolveCampaignContentRotation(campaign, 0)
+    }
+    if (!unit.inputOrder || !unit.inputOrder.includes(detail.id)) {
+      unit.inputOrder = (await this.supabase.listCampaignInputData(campaign.id)).map(row => row.id)
+    }
+    return { index: Math.max(0, unit.inputOrder.indexOf(detail.id)), count: 0 }
+  }
+
+  /**
+   * Một data (hoặc một mốc lịch) của chiến dịch FB bằng engine: như vòng lặp của executeCampaignV2 cho một data, chỉ khác chỗ quyết định
+   * kết quả: mốc gửi ghi dấu trước khi bấm (beforeNode / commitPoint), kết quả báo lên engine, DB quyết định chính sách.
+   */
+  private async runFacebookEngineTarget(unit: FacebookEngineUnit, api: WorkflowTargetApi): Promise<WorkflowTargetEnd> {
+    const { account, campaign } = unit
+    const workflow = unit.workflow
+    if (!workflow) throw new Error('Chưa tải được workflow chạy chiến dịch này')
+    const detail = api.target.id == null ? null : mapCampaignInputDataFromDB(api.target as unknown as Record<string, unknown>)
+    // Tìm data không có thao tác (Q5): kết quả không gắn thao tác, ghi "Tìm data" như bộ cũ (V558 report_v1).
+    const findData = campaign.actionId === FIND_DATA_GROUP_ACTION_ID || campaign.actionId === FIND_DATA_SEARCH_ACTION_ID
+    // Thao tác chính theo thứ tự của loại chiến dịch (đăng bài trước comment): khoá của api.actions là jsonb, không giữ thứ tự.
+    const configured = facebookDefaultActionCodes({ actionId: campaign.actionId, extraSettings: (campaign.extraSettings ?? {}) as Record<string, unknown> })
+    // Loại có kết quả không gắn thao tác (tìm data; newsfeed chỉ lướt): thao tác chính rỗng, tên theo loại (facebookResultName).
+    const resultName = facebookResultName(campaign.actionId)
+    const firstAction = configured.find(code => code in api.actions) || Object.keys(api.actions)[0]
+      || (findData || resultName ? '' : this.getPostActionCode(campaign) || 'fb_post_group')
+    const milestone = (key: string, actionCode: string, actionName?: string) =>
+      ({ key, actionCode, ...(actionName ? { actionName } : !actionCode ? { actionName: resultName ?? FACEBOOK_FIND_DATA_RESULT_NAME } : {}) })
+    const name = this.getInputDataDisplayName(campaign, detail)
+    const progress = (text: string): void => { void this.logCampaignProgress(campaign, text, { engine: true }).catch(() => {}) }
+    if (detail) unit.tried.add(detail.id)
+
+    // Nhóm đã biết cần duyệt bài: bộ cũ bỏ đăng bài, phần còn lại vẫn chạy.
+    const approval = await this.resolveGroupPostApprovalForTarget(account.id, campaign, detail)
+    if (approval.skipPostByKnownApproval && detail) progress(`⚠️ Bỏ qua đăng bài vào "${name}" vì group đã biết cần duyệt bài`)
+
+    // Thao tác tuỳ chọn hết lượt (claim trả skip): báo một lần mỗi lượt như logSkippedLimitActionsOnce, workflow bỏ bước đó.
+    const skipped = new Set<string>()
+    for (const [code, gate] of Object.entries(api.actions)) {
+      if (gate.decision !== 'skip') continue
+      skipped.add(code)
+      if (!unit.loggedSkipped.has(code)) {
+        unit.loggedSkipped.add(code)
+        progress(`⚠️ Bỏ qua ${this.getAccountActionName(code)} vì đã đạt giới hạn: ${gate.note || 'đang tạm khoá'}`)
+      }
+    }
+
+    let sourceLink = ''
+    if (unit.sourceLinks.length > 0) {
+      const index = unit.sourceLinkIndex % unit.sourceLinks.length
+      sourceLink = unit.sourceLinks[index]
+      unit.sourceLinkIndex = (index + 1) % unit.sourceLinks.length
+      try {
+        const updated = await this.updateCampaignAndBroadcast(campaign.id, {
+          extraSettings: { ...campaign.extraSettings, sourceLinkIndex: unit.sourceLinkIndex }
+        })
+        campaign.extraSettings = updated.extraSettings
+      } catch { /* như bộ cũ: không lưu được con trỏ thì lượt sau dùng lại link này */ }
+      progress(`🔗 Link nguồn #${index + 1}/${unit.sourceLinks.length}${detail ? ` cho "${name}"` : ''}: ${sourceLink}`)
+    }
+
+    // Đăng nhóm kèm chia sẻ sang nhóm đã tham gia (anh chốt làm y bộ cũ): ứng viên, số nhóm tối đa và chống gửi lặp như bộ cũ.
+    const sharePrep = await this.prepareFacebookEngineShareTargets(unit, detail, approval)
+    if ('gateError' in sharePrep) {
+      // Như bộ cũ: không kiểm được chống gửi lặp thì không chạy data này, tự thử lại sau (data về hàng đợi, lượt kết thúc).
+      progress(`⚠️ ${sharePrep.gateError}`)
+      const res = await api.reportMilestone(milestone('__share_cooldown', firstAction), { ok: false, phase: 'before_send',
+        signal: { kind: 'engine', code: 'gate_unavailable', errorCode: 'err_engine_gate_unavailable', message: sharePrep.gateError },
+        data: { gate: 'delivery_cooldown' } })
+      return 'stop' in res ? res : { done: true }
+    }
+    const share: FacebookEngineShare = { targets: sharePrep.targets, maxCount: sharePrep.maxCount, selected: null, runs: new Map(),
+      mainKey: null, postDelivery: null, aborted: false }
+
+    const mediaTempPaths: string[] = []
+    this.campaignContentMediaPaths.set(campaign.id, mediaTempPaths)
+    // Nội dung xoay vòng kiểu mới (campaignContentPreparationVersion = 1): lấy vị trí theo lease engine thay cho token bộ cũ.
+    this.engineContentIndexTakers.set(campaign.id, (actionCode, variantCount) =>
+      takeEngineContentIndex(api.targetRunId, api.leaseToken, actionCode, variantCount, { signal: api.signal, timeoutMs: 20_000 }))
+    const rotation = await this.resolveFacebookEngineContentRotation(unit, detail)
+    let page: PageController | null = null
+    const trace = new PageTrace()
+    let hangTimer: ReturnType<typeof setInterval> | null = null
+    const state: FacebookEngineTargetState = { stopped: null, refused: null, browserGone: null, reportCount: 0, marked: 0, runId: null }
+    try {
+      let base: Record<string, unknown>
+      try {
+        base = await this.buildVariablesV2(campaign, detail, account.id, sourceLink, rotation.index, approval, mediaTempPaths, skipped)
+      } catch (error) {
+        if (this.isCampaignMediaResolveError(error)) {
+          const res = await api.reportMilestone(milestone('__media', firstAction), { ok: false, phase: 'before_send',
+            signal: { kind: 'engine', code: 'media_unavailable', errorCode: 'err_media_file_missing', message: error.message } })
+          return 'stop' in res ? res : { done: true }
+        }
+        throw error
+      }
+      const allowLike = api.actions.fb_like_post ? api.actions.fb_like_post.decision === 'allow' : true
+      const allowComment = api.actions.fb_comment ? api.actions.fb_comment.decision === 'allow' : true
+      const identity = unit.pageIdentity
+      const variables: Record<string, unknown> = {
+        ...base,
+        ...identity?.variables(),
+        ...(campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID ? { pageInboxForceNavigate: !unit.pageInboxOpened } : {}),
+        // Chia sẻ sang nhóm đã tham gia: như bộ cũ; nhóm được chọn được nhận vào lượt và ghi dấu ngay trước cú bấm Đăng (beforeNode).
+        enableGroupPostShareToJoinedGroups: share.targets.length > 0 && share.maxCount > 0,
+        groupPostShareTargets: share.targets, groupPostShareMaxCount: share.maxCount,
+        ...(campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID ? { allowNewsfeedLike: allowLike, allowNewsfeedComment: allowComment } : {}),
+        ...(campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID && detail ? this.facebookGroupInviteEngineVariables(campaign, detail) : {}),
+        // Mã lượt data của engine trong auto_runs.variables: tra một lỗi từ lượt workflow sang lượt data và ngược lại (R1).
+        engineTargetRunId: api.targetRunId
+      }
+
+      const pageRef = this.isBrowserlessCampaign(campaign) ? { page: null } : await this.getAutomationPage(account, campaign.id)
+      page = pageRef.page
+      if (page) this.startBackgroundPreview(account.id, campaign.id, page)
+      const tracedPage = page ? tracePage(page, trace) : null
+      if (identity) { identity.page = page; identity.targetStarted = false }
+
+      const settings = unit.settings
+      const hangMs = settings.blockHangMinutes * 60_000
+      // Nhịp kiểm: 30 giây (ngưỡng mặc định 10 phút); ngưỡng nhỏ thì kiểm dày hơn.
+      const checkMs = Math.min(30_000, Math.max(200, Math.floor(hangMs / 4)))
+      let lastTick = Date.now()
+      // Block treo (Q20): quá N phút không có thao tác nào (không tính lúc nghỉ theo cài đặt, lúc máy ngủ) thì đóng cửa sổ ẩn: thao tác
+      // đang chờ trên trang trả lỗi, block kết thúc, data đi theo chính sách (SYS04), chạy data kế.
+      hangTimer = setInterval(() => {
+        const now = Date.now()
+        // Máy vừa ngủ dậy (nhịp kiểm bị trễ xa): thời gian ngủ không tính là treo.
+        if (now - lastTick > 3 * checkMs) trace.touch()
+        lastTick = now
+        if (!state.browserGone && page && trace.idleFor(hangMs)) {
+          state.browserGone = 'block_hang'
+          progress(`⚠️ Thao tác trên Facebook không phản hồi quá ${settings.blockHangMinutes} phút, đóng cửa sổ chạy ngầm để chạy data kế tiếp`)
+          try { this.backgroundPages.destroy(account.id) } catch { /* đã đóng */ }
+          // Electron không kết thúc lời gọi đang chờ khi cửa sổ bị huỷ (thử thật 17/11): vết tự kết thúc để block thoát.
+          trace.abandonPending('Thao tác trên Facebook không phản hồi, đã đóng cửa sổ chạy ngầm')
+        } else if (page && !page.isConnected()) {
+          // Cửa sổ chạy ngầm chết / bị đóng giữa lúc block đang chờ trên trang: lời gọi đang chờ kết thúc (không rõ đã gửi chưa). Đang dừng
+          // lượt (tạm dừng, thoát app, đăng xuất) thì chỉ gỡ lời gọi, kết quả theo đường dừng như cũ.
+          if (!state.browserGone && !api.signal.aborted) state.browserGone = 'browser_gone'
+          trace.abandonPending('Cửa sổ chạy ngầm đã đóng')
+        }
+      }, checkMs)
+
+      const stepsInfo = new Map<string, FacebookEngineStepInfo>()
+      const signs: readonly FacebookErrorSign[] = settings.errorSigns ?? []
+      /**
+       * Dấu hiệu có mặt của một lỗi cụ thể cho kết quả lỗi của bước `step` (anh chốt 17/11): chữ trên trang đã đọc lúc bước lỗi, rồi câu lỗi
+       * do block / bộ dựng lịch sử viết. null = không có, kết quả như hôm nay.
+       */
+      const signOf = (step: { stepKey?: string | null } | null | undefined, actionCode: string, phase: Phase, currentErrorCode: string | null,
+        messages: ReadonlyArray<string | null | undefined>): FacebookErrorSign | null => {
+        if (signs.length === 0) return null
+        const entry = step?.stepKey ? stepsInfo.get(step.stepKey) : undefined
+        return pickFacebookErrorSign(signs, { actionCode, phase, currentErrorCode },
+          { pageTexts: entry?.pageTexts ?? null, messages: [...messages, entry?.failure?.error ?? null] })
+      }
+      const marks = new Map<string, { actionCode: string; stepKey: string; level: number }>()
+      const realtime = new Set<string>()
+      /** Số dòng đã báo theo khoá bước (dòng thứ hai trở đi của cùng bước có hậu tố :n). */
+      const reported = new Map<string, number>()
+      /** Bước đã có kết quả (dòng lịch sử hoặc kết quả của dấu): bước lỗi không báo lần nữa ở nhánh "workflow lỗi". */
+      const resolvedSteps = new Set<string>()
+
+      const report = async (key: string, actionCode: string, raw: RawOutcome, actionName?: string): Promise<ReportSuccess | null> => {
+        if (state.stopped) return null
+        // R1: mã lượt workflow đi kèm mọi kết quả (dòng thành công: data.runId; lỗi: signal.runId) để tra từ lượt data sang các bước.
+        const runId = state.runId ? String(state.runId) : null
+        if (runId) {
+          raw = raw.ok ? { ...raw, data: { ...(raw.data ?? {}), runId } }
+            : { ...raw, signal: { ...raw.signal, runId }, data: { ...(raw.data ?? {}), runId } }
+        }
+        const res = await api.reportMilestone({ ...milestone(key, actionCode, actionName), quietOk: true }, raw)
+        if ('stop' in res) { state.stopped = res; return null }
+        marks.delete(key)
+        state.reportCount += 1
+        // Kết quả cú bấm Đăng của data chính: nhóm chia sẻ kèm theo đúng kết quả này.
+        if (share.mainKey !== null && key === share.mainKey) share.postDelivery = res.outcomes[0]?.deliveryState ?? null
+        return res
+      }
+
+      /**
+       * Đăng nhóm kèm chia sẻ, ngay trước cú bấm Đăng: nhận các nhóm đã chọn vào lượt (mỗi nhóm một lượt data riêng, cùng lease) và ghi dấu
+       * "sắp gửi" cho từng nhóm. Không nhận / không ghi dấu được nhóm nào thì không bấm Đăng (không đăng vào nhóm không ai ghi lại).
+       */
+      const beginShare = async (): Promise<'run' | 'stop'> => {
+        const selected = share.selected ?? []
+        share.selected = []
+        const claimed = await api.claimExtraTargets(selected.map(target => target.id))
+        if ('stop' in claimed) { state.stopped = claimed; return 'stop' }
+        for (const item of claimed.items) {
+          const id = Number(item.target.id)
+          unit.tried.add(id)
+          const target = selected.find(candidate => candidate.id === id)
+          if (target) share.runs.set(id, { targetRunId: item.targetRunId, target, done: false })
+        }
+        if (share.runs.size < selected.length) { share.aborted = true; return 'stop' }
+        for (const run of share.runs.values()) {
+          const mark = await api.beginExtraMilestone(run.targetRunId, { key: FACEBOOK_SHARE_STEP_KEY, actionCode: 'fb_post_group' })
+          if (mark === 'ok') continue
+          if ('stop' in mark) { state.stopped = mark; return 'stop' }
+          share.aborted = true
+          return 'stop'
+        }
+        return 'run'
+      }
+
+      /** Dòng lịch sử của nhóm chia sẻ kèm (bộ dựng cũ ghi theo data của nhóm): báo lên lượt data của nhóm đó. */
+      const shareRow = async (action: CreateCampaignDetailInput, outcome: MilestoneOutcome): Promise<CampaignDetail | null | undefined> => {
+        const id = action.inputDataId == null ? null : Number(action.inputDataId)
+        if (id === null || id === detail?.id) return undefined
+        const run = share.runs.get(id)
+        if (!run) {
+          console.warn('[CampaignEngine] Dòng lịch sử cho data không thuộc lượt, bỏ qua', { campaignId: campaign.id, inputDataId: id })
+          return null
+        }
+        if (run.done) return null
+        const res = await api.reportExtra(run.targetRunId, { key: FACEBOOK_SHARE_STEP_KEY, actionCode: outcome.actionCode,
+          ...(outcome.actionName ? { actionName: outcome.actionName } : {}), quietOk: true }, outcome.raw)
+        if ('stop' in res) {
+          if (res.reason === 'ownership_lost') { state.stopped = res; throw new FacebookEngineReportStop() }
+          throw new Error(`Không ghi được kết quả chia sẻ vào nhóm "${run.target.name}": ${String(res.detail?.reason ?? res.reason)}`)
+        }
+        run.done = true
+        const decision = res.outcomes[0]
+        if (!decision || decision.detailId == null) return null
+        return {
+          id: decision.detailId, campaignId: campaign.id, accountId: account.id, inputDataId: id, actionCode: decision.actionCode,
+          actionName: decision.actionName || action.actionName || '', status: (FACEBOOK_STATUS_VALUES[decision.statusCode ?? '']
+            ?? (decision.ok ? 'thành công' : 'thất bại')) as CampaignDetailStatus, errorCode: decision.errorCode, log: decision.log,
+          data: action.data, postUrl: action.postUrl, isDelete: false, reportGroup: decision.reportGroup as CampaignDetail['reportGroup'],
+          countsTowardLimit: decision.countsTowardLimit
+        }
+      }
+
+      /**
+       * Dòng lịch sử của bước `step`: giải quyết dấu đang mở của chính bước (hoặc dấu commitPoint của bước), không có thì dấu đang mở sớm
+       * nhất cùng thao tác (dòng đăng bài nhóm do bước xác nhận tạo sau cú bấm), không có dấu thì khoá của bước (thêm :n). Pha của dòng lỗi
+       * kiểu cũ (không có operationState): theo dấu và vết thao tác (cú bấm chưa chạy → chưa gửi; "lỗi" sau cú bấm → không rõ kết quả).
+       */
+      const screenshotOf = (step: RunStepV2 | null): string | null => (step?.stepKey ? stepsInfo.get(step.stepKey)?.screenshotId ?? null : null)
+
+      const placeRow = (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null): { key: string; phase: Phase | null } => {
+        const stepKey = step?.stepKey || step?.nodeId || '__row'
+        let markKey: string | null = null
+        for (const [key, mark] of marks) {
+          if (mark.actionCode !== actionCode) continue
+          if (mark.stepKey === stepKey) { markKey = key; break }
+          markKey ??= key
+        }
+        const n = reported.get(stepKey) ?? 0
+        reported.set(stepKey, n + 1)
+        resolvedSteps.add(stepKey)
+        if (markKey) resolvedSteps.add(marks.get(markKey)?.stepKey ?? markKey)
+        const key = markKey ?? (n === 0 ? stepKey : `${stepKey}:${n}`)
+        if (legacyStatus === null) return { key, phase: null }
+        const mark = markKey ? marks.get(markKey) : undefined
+        if (mark) {
+          const attempted = mark.level === 2 ? stepsInfo.get(mark.stepKey)?.sendAttempted ?? null : null
+          return { key, phase: attempted === false ? 'before_send' : legacyStatus === 'lỗi' ? 'in_flight' : 'after_send' }
+        }
+        return { key, phase: legacyStatus === 'lỗi' ? 'before_send' : 'after_send' }
+      }
+
+      const runtimeHelpers: BlockRuntimeHelpers = {
+        ...this.createBlockRuntimeHelpers(account, campaign, detail, tracedPage, mediaTempPaths),
+        commitPoint: async (options, metadata) => {
+          const stepKey = metadata.stepKey ?? metadata.nodeId ?? 'commit'
+          const key = options.key ? `${stepKey}:${options.key}` : stepKey
+          if (marks.has(key)) return
+          const actionCode = options.actionCode || stepsInfo.get(stepKey)?.step.actionCode
+          if (!actionCode) throw new Error('Thiếu thao tác của mốc gửi')
+          if (state.stopped || state.refused || api.shouldStop()) throw new Error('Đã dừng trước khi gửi')
+          const mark = await api.beginMilestone({ key, actionCode })
+          if (mark === 'ok') { marks.set(key, { actionCode, stepKey, level: 3 }); state.marked += 1; return }
+          if ('stop' in mark) state.stopped = mark
+          else state.refused = { key, actionCode, reason: mark.refused }
+          throw new Error('Engine không cho gửi tiếp')
+        },
+        observeSleep: phase => { if (phase === 'start') trace.sleepStart(); else trace.sleepEnd() },
+        observeElement: (elementName, selector) => trace.noteElement(elementName, selector)
+      }
+
+      const beforeNode = async (info: WorkflowNodeHookInfo): Promise<'run' | 'stop'> => {
+        const resolved = resolveEngineStep(unit.catalog.steps, { blockId: info.blockId, workflowId: unit.workflowId, nodeId: info.nodeId,
+          config: info.config, ...(info.blockCode !== undefined ? { blockCode: info.blockCode } : {}) })
+        stepsInfo.set(info.stepKey, { step: resolved, failure: null, sendAttempted: null, pageState: null })
+        trace.beginBlock(resolved.sendOps)
+        if (state.stopped || state.refused || api.shouldStop()) return 'stop'
+        if (resolved.kind !== 'delivery' || resolved.commitLevel === 3) return 'run'
+        if (!resolved.actionCode) {
+          state.refused = { key: info.stepKey, actionCode: firstAction, reason: 'action_unknown' }
+          return 'stop'
+        }
+        // Đăng nhóm kèm chia sẻ: các nhóm đã chọn được nhận và ghi dấu trước dấu của data chính, cùng cú bấm Đăng.
+        if (resolved.actionCode === 'fb_post_group' && share.mainKey === null && (share.selected?.length ?? 0) > 0) {
+          share.mainKey = info.stepKey
+          if (await beginShare() === 'stop') return 'stop'
+        }
+        const mark = await api.beginMilestone({ key: info.stepKey, actionCode: resolved.actionCode })
+        if (mark === 'ok') {
+          marks.set(info.stepKey, { actionCode: resolved.actionCode, stepKey: info.stepKey, level: resolved.commitLevel })
+          state.marked += 1
+          return 'run'
+        }
+        if ('stop' in mark) { state.stopped = mark; return 'stop' }
+        state.refused = { key: info.stepKey, actionCode: resolved.actionCode, reason: mark.refused }
+        return 'stop'
+      }
+
+      const afterNode = async (info: WorkflowNodeHookInfo & { result: BlockResult }): Promise<void> => {
+        // Nhóm chia sẻ kèm mà block đã chọn trong hộp đăng bài (như groupPostShareTargets của bộ cũ đọc lại sau lượt): chỉ nhóm trong danh
+        // sách ứng viên đã đưa vào biến.
+        if (info.blockName === 'fb_select_group_post_share_targets' && info.result.success && share.targets.length > 0) {
+          const raw = (info.result.output as { selectedTargets?: unknown } | undefined)?.selectedTargets
+          const ids = new Set((Array.isArray(raw) ? raw : []).map(item => Number((item as { id?: unknown } | null)?.id)))
+          share.selected = share.targets.filter(target => ids.has(target.id) && target.id !== detail?.id).slice(0, 3)
+        }
+        const entry = stepsInfo.get(info.stepKey)
+        if (!entry) return
+        const failed = !info.result.success || info.result.output?.ok === false
+        if (failed) {
+          const message = info.result.error ?? (typeof info.result.output?.error === 'string' ? info.result.output.error : null)
+          entry.failure = { ...trace.failureSignal(message ?? ''), threw: !info.result.success, error: message }
+          entry.pageState = facebookPageStateSignal(safePageUrl(page))
+          if (page && !page.isConnected() && !state.browserGone) state.browserGone = 'browser_gone'
+          // Ảnh lỗi (mục 12.2): chỉ khi chụp được, trong trần mỗi data / mã lỗi; không chặn lượt quá 5 giây.
+          const code = entry.pageState?.code ?? entry.failure.code
+          if (page?.isConnected() && typeof page.captureJpeg === 'function' && screenshotAllowed(api.targetRunId, campaign.id, code)) {
+            const capture = page.captureJpeg(70, 1280)
+            const jpeg = await Promise.race([capture, new Promise<null>(resolve => setTimeout(() => resolve(null), 5_000))]).catch(() => null)
+            if (jpeg) {
+              entry.screenshotId = saveErrorScreenshot(jpeg, { campaignId: campaign.id, accountId: account.id, inputDataId: detail?.id ?? null,
+                targetRunId: api.targetRunId, stepKey: info.stepKey, blockName: info.blockName, url: safePageUrl(page), code,
+                message: entry.failure.message })
+            }
+          }
+        }
+        // Dấu hiệu có mặt (anh chốt 17/11): block lỗi hoặc trả mã lỗi (vd FB40 không thấy ô đăng bài) thì đọc chữ trên trang ngay lúc đó,
+        // chỉ khi có dấu hiệu `page` cho thao tác; đọc lỗi thì như không có chữ.
+        const actionResult = (info.result.output as { actionResult?: { errorCode?: unknown; actionCode?: unknown } } | null | undefined)?.actionResult
+        const signAction = String(actionResult?.actionCode || entry.step.actionCode || firstAction)
+        const resultCode = typeof actionResult?.errorCode === 'string' && actionResult.errorCode ? actionResult.errorCode : null
+        if ((failed || resultCode) && page?.isConnected() && !entry.pageState && hasPageSigns(signs, signAction, resultCode)) {
+          entry.pageTexts = await readFacebookPageSignTexts(page)
+        }
+        if (entry.step.commitLevel === 2) entry.sendAttempted = trace.sendAttempted
+        // Newsfeed: bộ cũ ghi từng like / comment ngay khi xong (logNewsfeedMilestoneStep); engine báo ngay như vậy.
+        if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && info.result.success) {
+          realtime.add(info.stepKey)
+          await this.reportFacebookEngineRows(campaign, detail, account.id, [{ runId: info.runId, nodeId: info.nodeId, blockId: info.blockId,
+            blockName: info.blockName, status: 'success', input: {}, output: info.result.output, stepKey: info.stepKey }], null, {
+            report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
+        }
+      }
+
+      const abort = new AbortController()
+      const onAbort = (): void => abort.abort()
+      api.signal.addEventListener('abort', onAbort, { once: true })
+      this.activeV2Aborts.set(campaign.id, abort)
+      const screenshotLogs: BlockScreenshotProgressLog[] = []
+      let result: RunResult
+      try {
+        result = await this.engineV2.run(identity?.workflow || workflow, variables, tracedPage, {
+          organizationId: campaign.organizationId ?? account.organizationId ?? null,
+          accountId: account.id,
+          campaignId: campaign.id,
+          campaignInputId: detail?.inputId ?? null,
+          campaignInputDataId: detail?.id,
+          signal: abort.signal,
+          persist: true,
+          runtimeHelpers,
+          beforeNode,
+          afterNode,
+          onBlockScreenshot: async (request, screenshotPage) => {
+            const log = await this.recordBlockScreenshotEvent(account, campaign, detail, request, screenshotPage)
+            if (log) screenshotLogs.push(log)
+          },
+          onStepProgress: (step: RunStepV2) => {
+            if (step.runId && !state.runId) state.runId = step.runId
+            if (identity) {
+              identity.observe(step)
+              if (identity.switchAttempted) writeFacebookIdentityMarker(account.id, { campaignId: campaign.id, workflowId: identity.workflow.id,
+                originalIdentityName: identity.originalIdentityName })
+            }
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch { /* đóng */ }
+          },
+          onLog: entry => {
+            try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch { /* đóng */ }
+          }
+        })
+      } finally {
+        api.signal.removeEventListener('abort', onAbort)
+        if (this.activeV2Aborts.get(campaign.id) === abort) this.activeV2Aborts.delete(campaign.id)
+        if (hangTimer) { clearInterval(hangTimer); hangTimer = null }
+      }
+      if (detail && supportsFacebookRestBrowse(campaign.actionId)) unit.lastTarget = detail
+      if (result.runId) state.runId = result.runId
+
+      // Không chuyển được sang Page: bộ cũ tạm dừng chiến dịch trước khi chạy data (pauseBeforePageIdentityTarget); engine báo FB06.
+      if (identity && !identity.targetStarted && state.reportCount === 0) {
+        const failure = result.steps.find(step => step.status === 'error')
+        const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        await report('__identity', firstAction, { ok: false, phase: 'before_send',
+          signal: { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+        return state.stopped ?? { done: true }
+      }
+      if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {
+        unit.pageInboxOpened = true
+      }
+      // Nội dung kiểu cũ: chỉ tiến con trỏ sau khi đã đăng (như bộ cũ).
+      const published = campaign.actionId === PAGE_POST_ACTION_ID
+        ? result.steps.some(step => (step.blockName === 'fb_page_post_api' || step.blockName === 'fb_post_current_identity_ui')
+          && step.status === 'success' && (step.output?.ok === true || step.output?.posted === true))
+        : result.status === 'completed'
+      if (!this.campaignContentPreparationRuns.has(campaign.id) && published && rotation.count > 1) {
+        await this.advanceCampaignContentRotation(campaign, rotation).catch(error => console.warn('[CampaignEngine] content rotation:', error))
+      }
+
+      // 1. Dòng lịch sử của bộ dựng bộ cũ theo đúng thứ tự bước (bỏ bước newsfeed đã báo ngay).
+      await this.reportFacebookEngineRows(campaign, detail, account.id, result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
+        result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
+      for (const log of screenshotLogs) {
+        await this.logCampaignProgress(campaign, log.storedMessage, { realtimeMessage: log.realtimeMessage, realtimeAction: log.action, engine: true })
+      }
+
+      // 2. Mốc đã ghi dấu mà bộ dựng không ghi dòng nào. Block chạy xong: bộ cũ không ghi lịch sử, không tính lượt cho bước này (Like khi
+      //    comment seeding, comment tự bỏ qua khi bài chờ duyệt…; phát lại lịch sử thật 16/11) nên giải dấu bằng FB45 (không ghi, không in,
+      //    không tính); cú bấm gửi mức 2 chưa chạy thì là chưa gửi. Block lỗi thì theo vết thao tác: cú bấm gửi chưa chạy là chưa gửi, còn
+      //    lại không rõ kết quả.
+      for (const [key, mark] of [...marks]) {
+        if (state.stopped) break
+        const entry = stepsInfo.get(mark.stepKey)
+        const step = [...result.steps].reverse().find(item => item.stepKey === mark.stepKey)
+        const failed = !step || step.status !== 'success' || step.output?.ok === false || !!entry?.failure
+        resolvedSteps.add(mark.stepKey)
+        if (!failed) {
+          const notSent = mark.level === 2 && entry?.sendAttempted === false
+          await report(key, mark.actionCode, { ok: false, phase: notSent ? 'before_send' : 'in_flight',
+            signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Bước không ghi lịch sử (như bộ cũ)' } })
+          continue
+        }
+        const out = blockFailureOutcome({ error: entry?.failure?.error ?? step?.error ?? null, threw: entry?.failure?.threw ?? true,
+          traced: entry?.failure ?? null, marked: true, sendAttempted: mark.level === 2 ? entry?.sendAttempted ?? null : null,
+          pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+          signFor: phase => signOf(step, mark.actionCode, phase, null, [step?.error ?? null, entry?.failure?.message ?? null]) })
+        await report(key, mark.actionCode, { ok: false, phase: out.phase,
+          signal: entry?.screenshotId ? { ...out.signal, screenshotId: entry.screenshotId } : out.signal })
+      }
+
+      // 3. Mốc bị DB từ chối ghi dấu (thao tác chưa khai báo…): chưa bấm gì.
+      const refused = state.refused
+      if (refused && !state.stopped) {
+        await report(`${refused.key}:refused`, refused.actionCode, { ok: false, phase: 'before_send',
+          signal: { kind: 'engine', code: `mark_refused:${refused.reason}`, message: `Không ghi được dấu gửi (${refused.reason})` } })
+      }
+
+      // 4. Workflow lỗi ở bước không phải mốc gửi (mở trang, tìm ô nhập…) mà bước đó chưa có kết quả: báo lỗi trước khi gửi theo vết thao tác.
+      if (!state.stopped && result.status === 'failed') {
+        const failure = [...result.steps].reverse().find(step => step.status === 'error')
+        const key = failure?.stepKey ?? failure?.nodeId ?? '__workflow'
+        if (!resolvedSteps.has(key) && !marks.has(key)) {
+          const entry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
+          const out = blockFailureOutcome({ error: entry?.failure?.error ?? failure?.error ?? result.error ?? null, threw: true,
+            traced: entry?.failure ?? null, marked: false, sendAttempted: null, pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+            signFor: phase => signOf(failure, entry?.step.actionCode || firstAction, phase, null,
+              [failure?.error ?? result.error ?? null, entry?.failure?.message ?? null]) })
+          await report(`${key}:error`, entry?.step.actionCode || firstAction, { ok: false, phase: out.phase,
+            signal: entry?.screenshotId ? { ...out.signal, screenshotId: entry.screenshotId } : out.signal })
+        }
+      }
+
+      // 5. Dừng trước mốc gửi đầu tiên của data: không nhận / không ghi dấu được nhóm chia sẻ kèm đã chọn (không bấm Đăng), hoặc tạm dừng
+      //    giữa data khi data đã có dòng khác (tham gia nhóm…). Báo "chưa gửi" để data về hàng đợi như bộ cũ; lõi chỉ tự báo "đã dừng"
+      //    khi data chưa có kết quả nào, còn không thì data bị đóng theo dòng đã có mà chưa đăng bài.
+      if (!state.stopped && !state.refused && state.marked === 0 && (share.aborted || (result.stopped === true && state.reportCount > 0))) {
+        await report('__stopped', firstAction, { ok: false, phase: 'before_send', signal: share.aborted
+          ? { kind: 'engine', code: 'interrupted_before_send', errorCode: 'err_engine_interrupted_before_send',
+              message: 'Nhóm chia sẻ kèm không còn chạy được, đăng lại ở lượt sau' }
+          : { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled' } })
+      }
+      // 6a. Workflow chạy xong mà bộ dựng cũ không ghi dòng nào cho data (comment seeding không có bài hợp điều kiện…): bộ cũ đóng data, không
+      //     ghi lịch sử, không cộng chuỗi data lỗi (phát lại lịch sử thật 16/11). Báo FB45 để lõi không coi là "không có kết quả" (SYS07).
+      if (!state.stopped && result.status === 'completed' && state.reportCount === 0 && marks.size === 0) {
+        await report('__no_history', firstAction, { ok: false, phase: 'before_send',
+          signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Chạy xong, không có kết quả nào để ghi (như bộ cũ)' } })
+      }
+      // 6. Nhóm chia sẻ chưa có kết quả: theo kết quả cú bấm Đăng của data chính. Đã đăng: ghi như bộ cũ (bộ dựng thường đã ghi); không rõ:
+      //    không gửi lại; chưa bấm: về hàng đợi. Không biết kết quả cú bấm (hiếm) thì coi như không rõ, không đăng lại.
+      await this.closeFacebookEngineShareRuns(campaign, detail, name, api, share, state)
+      return state.stopped ?? { done: true }
+    } catch (error) {
+      if (error instanceof FacebookEngineReportStop) return state.stopped ?? { stop: true, reason: 'report_rejected' }
+      throw error
+    } finally {
+      if (hangTimer) clearInterval(hangTimer)
+      if (page && !unit.pageIdentity) this.stopBackgroundPreview(account.id, campaign.id)
+      this.cleanupCampaignMediaTempFiles(mediaTempPaths)
+      this.engineContentIndexTakers.delete(campaign.id)
+    }
+  }
+
+
+  /**
+   * Đăng nhóm kèm chia sẻ sang nhóm đã tham gia (bộ cũ, executeCampaign): số nhóm tối đa theo lượt đăng nhóm còn lại (tối đa 3), ứng viên
+   * là data chờ khác của chiến dịch có tên nhóm không trùng (tối đa 10), chống gửi lặp N ngày cho ứng viên. Data đã có lượt trong lượt
+   * engine này không làm ứng viên (claim không nhận lại). gateError: không kiểm được chống gửi lặp (bộ cũ dừng lượt, tự thử lại).
+   */
+  private async prepareFacebookEngineShareTargets(unit: FacebookEngineUnit, detail: CampaignInputData | null,
+    approval: { skipPostByKnownApproval: boolean }): Promise<{ targets: GroupPostShareTarget[]; maxCount: number } | { gateError: string }> {
+    const { account, campaign } = unit
+    const none = { targets: [] as GroupPostShareTarget[], maxCount: 0 }
+    if (!detail || campaign.actionId !== GROUP_POST_ACTION_ID || isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)
+      || campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true) return none
+    const maxCount = await this.resolveGroupPostShareQuotaCapacity(account, campaign, campaign.extraSettings?.actionLimits,
+      approval.skipPostByKnownApproval)
+    if (maxCount <= 0) return none
+    unit.shareDetails ??= await this.supabase.listCampaignInputData(campaign.id)
+    const details = unit.shareDetails
+    let targets = await this.buildGroupPostShareTargets(campaign, details, detail, unit.tried, maxCount)
+    if (targets.length > 0 && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
+      try {
+        const cooldown = await this.applyRecentDeliveryCooldown(account, campaign, targets.map(target => target.id))
+        for (const pausedId of cooldown.pausedInputDataIds) {
+          const paused = details.find(item => item.id === pausedId)
+          if (paused) paused.status = 'tạm dừng'
+        }
+        await this.logRecentDeliveryCooldownPauses(campaign, targets.map(target => details.find(item => item.id === target.id)), cooldown)
+        targets = targets.filter(target => cooldown.allowedInputDataIds.has(target.id))
+      } catch (error) {
+        return { gateError: `Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: ${getErrorMessage(error) || 'Lỗi không xác định'}` }
+      }
+    }
+    return { targets, maxCount }
+  }
+
+  /**
+   * Chốt các nhóm chia sẻ kèm chưa có kết quả theo kết quả cú bấm Đăng của data chính. Đã đăng (bộ dựng cũ thường đã ghi dòng "Đăng bài
+   * dạng chia sẻ"): ghi như bộ cũ. Không rõ đã đăng chưa: ghi "không rõ", không đăng lại. Chưa bấm Đăng: data về hàng đợi, không ghi lịch sử.
+   */
+  private async closeFacebookEngineShareRuns(campaign: Campaign, detail: CampaignInputData | null, name: string, api: WorkflowTargetApi,
+    share: FacebookEngineShare, state: FacebookEngineTargetState): Promise<void> {
+    if (share.runs.size === 0 || state.stopped) return
+    const delivery: DeliveryState = share.aborted || (state.refused !== null && state.refused.key === share.mainKey)
+      ? 'not_delivered' : share.postDelivery ?? 'unknown'
+    for (const run of share.runs.values()) {
+      if (run.done) continue
+      const step = { key: FACEBOOK_SHARE_STEP_KEY, actionCode: 'fb_post_group', actionName: 'Đăng bài', quietOk: true }
+      const raw: RawOutcome = delivery === 'delivered' || delivery === 'partial'
+        ? { ok: true, statusCode: 'campaign_detail_success', customerLog: `Đăng bài dạng chia sẻ vào ${run.target.name}`,
+            data: { shareMode: 'group_composer_add_group', sharedFromInputDataId: detail?.id ?? null, sharedFromName: name || undefined,
+              targetUid: run.target.uid } }
+        : delivery === 'unknown'
+          ? { ok: false, phase: 'in_flight', signal: { kind: 'engine', code: 'unknown_delivery', errorCode: 'err_engine_unknown_delivery',
+              message: 'Không xác nhận được bài đã đăng vào nhóm chia sẻ kèm' } }
+          : { ok: false, phase: 'before_send', signal: { kind: 'engine', code: 'interrupted_before_send', errorCode: 'err_engine_interrupted_before_send',
+              message: 'Bài đăng chính chưa đăng được, nhóm chia sẻ kèm chạy lại ở lượt sau' } }
+      const res = await api.reportExtra(run.targetRunId, step, raw, { quiet: delivery !== 'unknown' })
+      if ('stop' in res) {
+        if (res.reason === 'ownership_lost') { state.stopped = res; return }
+        console.warn('[CampaignEngine] Không chốt được nhóm chia sẻ kèm', { campaignId: campaign.id, inputDataId: run.target.id, reason: res.reason })
+        continue
+      }
+      run.done = true
+      if (raw.ok) await this.finishGroupPostShareTarget(campaign, run.target).catch(error => console.warn('[CampaignEngine] share note:', error))
+    }
+  }
+
+  /**
+   * Chạy bộ dựng dòng lịch sử của bộ cũ cho các bước (theo thứ tự) ở chế độ thu lại: mỗi dòng định ghi (writeCampaignDetail) thành một
+   * kết quả báo lên engine theo khoá mốc của bước (thêm :n khi một bước có nhiều dòng); câu tiến trình của bộ dựng in sau, trừ câu lỗi
+   * (lõi in câu lỗi kèm mã). Việc kèm theo của bộ dựng (Up tin, đồng bộ trạng thái duyệt bài…) chạy như bộ cũ.
+   */
+  private async reportFacebookEngineRows(campaign: Campaign, detail: CampaignInputData | null, accountId: number, steps: RunStepV2[],
+    context: RunStepV2[] | null, ctx: {
+      report: (key: string, actionCode: string, raw: RawOutcome, actionName?: string) => Promise<ReportSuccess | null>
+      /** Khoá kết quả cho một dòng của bước đang dựng (giải quyết dấu đang mở nếu có) và pha của dòng lỗi kiểu cũ. */
+      placeRow: (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null) => { key: string; phase: Phase | null }
+      /** Mã ảnh lỗi của bước (nếu đã chụp). */
+      screenshotOf?: (step: RunStepV2 | null) => string | null
+      /** Dấu hiệu có mặt của lỗi cụ thể cho dòng lỗi (errorSigns.ts, anh chốt 17/11); null = như hôm nay. */
+      signOf?: (step: RunStepV2 | null, actionCode: string, phase: Phase, currentErrorCode: string | null,
+        messages: ReadonlyArray<string | null | undefined>) => FacebookErrorSign | null
+      firstAction: string
+      /** Dòng của data khác data chính (nhóm chia sẻ kèm): báo lên lượt data của nhóm đó; undefined = dòng của data chính. */
+      extraRow?: (action: CreateCampaignDetailInput, outcome: MilestoneOutcome) => Promise<CampaignDetail | null | undefined>
+    }): Promise<void> {
+    const allSteps = context ?? steps
+    let current: RunStepV2 | null = null
+    const captured: Array<{ message: string; options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } }> = []
+    this.facebookEngineSinks.set(campaign.id, async action => {
+      const outcome = detailInputOutcome(action, ctx.firstAction)
+      const routed = ctx.extraRow ? await ctx.extraRow(action, outcome) : undefined
+      if (routed !== undefined) return routed
+      const place = ctx.placeRow(current, outcome.actionCode, action.resultOutput?.operationState ? null : String(action.status ?? ''))
+      if (!outcome.raw.ok && place.phase) outcome.raw = { ...outcome.raw, phase: place.phase }
+      // Dấu hiệu có mặt: mã cụ thể thay mã chung / dòng chưa có mã; chính sách của mã đó giữ cách xử lý như hôm nay (V559), chỉ đổi câu.
+      if (!outcome.raw.ok && ctx.signOf) {
+        const raw = outcome.raw
+        const sign = ctx.signOf(current, outcome.actionCode, raw.phase, raw.signal.errorCode ?? null, [raw.signal.message ?? null, action.log ?? null])
+        if (sign) outcome.raw = { ...raw, signal: { ...raw.signal, kind: 'block', code: sign.code, errorCode: sign.code } }
+      }
+      const screenshotId = !outcome.raw.ok ? ctx.screenshotOf?.(current) : null
+      if (!outcome.raw.ok && screenshotId) outcome.raw = { ...outcome.raw, signal: { ...outcome.raw.signal, screenshotId } }
+      const res = await ctx.report(place.key, outcome.actionCode, outcome.raw, outcome.actionName)
+      if (!res) throw new FacebookEngineReportStop()
+      const decision = res.outcomes.find(item => item.actionCode === outcome.actionCode) ?? res.outcomes[0]
+      if (!decision || decision.detailId == null) return null
+      return {
+        id: decision.detailId, campaignId: campaign.id, accountId, inputDataId: action.inputDataId ?? detail?.id ?? null,
+        actionCode: decision.actionCode, actionName: decision.actionName || action.actionName || '',
+        status: (FACEBOOK_STATUS_VALUES[decision.statusCode ?? ''] ?? (decision.ok ? 'thành công' : 'thất bại')) as CampaignDetailStatus,
+        errorCode: decision.errorCode, log: decision.log, data: action.data, postUrl: action.postUrl, isDelete: false,
+        reportGroup: decision.reportGroup as CampaignDetail['reportGroup'], countsTowardLimit: decision.countsTowardLimit
+      }
+    })
+    this.facebookEngineProgress.set(campaign.id, captured)
+    try {
+      const summary = this.createMilestoneSummary()
+      for (const step of steps) {
+        current = step
+        if (campaign.actionId === FACEBOOK_GROUP_INVITE_ACTION_ID && step.blockName === FACEBOOK_GROUP_INVITE_ACTION_CODE
+          && step.status === 'success' && !this.hasExplicitActionResult(step)) {
+          await this.writeFacebookGroupInviteEngineRows(campaign, detail, accountId, step, ctx)
+        } else if (this.hasExplicitActionResult(step)) {
+          await this.logExplicitActionResultStep(campaign, detail, accountId, step, summary, allSteps, new Set())
+        } else if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID) {
+          await this.logNewsfeedMilestoneStep(campaign, detail, accountId, step)
+        } else {
+          await this.logMilestonesV2(campaign, detail, accountId, allSteps, true, [], new Set(), { step, summary })
+        }
+      }
+    } finally {
+      this.facebookEngineSinks.delete(campaign.id)
+      this.facebookEngineProgress.delete(campaign.id)
+      for (const line of captured) {
+        if (line.message.startsWith('❌')) continue
+        await this.logCampaignProgress(campaign, line.message, { ...line.options, engine: true })
+      }
+    }
+  }
+
+  /**
+   * Mời vào group chạy bằng engine: block trả results theo lô (không theo khuôn actionResult); bộ cũ dựng dòng lịch sử bằng
+   * processFacebookGroupInviteOutput. Engine chạy lô một người nên dựng đúng các dòng đó cho data đang chạy rồi báo lên engine qua
+   * writeCampaignDetail (thử thật 17/11: thiếu đoạn này engine chốt FB45, không ghi dòng "Đã là thành viên của group" như bộ cũ).
+   * Bấm gửi lỗi mà người này đã được chọn: bộ cũ trả data về hàng đợi kèm ghi chú, không ghi dòng → engine báo "chưa gửi, về hàng đợi".
+   * Block không trả kết quả cho data: bộ cũ ghi dòng "lỗi" (rồi tạm dừng ngay); engine ghi dòng "lỗi" như vậy, dừng theo chuỗi lỗi.
+   */
+  private async writeFacebookGroupInviteEngineRows(campaign: Campaign, detail: CampaignInputData | null, accountId: number, step: RunStepV2,
+    ctx: { report: (key: string, actionCode: string, raw: RawOutcome, actionName?: string) => Promise<ReportSuccess | null>
+      placeRow: (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null) => { key: string; phase: Phase | null } }): Promise<void> {
+    if (!detail) return
+    const output = (step.output ?? {}) as FacebookGroupInviteBlockOutput
+    const extra = campaign.extraSettings || {}
+    const groupUrl = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUrl, extra.facebookGroupInviteTargetGroupUid)
+    const groupName = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupName, groupUrl)
+    const groupUid = this.firstNonEmptyString(extra.facebookGroupInviteTargetGroupUid)
+    const target = this.createFacebookGroupInviteTarget(detail)
+    const actionCode = FACEBOOK_GROUP_INVITE_ACTION_CODE
+    const actionName = this.getAccountActionName(actionCode)
+    const runId = step.runId != null ? String(step.runId) : undefined
+    const rows = (Array.isArray(output.results) ? output.results : []).filter(raw => Number(raw?.inputDataId) === detail.id)
+    for (const raw of rows) {
+      const status = this.normalizeFacebookGroupInviteDetailStatus(raw, output)
+      const message = this.getFacebookGroupInviteDetailMessage(status, raw, target, groupName)
+      if (output.submitOk === false && raw.selected === true) {
+        const res = await ctx.report(ctx.placeRow(step, actionCode, null).key, actionCode, { ok: false, phase: 'before_send',
+          signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled', message } }, actionName)
+        if (!res) throw new FacebookEngineReportStop()
+        continue
+      }
+      await this.writeCampaignDetail({
+        inputDataId: detail.id, campaignId: campaign.id, accountId, actionCode, actionName, status,
+        errorCode: status === 'lỗi' ? 'err_undefined' : undefined, log: message,
+        data: { groupUrl, groupName, groupUid, target: { inputDataId: detail.id, name: target.name, uid: target.uid, url: target.url },
+          selected: raw.selected === true, submitOk: output.submitOk === true, runId, rawResult: raw as Record<string, unknown> },
+        shouldCountAction: status === 'thành công' && raw.countsTowardLimit !== false
+      })
+    }
+    if (rows.length === 0) {
+      await this.writeCampaignDetail({
+        inputDataId: detail.id, campaignId: campaign.id, accountId, actionCode, actionName, status: 'lỗi', errorCode: 'err_undefined',
+        log: output.error || output.message || 'Workflow mời vào group không trả về kết quả target',
+        data: { groupUrl, groupName, groupUid, runId }, shouldCountAction: false
+      })
+    }
   }
 
   private async runFacebookGroupInviteBatch(
@@ -10625,8 +11809,14 @@ export class CampaignScheduler {
     const enablePostLike = !nativeGroupShare && (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
     const commentGroupMode = extra.commentGroupMode || 'all'
     const commentType = extra.commentType || 'own'
+    // Q10 (16/11/2026): "Số comment tối đa" / "Số bài cần comment" không quá trần facebook.max_comments (mặc định 20, sửa ở DB); chiến dịch
+    // cũ đặt hơn trần chỉ chạy tới trần (bản Desktop này, cả bộ cũ lẫn engine).
+    const maxComments = cachedFacebookRuntimeSettings().maxComments
     const rawCommentCount = Math.floor(Number(extra.commentCount ?? 3))
-    const commentCount = Number.isFinite(rawCommentCount) ? Math.max(1, rawCommentCount) : 3
+    const commentCount = Math.min(maxComments, Number.isFinite(rawCommentCount) ? Math.max(1, rawCommentCount) : 3)
+    const rawPostsPerTarget = extra.postsPerTarget == null ? null : Math.floor(Number(extra.postsPerTarget))
+    const postsPerTarget = rawPostsPerTarget != null && Number.isFinite(rawPostsPerTarget)
+      ? Math.min(maxComments, Math.max(1, rawPostsPerTarget)) : null
     let commentIndices: number[] = []
     if (enableCommentIterations) {
       if (commentType === 'own') commentIndices = [1]
@@ -10676,7 +11866,7 @@ export class CampaignScheduler {
       ? 1
       : useAdvancedCommentContent && campaign.actionId === COMMENT_SEEDING_POST_ACTION_ID
         ? 1
-        : Math.max(commentIndices.length, Number(extra.postsPerTarget ?? commentCount), 1)
+        : Math.max(commentIndices.length, Number(postsPerTarget ?? commentCount), 1)
     let commentVariants: string[]
     let commentImageBatches: string[][]
     let commentImageOption: 'none' | 'all' | 'random'
@@ -10783,7 +11973,7 @@ export class CampaignScheduler {
       commentImageBatches,
       commentImageOption: enableCommentIterations ? commentImageOption : 'none',
       enablePostLike,
-      postsPerTarget: extra.postsPerTarget ?? commentCount,
+      postsPerTarget: postsPerTarget ?? commentCount,
       commentPostSort: canUseCommentSeedingPostContentConditions
         ? (extra.commentPostSort ?? 'recent_activity')
         : undefined,
@@ -11226,7 +12416,7 @@ export class CampaignScheduler {
             ? this.groupPostMilestonePayload(campaign, detail, accountId, step, steps, output) : null
           const shareTarget = isGroupVerify && output.actionCode === 'fb_post_group'
             ? shareTargets.find(target => target.id === inputDataId) : undefined
-          const created = await this.supabase.createCampaignDetail({ ...legacy?.action, ...group?.action, campaignId: campaign.id, accountId,
+          const created = await this.writeCampaignDetail({ ...legacy?.action, ...group?.action, campaignId: campaign.id, accountId,
             inputDataId, actionCode: output.actionCode,
             actionName: String(row.actionName || legacy?.action.actionName || helperLegacy?.actionName || group?.action.actionName || this.getAccountActionName(output.actionCode)),
             resultOutput: group && output.subStatusCode == null
@@ -11244,7 +12434,7 @@ export class CampaignScheduler {
                 sharedFromName: this.getInputDataDisplayName(campaign, detail, '') || undefined, targetUid: shareTarget.uid } : {}),
               ...(row.data && typeof row.data === 'object' ? row.data as Record<string, unknown> : {}) } })
           if (group) await group.finish(async action => {
-            const shared = await this.supabase.createCampaignDetail(action)
+            const shared = await this.writeCampaignDetail(action)
             if (shared) this.recordMilestoneSummary(summary, shared.status, shared.log, shared.actionName)
             return shared
           }, consumedGroupPostInputDataIds, explicitInputIds)
@@ -11316,7 +12506,8 @@ export class CampaignScheduler {
             // Thresholds belong to the complete target, not an individual
             // result/progress event. Non-counting and immediate effects retain
             // their existing timing and share the same receipt on replay.
-            if (!this.getPolicyThreshold(policy) || !receipt.countsTowardBadTarget) {
+            // Engine v2 Facebook: DB đã quyết định chính sách theo kết quả vừa báo; không áp chính sách của bộ cũ lần nữa.
+            if (!this.facebookEngineSinks.has(campaign.id) && (!this.getPolicyThreshold(policy) || !receipt.countsTowardBadTarget)) {
               const account = await this.supabase.getAccount(accountId)
               if (account) {
                 receipt.handling = this.applyRuntimeErrorPolicy(account, campaign, receipt.errorCode, output.actionCode,
@@ -11400,12 +12591,13 @@ export class CampaignScheduler {
     }
     const milestone = this.newsfeedMilestonePayload(campaign, detail, accountId, step)
     if (!milestone) return
+    // stepKey (node + vòng lặp) trước: bước engine báo ngay không có startedAt, mà hai lần like cùng một bài ở hai vòng có output giống hệt.
     const key = [campaign.id, step.runId ?? 'run', step.nodeId || step.blockName,
-      step.startedAt || step.completedAt || JSON.stringify(step.output || {})].join(':')
+      step.stepKey || step.startedAt || step.completedAt || JSON.stringify(step.output || {})].join(':')
     if (this.loggedNewsfeedMilestoneKeys.has(key)) return
     this.loggedNewsfeedMilestoneKeys.add(key)
     try {
-      await this.supabase.createCampaignDetail(milestone.action)
+      await this.writeCampaignDetail(milestone.action)
       await this.logCampaignProgress(campaign, milestone.progress)
       if (milestone.linkProgress) await this.logCampaignProgress(campaign, milestone.linkProgress)
     } catch (err) {
@@ -11666,7 +12858,7 @@ export class CampaignScheduler {
     }
     const normal = normalResults[outcome]
     if (normal) {
-      await this.supabase.createCampaignDetail({
+      await this.writeCampaignDetail({
         inputDataId: detail?.id, campaignId: campaign.id, accountId,
         actionCode: 'fb_add_friend', actionName: 'Kết bạn', status: normal.status,
         log: normal.log, shouldCountAction: normal.count, data: { friendOutcome: outcome }
@@ -11693,7 +12885,7 @@ export class CampaignScheduler {
         actionName: 'Kết bạn', action: 'Kết bạn', actionCode: 'fb_add_friend',
         message: errorCode === 'err_undefined' ? undefined : message
       }) || policy?.errorName || `Không thực hiện được thao tác kết bạn với ${name}`
-      await this.supabase.createCampaignDetail({
+      await this.writeCampaignDetail({
         inputDataId: detail?.id, campaignId: campaign.id, accountId,
         actionCode: 'fb_add_friend', actionName: 'Kết bạn', status, errorCode, log,
         shouldCountAction: policy?.countsTowardLimit ?? true,
@@ -11733,7 +12925,7 @@ export class CampaignScheduler {
     const summary = legacyPass?.summary ?? this.createMilestoneSummary()
     const emits = (step: RunStepV2 | undefined): boolean => !!step && (!legacyPass || legacyPass.step === step)
     const createCampaignDetail = async (action: import('../../shared/types').CreateCampaignDetailInput) => {
-      const created = await this.supabase.createCampaignDetail(action)
+      const created = await this.writeCampaignDetail(action)
       if (!created) return null
       this.recordMilestoneSummary(
         summary,
@@ -14564,9 +15756,17 @@ export class CampaignScheduler {
   private async logCampaignProgress(
     campaignOrId: number | Pick<Campaign, 'id' | 'name' | 'accountId' | 'accountName'>,
     message: string,
-    options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } = {}
+    options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string; engine?: boolean } = {}
   ): Promise<void> {
     const campaignId = typeof campaignOrId === 'number' ? campaignOrId : campaignOrId.id
+    // Engine v2 Facebook: bộ dựng dòng lịch sử đang chạy ở chế độ thu lại; câu của engine (engine: true) đi thẳng.
+    const capture = options.engine === true ? undefined : this.facebookEngineProgress.get(campaignId)
+    if (capture) {
+      const { engine: _engine, ...rest } = options
+      void _engine
+      capture.push({ message, options: rest })
+      return
+    }
     let realtimeMessage = options.realtimeMessage ?? message
     let realtimeContext: Pick<CampaignLogEntry, 'accountId' | 'accountName' | 'campaignId' | 'campaignName'> = {
       campaignId,
@@ -17327,6 +18527,8 @@ export class CampaignScheduler {
       variantCount: count,
       signal,
       takeIndex: variantCount => {
+        const engineTaker = this.engineContentIndexTakers.get(campaign.id)
+        if (engineTaker) return engineTaker(actionCode, variantCount)
         const runtimeClaimToken = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
         const runtimeUnitToken = this.activeCampaignRunUnits.get(campaign.id)?.runtimeUnitToken
         if (!runtimeClaimToken || !runtimeUnitToken) throw new Error('Thiếu quyền sở hữu lượt để lấy nội dung chiến dịch')

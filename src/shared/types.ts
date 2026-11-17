@@ -735,6 +735,12 @@ export interface CampaignExtraSettings {
   multiDailyTimeSlots?: string         // Danh sách HH:mm, cách nhau bởi dấu phẩy
   zaloShareRepeatEnabled?: boolean     // Zalo friend/group gửi dạng chia sẻ: gửi xong thì gửi lặp lại sau x phút (src/shared/zaloShareRepeat.ts)
   zaloShareRepeatAfterMinutes?: number // Số phút nghỉ, tính từ lúc hoàn thành lượt trước (5–1439)
+  /** "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts): cài đặt trên form, lưu ở extra_settings; bộ chạy chưa đọc. */
+  repeatAfterCompletionEnabled?: boolean
+  repeatAfterCompletionEvery?: number
+  repeatAfterCompletionUnit?: 'minute' | 'hour' | 'day'
+  /** Số lượt tối đa, tính cả lượt đầu (2–100). */
+  repeatAfterCompletionMaxRuns?: number
   isFindPostByKeywords?: boolean
   postKeywords?: string
   isFindPostByContentAI?: boolean
@@ -1266,6 +1272,11 @@ export interface CampaignDetailAutomationTrigger {
 export interface CampaignDetailPageQuery {
   includeFacebookGroupMetadata?: boolean
   engagementFilter?: EngagementFilter
+  /**
+   * Bộ lọc Hành động (V539/V540): bỏ trống = "Tất cả", gọi đúng hàm v2 như cũ; một mã = chỉ lượt của hành động đó;
+   * '' = lượt cũ chưa ghi hành động. Có giá trị thì đọc bằng `aka_agent_list_campaign_details_page_v3`.
+   */
+  actionCode?: string
   campaignId: number
   sort?: CampaignDetailSort
   search?: string
@@ -3098,9 +3109,9 @@ export interface AuthUser {
   /** Quyền đồng bộ Chat hiệu lực, gộp từ Product Zalo 16/18 còn hạn của tổ chức. */
   isChatSync?: boolean
   /**
-   * V498: tài khoản Zalo Server của tổ chức đang chạy trên Fly (có Chat, hoặc ChatApi đã nhận theo cờ engine v2).
-   * Chỉ hỏi khi tổ chức không Chat có quyền Server; chốt lúc đăng nhập. Tổ chức không Chat chỉ dùng để nghe tiến trình
-   * chiến dịch từ ChatApi, thao tác tài khoản vẫn đi App Server.
+   * Tài khoản Zalo Server của tổ chức không Chat chạy trên Fly; chốt lúc đăng nhập theo cờ engine v2 của tổ chức (V513,
+   * `resolveZaloServerOnFlyAtLogin`): bật = Fly, tắt = App Server. Đúng (và có quyền Server) thì mọi việc của tài khoản Server
+   * đi ChatApi (`serverAccountsUseChatApi`): tiến trình, QR, kiểm phiên, đăng xuất, quét data, kiểm SĐT.
    */
   zaloServerOnFly?: boolean
   /**
@@ -3108,6 +3119,12 @@ export interface AuthUser {
    * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
    */
   campaignEngineV2?: boolean
+  /**
+   * V556: tổ chức nằm trong thiết lập engine.facebook (aka_agent_engine_facebook_enabled_v1, đọc theo phiên). Chốt lúc đăng nhập,
+   * không phụ thuộc quyền Zalo; chỉ khi true bản Desktop này mới chạy chiến dịch Facebook bằng engine v2 (loại nào do hàm phủ quyết định).
+   * Tắt khẩn cấp có hiệu lực ở lần nhận lượt kế tiếp nhờ claim kiểm lại (not_enabled → bộ cũ tới hết phiên).
+   */
+  facebookEngineV2?: boolean
   /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
   chatWebEnabledAtLogin?: boolean
   /** Opaque desktop login generation; never a Chat authentication token. */

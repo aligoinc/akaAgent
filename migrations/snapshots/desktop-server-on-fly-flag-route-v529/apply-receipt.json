@@ -1,0 +1,41 @@
+{
+  "migration": "migration_v529_desktop_server_on_fly_flag_route",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh (14/11/2026 ~08:50 VN: \"Sửa V498\")",
+  "applied_at_vn": "2026-11-14 08:55:07",
+  "method": "supabase db query --linked -f (file bọc bằng scripts/make-migration-ledger-apply.cjs, dòng sổ cùng giao dịch)",
+  "ledger": {
+    "version": "20261114015453",
+    "name": "migration_v529_desktop_server_on_fly_flag_route",
+    "statements_md5": "a1217f23b6faddf9b6ea431801ad6e2c",
+    "file_md5": "a1217f23b6faddf9b6ea431801ad6e2c"
+  },
+  "preflight_live_08_54_vn": {
+    "ledger_last": "20261113191417 (migration_v528_new_zalo_runtime_default_on)",
+    "fn_md5_v498": "0e8f19b1cabf61598a08a818dfe20171",
+    "flag_route_md5": "9fc8fdbcfeeb1ccbaccb21e98078d980",
+    "fn_acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+    "orgs_changing_result": [1422, 2095, 2104, 2114, 2116, 2126, 2127, 2128, 2129, 2133, 2137, 2140]
+  },
+  "postflight": {
+    "fn_md5": "2bdb82692298981a410803ef8ef47266",
+    "fn_acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+    "fn_attrs": {"owner": "postgres", "security_definer": true, "volatility": "s", "config": ["search_path=pg_catalog, public, private"]},
+    "desktop_session_calls_rolled_back": [
+      {"org": 1422, "group": "bật cờ, gói Server, chưa có tài khoản Server (đổi kết quả)", "on_fly": true},
+      {"org": 465, "group": "chỉ Desktop, không gói Server", "on_fly": false}
+    ]
+  },
+  "postgrest": {
+    "schema_reload_message_utc": "2026-11-14T01:55:07.225",
+    "schema_cache_queried_ms": 7136.4,
+    "edge_01_55_utc": {"requests": 38208, "e5xx": 0, "e503": 0, "over_1s": 495, "p50_ms": 45, "p99_ms": 1250},
+    "edge_01_56_utc": {"e5xx": 0, "e503": 0, "over_1s": 0, "p50_ms": 41, "p99_ms": 98}
+  },
+  "tests": {
+    "v529": "node scripts/test-v529-desktop-server-on-fly-flag-route.cjs: 9 nhóm đạt (PG17 cục bộ)",
+    "v498_regression": "node scripts/test-v498-zalo-server-on-fly-desktop.cjs: 9 nhóm đạt"
+  },
+  "effect": "Desktop ≥ 9.6.0 đọc hàm lúc đăng nhập: nhân viên của 12 tổ chức trên đăng nhập lại thì tài khoản Server đi ChatApi (Fly) ngay từ tài khoản đầu tiên. Desktop < 9.6.0 không gọi hàm.",
+  "rollback": "migrations/rollback_v529_desktop_server_on_fly_flag_route.sql (trả đúng thân V498, md5 0e8f19b1cabf61598a08a818dfe20171)"
+}

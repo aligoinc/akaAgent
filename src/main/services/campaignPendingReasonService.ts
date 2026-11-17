@@ -16,6 +16,8 @@ export interface PendingReasonRuntime {
   readinessReason(account: AutoAccount, campaign: Campaign): string | null
   configurationReason(campaign: Campaign, action: CampaignAction, requiresWorkflow: boolean): string | null
   limitReason(account: AutoAccount, campaign: Campaign, action: CampaignAction): Promise<string | null>
+  /** Engine v2: câu theo lần nhận lượt gần nhất của bộ chạy trên máy này (lease, token bộ cũ, khoá / hạn mức…); null = không có. */
+  engineReason?(account: AutoAccount, campaign: Campaign): string | null
 }
 
 const mobileManaged = (campaign: Campaign) => campaign.actionId === 'sms_send' || campaign.actionId === 'voice_call'
@@ -137,6 +139,8 @@ export async function inspectPendingCampaign(
   if (account.loginStatus !== 'đã đăng nhập') return finish('Tài khoản chưa đăng nhập hoặc phiên đăng nhập đã hết hạn.')
   const readiness = runtime.readinessReason(account, campaign)
   if (readiness) return finish(readiness)
+  const engine = runtime.engineReason?.(account, campaign)
+  if (engine) return finish(engine)
 
   const action = await reads.readPendingReasonAction(campaign.actionId, signal)
   if (!action || isChatManaged && (!action.isActive || action.isDelete || action.flatformType !== 'zalo')) {

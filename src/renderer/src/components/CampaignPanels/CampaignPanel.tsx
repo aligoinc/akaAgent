@@ -15,7 +15,7 @@ import { canCheckCampaignPendingReason } from '../../../../shared/campaignPendin
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
 import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, CalendarDays, CircleDot, Monitor, Hash, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
+import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, Merge, CalendarDays, CircleDot, Monitor, Hash, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
 import { loadSelectedCampaignInputData } from '../../../../shared/campaignInputDataSelection'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useAuthStore } from '../../stores/authStore'
@@ -81,6 +81,15 @@ import { CAMPAIGN_LIMIT_PROGRESS_MAX_IDS } from '../../../../shared/campaignLimi
 import CampaignInfoView from './CampaignInfoView'
 import CampaignContentPreviewTab from './CampaignContentPreviewTab'
 import { CampaignRunReportTab, type CampaignReportDrillTarget } from './CampaignRunReport/CampaignRunReportTab'
+import { CampaignResultActionList } from './CampaignResults/CampaignResultActionList'
+import { CampaignResultMergedView, type CampaignResultMergedState } from './CampaignResults/CampaignResultMergedView'
+import { CampaignResultExportCancelled, exportCampaignResultsMerged } from './CampaignResults/campaignResultMergedExport'
+import { useCampaignResultActions } from './CampaignResults/useCampaignResultActions'
+import {
+  CAMPAIGN_RESULT_ACTIONS_NOT_READY, CAMPAIGN_RESULT_NO_ACTION, CAMPAIGN_RESULT_NO_ACTION_LABEL, campaignResultActionFileName,
+  type CampaignResultActionView, type CampaignResultRecipientSort
+} from '../../../../shared/campaignResultActions'
+import type { CampaignResultRecipientIpcQuery } from '../../../../shared/campaignResultActionsIpc'
 import { buildCampaignContentPreview } from './campaignContentPreview'
 import { getContentTemplateChannelForAction } from './contentTemplateCampaignUtils'
 import AutomationFormModal from '../Automation/AutomationFormModal'
@@ -119,7 +128,7 @@ interface CampaignPanelProps {
 type DetailTab = 'randomRun' | 'info' | 'data' | 'actions' | 'report' | 'accountActions' | 'contentPreview' | 'automation' | 'automationActivation' | 'emailLinks' | 'runLog' | 'accountInfo' | 'foundData' | 'findDataLog' | 'postSearchLog' | 'findDataCampaigns' | 'sourceCampaigns'
 type CampaignTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'this_month' | 'last_month' | '60_days' | '90_days' | 'custom'
 type CampaignFilterDropdown = 'time' | 'account' | 'status' | 'platform' | 'action'
-type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'findDataLogScope'
+type DetailFilterDropdown = 'inputDataTime' | 'inputDataStatus' | 'inputDataOrigin' | 'inputDataSort' | 'actionsTime' | 'actionsStatus' | 'actionsSort' | 'actionsAction' | 'findDataLogScope'
 type DetailTimePreset = 'all' | 'today' | 'yesterday' | '7_days' | '30_days' | 'custom'
 type InputDataBatchStatus = Extract<CampaignInputStatus, 'chờ xử lý' | 'tạm dừng'>
 type CampaignTableRow =
@@ -1771,7 +1780,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     campaignConfigs, campaignLogs, loadingCampaignConfigIds, loadingCampaignLogIds,
     campaignInputData, campaignInputDataTotal, loadingCampaignInputData,
     campaignDetails, loadingCampaignDetails,
-    campaignDetailPageItems, campaignDetailPageTotal, loadingCampaignDetailPage,
+    campaignDetailPageItems, campaignDetailPageTotal, loadingCampaignDetailPage, campaignDetailPageError,
     emailCampaignLinkTrackings, emailCampaignLinkTrackingCampaignId, loadingEmailCampaignLinkTrackings,
     campaignRunEvents, loadingCampaignRunEvents,
     campaignRelationSummaries, loadingCampaignRelationSummaries,
@@ -1911,6 +1920,18 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [debouncedActionDetailSearch, setDebouncedActionDetailSearch] = useState('')
   const [actionDetailPage, setActionDetailPage] = useState(1)
   const [actionDetailSort, setActionDetailSort] = useState<CampaignDetailSort>('created_desc')
+  // Bộ lọc Hành động của tab Kết quả chạy (V539/V540): Tất cả (mặc định, đọc v2 như cũ), một hành động, hoặc gộp theo data.
+  const [resultActionView, setResultActionView] = useState<CampaignResultActionView>({ kind: 'all' })
+  const [resultActionRequestedName, setResultActionRequestedName] = useState<string | undefined>()
+  const [mergedResultSort, setMergedResultSort] = useState<CampaignResultRecipientSort>('processed_desc')
+  const [mergedResultState, setMergedResultState] = useState<CampaignResultMergedState>({ total: 0, loading: true, failed: false })
+  const [mergedResultReload, setMergedResultReload] = useState(0)
+  const [mergedExportProgress, setMergedExportProgress] = useState<{ done: number; total: number } | null>(null)
+  const [mergedExportError, setMergedExportError] = useState('')
+  const mergedExportCancelled = useRef(false)
+  const resultActions = useCampaignResultActions(selectedCampaignId)
+  const resultMerged = resultActionView.kind === 'merged'
+  const resultActionCode = resultActionView.kind === 'action' ? resultActionView.code : undefined
   const [exportingCampaignDetails, setExportingCampaignDetails] = useState(false)
   const [exportingFoundData, setExportingFoundData] = useState(false)
   const [findDataLogScope, setFindDataLogScope] = useState<FindDataLogScope>('visible')
@@ -2177,6 +2198,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       return
     }
     if (detailTab === 'actions') {
+      // Chế độ gộp tự đọc theo trang của nó (CampaignResultMergedView), không đọc danh sách kết quả.
+      if (resultMerged) return
       const dateStart = actionDetailFilters.timePreset === 'all'
         ? null
         : parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
@@ -2191,7 +2214,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
         dateFrom: dateStart?.toISOString() || null,
         dateTo: dateEnd?.toISOString() || null,
         offset: (actionDetailPage - 1) * CAMPAIGN_DETAIL_PAGE_SIZE,
-        limit: CAMPAIGN_DETAIL_PAGE_SIZE
+        limit: CAMPAIGN_DETAIL_PAGE_SIZE,
+        // "Tất cả" không gửi khóa này nên đọc đúng hàm v2 như trước.
+        ...(resultActionCode === undefined ? {} : { actionCode: resultActionCode })
       })
       return
     }
@@ -2249,7 +2274,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     actionDetailFilters.engagementFilter,
     actionDetailFilters.timePreset,
     actionDetailPage,
-    actionDetailSort
+    actionDetailSort,
+    resultMerged,
+    resultActionCode
   ])
 
   useEffect(() => {
@@ -2276,7 +2303,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
 
   useEffect(() => {
     setActionDetailPage(1)
-  }, [debouncedActionDetailSearch, actionDetailFilters.dateFrom, actionDetailFilters.dateTo, actionDetailFilters.status, actionDetailFilters.engagementFilter, actionDetailFilters.timePreset, selectedCampaignId])
+  }, [debouncedActionDetailSearch, actionDetailFilters.dateFrom, actionDetailFilters.dateTo, actionDetailFilters.status, actionDetailFilters.engagementFilter, actionDetailFilters.timePreset, selectedCampaignId, resultActionCode])
+
+  // Danh sách hành động: tải khi đang ở một hành động hoặc chế độ gộp (tên cột, tên hành động); "Tất cả" chỉ tải khi mở bảng chọn.
+  useEffect(() => {
+    if (detailTab === 'actions' && resultActionView.kind !== 'all') resultActions.load()
+  }, [detailTab, resultActionView.kind, resultActions.load])
 
   useEffect(() => {
     const pageCount = Math.max(1, Math.ceil(campaignInputDataTotal / CAMPAIGN_INPUT_DATA_PAGE_SIZE))
@@ -2401,6 +2433,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     setActionDetailSearch('')
     setDebouncedActionDetailSearch('')
     setActionDetailPage(1)
+    setResultActionView({ kind: 'all' })
+    setResultActionRequestedName(undefined)
+    setMergedResultSort('processed_desc')
+    mergedExportCancelled.current = true
+    setMergedExportProgress(null)
+    setMergedExportError('')
     setAutomationExecutionSearch('')
     setDebouncedAutomationExecutionSearch('')
     setAutomationExecutionStatus('')
@@ -4005,7 +4043,73 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       dateFrom: dateStart?.toISOString() || null,
       dateTo: dateEnd?.toISOString() || null,
       offset,
-      limit
+      limit,
+      ...(resultActionCode === undefined ? {} : { actionCode: resultActionCode })
+    }
+  }
+
+  /** Bộ lọc của chế độ gộp: cùng các bộ lọc của tab (thời gian, trạng thái, tương tác, tìm) + thứ tự theo data. */
+  const mergedResultQuery = useMemo<CampaignResultRecipientIpcQuery>(() => {
+    const dateStart = actionDetailFilters.timePreset === 'all' ? null : parseDateInputBoundary(actionDetailFilters.dateFrom, 'start')
+    const dateEnd = actionDetailFilters.timePreset === 'all' ? null : parseDateInputBoundary(actionDetailFilters.dateTo, 'end')
+    return {
+      sort: mergedResultSort,
+      search: debouncedActionDetailSearch.trim() || undefined,
+      status: actionDetailFilters.status || undefined,
+      engagementFilter: actionDetailFilters.engagementFilter && actionDetailFilters.engagementFilter !== 'all' ? actionDetailFilters.engagementFilter : undefined,
+      dateFrom: dateStart?.toISOString() || undefined,
+      dateTo: dateEnd?.toISOString() || undefined
+    }
+  }, [mergedResultSort, debouncedActionDetailSearch, actionDetailFilters.status, actionDetailFilters.engagementFilter, actionDetailFilters.timePreset, actionDetailFilters.dateFrom, actionDetailFilters.dateTo])
+  const resultActionOption = resultActionCode !== undefined
+    ? resultActions.state.data?.actions.find(option => option.code === resultActionCode)
+    : undefined
+  const resultActionName = resultActionOption?.name || resultActionRequestedName
+    || (resultActionCode === CAMPAIGN_RESULT_NO_ACTION ? CAMPAIGN_RESULT_NO_ACTION_LABEL : undefined)
+  const resultActionLabel = resultActionView.kind === 'all' ? 'Tất cả' : resultMerged ? 'Gộp hành động' : resultActionName || 'Đang tải…'
+  const resultUsesInputData = selectedCampaignAccount?.flatformType !== 'facebook'
+    || !['facebook_timeline_post', 'facebook_newsfeed_interaction'].includes(selectedCampaign?.actionId || '')
+  const resultHasFilters = !!(actionDetailFilters.status || actionDetailFilters.timePreset !== 'all'
+    || (actionDetailFilters.engagementFilter && actionDetailFilters.engagementFilter !== 'all') || debouncedActionDetailSearch.trim())
+
+  const changeResultActionView = (next: CampaignResultActionView) => {
+    closeDetailDropdown()
+    setResultActionView(next)
+    setResultActionRequestedName(undefined)
+    setMergedExportError('')
+    setActionDetailPage(1)
+  }
+
+  const handleExportMergedResults = async () => {
+    if (!selectedCampaign) return
+    if (exportingCampaignDetails) {
+      // Bấm lần nữa khi đang xuất = hủy; không ghi file dở.
+      mergedExportCancelled.current = true
+      return
+    }
+    mergedExportCancelled.current = false
+    setMergedExportError('')
+    setExportingCampaignDetails(true)
+    try {
+      const count = await exportCampaignResultsMerged({
+        campaignId: selectedCampaign.id,
+        actionId: selectedCampaign.actionId,
+        platform: selectedCampaignAccount?.flatformType || '',
+        query: mergedResultQuery,
+        options: resultActions.state.data?.actions ?? [],
+        isCancelled: () => mergedExportCancelled.current,
+        onProgress: (done, total) => setMergedExportProgress({ done, total }),
+        formatTime: value => value ? formatDisplayDateTime(value) : ''
+      })
+      showAlert(`Đã xuất ${count.toLocaleString('vi-VN')} data ra Excel.`, 'success')
+    } catch (err) {
+      if (!(err instanceof CampaignResultExportCancelled)) {
+        console.error('Failed to export merged campaign results:', err)
+        setMergedExportError(err instanceof Error && err.message ? err.message : 'Không thể xuất file Excel.')
+      }
+    } finally {
+      setExportingCampaignDetails(false)
+      setMergedExportProgress(null)
     }
   }
 
@@ -4015,6 +4119,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       return
     }
     if (!window.electronAPI) return
+    if (resultMerged) {
+      await handleExportMergedResults()
+      return
+    }
 
     setExportingCampaignDetails(true)
     try {
@@ -4143,7 +4251,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, sheet, 'Lich su hanh dong')
       const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
-      writeFile(workbook, `campaign-history-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      writeFile(workbook, resultActionCode !== undefined
+        ? campaignResultActionFileName(selectedCampaign.id, resultActionName || resultActionCode || 'hanh-dong')
+        : `campaign-history-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
       showAlert('Đã xuất lịch sử hành động ra Excel.', 'success')
     } catch (err) {
       console.error('Failed to export campaign details:', err)
@@ -4340,6 +4450,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const handleLoadCampaignDetails = () => {
     if (!selectedCampaignId) {
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
+      return
+    }
+    // Danh sách hành động chỉ tải lại khi đã từng tải (đếm lượt mới).
+    resultActions.reload()
+    if (resultMerged) {
+      setMergedResultReload(value => value + 1)
       return
     }
     loadCampaignDetailPage(
@@ -4651,7 +4767,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   }
 
   // Bấm một số ở tab Báo cáo: mở Data ban đầu/Kết quả chạy đã lọc đúng trạng thái trên toàn thời gian (null = bỏ lọc).
-  const openReportDrillTab = (target: CampaignReportDrillTarget, status: string | null) => {
+  const openReportDrillTab = (target: CampaignReportDrillTarget, status: string | null, action?: { code: string; name: string }) => {
     if (target === 'data') {
       setInputDataSearch('')
       setDebouncedInputDataSearch('')
@@ -4664,6 +4780,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     setActionDetailSearch('')
     setDebouncedActionDetailSearch('')
     setActionDetailFilters({ ...createDefaultDetailFilters(), status: status || '' })
+    // Chip của một hành động mở đúng hành động đó (mã "" = lượt chưa ghi hành động); mục khác của báo cáo về "Tất cả".
+    setResultActionView(action ? { kind: 'action', code: action.code } : { kind: 'all' })
+    setResultActionRequestedName(action?.name)
     setActionDetailPage(1)
     setDetailTab('actions')
   }
@@ -4914,10 +5033,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
 
   const renderDetailSort = (target: 'inputDataSort' | 'actionsSort') => {
     const inputData = target === 'inputDataSort'
-    const value = inputData ? inputDataSort : actionDetailSort
-    const options = inputData ? CAMPAIGN_DATA_SORT_OPTIONS : CAMPAIGN_DATA_SORT_OPTIONS.slice(0, 2)
+    // Chế độ gộp sắp theo data (bốn cách như Data ban đầu; mặc định cập nhật gần nhất, data chưa chạy ở cuối).
+    const merged = !inputData && resultMerged
+    const value = inputData ? inputDataSort : merged ? mergedResultSort : actionDetailSort
+    const options = inputData || merged ? CAMPAIGN_DATA_SORT_OPTIONS : CAMPAIGN_DATA_SORT_OPTIONS.slice(0, 2)
     const label = options.find(option => option.value === value)!.label
-    const title = inputData
+    const title = inputData || merged
       ? 'Cập nhật là thời gian xử lý data; chưa có thời gian xử lý thì dùng thời gian tạo.'
       : 'Sắp xếp theo thời gian tạo kết quả chạy.'
     return (
@@ -4959,6 +5080,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                     if (inputData) {
                       setInputDataSort(option.value)
                       setInputDataPage(1)
+                    } else if (merged) {
+                      setMergedResultSort(option.value)
                     } else if (option.value === 'created_desc' || option.value === 'created_asc') {
                       setActionDetailSort(option.value)
                       setActionDetailPage(1)
@@ -6654,6 +6777,43 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 <>
                   <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
                     <div className="campaign-data-filter-fields">
+                      <div className={`report-dropdown-field detail-filter-dropdown-field result-action-field${resultActionView.kind !== 'all' ? ' is-filtered' : ''}`}>
+                        <span>Hành động</span>
+                        <button
+                          type="button"
+                          className={`report-filter-button detail-filter-button result-action-button ${openDetailDropdown === 'actionsAction' ? 'active' : ''}`}
+                          aria-haspopup="listbox"
+                          aria-expanded={openDetailDropdown === 'actionsAction'}
+                          aria-label={`Hành động: ${resultActionLabel}`}
+                          onClick={event => {
+                            if (openDetailDropdown !== 'actionsAction') resultActions.load()
+                            handleDetailDropdownToggle('actionsAction', event.currentTarget, 300, 420)
+                          }}
+                        >
+                          {resultMerged && <Merge size={14} aria-hidden="true" />}
+                          <strong>{resultActionLabel}</strong>
+                          <ChevronDown size={14} />
+                        </button>
+                        {openDetailDropdown === 'actionsAction' && detailPopoverPosition && (
+                          <div
+                            className="report-filter-popover detail-filter-popover result-action-popover"
+                            style={{
+                              top: detailPopoverPosition.top ?? 'auto',
+                              bottom: detailPopoverPosition.bottom ?? 'auto',
+                              left: detailPopoverPosition.left,
+                              width: detailPopoverPosition.width
+                            }}
+                          >
+                            <CampaignResultActionList
+                              value={resultActionView}
+                              state={resultActions.state}
+                              usesInputData={resultUsesInputData}
+                              onChoose={changeResultActionView}
+                              onRetry={resultActions.load}
+                            />
+                          </div>
+                        )}
+                      </div>
                       {renderDetailFilters(
                         'actionsTime',
                         'actionsStatus',
@@ -6675,199 +6835,238 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                         <input
                           value={actionDetailSearch}
                           onChange={event => setActionDetailSearch(event.target.value)}
-                          placeholder="Tìm hành động, trạng thái, nội dung, link..."
+                          placeholder={resultMerged ? 'Tìm tên, SĐT, UID, trạng thái, nội dung...' : 'Tìm hành động, trạng thái, nội dung, link...'}
                         />
                       </label>
                     </div>
                     <div className="campaign-data-toolbar-actions">
                       {renderDetailSort('actionsSort')}
                       <div className="detail-filter-actions">
+                        {resultMerged && mergedExportError && <span className="result-export-error" role="alert">{mergedExportError}</span>}
+                        {resultMerged && mergedExportProgress && <span className="result-export-progress" role="status">
+                          Đang xuất {mergedExportProgress.done.toLocaleString('vi-VN')}/{mergedExportProgress.total.toLocaleString('vi-VN')}
+                        </span>}
                         <button
                           className="btn btn-secondary"
                           onClick={handleLoadCampaignDetails}
-                          disabled={loadingCampaignDetailPage}
+                          disabled={resultMerged ? mergedResultState.loading : loadingCampaignDetailPage}
                           title="Tải lại kết quả chạy"
                         >
-                          <RefreshCw size={14} className={loadingCampaignDetailPage ? 'spin' : ''} /> Tải lại
+                          <RefreshCw size={14} className={(resultMerged ? mergedResultState.loading : loadingCampaignDetailPage) ? 'spin' : ''} /> Tải lại
                         </button>
-                        <button
-                          className="btn btn-secondary"
-                          onClick={handleExportCampaignDetails}
-                          disabled={loadingCampaignDetailPage || exportingCampaignDetails || campaignDetailPageTotal === 0}
-                          title="Xuất lịch sử hành động ra Excel"
-                        >
-                          {exportingCampaignDetails
-                            ? <RefreshCw size={14} className="spin" />
-                            : <Download size={14} />}
-                          {exportingCampaignDetails ? ' Đang xuất...' : ' Xuất Excel'}
-                        </button>
+                        {resultMerged && exportingCampaignDetails ? (
+                          <button className="btn btn-secondary" onClick={handleExportCampaignDetails} title="Hủy xuất Excel">
+                            <X size={14} /> Hủy xuất
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-secondary"
+                            onClick={handleExportCampaignDetails}
+                            disabled={resultMerged
+                              ? exportingCampaignDetails || mergedResultState.total === 0 || mergedResultState.loading || mergedResultState.failed
+                              : loadingCampaignDetailPage || exportingCampaignDetails || campaignDetailPageTotal === 0}
+                            title={resultMerged ? 'Xuất mỗi data một hàng, kèm sheet Tất cả lượt' : 'Xuất lịch sử hành động ra Excel'}
+                          >
+                            {exportingCampaignDetails
+                              ? <RefreshCw size={14} className="spin" />
+                              : <Download size={14} />}
+                            {exportingCampaignDetails ? ' Đang xuất...' : ' Xuất Excel'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
-                  {loadingCampaignDetailPage ? (
-                    <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
-                  ) : campaignDetailPageTotal === 0 ? (
-                    <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
-                      {actionDetailFilters.status || actionDetailFilters.timePreset !== 'all' || (actionDetailFilters.engagementFilter && actionDetailFilters.engagementFilter !== 'all') || debouncedActionDetailSearch.trim()
-                        ? 'Không có kết quả chạy phù hợp bộ lọc'
-                        : 'Chưa có hành động nào được ghi nhận'}
-                    </div>
-                  ) : (
-                    <table className="campaign-grid" style={{ fontSize: 12 }}>
-                      <thead>
-                        {isSelectedVoiceCallCampaign ? (
-                          <tr>
-                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
-                            <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
-                            <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
-                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung cuộc gọi</th>
-                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Xác minh bắt máy</th>
-                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
-                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
-                          </tr>
-                        ) : isSelectedSmsCampaign ? (
-                          <tr>
-                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
-                            <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
-                            <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Nhà mạng</th>
-                            <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
-                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
-                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
-                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
-                          </tr>
-                        ) : (
-                          <tr>
-                            <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
-                            {campaignDetailTargetColumns.map(column => (
-                              <th key={column.key} style={{ minWidth: column.minWidth, whiteSpace: 'nowrap' }}>
-                                {column.label}
-                              </th>
-                            ))}
-                            <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Hành động</th>
-                            <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
-                            {selectedCampaignAccount?.flatformType === 'zalo' && <th style={{ minWidth: 210 }}>Tương tác Zalo</th>}
-                            <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
-                            <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
-                          </tr>
-                        )}
-                      </thead>
-                      <tbody>
-                        {filteredCampaignDetails.map(a => {
-                          const createdAtLabel = formatDisplayDateTime(a.createdAt)
-                          const statusLabel = a.statusPresentation?.name || getDetailStatusLabel(a.status)
-                          const detailLogTitle = getCampaignDetailLogTitle(a)
-                          const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
-                          const voiceDetail = isSelectedVoiceCallCampaign ? getVoiceCallCampaignDetailInfo(a) : null
-                          const targetInfo = getCampaignDetailTargetInfo(a)
-                          return (
-                            <tr key={a.id}>
-                              <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
-                                {createdAtLabel}
-                              </td>
-                              {isSelectedVoiceCallCampaign ? (
-                                <>
-                                  <td title={voiceDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
-                                    {voiceDetail?.phone || '-'}
-                                  </td>
-                                  <td title={voiceDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
-                                    {voiceDetail?.simSlot || '-'}
-                                  </td>
-                                </>
-                              ) : isSelectedSmsCampaign ? (
-                                <>
-                                  <td title={smsDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
-                                    {smsDetail?.phone || '-'}
-                                  </td>
-                                  <td title={smsDetail?.carrierLabel || '-'} style={{ whiteSpace: 'nowrap' }}>
-                                    {smsDetail?.carrierLabel || '-'}
-                                  </td>
-                                  <td title={smsDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
-                                    {smsDetail?.simSlot || '-'}
-                                  </td>
-                                </>
-                              ) : (
-                                <>
-                                  {campaignDetailTargetColumns.map(column => {
-                                    const value = targetInfo[column.key]
-                                    return (
-                                      <td
-                                        key={column.key}
-                                        className={`campaign-detail-target-cell${column.key === 'phone' ? ' campaign-detail-target-phone-cell' : ''}`}
-                                        title={value}
-                                      >
-                                        {value}
-                                      </td>
-                                    )
-                                  })}
-                                  <td title={a.actionName || '-'}>
-                                    <strong>{a.actionName}</strong>
-                                  </td>
-                                </>
-                              )}
-                              <td title={statusLabel}>
-                                <span style={{ color: a.statusPresentation?.color || getStatusColor(a.status) }}>
-                                  {statusLabel}
-                                </span>
-                                {a.subStatusPresentation && <div style={{ color: a.subStatusPresentation.color || 'var(--text-tertiary)', fontSize: '0.85em' }}>
-                                  {a.subStatusPresentation.name}
-                                </div>}
-                              </td>
-                              {selectedCampaignAccount?.flatformType === 'zalo' && <td style={{ whiteSpace: 'pre-line', minWidth: 210 }} title={a.zaloEngagement ? `Theo dõi đến ${formatDisplayDateTime(a.zaloEngagement.tracking_until)}` : undefined}>
-                                {engagementDisplay(a.zaloEngagement, a.zaloEngagementApplicable ?? (engagementApplicable(a.actionCode) && a.status === 'thành công' && !selectedCampaignAccount.isZaloShowWeb))}
-                              </td>}
-                              {isSelectedVoiceCallCampaign && (
-                                <>
-                                  <td className="campaign-detail-sms-content-cell" title={voiceDetail?.content || '-'}>
-                                    {voiceDetail?.content || '-'}
-                                  </td>
-                                  <td title={voiceDetail?.answerVerified ? 'Đã xác minh bắt máy' : 'Không xác minh bắt máy'}>
-                                    {voiceDetail?.answerVerified ? 'Đã xác minh' : 'Không xác minh'}
-                                  </td>
-                                </>
-                              )}
-                              {isSelectedSmsCampaign && (
-                                <td className="campaign-detail-sms-content-cell" title={smsDetail?.content || '-'}>
-                                  {smsDetail?.content || '-'}
-                                </td>
-                              )}
-                              <td style={{ minWidth: 190 }}>
-                                {(a.triggeredAutomations || []).length === 0 ? '—' : (
-                                  <div className="campaign-automation-inline-links">
-                                    {(a.triggeredAutomations || []).map(trigger => (
-                                      <button
-                                        key={trigger.automationDetailId}
-                                        type="button"
-                                        className="campaign-automation-link"
-                                        onClick={() => void handleViewAutomationById(trigger.automationId)}
-                                        disabled={automationViewLoadingId === trigger.automationId}
-                                        title="Xem tự động hóa được kích hoạt bởi kết quả này"
-                                      >
-                                        <Zap size={12} />
-                                        {automationViewLoadingId === trigger.automationId ? 'Đang tải...' : trigger.automationName}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="campaign-detail-log-cell" title={detailLogTitle}>
-                                {renderCampaignDetailLog(a)}
-                              </td>
+                  {resultMerged && <p className="result-merge-hint">
+                    <Info size={14} aria-hidden="true" />
+                    <span>Mỗi data một dòng. Khoảng thời gian, Trạng thái, Tương tác Zalo và Tìm kiếm chọn những data có ít nhất một lượt khớp; dòng vẫn hiện đủ mọi hành động.</span>
+                  </p>}
+                  {resultMerged && selectedCampaign ? (
+                    <CampaignResultMergedView
+                      campaignId={selectedCampaign.id}
+                      actionId={selectedCampaign.actionId}
+                      platform={selectedCampaignAccount?.flatformType || ''}
+                      active={isActive && detailDockOpen && detailTab === 'actions'}
+                      query={mergedResultQuery}
+                      reloadKey={mergedResultReload}
+                      actions={resultActions.state.data?.actions ?? null}
+                      hasFilters={resultHasFilters}
+                      onState={setMergedResultState}
+                      statusColor={getStatusColor}
+                      formatTime={formatDisplayDateTime}
+                    />
+                  ) : <>
+                    {loadingCampaignDetailPage ? (
+                      <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+                    ) : resultActionCode !== undefined && campaignDetailPageError ? (
+                      <div className="result-action-error" role="alert">
+                        <span>{campaignDetailPageError.includes(CAMPAIGN_RESULT_ACTIONS_NOT_READY)
+                          ? CAMPAIGN_RESULT_ACTIONS_NOT_READY
+                          : 'Chưa tải được kết quả chạy. Vui lòng thử lại.'}</span>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => changeResultActionView({ kind: 'all' })}>Xem tất cả</button>
+                      </div>
+                    ) : campaignDetailPageTotal === 0 ? (
+                      <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>
+                        {resultHasFilters || resultActionCode !== undefined
+                          ? 'Không có kết quả chạy phù hợp bộ lọc'
+                          : 'Chưa có hành động nào được ghi nhận'}
+                      </div>
+                    ) : (
+                      <table className="campaign-grid" style={{ fontSize: 12 }}>
+                        <thead>
+                          {isSelectedVoiceCallCampaign ? (
+                            <tr>
+                              <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
+                              <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
+                              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung cuộc gọi</th>
+                              <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Xác minh bắt máy</th>
+                              <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
+                              <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
                             </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
-                  )}
-                  <div className="campaign-input-data-pager">
-                    <span>Hiển thị {actionDetailRangeStart}–{actionDetailRangeEnd} / {campaignDetailPageTotal} kết quả</span>
-                    <div>
-                      <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.max(1, page - 1))} disabled={actionDetailPage <= 1 || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(90deg)' }} /></button>
-                      <span>Trang {actionDetailPage}/{actionDetailPageCount}</span>
-                      <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.min(actionDetailPageCount, page + 1))} disabled={actionDetailPage >= actionDetailPageCount || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} /></button>
+                          ) : isSelectedSmsCampaign ? (
+                            <tr>
+                              <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                              <th style={{ minWidth: 120, whiteSpace: 'nowrap' }}>SĐT</th>
+                              <th style={{ minWidth: 110, whiteSpace: 'nowrap' }}>Nhà mạng</th>
+                              <th style={{ minWidth: 80, whiteSpace: 'nowrap' }}>SIM</th>
+                              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Nội dung SMS</th>
+                              <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
+                              <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
+                            </tr>
+                          ) : (
+                            <tr>
+                              <th style={{ minWidth: 150, whiteSpace: 'nowrap' }}>Thời gian</th>
+                              {campaignDetailTargetColumns.map(column => (
+                                <th key={column.key} style={{ minWidth: column.minWidth, whiteSpace: 'nowrap' }}>
+                                  {column.label}
+                                </th>
+                              ))}
+                              <th style={{ minWidth: 160, whiteSpace: 'nowrap' }}>Hành động</th>
+                              <th style={{ minWidth: 130, whiteSpace: 'nowrap' }}>Trạng thái</th>
+                              {selectedCampaignAccount?.flatformType === 'zalo' && <th style={{ minWidth: 210 }}>Tương tác Zalo</th>}
+                              <th style={{ minWidth: 190, whiteSpace: 'nowrap' }}>Kích hoạt tự động hóa</th>
+                              <th style={{ minWidth: 260, whiteSpace: 'nowrap' }}>Chi tiết</th>
+                            </tr>
+                          )}
+                        </thead>
+                        <tbody>
+                          {filteredCampaignDetails.map(a => {
+                            const createdAtLabel = formatDisplayDateTime(a.createdAt)
+                            const statusLabel = a.statusPresentation?.name || getDetailStatusLabel(a.status)
+                            const detailLogTitle = getCampaignDetailLogTitle(a)
+                            const smsDetail = isSelectedSmsCampaign ? getSmsCampaignDetailInfo(a) : null
+                            const voiceDetail = isSelectedVoiceCallCampaign ? getVoiceCallCampaignDetailInfo(a) : null
+                            const targetInfo = getCampaignDetailTargetInfo(a)
+                            return (
+                              <tr key={a.id}>
+                                <td title={createdAtLabel} style={{ whiteSpace: 'nowrap' }}>
+                                  {createdAtLabel}
+                                </td>
+                                {isSelectedVoiceCallCampaign ? (
+                                  <>
+                                    <td title={voiceDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                      {voiceDetail?.phone || '-'}
+                                    </td>
+                                    <td title={voiceDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                      {voiceDetail?.simSlot || '-'}
+                                    </td>
+                                  </>
+                                ) : isSelectedSmsCampaign ? (
+                                  <>
+                                    <td title={smsDetail?.phone || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                      {smsDetail?.phone || '-'}
+                                    </td>
+                                    <td title={smsDetail?.carrierLabel || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                      {smsDetail?.carrierLabel || '-'}
+                                    </td>
+                                    <td title={smsDetail?.simSlot || '-'} style={{ whiteSpace: 'nowrap' }}>
+                                      {smsDetail?.simSlot || '-'}
+                                    </td>
+                                  </>
+                                ) : (
+                                  <>
+                                    {campaignDetailTargetColumns.map(column => {
+                                      const value = targetInfo[column.key]
+                                      return (
+                                        <td
+                                          key={column.key}
+                                          className={`campaign-detail-target-cell${column.key === 'phone' ? ' campaign-detail-target-phone-cell' : ''}`}
+                                          title={value}
+                                        >
+                                          {value}
+                                        </td>
+                                      )
+                                    })}
+                                    <td title={a.actionName || '-'}>
+                                      <strong>{a.actionName}</strong>
+                                    </td>
+                                  </>
+                                )}
+                                <td title={statusLabel}>
+                                  <span style={{ color: a.statusPresentation?.color || getStatusColor(a.status) }}>
+                                    {statusLabel}
+                                  </span>
+                                  {a.subStatusPresentation && <div style={{ color: a.subStatusPresentation.color || 'var(--text-tertiary)', fontSize: '0.85em' }}>
+                                    {a.subStatusPresentation.name}
+                                  </div>}
+                                </td>
+                                {selectedCampaignAccount?.flatformType === 'zalo' && <td style={{ whiteSpace: 'pre-line', minWidth: 210 }} title={a.zaloEngagement ? `Theo dõi đến ${formatDisplayDateTime(a.zaloEngagement.tracking_until)}` : undefined}>
+                                  {engagementDisplay(a.zaloEngagement, a.zaloEngagementApplicable ?? (engagementApplicable(a.actionCode) && a.status === 'thành công' && !selectedCampaignAccount.isZaloShowWeb))}
+                                </td>}
+                                {isSelectedVoiceCallCampaign && (
+                                  <>
+                                    <td className="campaign-detail-sms-content-cell" title={voiceDetail?.content || '-'}>
+                                      {voiceDetail?.content || '-'}
+                                    </td>
+                                    <td title={voiceDetail?.answerVerified ? 'Đã xác minh bắt máy' : 'Không xác minh bắt máy'}>
+                                      {voiceDetail?.answerVerified ? 'Đã xác minh' : 'Không xác minh'}
+                                    </td>
+                                  </>
+                                )}
+                                {isSelectedSmsCampaign && (
+                                  <td className="campaign-detail-sms-content-cell" title={smsDetail?.content || '-'}>
+                                    {smsDetail?.content || '-'}
+                                  </td>
+                                )}
+                                <td style={{ minWidth: 190 }}>
+                                  {(a.triggeredAutomations || []).length === 0 ? '—' : (
+                                    <div className="campaign-automation-inline-links">
+                                      {(a.triggeredAutomations || []).map(trigger => (
+                                        <button
+                                          key={trigger.automationDetailId}
+                                          type="button"
+                                          className="campaign-automation-link"
+                                          onClick={() => void handleViewAutomationById(trigger.automationId)}
+                                          disabled={automationViewLoadingId === trigger.automationId}
+                                          title="Xem tự động hóa được kích hoạt bởi kết quả này"
+                                        >
+                                          <Zap size={12} />
+                                          {automationViewLoadingId === trigger.automationId ? 'Đang tải...' : trigger.automationName}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="campaign-detail-log-cell" title={detailLogTitle}>
+                                  {renderCampaignDetailLog(a)}
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    )}
+                    <div className="campaign-input-data-pager">
+                      <span>Hiển thị {actionDetailRangeStart}–{actionDetailRangeEnd} / {campaignDetailPageTotal} kết quả</span>
+                      <div>
+                        <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.max(1, page - 1))} disabled={actionDetailPage <= 1 || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(90deg)' }} /></button>
+                        <span>Trang {actionDetailPage}/{actionDetailPageCount}</span>
+                        <button type="button" className="btn-icon" onClick={() => setActionDetailPage(page => Math.min(actionDetailPageCount, page + 1))} disabled={actionDetailPage >= actionDetailPageCount || loadingCampaignDetailPage}><ChevronDown size={14} style={{ transform: 'rotate(-90deg)' }} /></button>
+                      </div>
                     </div>
-                  </div>
+                  </>}
                 </>
               )}
 

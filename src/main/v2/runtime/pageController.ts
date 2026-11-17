@@ -632,6 +632,14 @@ export class PageController {
     return image.toPNG().toString('base64')
   }
 
+  /** Ảnh JPEG của trang (engine v2: ảnh lỗi), thu nhỏ về rộng tối đa maxWidth. Không ghi vào vết thao tác. */
+  async captureJpeg(quality = 70, maxWidth = 1280): Promise<Buffer> {
+    let image = await this.wc.capturePage()
+    const { width } = image.getSize()
+    if (width > maxWidth) image = image.resize({ width: maxWidth })
+    return image.toJPEG(quality)
+  }
+
   // =========== GENERIC EVAL ===========
   async evaluate<T = unknown>(code: string, ...args: unknown[]): Promise<T> {
     const argsJSON = JSON.stringify(args)

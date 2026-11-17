@@ -184,6 +184,111 @@ async function runtimeCases(zca) {
   assert.equal(clock.tasks.size, 0)
 }
 
+// Lỗi mạng ở bước tải tệp lên Zalo khi chưa có yêu cầu nào khác tới Zalo: lớp bọc media đánh dấu "chưa gửi" (zca-js chỉ gọi bước gửi
+// sau khi tải xong) để cổng engine v2 xếp NET01 (data về hàng đợi) thay vì UNK01. Đã có yêu cầu gửi (chữ đi trước tệp), lỗi ở bước
+// gửi tệp, quá giờ, URL không đọc được: không đánh dấu (giữ "không rõ đã tới").
+async function uploadNotSentCases(zca) {
+  const sdkRoot = pathToFileURL(path.join(root, 'node_modules/zca-js/dist') + path.sep)
+  const { createContext } = await import(new URL('context.js', sdkRoot))
+  const { uploadAttachmentFactory } = await import(new URL('apis/uploadAttachment.js', sdkRoot))
+  const { sendMessageFactory } = await import(new URL('apis/sendMessage.js', sdkRoot))
+  const { encodeAES } = await import(new URL('utils.js', sdkRoot))
+  const Runtime = harness('src/main/services/zaloRuntimeService.ts', 'ZaloRuntimeService', [
+    'sendMessageToUser', 'sendMessageToGroup', 'sendMessage', 'getCampaignMediaExecution'
+  ], { ...zca, ...media, ...preCall, requiresZaloUploadCallback: file => /\.mp4$/.test(file), isZaloWebSupportedAttachment: () => true,
+    ZALO_FILE_MESSAGE_SEND_TIMEOUT_MS: 180000, ZALO_MESSAGE_SEND_TIMEOUT_MS: 90000, ZALO_LISTENER_REFRESH_AFTER_MS: 1800000 })
+  const undiciReset = () => Object.assign(new TypeError('fetch failed'), {
+    cause: Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET', syscall: 'read' }) })
+  const nodeFetchReset = url => Object.assign(new Error(`request to ${url} failed, reason: read ECONNRESET`), { code: 'ECONNRESET', type: 'system' })
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-media-upload-'))
+  const video = path.join(dir, 'video.mp4'); fs.writeFileSync(video, 'offline-video')
+  const setup = respond => {
+    const ctx = createContext()
+    Object.assign(ctx, { secretKey: Buffer.alloc(16, 1).toString('base64'), uid: 'fixture', imei: 'fixture', userAgent: 'fixture', language: 'vi',
+      settings: { features: { sharefile: { max_file: 10, max_size_share_file_v3: 100, restricted_ext_file: [], chunk_size_file: 1024 } } } })
+    const requests = []
+    const ok = data => Response.json({ error_code: 0, data: encodeAES(ctx.secretKey, JSON.stringify({ error_code: 0, data })) })
+    ctx.options.polyfill = async url => { requests.push(new URL(String(url)).pathname); return respond(String(url), ok) }
+    // Máy chủ như zca-js thật dùng (tt-files-wpa / tt-chat / tt-group …chat.zalo.me).
+    const api = { getContext: () => ctx, zpwServiceMap: { file: ['https://tt-files-wpa.chat.zalo.me'],
+      chat: ['https://tt-chat2-wpa.chat.zalo.me'], group: ['https://tt-group-wpa.chat.zalo.me'] } }
+    api.uploadAttachment = uploadAttachmentFactory(ctx, api)
+    api.sendMessage = sendMessageFactory(ctx, api)
+    const runtime = Object.assign(new Runtime(), {
+      campaignMediaExecutions: new WeakMap(), ensureApi: async () => api, apiCache: new Map([[1, { api }]]),
+      supabase: { getAccountForZaloRuntime: async () => ({ flatformType: 'zalo' }) }, ensureZaloListenerReady: async () => {},
+      withTimeout: async promise => promise
+    })
+    return { ctx, runtime, requests }
+  }
+  const notSent = error => { assert.equal(media.isCampaignMediaUploadNotSent(error), true, `thiếu dấu chưa gửi: ${error?.message}`); return true }
+  const unknown = error => { assert.equal(media.isCampaignMediaUploadNotSent(error), false, `không được có dấu: ${error?.message}`); return true }
+  try {
+    // 1. Tải tệp lên lỗi mạng (undici và node-fetch qua proxy), người dùng và nhóm: chưa có yêu cầu gửi nào → có dấu.
+    for (const [type, reset] of [['user', undiciReset], ['user', nodeFetchReset], ['group', undiciReset]]) {
+      const t = setup(url => { if (url.includes('/asyncfile/upload?')) throw reset(url); throw new Error(`Unexpected request ${url}`) })
+      const send = type === 'user' ? t.runtime.sendMessageToUser(1, 'recipient', '', [video], true)
+        : t.runtime.sendMessageToGroup(1, 'recipient', '', [video], true)
+      await assert.rejects(send, error => notSent(error) && error.code === (reset === nodeFetchReset ? 'ECONNRESET' : undefined))
+      assert.deepEqual(t.requests, [`/api/${type === 'user' ? 'message' : 'group'}/asyncfile/upload`])
+    }
+    // 2. Chữ kèm video: zca-js gửi chữ trước (yêu cầu gửi tới Zalo), rồi tải tệp lỗi → chữ có thể đã tới, không đánh dấu.
+    const textFirst = setup((url, ok) => {
+      if (url.includes('/asyncfile/upload?')) throw undiciReset()
+      if (url.includes('/asyncfile/')) throw new Error(`Unexpected request ${url}`)
+      return ok({ msgId: 'text-1' })
+    })
+    await assert.rejects(textFirst.runtime.sendMessageToUser(1, 'recipient', 'Chào', [video], true), unknown)
+    assert.equal(textFirst.requests.length, 2); assert.equal(textFirst.requests[1], '/api/message/asyncfile/upload')
+    assert.notEqual(textFirst.requests[0], '/api/message/asyncfile/upload')
+    // 3. Tải tệp xong, bước gửi tệp lỗi mạng → không rõ đã tới, không đánh dấu.
+    let fileId = 0
+    const sendFails = setup((url, ok) => {
+      if (url.includes('/asyncfile/upload?')) return ok({ fileId: String(++fileId) })
+      if (url.includes('/asyncfile/msg?')) throw undiciReset()
+      throw new Error(`Unexpected request ${url}`)
+    })
+    const failedSend = assert.rejects(sendFails.runtime.sendMessageToUser(1, 'recipient', '', [video], true), unknown)
+    await waitForUploadCallback(sendFails.ctx)
+    await sendFails.ctx.uploadCallbacks.get('1')({ fileId: '1', fileUrl: 'https://tt-files-wpa.chat.zalo.me/f1' })
+    await failedSend
+    assert.deepEqual(sendFails.requests, ['/api/message/asyncfile/upload', '/api/message/asyncfile/msg'])
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+
+  // 4. Trực tiếp với lớp bọc: tải tệp gốc từ máy chủ khác (không phải Zalo) rồi tải lên lỗi → vẫn có dấu; ảnh (photo_original) và
+  // ảnh thu nhỏ (upthumb) cũng là bước tải lên.
+  const reset = () => Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } })
+  const direct = new media.CampaignMediaExecution(async input => {
+    const url = new URL(String(input))
+    if (url.hostname.endsWith('r2.dev')) return new Response('file')
+    throw reset()
+  })
+  await assert.rejects(direct.run(async () => {
+    await direct.fetch('https://pub-1.r2.dev/campaign/a.jpg')
+    await direct.fetch('https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2&params=x')
+  }, 180000), notSent)
+  await assert.rejects(direct.run(() => direct.fetch('https://tt-files-wpa.chat.zalo.me/api/group/photo_original/upload?type=11'), 180000), notSent)
+  await assert.rejects(direct.run(() => direct.fetch('https://tt-files-wpa.chat.zalo.me/api/message/upthumb?params=x'), 180000), notSent)
+  // URL không đọc được trước đó: coi như có thể đã gửi → không đánh dấu.
+  await assert.rejects(direct.run(async () => {
+    await direct.fetch({ notAUrl: true }).catch(() => {})
+    await direct.fetch('https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2')
+  }, 180000), unknown)
+  // Lỗi khác sau khi tải lên thành công (không có lỗi tải lên) → không đánh dấu.
+  const uploaded = new media.CampaignMediaExecution(async () => new Response('ok'))
+  const policy = Object.assign(new Error('Zalo từ chối tệp'), { code: 120 })
+  await assert.rejects(uploaded.run(async () => {
+    await uploaded.fetch('https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2'); throw policy
+  }, 180000), error => error === policy && unknown(error))
+  // 5. Quá giờ khi đang tải lên: mã quá giờ của hàng rào, không đánh dấu.
+  const hanging = new media.CampaignMediaExecution(async (_url, init) =>
+    new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(init.signal.reason))))
+  const timedOut = assert.rejects(hanging.run(() => hanging.fetch('https://tt-files-wpa.chat.zalo.me/api/message/photo_original/upload?type=2'), 20),
+    error => error.code === media.CAMPAIGN_MEDIA_TIMEOUT_CODE && unknown(error))
+  await flush(); await clock.advance(20); await timedOut
+  assert.equal(clock.tasks.size, 0)
+}
+
 // Lỗi của bước chuẩn bị (ensureApi, đọc lại tài khoản, listener tải tệp) có dấu "trước khi gọi Zalo" (zaloPreCallError) để cổng
 // engine v2 xếp "chưa gửi"; lỗi từ chính lệnh gửi Zalo (mã Zalo, quá giờ) KHÔNG được có dấu, nếu không data đã gửi sẽ bị gửi lại.
 // Câu, mã và lớp lỗi giữ nguyên cho bộ chạy cũ.
@@ -464,11 +569,12 @@ async function sharePolicyStopCases(Scheduler) {
 async function main() {
   const zca = await import('zca-js')
   await runtimeCases(zca)
+  await uploadNotSentCases(zca)
   await preCallCases(zca)
   const Scheduler = schedulerClass(zca)
   await schedulerCases(Scheduler)
   await sharePolicyStopCases(Scheduler)
-  console.log('PASS: Desktop/Server media deadlines, real SDK late file_done fence, proxy transport, next send, invalidation, pre-call error marking (prepare marked, Zalo send errors unmarked), share thresholds/order/policy/DB failures, 20 share stop-policy regressions, normal downstream skip and partial rich text')
+  console.log('PASS: Desktop/Server media deadlines, real SDK late file_done fence, proxy transport, next send, invalidation, upload network failure before any send marked not-sent (text-first, send-step, timeout and unreadable URL unmarked), pre-call error marking (prepare marked, Zalo send errors unmarked), share thresholds/order/policy/DB failures, 20 share stop-policy regressions, normal downstream skip and partial rich text')
 }
 module.exports = { schedulerClass, fixture, timeout, media }
 if (require.main === module) main().catch(error => { console.error(error); process.exitCode = 1 })

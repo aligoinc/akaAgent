@@ -31,7 +31,38 @@ export interface RunContext {
   blockTimeoutMs?: number
   /** Main-only immutable cache for optional, non-persisted workflows. Never used by campaigns. */
   preparedBlocks?: ReadonlyMap<number, BlockDef>
+  /**
+   * Engine v2 (Facebook): hook có await ngay trước khi một block JS bắt đầu. 'stop' = dừng workflow trước block này (ranh giới mốc):
+   * block không chạy, các node còn lại không chạy, run kết thúc 'cancelled' kèm stopped = true. Hook ném lỗi thì block không chạy và
+   * workflow dừng (lỗi của nơi chạy, không làm hỏng run()). Không có hook thì như cũ (bộ cũ, trình sửa workflow).
+   */
+  beforeNode?: (info: WorkflowNodeHookInfo) => Promise<'run' | 'stop'>
+  /** Engine v2 (Facebook): hook có await sau khi block JS có kết quả (trước khi ghi bước). Ném lỗi thì workflow dừng. */
+  afterNode?: (info: WorkflowNodeHookInfo & { result: BlockResult }) => Promise<void>
 }
+
+export interface WorkflowNodeHookInfo {
+  nodeId: string
+  blockId: number
+  blockName: string
+  /** Khoá mốc của lần chạy này: nodeId, trong vòng lặp thêm #i (lồng nhau #i.j). */
+  stepKey: string
+  loopPath: readonly number[]
+  input: Record<string, unknown>
+  vars: Record<string, unknown>
+  config: Record<string, unknown>
+  /** Code block thật sự chạy (codeOverride của node nếu có): engine so md5 với lúc duyệt danh mục bước. */
+  blockCode?: string
+  runId?: number
+  runStepId?: number
+}
+
+/** Khoá mốc ổn định trong một lượt: nodeId (+ #chỉ số vòng lặp). */
+export function workflowStepKey(nodeId: string, loopPath: readonly number[]): string {
+  return loopPath.length ? `${nodeId}#${loopPath.join('.')}` : nodeId
+}
+
+interface RunState { stopRequested: boolean; hookError?: string }
 
 export interface BlockScreenshotCaptureRequest {
   organizationId?: number | null
@@ -61,6 +92,8 @@ export interface RunResult {
   output: Record<string, unknown>
   error?: string
   steps: RunStepV2[]
+  /** Engine v2: beforeNode trả 'stop' (dừng ở ranh giới mốc) hoặc hook lỗi. */
+  stopped?: boolean
 }
 
 interface NodeState {
@@ -166,23 +199,30 @@ export class WorkflowEngineV2 {
     const resultSources = new WorkflowActionResultSources()
 
     const signal = ctx.signal ?? new AbortController().signal
+    const runState: RunState = { stopRequested: false }
 
     // ===== Main DAG loop =====
     let cancelled = false
     let failed = false
+    // R3: lỗi ném ra giữa vòng (callback của nơi chạy…) không được để dòng auto_runs kẹt 'running': ghi trạng thái rồi ném lại.
+    let loopError: unknown = null
 
-    while (true) {
-      if (signal.aborted) { cancelled = true; break }
-      const ready = this.computeReady(workflow, graph, nodeStates)
-      if (ready.length === 0) break
+    try {
+      while (true) {
+        if (signal.aborted || runState.stopRequested) { cancelled = true; break }
+        const ready = this.computeReady(workflow, graph, nodeStates)
+        if (ready.length === 0) break
 
-      // Run cohort song song
-      await drainWorkflowCohort(ready.map(node => this.executeNode({
-        node, blockMap, workflow, graph, nodeStates, variables,
-        page, signal, runId, ctx, allSteps, resultSources
-      })))
+        // Run cohort song song
+        await drainWorkflowCohort(ready.map(node => this.executeNode({
+          node, blockMap, workflow, graph, nodeStates, variables,
+          page, signal, runId, ctx, allSteps, resultSources, loopPath: [], runState
+        })))
 
-      if (signal.aborted) { cancelled = true; break }
+        if (signal.aborted || runState.stopRequested) { cancelled = true; break }
+      }
+    } catch (err) {
+      loopError = err
     }
 
     // ===== Determine overall status =====
@@ -192,7 +232,8 @@ export class WorkflowEngineV2 {
     for (const [, state] of nodeStates) {
       if (state.status === 'error') { failed = true; lastError = state.error }
     }
-    if (cancelled) overallStatus = 'cancelled'
+    if (loopError) { overallStatus = 'failed'; overallError = loopError instanceof Error ? loopError.message : String(loopError) }
+    else if (cancelled) { overallStatus = 'cancelled'; if (runState.hookError) overallError = runState.hookError }
     else if (failed) { overallStatus = 'failed'; overallError = lastError }
 
     // Aggregate output (concatenate outputs của leaf nodes — node không có successor)
@@ -243,7 +284,8 @@ export class WorkflowEngineV2 {
       }
     }
 
-    return { runId, status: overallStatus, output, error: overallError, steps }
+    if (loopError) throw loopError
+    return { runId, status: overallStatus, output, error: overallError, steps, ...(runState.stopRequested ? { stopped: true } : {}) }
   }
 
   // =========== EXECUTION CORE ===========
@@ -261,9 +303,14 @@ export class WorkflowEngineV2 {
     ctx: RunContext
     allSteps: RunStepV2[]
     resultSources: WorkflowActionResultSources
+    /** Chỉ số các vòng lặp bao quanh (engine v2: khoá mốc). */
+    loopPath: number[]
+    runState: RunState
   }): Promise<void> {
-    const { node, blockMap, workflow, graph, nodeStates, variables, page, signal, runId, ctx, allSteps, resultSources } = args
+    const { node, blockMap, workflow, graph, nodeStates, variables, page, signal, runId, ctx, allSteps, resultSources, loopPath, runState } = args
     const state = nodeStates.get(node.id)!
+    // Engine v2: workflow đã dừng ở ranh giới mốc (node khác trong cùng cụm vừa trả 'stop'): không bắt đầu node mới.
+    if (runState.stopRequested) { state.status = 'skipped'; return }
     state.status = 'running'
     state.startedAt = new Date().toISOString()
 
@@ -288,20 +335,26 @@ export class WorkflowEngineV2 {
         console.error('[engineV2] createRunStep failed:', err)
       }
     }
+    const stepKey = workflowStepKey(node.id, loopPath)
     ctx.onStepProgress?.({
       runId, nodeId: node.id, blockId: node.blockId, blockName: node.blockName,
-      status: 'running', input, output: {}, startedAt: state.startedAt
+      status: 'running', input, output: {}, startedAt: state.startedAt, stepKey
     })
 
     // ===== Dispatch theo systemType =====
     const block = blockMap.get(node.blockId)
     let result: BlockResult
+    const hookInfo = (): WorkflowNodeHookInfo => ({ nodeId: node.id, blockId: node.blockId, blockName: node.blockName, stepKey, loopPath,
+      input, vars: variables, config: (node.config ?? {}) as Record<string, unknown>,
+      ...(block ? { blockCode: node.codeOverride ?? block.code } : {}), runId, runStepId: stepDbId })
+    let hookStopped = false
 
     try {
       if (node.systemType === 'ifElse') {
         result = await this.execIfElse(node, input, variables)
       } else if (node.systemType === 'loop') {
-        result = await this.execLoop(node, input, variables, workflow, graph, nodeStates, blockMap, page, signal, runId, ctx, allSteps, resultSources)
+        result = await this.execLoop(node, input, variables, workflow, graph, nodeStates, blockMap, page, signal, runId, ctx, allSteps, resultSources,
+          loopPath, runState)
       } else if (node.systemType === 'merge' || node.systemType === 'parallel') {
         result = await this.execMergeOrParallel(node, input)
       } else {
@@ -309,28 +362,55 @@ export class WorkflowEngineV2 {
         if (!block) {
           throw new Error(`Block không tìm thấy: blockId=${node.blockId} blockName="${node.blockName}"`)
         }
-        const code = node.codeOverride ?? block.code
-        result = await this.executor.execute(
-          { code, blockName: block.name, timeoutMs: ctx.blockTimeoutMs },
-          {
-            input, page, vars: variables, signal,
-            runtimeHelpers: ctx.runtimeHelpers,
-            runtimeMetadata: {
-              accountId: ctx.accountId,
-              organizationId: ctx.organizationId,
-              campaignId: ctx.campaignId,
-              campaignInputId: ctx.campaignInputId,
-              campaignInputDataId: ctx.campaignInputDataId,
-              workflowId: workflow.id,
-              runId,
-              runStepId: stepDbId,
-              nodeId: node.id,
-              blockId: node.blockId,
-              blockName: node.blockName
-            },
-            onLog: (line) => ctx.onLog?.({ nodeId: node.id, line })
+        // Engine v2: ghi dấu "sắp gửi" / dừng ở ranh giới mốc trước khi block bắt đầu. Hook lỗi thì không chạy block.
+        let decision: 'run' | 'stop' = 'run'
+        if (ctx.beforeNode) {
+          try {
+            decision = await ctx.beforeNode(hookInfo())
+          } catch (err: any) {
+            runState.stopRequested = true
+            runState.hookError = `Lỗi engine trước block ${node.blockName}: ${err?.message ? String(err.message) : String(err)}`
+            throw new Error(runState.hookError)
           }
-        )
+        }
+        if (decision === 'stop') {
+          runState.stopRequested = true
+          hookStopped = true
+          result = { success: true, output: {}, durationMs: 0, logs: [] }
+        } else {
+          const code = node.codeOverride ?? block.code
+          result = await this.executor.execute(
+            { code, blockName: block.name, timeoutMs: ctx.blockTimeoutMs },
+            {
+              input, page, vars: variables, signal,
+              runtimeHelpers: ctx.runtimeHelpers,
+              runtimeMetadata: {
+                accountId: ctx.accountId,
+                organizationId: ctx.organizationId,
+                campaignId: ctx.campaignId,
+                campaignInputId: ctx.campaignInputId,
+                campaignInputDataId: ctx.campaignInputDataId,
+                workflowId: workflow.id,
+                runId,
+                runStepId: stepDbId,
+                nodeId: node.id,
+                blockId: node.blockId,
+                blockName: node.blockName,
+                stepKey
+              },
+              onLog: (line) => ctx.onLog?.({ nodeId: node.id, line })
+            }
+          )
+          if (ctx.afterNode) {
+            try {
+              await ctx.afterNode({ ...hookInfo(), result })
+            } catch (err: any) {
+              runState.stopRequested = true
+              runState.hookError = `Lỗi engine sau block ${node.blockName}: ${err?.message ? String(err.message) : String(err)}`
+              console.error('[engineV2] afterNode failed:', err)
+            }
+          }
+        }
       }
     } catch (err: any) {
       result = {
@@ -340,6 +420,21 @@ export class WorkflowEngineV2 {
         durationMs: 0,
         logs: []
       }
+    }
+    if (hookStopped) {
+      // Ranh giới mốc: block không chạy; bước ghi 'skipped' để lịch sử lượt workflow đúng sự thật.
+      state.status = 'skipped'
+      state.completedAt = new Date().toISOString()
+      if ((ctx.persist ?? true) && stepDbId) {
+        try {
+          await runV2Repo.updateRunStep(stepDbId, { status: 'skipped', output: {}, durationMs: 0, completedAt: state.completedAt })
+        } catch (err) {
+          console.error('[engineV2] updateRunStep failed:', err)
+        }
+      }
+      ctx.onStepProgress?.({ runId, nodeId: node.id, blockId: node.blockId, blockName: node.blockName, status: 'skipped', input, output: {},
+        startedAt: state.startedAt, completedAt: state.completedAt, stepKey })
+      return
     }
 
     state.completedAt = new Date().toISOString()
@@ -403,7 +498,7 @@ export class WorkflowEngineV2 {
       status: state.status, input, output: state.output,
       actionResultSourceKeys: state.actionResultSourceKeys,
       error: state.error, durationMs: state.durationMs,
-      startedAt: state.startedAt, completedAt: state.completedAt
+      startedAt: state.startedAt, completedAt: state.completedAt, stepKey
     })
 
     // Accumulate step vào allSteps (loop body có thể chạy nhiều lần — mỗi lần 1 row)
@@ -419,7 +514,8 @@ export class WorkflowEngineV2 {
       error: state.error,
       durationMs: state.durationMs,
       startedAt: state.startedAt,
-      completedAt: state.completedAt
+      completedAt: state.completedAt,
+      stepKey
     })
 
     // ===== Skip propagation cho ifElse =====
@@ -491,7 +587,9 @@ export class WorkflowEngineV2 {
     runId: number | undefined,
     ctx: RunContext,
     allSteps: RunStepV2[],
-    resultSources: WorkflowActionResultSources
+    resultSources: WorkflowActionResultSources,
+    loopPath: number[] = [],
+    runState: RunState = { stopRequested: false }
   ): Promise<BlockResult> {
     const startTime = Date.now()
     const cfg = node.config ?? {}
@@ -542,29 +640,32 @@ export class WorkflowEngineV2 {
       }
     }
 
-    // Helper: chạy 1 iteration body
-    const runIteration = async (iterIdx: number, item: unknown | undefined) => {
+    // Helper: chạy 1 iteration body. 'stopped' = engine v2 dừng ở ranh giới mốc (không phải lỗi của vòng lặp).
+    const runIteration = async (iterIdx: number, item: unknown | undefined): Promise<'ok' | 'error' | 'stopped'> => {
       // Reset body node states
       for (const id of bodyNodeIds) {
         nodeStates.set(id, { status: 'pending', output: {} })
       }
       const iterVars = { ...vars, loopIndex: iterIdx, loopItem: item, loopIteration: iterIdx + 1 }
+      const iterPath = [...loopPath, iterIdx]
       // Mini DAG loop trên body subgraph
       while (true) {
-        if (signal.aborted) return false
+        if (signal.aborted) return 'error'
+        if (runState.stopRequested) return 'stopped'
         const ready = this.computeReadyInSubgraph(workflow, graph, nodeStates, bodyNodeIds, bodyStartIds, node.id)
         if (ready.length === 0) break
         await drainWorkflowCohort(ready.map(n => this.executeNode({
           node: n, blockMap, workflow, graph, nodeStates,
-          variables: iterVars, page, signal, runId, ctx, allSteps, resultSources
+          variables: iterVars, page, signal, runId, ctx, allSteps, resultSources, loopPath: iterPath, runState
         })))
       }
+      if (runState.stopRequested) return 'stopped'
       // Iteration coi như completed nếu không có body node nào lỗi
       for (const id of bodyNodeIds) {
         const s = nodeStates.get(id)!
-        if (s.status === 'error') return false
+        if (s.status === 'error') return 'error'
       }
-      return true
+      return 'ok'
     }
 
     if (loopType === 'while') {
@@ -573,7 +674,7 @@ export class WorkflowEngineV2 {
       let i = 0
       let lastSuccess = true
       while (i < cap) {
-        if (signal.aborted) break
+        if (signal.aborted || runState.stopRequested) break
         // Eval condition
         try {
           const sandbox = require('vm').createContext({ input, vars, iter: i, Math, JSON })
@@ -586,7 +687,12 @@ export class WorkflowEngineV2 {
             durationMs: Date.now() - startTime, logs: []
           }
         }
-        lastSuccess = await runIteration(i, undefined)
+        const outcome = await runIteration(i, undefined)
+        lastSuccess = outcome !== 'error'
+        if (outcome === 'stopped') {
+          markPendingBodySkipped()
+          return { success: true, output: { iterations: i, stopped: true }, durationMs: Date.now() - startTime, logs: [] }
+        }
         if (!lastSuccess) {
           return {
             success: false, output: { iterations: i + 1 },
@@ -597,13 +703,17 @@ export class WorkflowEngineV2 {
         i++
       }
       if (i === 0) markPendingBodySkipped()
-      return { success: true, output: { iterations: i }, durationMs: Date.now() - startTime, logs: [] }
+      return { success: true, output: { iterations: i, ...(runState.stopRequested ? { stopped: true } : {}) }, durationMs: Date.now() - startTime, logs: [] }
     } else {
       let completed = 0
       for (const it of iterations) {
-        if (signal.aborted) break
-        const ok = await runIteration(it.index, it.item)
-        if (!ok) {
+        if (signal.aborted || runState.stopRequested) break
+        const outcome = await runIteration(it.index, it.item)
+        if (outcome === 'stopped') {
+          markPendingBodySkipped()
+          return { success: true, output: { iterations: completed, stopped: true }, durationMs: Date.now() - startTime, logs: [] }
+        }
+        if (outcome === 'error') {
           return {
             success: false, output: { iterations: completed },
             error: `Body iteration #${it.index + 1} lỗi`,
@@ -613,7 +723,7 @@ export class WorkflowEngineV2 {
         completed++
       }
       if (completed === 0) markPendingBodySkipped()
-      return { success: true, output: { iterations: completed }, durationMs: Date.now() - startTime, logs: [] }
+      return { success: true, output: { iterations: completed, ...(runState.stopRequested ? { stopped: true } : {}) }, durationMs: Date.now() - startTime, logs: [] }
     }
   }
 

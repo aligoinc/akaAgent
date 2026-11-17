@@ -10,6 +10,7 @@ import {
   FileText,
   FolderOpen,
   Globe,
+  Handshake,
   Images,
   Info,
   KeyRound,
@@ -35,6 +36,7 @@ import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/d
 import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
 import NotificationBell from '../Notifications/NotificationBell'
+import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
@@ -50,6 +52,8 @@ interface TopBarProps {
   onOpenAccountInfo: () => void
   onOpenGeneralSettings: () => void
   onOpenChangePassword: () => void
+  /** Mục "Đối tác akaBiz": mở trang đối tác của cổng bằng trình duyệt ngoài. */
+  onOpenAffPartner: () => void
   /** Mở trang Thông báo; truyền id để mở sẵn chi tiết một thông báo. */
   onOpenNotifications: (notificationId?: number) => void
   currentVersion: string
@@ -85,6 +89,7 @@ export default function TopBar({
   onOpenAccountInfo,
   onOpenGeneralSettings,
   onOpenChangePassword,
+  onOpenAffPartner,
   onOpenNotifications,
   currentVersion,
   availableUpdateVersion,
@@ -385,6 +390,10 @@ export default function TopBar({
               </button>
               {canManageStaff(user) && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onPageChange('staff-management') }}>
                 <Users size={18} /><span>Quản lý nhân viên</span>
+              </button>}
+              {/* Tính năng cơ bản: mọi tài khoản đều thấy, không theo công tắc nào. */}
+              {user && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onOpenAffPartner() }}>
+                <Handshake size={16} /><span>{AFF_PARTNER_MENU_LABEL}</span>
               </button>}
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenChangePassword} role="menuitem">
                 <KeyRound size={16} />

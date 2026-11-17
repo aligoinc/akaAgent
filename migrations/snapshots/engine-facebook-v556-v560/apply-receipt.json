@@ -1,0 +1,34 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_by": "Claude (phiên engine v2 Facebook), theo yêu cầu của anh ngày 17/11/2026 (\"Ngay bây giờ\")",
+  "method": "supabase db query --linked -f <file bọc sổ> (scripts/make-migration-ledger-apply.cjs); V557 p2a/p2b (CREATE INDEX CONCURRENTLY) chạy riêng rồi ghi sổ bằng một giao dịch có kiểm chỉ mục hợp lệ",
+  "preflight_readonly_vn": "2026-11-17 16:25",
+  "preflight": {
+    "ledger_head": "migration_v555_web_proxy_management_all_orgs (20261117025713); sau đó sale_order_invoice_info (20261117031242); chưa có V556–V560",
+    "function_md5_live_equal_v558_source": true,
+    "facebook_catalog_reread_equal_fixture": "catalog-live-20261116.json chỉ khác ledgerHead; workflows-live-20261116.json giống hệt (14 workflow, 84 block)"
+  },
+  "ledger": [
+    { "version": "20261117092922", "name": "migration_v556_engine_facebook_p1", "md5": "b0dd4ef804bbe88812bf93d56f10c5ab" },
+    { "version": "20261117093034", "name": "migration_v556_engine_facebook_p2", "md5": "4ac1030593c777439760af229f2eecb4" },
+    { "version": "20261117093058", "name": "migration_v557_engine_slot_runs_p1", "md5": "9f3908743e6a48017ea1e582bdbaf4c3" },
+    { "version": "20261117093145", "name": "migration_v557_engine_slot_runs_p2a_index", "md5": "a5cc1446a3ec9751b30f78ef780b287c" },
+    { "version": "20261117093146", "name": "migration_v557_engine_slot_runs_p2b_index", "md5": "c9815a371b810a3189e652b93378aaf5" },
+    { "version": "20261117093153", "name": "migration_v557_engine_slot_runs_p3", "md5": "48649bfba91eab649cb20e17441baa34" },
+    { "version": "20261117093207", "name": "migration_v558_engine_facebook_functions", "md5": "cf754a02091cdc9bd91e7f3860a3ef78" },
+    { "version": "20261117093236", "name": "migration_v559_engine_facebook_policies", "md5": "98f8624b03f0753a2eee4d5cae4a55b5" },
+    { "version": "20261117093246", "name": "migration_v560_engine_facebook_copies", "md5": "262bf549edcc36cf17b7ae8bc17ec834" }
+  ],
+  "postflight": {
+    "ledger_md5_equal_files": true,
+    "v558_function_md5": { "claim": "7ddfa216286849296e6b537c120e291d", "limit": "5c7e8c79040723a3c6f21f7565d58d81", "resolve": "a7c79e276426154098c5beff8cfd580e", "report": "bb8bc00f9d2a8c51a00dcb525fa2e4ab", "simulate": "de54bae78c002b33d04fdd3c9079aad2", "finish": "ffccdf1f6d95d6ed877c22abe945ae0b" },
+    "v559": { "policies_v559_fb_draft": 86, "signal_rules": 15, "new_codes": ["FB42", "FB43", "FB44", "FB45"], "facebook_error_signs": 4, "fb04_legacy_row": "disable_action_codes [], update_status_account null, update_status_campaign 'chờ xử lý', update_login_status 'checkpoint'" },
+    "v560": { "engine_blocks": 84, "engine_workflows": 14, "block_copies": 84, "engine_workflow_map": 14, "block_steps": 24 },
+    "policy_lint_rows": 0,
+    "engine_zalo_after_v558": "claim / report / mark_sending / heartbeat / release đều 200, lượt Desktop và Fly vẫn nhận và chốt bình thường",
+    "legacy_facebook_after_v559": "bộ chạy FB cũ của khách vẫn ghi lịch sử bình thường (dòng 'lỗi' duy nhất trong phút đầu là Facebook báo giới hạn tần suất)"
+  },
+  "incident_during_apply": "V556 p1 lúc 16:29:22–24 VN: request REST chậm 3–5 giây khi PostgREST nạp lại schema; 2 lượt aka_agent_engine_report_v1 của engine Zalo Desktop quá giờ 3 giây (HTTP 500). Engine tự báo lại, 0 lượt mở sót (kiểm 16:30). Các phần sau: 0 lỗi 5xx.",
+  "setting_change": { "key": "engine.facebook", "from": "{\"mode\":\"off\",\"organizationIds\":[]}", "to": "{\"mode\":\"orgs\",\"organizationIds\":[1]}", "at_vn": "2026-11-17 16:34:10", "emergency_off": "{\"mode\":\"off\",\"organizationIds\":[]} (có hiệu lực ở lần nhận lượt kế tiếp)" },
+  "do_not_reapply": true
+}
