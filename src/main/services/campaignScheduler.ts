@@ -72,6 +72,7 @@ import {
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
 import { isRecentDeliveryCooldownEnabled } from '../../shared/campaignDeliveryCooldown'
 import { parseZaloShareRepeatMinutes, supportsZaloShareRepeat } from '../../shared/zaloShareRepeat'
+import { CAMPAIGN_REPEAT_NO_DATA_ACTIONS, campaignRepeatUnits } from '../../shared/campaignRepeat'
 import { BlockResult, IPC_EVENTS_V2, RunStepV2 } from '../../shared/v2Types'
 import { PageController, PageControllerRegistry } from '../v2/runtime/pageController'
 import { BlockScreenshotCaptureRequest, WorkflowEngineV2, type RunResult, type WorkflowNodeHookInfo } from '../v2/runtime/workflowEngine'
@@ -2545,6 +2546,10 @@ export class CampaignScheduler {
       return
     }
 
+    if (await this.handleCampaignRepeatAfterCompletion(campaign, now)) {
+      return
+    }
+
     if (await this.handleRerunAfterCompletion(campaign, now)) {
       return
     }
@@ -2841,6 +2846,63 @@ export class CampaignScheduler {
     return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
       emptyDataSuffix: 'ở lượt gửi lặp kế tiếp',
       scheduledLog: `⏳ Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
+    })
+  }
+
+  /**
+   * "Lặp lại sau khi chạy xong" (V561, docs/CAMPAIGN_REPEAT_V561.md): chiến dịch lịch Hàng ngày chạy hết danh sách thì hẹn chạy
+   * lại sau x phút / giờ / ngày, tới khi đủ số lượt tối đa hoặc tới ngày kết thúc. DB đếm lượt và tính giờ lượt kế
+   * (aka_agent_campaign_repeat_decide_v1); ở đây chỉ gọi khi lượt này thật sự chạy hết và còn data để chạy lại, rồi đặt lại data
+   * và hẹn lịch bằng phần chung với "nhiều khung giờ". Lượt kế có thể ở ngày sau: lịch tương lai không bị bước cập nhật lịch đầu
+   * ngày đụng tới.
+   *
+   * Bộ chạy trên App Server (runtimeTarget 'server') không gọi: hàm chuyển lượt của Zalo Server chỉ nhận nhắn bạn bè / group, nên
+   * chiến dịch hoàn thành như thường và bộ quét dự phòng trong DB mở lại. DB chưa có V561 hoặc lỗi gọi hàm: hoàn thành như
+   * thường (bộ quét vẫn mở lại nếu chiến dịch đã đăng ký lặp).
+   */
+  private async handleCampaignRepeatAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    const extra = campaign.extraSettings
+    if (extra?.repeatAfterCompletionEnabled !== true || this.runtimeTarget === 'server') return false
+    if (extra.multiDailyTimeSlotsEnabled === true) return false
+    const units = campaignRepeatUnits(campaign.actionId, {
+      zaloMessageSendMode: extra.zaloMessageSendMode,
+      dataTargetSourceMode: campaign.dataTargetSourceMode,
+      scheduleType: campaign.scheduleType || 'daily'
+    })
+    if (units.length === 0) return false
+
+    const details = (await this.supabase.listCampaignInputData(campaign.id)).filter(detail => !detail.isDelete)
+    // Còn data chờ (mới thêm giữa lượt) thì lượt này chưa xong: để bước hoàn thành thường xử lý, không đếm lượt.
+    if (details.some(detail => detail.status === 'chờ xử lý')) return false
+    const resettableCount = details.filter(detail => detail.status !== 'tạm dừng').length
+    // Không còn data để chạy lại thì không lặp; riêng đăng trang cá nhân và lướt newsfeed chạy không cần data.
+    if (details.length > 0 ? resettableCount === 0 : !CAMPAIGN_REPEAT_NO_DATA_ACTIONS.includes(campaign.actionId)) return false
+
+    let decision: Awaited<ReturnType<SupabaseService['decideCampaignRepeat']>>
+    try {
+      decision = await this.supabase.decideCampaignRepeat(campaign.id)
+    } catch (error) {
+      console.warn('[CampaignScheduler] campaign repeat decision failed:', campaign.id, error)
+      return false
+    }
+    if (!decision?.ok || decision.enabled !== true) return false
+
+    if (decision.repeat !== true || !decision.next) {
+      const reason = decision.reason === 'max_runs' && Number.isInteger(decision.maxRuns)
+        ? ` (đã chạy đủ ${decision.maxRuns} lượt)`
+        : decision.reason === 'end_date' ? ' (lượt lặp kế tiếp đã qua ngày kết thúc)' : ''
+      const completed = await this.transitionCampaignToCompleted(campaign)
+      if (completed) {
+        await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"${reason}`)
+      }
+      return true
+    }
+
+    const nextSchedule = new Date(decision.next)
+    if (Number.isNaN(nextSchedule.getTime())) return false
+    return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
+      emptyDataSuffix: 'ở lượt lặp kế tiếp',
+      scheduledLog: `⏳ Đã chạy xong lượt ${decision.run}/${decision.maxRuns}, hẹn chạy lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
     })
   }
 

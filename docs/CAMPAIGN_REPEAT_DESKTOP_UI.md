@@ -2,7 +2,7 @@
 
 Trạng thái 17/11/2026: đã merge `dev_3` qua [#689](https://github.com/aligoinc/akaAgent/pull/689) theo yêu cầu (nhánh `claude/campaign-repeat-after-completion`; akaAgentWebApp `dev_1` qua #249), chưa build/phát hành.
 
-**Nhánh này chỉ có phần cài đặt**: ô trên form, lưu vào DB khi tạo / sửa / tắt, dòng hiển thị ở chi tiết chiến dịch. **Chưa có gì làm cho chiến dịch thật sự chạy lại** (người dùng chốt 17/11/2026: chỉ làm cài đặt trên giao diện và lưu vào DB). Không có migration, cột, bảng, RPC hay thay đổi bộ chạy nào. Bản đầy đủ từng viết (V556, bộ chạy Desktop, bộ quét của API) còn trong lịch sử nhánh ở commit `3534c4a` và `7f6d5c5`, chưa từng apply hay phát hành.
+**Phần chạy (17/11/2026 tối, đã merge `dev_3` qua [#691](https://github.com/aligoinc/akaAgent/pull/691), chưa build/phát hành)**: DB V561 (bộ đếm hai cột, hàm quyết định, engine v2, bộ quét), bộ chạy cũ Desktop gọi `aka_agent_campaign_repeat_decide_v1` khi chạy hết danh sách (`handleCampaignRepeatAfterCompletion`), lưu chiến dịch gọi `aka_agent_campaign_repeat_sync_v1`. Xem [CAMPAIGN_REPEAT_V561.md](CAMPAIGN_REPEAT_V561.md). Phần dưới đây mô tả phần cài đặt; các câu "chưa có phần chạy" ở dưới là trạng thái trước V561.
 
 ## Lưu ở đâu
 

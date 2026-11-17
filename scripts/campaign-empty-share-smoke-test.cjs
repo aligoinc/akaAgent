@@ -83,7 +83,7 @@ function fixture({ actionId = 'zalo_message_friend', server = false, rich = fals
     shouldUseAdvancedContent: () => advanced,
     getAdvancedContentConfigError: forbid, getRawCampaignContentForIndex: forbid, resolveCampaignMediaForIndex: forbid,
     restoreFacebookPageIdentity: async () => {},
-    handleZaloRealtimeGroupCompletion: async () => false, handleRerunAfterCompletion: async () => false,
+    handleZaloRealtimeGroupCompletion: async () => false, handleRerunAfterCompletion: async () => false, handleCampaignRepeatAfterCompletion: async () => false,
     dataGroupRuntimeContext: () => ({ runtimeTarget: server ? 'server' : 'desktop' }),
     supabase: {
       getRuntimeClock: async () => ({ dbNow: now }), getCampaign: async () => campaign,
