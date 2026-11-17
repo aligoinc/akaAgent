@@ -104,6 +104,8 @@ export class PageTrace {
   private attempted = false
   private sleeping = 0
   private lastActivity = Date.now()
+  /** Lời gọi trên trang đang chờ (tracePage): abandonPending kết thúc chúng. */
+  private readonly pending = new Set<(error: Error) => void>()
 
   constructor(private readonly now: () => number = Date.now) {
     this.blockStartedAt = now()
@@ -146,6 +148,23 @@ export class PageTrace {
 
   /** Cú bấm gửi của block đã thật sự chạy chưa (lỗi kiểu "không tìm thấy phần tử" không tính). */
   get sendAttempted(): boolean { return this.attempted }
+
+  addPending(cancel: (error: Error) => void): void { this.pending.add(cancel) }
+  removePending(cancel: (error: Error) => void): void { this.pending.delete(cancel) }
+
+  /**
+   * Bộ chạy đã đóng cửa sổ chạy ngầm (block treo Q20, cửa sổ chết): Electron KHÔNG kết thúc lời gọi đang chờ trên trang khi cửa sổ bị huỷ
+   * (thử thật 17/11/2026, Electron 33: evaluate đang chờ vẫn treo sau 2 phút; electron-real-smoke.cjs), nên vết kết thúc mọi lời gọi đang chờ
+   * bằng lỗi `message` để block thoát. Câu lỗi không thuộc nhóm "chắc chắn chưa gửi": cú bấm gửi đang dở được coi là có thể đã gửi, không gửi
+   * lại. Lời gọi sau đó đi thẳng PageController (trang đã đóng thì báo "Browser page is not connected", chưa gửi). Trả số lời gọi đã kết thúc.
+   */
+  abandonPending(message: string): number {
+    const cancels = [...this.pending]
+    this.pending.clear()
+    const error = new Error(message)
+    for (const cancel of cancels) cancel(error)
+    return cancels.length
+  }
 
   elementName(selector: unknown): { el?: string; sel?: string } {
     if (typeof selector !== 'string' || !selector) return {}
@@ -232,13 +251,21 @@ export function tracePage(page: PageController, trace: PageTrace): PageControlle
         const pageUrl = tracePageUrl(safeUrl(target))
         const startedAt = trace.clock()
         trace.touch()
+        let cancel: ((error: Error) => void) | null = null
         try {
-          const result = await (value as (...input: unknown[]) => Promise<unknown>).apply(target, args)
+          // Chạy đua với abandonPending: cửa sổ bị huỷ thì Electron để lời gọi treo mãi, vết tự kết thúc lời gọi.
+          const result = await new Promise<unknown>((resolve, reject) => {
+            cancel = reject
+            trace.addPending(reject)
+            Promise.resolve().then(() => (value as (...input: unknown[]) => Promise<unknown>).apply(target, args)).then(resolve, reject)
+          })
           trace.record(property, args, startedAt, null, pageUrl)
           return result
         } catch (error) {
           trace.record(property, args, startedAt, error ?? new Error('unknown'), pageUrl)
           throw error
+        } finally {
+          if (cancel) trace.removePending(cancel)
         }
       }
       wrapped.set(property, fn)

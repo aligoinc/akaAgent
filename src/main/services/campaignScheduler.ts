@@ -5983,6 +5983,13 @@ export class CampaignScheduler {
           state.browserGone = 'block_hang'
           progress(`⚠️ Thao tác trên Facebook không phản hồi quá ${settings.blockHangMinutes} phút, đóng cửa sổ chạy ngầm để chạy data kế tiếp`)
           try { this.backgroundPages.destroy(account.id) } catch { /* đã đóng */ }
+          // Electron không kết thúc lời gọi đang chờ khi cửa sổ bị huỷ (thử thật 17/11): vết tự kết thúc để block thoát.
+          trace.abandonPending('Thao tác trên Facebook không phản hồi, đã đóng cửa sổ chạy ngầm')
+        } else if (page && !page.isConnected()) {
+          // Cửa sổ chạy ngầm chết / bị đóng giữa lúc block đang chờ trên trang: lời gọi đang chờ kết thúc (không rõ đã gửi chưa). Đang dừng
+          // lượt (tạm dừng, thoát app, đăng xuất) thì chỉ gỡ lời gọi, kết quả theo đường dừng như cũ.
+          if (!state.browserGone && !api.signal.aborted) state.browserGone = 'browser_gone'
+          trace.abandonPending('Cửa sổ chạy ngầm đã đóng')
         }
       }, checkMs)
 

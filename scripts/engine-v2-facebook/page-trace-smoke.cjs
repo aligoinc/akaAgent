@@ -155,7 +155,35 @@ async function main() {
     pass('Block treo: 10 phút không thao tác, không tính lúc nghỉ theo cài đặt')
   }
 
+  // 6. Electron không kết thúc lời gọi đang chờ khi cửa sổ bị huỷ (electron-real-smoke): bộ lập lịch gọi abandonPending để block thoát.
+  {
+    const trace = new PageTrace()
+    trace.beginBlock(['evaluate'])
+    const page = fakePage()
+    // tracePage giữ hàm bọc theo tên method (PageController không đổi method), nên đổi hành vi bằng cờ chứ không gán lại page.evaluate.
+    let hang = true
+    page.evaluate = () => (hang ? new Promise(() => {}) : Promise.resolve(7))
+    const traced = tracePage(page, trace)
+    const hung = traced.evaluate('chờ mãi').then(() => 'xong', error => error.message)
+    await new Promise(resolve => setImmediate(resolve))
+    assert.equal(trace.abandonPending('Thao tác trên Facebook không phản hồi, đã đóng cửa sổ chạy ngầm'), 1)
+    assert.equal(await hung, 'Thao tác trên Facebook không phản hồi, đã đóng cửa sổ chạy ngầm')
+    assert.equal(trace.sendAttempted, true, 'cú gửi bị cắt giữa chừng: có thể đã gửi, không gửi lại')
+    assert.equal(isNotDispatchedError('Thao tác trên Facebook không phản hồi, đã đóng cửa sổ chạy ngầm'), false)
+    assert.equal(trace.abandonPending('lần hai'), 0, 'không còn lời gọi nào đang chờ')
+    hang = false
+    assert.equal(await traced.evaluate('sau đó'), 7, 'lời gọi sau đó đi thẳng trang như cũ')
+    pass('Cắt lời gọi đang chờ khi cửa sổ bị huỷ: block thoát, cú gửi đang dở là không rõ kết quả, lời gọi sau đi như cũ')
+  }
+
   console.log(`\n${checks} nhóm kiểm tra đạt`)
+  finished = true
 }
+
+// Một lời gọi treo làm Node thoát lặng lẽ với mã 0 khi hết việc: coi là hỏng.
+let finished = false
+process.on('beforeExit', () => {
+  if (!finished && !process.exitCode) { console.error('FAIL một nhóm kiểm tra không kết thúc (lời gọi treo)'); process.exitCode = 1 }
+})
 
 main().catch(err => { console.error(err); process.exit(1) })

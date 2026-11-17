@@ -100,6 +100,14 @@
 >   phát lại / kịch bản dùng AI giả (`aiwrap` trong `desktop-harness.cjs`), không gọi mạng. Kiểm lại sau Q11: `desktop-fb-smoke` 21/21, các bài FB khác đạt, typecheck
 >   Desktop / lõi / renderer sạch; phát lại lịch sử thật 1.168 khớp, 10 khác đã chốt, 0 chưa giải thích; kịch bản sự cố FB 20 hạt giống 0 vi phạm;
 >   kịch bản Zalo 708 lượt 0 vi phạm mới; `campaign-outcome-engine-check-all` (Zalo) đạt.
+> - **Thử thật trong Electron 17/11** (mục 9.5, phần chỉ Chromium thật kiểm được; `scripts/engine-v2-facebook/electron-real-smoke.cjs`, Electron 33
+>   của repo, trang giả cục bộ, không chạm Facebook; code block 27 / 30 và XPath lấy từ ảnh chụp production 17/11): block 27 (mở hộp đăng bài)
+>   và 30 (bấm Đăng) thật chạy đúng trên cửa sổ chạy ngầm cấu hình như `BackgroundPageManager`, vết ghi đúng tên phần tử, cú bấm Đăng được
+>   nhận là đã gửi; trang "Bạn hiện không xem được nội dung này" ra FB40 rồi dấu hiệu đổi thành FB14 (chỉ đọc vùng chính, không đọc thanh bên);
+>   chụp được ảnh cửa sổ ẩn. **Tìm ra:** huỷ cửa sổ KHÔNG làm `executeJavaScript` đang chờ kết thúc (vẫn treo sau 2 phút), chỉ `loadURL` đang
+>   chờ báo ERR_FAILED, nên block treo (Q20) trước đó không thoát dù cửa sổ đã bị huỷ. Sửa: vết thao tác kết thúc mọi lời gọi đang chờ
+>   (`PageTrace.abandonPending`) khi bộ chạy huỷ cửa sổ hoặc thấy cửa sổ đã đóng, bằng câu lỗi không thuộc nhóm "chắc chắn chưa gửi" (cú gửi
+>   đang dở là không rõ kết quả, không gửi lại); `page-trace-smoke` 6/6. Bộ cũ không đổi.
 >
 > Nguồn: kế hoạch engine v2 (`~/.claude/plans/t-i-mu-n-t-ch-c-composed-wolf.md`, mục 4 quyết định 11, 5.4, 8.2, 10 giai đoạn 7),
 > [thiết kế](CAMPAIGN_OUTCOME_ENGINE.md), [phủ Zalo](CAMPAIGN_OUTCOME_ENGINE_ZALO_COVERAGE.md),
@@ -1069,9 +1077,10 @@ Còn thiếu:
   đã bật gần như không còn lượt FB bộ cũ. Trong lúc làm dở, chỉ tổ chức thử chịu rủi ro này. Zalo giữ nguyên (Q24).
 - **R16. Nhận ra block treo** (anh chốt Q20, 16/11). Không giới hạn thời gian chạy của block. Treo nghĩa là **10 phút liền không có thao tác nào** bắt đầu
   hoặc kết thúc (engine thấy mọi thao tác qua lớp bọc `PageController`), không tính lúc block nghỉ theo cài đặt (`helpers.sleep`) và lúc máy
-  ngủ. Block chạy lâu mà vẫn đang làm việc (vòng comment, cuộn trang) không bị cắt. Treo thì huỷ cửa sổ ẩn của tài khoản (cách duy nhất ngắt
-  được `executeJavaScript`; cần thử xem lời gọi đang chờ có bị huỷ thật không), ghi "không rõ kết quả" nếu đã có dấu "sắp gửi", nhả lease rồi
-  chạy data kế. Hôm nay `executeJavaScript`, `loadURL` và phần đọc kết quả của `apiCall` không có hạn giờ (`pageController.ts:150`, `:166`,
+  ngủ. Block chạy lâu mà vẫn đang làm việc (vòng comment, cuộn trang) không bị cắt. Treo thì huỷ cửa sổ ẩn của tài khoản, ghi "không rõ kết
+  quả" nếu đã có dấu "sắp gửi", nhả lease rồi chạy data kế. Thử thật 17/11 (`electron-real-smoke.cjs`): huỷ cửa sổ KHÔNG làm `executeJavaScript`
+  đang chờ kết thúc (chỉ `loadURL` báo ERR_FAILED), nên vết thao tác tự kết thúc mọi lời gọi đang chờ (`PageTrace.abandonPending`) để block
+  thoát; câu lỗi không thuộc nhóm "chắc chắn chưa gửi". Hôm nay `executeJavaScript`, `loadURL` và phần đọc kết quả của `apiCall` không có hạn giờ (`pageController.ts:150`, `:166`,
   `:676-680`); hạn 5 phút của `vm` chỉ phủ phần chạy đồng bộ của block (`blockExecutor.ts:76-95`).
   Đo 16/11 (17,3 giờ, 9.868 lượt FB, phụ lục A mục 29): 14 bước chạy quá 10 phút. Bước dài hợp lệ vẫn làm thao tác liên tục (nút `loop` tới
   40 phút, `fb_prepare_seeding_iterations` cuộn trang tới 54 phút) hoặc đang nghỉ theo cài đặt (`sleep` tới 17 phút). Bước chỉ làm một việc mà

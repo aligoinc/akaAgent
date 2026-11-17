@@ -1,0 +1,25 @@
+{
+ "readAt": "2026-11-17",
+ "source": "auto_blocks / auto_elements production (chỉ đọc), không dữ liệu khách",
+ "note": "Ảnh chụp cho scripts/engine-v2-facebook/electron-real-smoke.cjs: code block thật (md5 = DB lúc đọc, giữ nguyên CRLF) và XPath thật.",
+ "elements": {
+  "fb_composer_button": "//*[@role='button' and (contains(.,'đang nghĩ gì') or contains(.,'on your mind') or contains(.,'Write something') or contains(.,'Bạn viết gì đi'))]",
+  "fb_composer_dialog": "//*[@role='dialog']//*[@contenteditable='true'] | //form[@method='POST']//*[contains(@class,'notranslate')]",
+  "fb_post_button": "//*[@role='dialog']//*[(@aria-label='Đăng' or @aria-label='Post') and @role='button'] | //*[not(@aria-hidden)]/form//*[@role='button' and (contains(.,'Post') or .='Đăng')]",
+  "FbComposerNextButton": "//*[@role='button' and (contains(.,'Next') or contains(.,'Tiếp'))]"
+ },
+ "blocks": [
+  {
+   "id": 27,
+   "name": "fb_open_composer",
+   "md5": "62b842acb7b45fdf4aad976775db3c56",
+   "code": "// Composer errors use the standard result contract; workflow gates publishing on opened.\nasync function waitForComposer(selector, stage) {\n  try { await page.waitForSelector(selector, { timeout: 15000 }); }\n  catch (cause) {\n    const raw = cause && cause.message ? String(cause.message) : String(cause);\n    const actionCode = input.composerActionCode;\n    if (signal.aborted || !raw.startsWith('waitForSelector timeout:') ||\n        !['fb_post_group', 'fb_post_my_profile'].includes(actionCode)) throw cause;\n    const actionResult = {\n      actionCode, statusCode: 'campaign_detail_error', errorCode: actionCode === 'fb_post_group'\n        ? 'err_fb_group_composer_editor_not_found' : 'err_fb_composer_editor_not_found',\n      inputDataId: vars.inputDataId ?? null,\n      operationState: 'not_committed', message: \"Không tìm thấy ô đăng bài\",\n      data: { error: raw, selector, stage, source: 'fb_open_composer' }\n    };\n    return { opened: false, actionResult };\n  }\n}\nconst btn = await helpers.element('fb_composer_button')\r\nconst buttonFailure = await waitForComposer(btn, 'composer_button')\nif (buttonFailure) return buttonFailure\r\nawait helpers.sleep(500, signal)\r\nawait page.click(btn)\r\n// Chờ form đăng bài (//form[@method='POST']) — giống pattern cũ sleep 5s\r\nawait helpers.sleep(5000, signal)\r\nconst dialog = await helpers.element('fb_composer_dialog')\r\nconst dialogFailure = await waitForComposer(dialog, 'composer_dialog')\nif (dialogFailure) return dialogFailure\r\nreturn { opened: true }"
+  },
+  {
+   "id": 30,
+   "name": "fb_click_post_button",
+   "md5": "4389c339487296b488aa010edb3ddcef",
+   "code": "\nlet nextClicked = false\ntry {\n  const nextSelector = await helpers.element('FbComposerNextButton')\n  const nextButton = await page.$(nextSelector)\n  if (nextButton) {\n    await page.click(nextSelector)\n    nextClicked = true\n  }\n} catch {}\n\nif (nextClicked) await helpers.sleep(2000, signal)\n\nconst publishMedia = Array.isArray(vars.images) ? vars.images : []\nconst publishHasVideo = publishMedia.some(path => /^data:video\\//i.test(String(path || '')) || /\\.(3g2|3gp|avi|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)(?:[?#].*)?$/i.test(String(path || '')))\nconst publishTimeoutMs = publishHasVideo ? 180000 : 60000\n// Match the existing Group visibility check; a disabled button still exists.\nasync function postSubmitButtonIsVisible(selector) {\n  return await page.evaluate(`\n    const result = document.evaluate(__args[0], document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n    for (let i = 0; i < result.snapshotLength; i++) {\n      const el = result.snapshotItem(i);\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;\n      const rect = el.getBoundingClientRect();\n      if (rect.width > 0 && rect.height > 0) return true;\n    }\n    return false;\n  `, selector);\n}\n\nconst btn = await helpers.element('fb_post_button')\nawait page.waitForSelector(btn, { timeout: 10000 })\nawait page.click(btn)\nvars.facebookPostPublishStartedAt = Date.now()\nif (input.verifyPostAfterClick === true) {\n  while (true) {\n    if (signal.aborted) throw new Error('Đã dừng chờ xác nhận đăng bài')\n    if (!await postSubmitButtonIsVisible(btn)) {\n      return { ok: true, posted: true, submitClosed: true, publishTimeoutMs }\n    }\n    const remainingMs = publishTimeoutMs - (Date.now() - vars.facebookPostPublishStartedAt)\n    if (remainingMs <= 0) throw new Error('Form đăng bài chưa đóng sau ' + (publishTimeoutMs / 1000) + ' giây')\n    await helpers.sleep(Math.min(500, remainingMs), signal)\n  }\n}\n// Group retains its separate verify block and frequency-limit policy.\nawait helpers.sleep(3000, signal)\nreturn { posted: true }\n"
+  }
+ ]
+}
