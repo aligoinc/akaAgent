@@ -2,6 +2,7 @@ import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaignDraftRequest } from '../../../shared/campaignDrafts'
 import * as campaignDraftRepo from '../../data/repositories/campaignDraftRepository'
+import { syncCampaignRepeat } from '../../data/repositories/campaignRepeatRepository'
 import { CAMPAIGN_INPUT_DATA_DEFAULT_MAX_ROWS, CAMPAIGN_STATUSES, IPC_EVENTS, type AddCampaignInputDataRowsRequest, type AddCampaignInputDataToCampaignRequest, type Campaign, type CampaignDetailPageQuery, type CampaignInputDataPageQuery, type CampaignInputDataWriteProgress, type CampaignInputStatus, type CampaignRunEventListOptions, type CampaignStatus, type CampaignUpdate } from '../../../shared/types'
 import { SupabaseService } from '../../services/supabase'
 import { FOUND_FACEBOOK_GROUP_CARDS_IPC, type FoundFacebookGroupCardsRequest } from '../../../shared/foundFacebookGroupCardsIpc'
@@ -132,8 +133,22 @@ export function registerCampaignHandlers(
     return supabase.getCampaignLog(id)
   })
 
+  // "Lặp lại sau khi chạy xong" (V556, docs/CAMPAIGN_REPEAT_V556.md): sau khi lưu chiến dịch có (hoặc vừa bỏ) cài đặt lặp thì đăng ký
+  // lại trong DB; bộ quét dự phòng chỉ xét chiến dịch đã đăng ký. Chiến dịch đã lưu rồi nên lỗi ở đây không làm hỏng lượt lưu.
+  const registerCampaignRepeat = async (campaignId: unknown, ...settings: unknown[]): Promise<void> => {
+    const usesRepeat = settings.some(item => item && typeof item === 'object'
+      && (item as Record<string, unknown>).repeatAfterCompletionEnabled === true)
+    if (!usesRepeat || !Number.isSafeInteger(Number(campaignId)) || Number(campaignId) <= 0) return
+    try {
+      await syncCampaignRepeat(Number(campaignId))
+    } catch (error) {
+      console.warn('[campaign-repeat] sync failed:', campaignId, error)
+    }
+  }
+
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN, async (_, campaignData) => {
     const campaign = await supabase.createCampaign(campaignData)
+    await registerCampaignRepeat(campaign?.id, campaign?.extraSettings)
     realtimeRefreshController?.refreshSoon('campaign-created')
     return campaign
   })
@@ -167,7 +182,12 @@ export function registerCampaignHandlers(
       }
     }
     try {
+      // Đọc cài đặt lặp trước khi sửa: vừa tắt lặp cũng phải gỡ đăng ký.
+      const repeatBefore = payload.extraSettings !== undefined || payload.scheduleEndDate !== undefined || payload.scheduleType !== undefined
+        ? (await supabase.getCampaignConfig(id).catch(() => null))?.extraSettings
+        : undefined
       const campaign = await supabase.updateCampaign(id, payload, requireEditReady === true, expectedUpdatedAt, retrySmsInputSchedule)
+      await registerCampaignRepeat(id, repeatBefore, payload.extraSettings, (campaign as { extraSettings?: unknown } | null | undefined)?.extraSettings)
       realtimeRefreshController?.refreshSoon('campaign-updated')
       return campaign
     } catch (error) {

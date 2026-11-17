@@ -1,3 +1,4 @@
+import type { CampaignRepeatAudience } from './campaignRepeat'
 import type { AutoAccount, CampaignListItem } from './types'
 import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
 import type { RenewalReminderSettings } from './renewalReminder'
@@ -15,6 +16,11 @@ export interface DesktopPollingSettings {
    * src/shared/zaloShareRepeat.ts). Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = ẩn.
    */
   zaloShareRepeatEnabled?: boolean
+  /**
+   * "Lặp lại sau khi chạy xong" mở cho ai (`campaign.repeat_after_completion`, cùng công tắc với Web, src/shared/campaignRepeat.ts).
+   * Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = `off` = ẩn nhóm cài đặt trong form.
+   */
+  campaignRepeatAudience?: CampaignRepeatAudience
   /** Ngừng đọc theo hẹn giờ/sự kiện khi cửa sổ chính thu nhỏ, ẩn hoặc màn hình khóa. Thiếu = tắt. */
   hiddenPauseEnabled?: boolean
   /** Cả máy không có thao tác từ ngần này giây thì coi là không ai nhìn. 0/thiếu = tắt. */
@@ -34,7 +40,7 @@ export interface DesktopPollingSettings {
    */
   affPartnerAudience?: AffPartnerAudience
 }
-export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, affPartnerAudience: 'off' }
+export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, campaignRepeatAudience: 'off', affPartnerAudience: 'off' }
 export function parseDesktopPollSeconds(value: unknown): number {
   const text = String(value ?? '').trim()
   const seconds = Number(text)
