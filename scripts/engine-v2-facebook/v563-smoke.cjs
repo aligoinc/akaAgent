@@ -7,7 +7,9 @@
 //   2. Dấu hiệu FB11: đăng nhóm ra FB40 mà trang có nút "Tham gia nhóm" → FB11; trang nhóm đã tham gia (chữ thật 17/11) → không;
 //      "Bạn hiện không xem được nội dung này" vẫn ra FB14; thao tác khác / mã khác → không.
 //   3. SQL: preflight chặn khi dòng dấu hiệu / chính sách FB40 / code block lệch; apply; chính sách hiệu lực FB11 khi đăng nhóm = FB40 ở mọi
-//      pha và trạng thái (trừ câu cho khách, câu là câu anh duyệt); FB11 ở thao tác khác không đổi; apply lại bị từ chối; gỡ rồi apply lại.
+//      pha và trạng thái (trừ câu cho khách, câu là câu anh duyệt); comment trong chiến dịch đăng nhóm không cộng / đặt lại chuỗi, FB03 khi
+//      comment không dừng (so chính sách hiệu lực trước / sau ở mọi mã, pha, loại chiến dịch có comment: chỉ chỗ đó đổi); FB11 ở thao tác khác
+//      không đổi; apply lại bị từ chối; gỡ rồi apply lại.
 // Chạy: node scripts/engine-v2-facebook/v563-smoke.cjs
 'use strict'
 const assert = require('node:assert/strict')
@@ -300,6 +302,24 @@ async function main() {
       return out
     }
     const fb11Before = await snapshot(B.FB11, fbActions)
+    // Chính sách hiệu lực của comment / đăng bài ở các loại chiến dịch có comment (và không gắn loại), mọi mã Facebook / hệ thống, mọi pha.
+    const errorCodes = (await q(`SELECT error_code FROM public.auto_error WHERE public_code ~ '^(FB|SYS|NET|UNK)' AND is_active ORDER BY error_code`))
+      .map(r => r.error_code)
+    const commentSnapshot = async () => {
+      const out = {}
+      for (const camp of ['facebook_group_post', 'facebook_comment_seeding', 'facebook_comment_seeding_post', null]) {
+        for (const action of ['fb_comment', 'fb_post_group']) {
+          for (const code of [null, ...errorCodes]) {
+            for (const phase of PHASES) {
+              out[`${camp}|${action}|${code}|${phase}`] = strip((await one(
+                `SELECT public.aka_agent_engine_resolve_policy($1, NULL, $2, $3, 'desktop', $4) AS p`, [code, action, camp, phase])).p)
+            }
+          }
+        }
+      }
+      return out
+    }
+    const commentBefore = await commentSnapshot()
     const blockRow = async id => one(`SELECT md5(code) AS m, name FROM public.auto_blocks WHERE id = $1`, [id])
     const signsValue = async () => (await one(`SELECT value FROM public.auto_system_settings WHERE key = 'facebook.error_signs'`)).value
 
@@ -336,8 +356,13 @@ async function main() {
       assert.deepEqual(await q(`SELECT id::int, commit_level, send_ops, reviewed_code_md5 FROM public.auto_engine_block_steps WHERE block_id = $1`, [comment.id]),
         [{ id: comment.steps[0].id, commit_level: 2, send_ops: ['press:Enter'], reviewed_code_md5: B.COMMENT.newMd5 }], 'danh mục bước ghi md5 đã duyệt mới')
       assert.equal(await signsValue(), B.NEW_SIGNS)
-      const rows = await q(`SELECT action_code, log_template, campaign_note_template FROM public.auto_outcome_policies WHERE source = $1`, [B.SOURCE])
+      const rows = await q(`SELECT action_code, log_template, campaign_note_template FROM public.auto_outcome_policies WHERE source = $1 AND error_code = $2`,
+        [B.SOURCE, B.FB11])
       assert.deepEqual(rows, [{ action_code: 'fb_post_group', log_template: B.FB11_TITLE, campaign_note_template: B.FB11_TITLE }])
+      const commentRows = await q(`SELECT error_code, target_streak_effect, campaign_effect, run_effect FROM public.auto_outcome_policies
+        WHERE source = $1 AND action_code = 'fb_comment' AND campaign_action_id = $2 ORDER BY error_code NULLS FIRST`, [B.SOURCE, B.GROUP_POST])
+      assert.deepEqual(commentRows, [{ error_code: null, target_streak_effect: 'ignore', campaign_effect: null, run_effect: null },
+        { error_code: B.FB03, target_streak_effect: null, campaign_effect: 'none', run_effect: 'continue' }])
     })
 
     await check('chính sách hiệu lực: FB11 khi đăng nhóm = FB40 ở mọi pha và trạng thái báo lên; câu cho khách là câu anh duyệt', async () => {
@@ -349,6 +374,30 @@ async function main() {
           assert.equal(mine.log_template, B.FB11_TITLE)
         }
       }
+    })
+
+    await check('đăng nhóm kiêm comment: chỉ comment trong chiến dịch đăng nhóm đổi (không cộng / đặt lại chuỗi; FB03 không dừng, chạy tiếp); comment seeding, đăng bài, chiến dịch khác giữ nguyên', async () => {
+      const after = await commentSnapshot()
+      let changed = 0
+      for (const key of Object.keys(commentBefore)) {
+        const [camp, action, code, phase] = key.split('|')
+        if (action === 'fb_post_group' && code === B.FB11) {
+          // Phần FB11 của V563 (kiểm riêng ở trên): FB11 khi đăng bài = FB40 ở mọi loại chiến dịch.
+          assert.deepEqual(after[key], after[`${camp}|fb_post_group|${B.FB40}|${phase}`], key)
+          continue
+        }
+        const want = { ...commentBefore[key] }
+        if (camp === B.GROUP_POST && action === 'fb_comment') {
+          want.target_streak_effect = 'ignore'
+          if (code === B.FB03) { want.campaign_effect = 'none'; want.run_effect = 'continue' }
+        }
+        if (JSON.stringify(want) !== JSON.stringify(commentBefore[key])) changed++
+        assert.deepEqual(after[key], want, key)
+      }
+      assert.ok(changed > 100, `số chỗ đổi: ${changed}`)
+      // Trước V563 comment hỏng khi bài bị bỏ qua (không có kết quả gửi) cộng chuỗi; mã chung (SYS99) có ngưỡng 4 tạm dừng chiến dịch.
+      assert.equal(commentBefore[`${B.GROUP_POST}|fb_comment|err_undefined|after_send`].target_streak_effect, 'increment')
+      assert.equal(commentBefore[`${B.GROUP_POST}|fb_comment|${B.FB03}|after_send`].campaign_effect, 'pause')
     })
 
     await check('FB11 ở thao tác khác không đổi; apply lại bị từ chối', async () => {
@@ -367,6 +416,7 @@ async function main() {
       assert.equal(await signsValue(), B.OLD_SIGNS)
       assert.equal((await one(`SELECT count(*)::int AS n FROM public.auto_outcome_policies WHERE source = $1`, [B.SOURCE])).n, 0)
       assert.deepEqual(await snapshot(B.FB11, fbActions), fb11Before)
+      assert.deepEqual(await commentSnapshot(), commentBefore, 'chính sách comment về như trước V563')
       await expectRefused(rollback, /không phải bản V563/)
       await db.query(v563)
       assert.equal((await blockRow(B.LIVE.block.id)).m, B.NEW_MD5)

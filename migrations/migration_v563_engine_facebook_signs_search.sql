@@ -1,7 +1,8 @@
 -- V563: engine v2 Facebook, sửa riêng phần engine (bộ cũ không đổi): bản "[engine] fb_collect_search_groups" đọc số bài/ngày + tên nhóm
 -- giao diện tiếng Anh; bản "[engine] fb_comment_at_position" chỉ comment "bài của mình" khi thấy đúng bài vừa đăng (không comment nhầm bài người
 -- khác); bản "[engine] fb_adjust_group_post_comments_after_pending" bỏ lượt comment "bài của mình" khi chưa lấy được link bài vừa đăng và báo
--- khách một câu ⚠️; dấu hiệu FB11 "Tham gia nhóm" khi đăng nhóm không thấy ô đăng bài (chính sách = FB40, chỉ đổi câu).
+-- khách một câu ⚠️; dấu hiệu FB11 "Tham gia nhóm" khi đăng nhóm không thấy ô đăng bài (chính sách = FB40, chỉ đổi câu); đăng nhóm kiêm comment:
+-- comment không cộng chuỗi data lỗi, FB03 khi comment không tạm dừng chiến dịch (comment seeding không đổi).
 -- SINH TỪ scripts/build-v563-sql.cjs (nguồn guard: scripts/fixtures/engine-v2-facebook/v563-live-20261117.json), không sửa tay.
 -- Rà soát và số liệu: docs/ENGINE_V2_FACEBOOK_ERROR_REVIEW_20261117.md. Chỉ dữ liệu, không DDL (không nạp lại schema PostgREST).
 -- Bộ cũ không nạp block "[engine]" và không đọc facebook.error_signs. Desktop đọc lại block / dấu hiệu / danh mục ở lần nạp danh mục kế tiếp.
@@ -58,6 +59,13 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_fb_group_cannot_post_not_member' AND public_code = 'FB11' AND is_active AND NOT is_delete
                    AND customer_title = 'Tài khoản chưa vào nhóm này nên chưa đăng bài được' AND customer_help IS NULL) THEN
     RAISE EXCEPTION 'V563: mã FB11 không bật hoặc câu cho khách không phải câu anh duyệt';
+  END IF;
+  -- Đăng nhóm kiêm comment: chưa có dòng chính sách nào riêng cho comment trong chiến dịch đăng nhóm; FB03 đang bật.
+  IF EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE action_code = 'fb_comment' AND campaign_action_id = 'facebook_group_post' AND NOT is_delete) THEN
+    RAISE EXCEPTION 'V563: đã có chính sách riêng cho comment trong chiến dịch đăng nhóm';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_comment_frequency_limit' AND public_code = 'FB03' AND is_active AND NOT is_delete) THEN
+    RAISE EXCEPTION 'V563: mã FB03 không bật';
   END IF;
 END $pre$;
 
@@ -507,13 +515,20 @@ UPDATE public.auto_system_settings SET value = '[{"code":"err_fb_page_inbox_cust
 INSERT INTO public.auto_outcome_policies (error_code, action_code, error_class, status_id, campaign_action_id, runtime_target, detail_mode, detail_status_id, sub_status_id, quota_effect, target_streak_effect, streak_threshold, target_effect, requeue_after_minutes, remaining_steps, lock_action_codes, lock_mode, lock_minutes, lock_days, lock_time, run_effect, pace_mode, pace_seconds, campaign_effect, campaign_hold_minutes, account_effect, login_effect, streak_after_delivery, log_template, campaign_note_template,
   description, source, is_active, is_delete)
 SELECT 'err_fb_group_cannot_post_not_member', 'fb_post_group', p.error_class, p.status_id, p.campaign_action_id, p.runtime_target, p.detail_mode, p.detail_status_id, p.sub_status_id, p.quota_effect, p.target_streak_effect, p.streak_threshold, p.target_effect, p.requeue_after_minutes, p.remaining_steps, p.lock_action_codes, p.lock_mode, p.lock_minutes, p.lock_days, p.lock_time, p.run_effect, p.pace_mode, p.pace_seconds, p.campaign_effect, p.campaign_hold_minutes, p.account_effect, p.login_effect, p.streak_after_delivery, 'Tài khoản chưa vào nhóm này nên chưa đăng bài được', 'Tài khoản chưa vào nhóm này nên chưa đăng bài được',
-  '[anh chốt 17/11, V563] FB11 khi đăng nhóm: có chỗ phát (dấu hiệu: không thấy ô đăng bài (FB40) mà trang có nút "Tham gia nhóm" / "Join group"); giữ cách xử lý như FB40 hôm nay, chỉ đổi câu cho khách.', 'v563_fb_signs', true, false
+  '[anh chốt 17/11, V563] FB11 khi đăng nhóm: có chỗ phát (dấu hiệu: không thấy ô đăng bài (FB40) mà trang có nút "Tham gia nhóm" / "Join group"); giữ cách xử lý như FB40 hôm nay, chỉ đổi câu cho khách.', 'v563_fb', true, false
   FROM public.auto_outcome_policies p
  WHERE p.error_code = 'err_fb_group_composer_editor_not_found' AND p.action_code IS NULL AND p.campaign_action_id IS NULL AND p.runtime_target IS NULL AND p.is_active AND NOT p.is_delete
    AND md5(jsonb_strip_nulls(to_jsonb(p) - 'id' - 'created_at' - 'updated_at' - 'updated_by' - 'revision')::text) = '7ead85c5fa88a906d167ce52f46ecc03';
 
+-- 5. Đăng nhóm kiêm comment: chặn theo thao tác riêng chiến dịch đăng nhóm (áp sau cùng): comment không cộng / đặt lại chuỗi data lỗi.
+INSERT INTO public.auto_outcome_policies (action_code, campaign_action_id, target_streak_effect, description, source, is_active, is_delete)
+VALUES ('fb_comment', 'facebook_group_post', 'ignore', '[anh chốt 17/11, V563] Đăng nhóm kiêm comment: kết quả comment (thành công lẫn lỗi) không cộng / không đặt lại chuỗi data lỗi, chuỗi chỉ theo kết quả đăng bài; comment hỏng không làm dừng chiến dịch đăng nhóm, kể cả khi bài bị bỏ qua vì nhóm cần duyệt (trước V563: dừng sau 4 data).', 'v563_fb', true, false);
+-- 6. FB03 khi comment trong chiến dịch đăng nhóm: không tạm dừng, chạy tiếp (dòng theo mã + thao tác + loại chiến dịch, hẹp nhất).
+INSERT INTO public.auto_outcome_policies (error_code, action_code, campaign_action_id, campaign_effect, run_effect, description, source, is_active, is_delete)
+VALUES ('err_comment_frequency_limit', 'fb_comment', 'facebook_group_post', 'none', 'continue', '[anh chốt 17/11, V563, "Chạy tiếp ngay"] FB03 khi comment trong chiến dịch đăng nhóm: không tạm dừng chiến dịch, không dừng lượt; data sau vẫn đăng bài và vẫn thử comment (bộ cũ tạm dừng chiến dịch).', 'v563_fb', true, false);
+
 DO $post$
-DECLARE v_n integer; v_phase text; v_mine jsonb; v_today jsonb;
+DECLARE v_n integer; v_phase text; v_mine jsonb; v_today jsonb; v_code text;
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2909 AND md5(code) = '499445e4406d2095c951b5c1c9aef03d') THEN
     RAISE EXCEPTION 'V563 postflight: code block 2909 không phải bản mới (md5 499445e4406d2095c951b5c1c9aef03d)';
@@ -545,7 +560,7 @@ BEGIN
   SELECT count(*) INTO v_n FROM public.auto_system_settings WHERE key = 'facebook.error_signs' AND md5(value) = '7e25dd65faab148bcf55b93654852a16'
      AND jsonb_array_length(value::jsonb) = 5;
   IF v_n <> 1 THEN RAISE EXCEPTION 'V563 postflight: dòng facebook.error_signs không phải bản mới (5 dấu hiệu)'; END IF;
-  SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE source = 'v563_fb_signs' AND error_code = 'err_fb_group_cannot_post_not_member' AND action_code = 'fb_post_group'
+  SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE source = 'v563_fb' AND error_code = 'err_fb_group_cannot_post_not_member' AND action_code = 'fb_post_group'
      AND is_active AND NOT is_delete;
   IF v_n <> 1 THEN RAISE EXCEPTION 'V563 postflight: cần đúng 1 dòng chính sách FB11 cho đăng nhóm, có %', v_n; END IF;
   -- Chính sách hiệu lực của FB11 khi đăng nhóm = FB40 (trừ câu cho khách) ở mọi pha.
@@ -554,6 +569,30 @@ BEGIN
     v_today := public.aka_agent_engine_resolve_policy('err_fb_group_composer_editor_not_found', NULL, 'fb_post_group', NULL, 'desktop', v_phase) - 'policy_ids' - 'revisions' - 'log_template' - 'campaign_note_template';
     IF v_mine IS DISTINCT FROM v_today THEN
       RAISE EXCEPTION 'V563 postflight: chính sách FB11 khi đăng nhóm khác FB40 ở pha %: % / %', v_phase, v_mine, v_today;
+    END IF;
+  END LOOP;
+  -- Đăng nhóm kiêm comment: đúng 2 dòng mới; comment không cộng chuỗi ở mọi pha (mã chung, mã Facebook, thành công); FB03 khi comment không
+  -- tạm dừng, chạy tiếp; comment seeding vẫn cộng chuỗi và FB03 vẫn tạm dừng như trước.
+  SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE source = 'v563_fb' AND action_code = 'fb_comment' AND campaign_action_id = 'facebook_group_post'
+     AND is_active AND NOT is_delete;
+  IF v_n <> 2 THEN RAISE EXCEPTION 'V563 postflight: cần đúng 2 dòng chính sách comment cho đăng nhóm, có %', v_n; END IF;
+  FOREACH v_phase IN ARRAY ARRAY['before_send', 'in_flight', 'after_send'] LOOP
+    FOREACH v_code IN ARRAY ARRAY['err_undefined', 'err_engine_fb_action_failed', 'err_engine_fb_ui_not_ready', 'err_fb_comment_box_not_found', 'err_comment_frequency_limit'] LOOP
+      IF public.aka_agent_engine_resolve_policy(v_code, NULL, 'fb_comment', 'facebook_group_post', 'desktop', v_phase)->>'target_streak_effect' IS DISTINCT FROM 'ignore' THEN
+        RAISE EXCEPTION 'V563 postflight: % khi comment trong chiến dịch đăng nhóm vẫn đổi chuỗi lỗi ở pha %', v_code, v_phase;
+      END IF;
+    END LOOP;
+    IF public.aka_agent_engine_resolve_policy(NULL, NULL, 'fb_comment', 'facebook_group_post', 'desktop', v_phase)->>'target_streak_effect' IS DISTINCT FROM 'ignore' THEN
+      RAISE EXCEPTION 'V563 postflight: comment thành công trong chiến dịch đăng nhóm vẫn đổi chuỗi lỗi';
+    END IF;
+    v_mine := public.aka_agent_engine_resolve_policy('err_comment_frequency_limit', NULL, 'fb_comment', 'facebook_group_post', 'desktop', v_phase);
+    IF v_mine->>'campaign_effect' IS DISTINCT FROM 'none' OR v_mine->>'run_effect' IS DISTINCT FROM 'continue' THEN
+      RAISE EXCEPTION 'V563 postflight: FB03 khi comment trong chiến dịch đăng nhóm vẫn dừng (% / %)', v_mine->>'campaign_effect', v_mine->>'run_effect';
+    END IF;
+    IF public.aka_agent_engine_resolve_policy('err_engine_fb_ui_not_ready', NULL, 'fb_comment', 'facebook_comment_seeding', 'desktop', v_phase)->>'target_streak_effect'
+       IS DISTINCT FROM 'increment'
+       OR public.aka_agent_engine_resolve_policy('err_comment_frequency_limit', NULL, 'fb_comment', 'facebook_comment_seeding', 'desktop', v_phase)->>'campaign_effect' IS DISTINCT FROM 'pause' THEN
+      RAISE EXCEPTION 'V563 postflight: chính sách comment seeding bị đổi ở pha %', v_phase;
     END IF;
   END LOOP;
 END $post$;

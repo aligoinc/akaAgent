@@ -1,5 +1,5 @@
--- Gỡ V563: trả bản "[engine] fb_collect_search_groups", "[engine] fb_comment_at_position" (kèm md5 đã duyệt của danh mục bước) và dòng
--- facebook.error_signs về bản trước V563, xoá chính sách FB11 khi đăng nhóm (V563). Chỉ chạy khi các thứ đó đang đúng bản V563 (đã ai sửa sau V563 thì
+-- Gỡ V563: trả 3 bản "[engine]" (tìm nhóm bằng search, comment theo vị trí kèm md5 đã duyệt của danh mục bước, chỉnh comment sau đăng) và dòng
+-- facebook.error_signs về bản trước V563, xoá chính sách FB11 khi đăng nhóm và hai dòng comment trong chiến dịch đăng nhóm (V563). Chỉ chạy khi các thứ đó đang đúng bản V563 (đã ai sửa sau V563 thì
 -- dừng, không ghi đè). Bộ cũ không đổi. SINH TỪ scripts/build-v563-sql.cjs.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -388,7 +388,8 @@ $v563_adjust$, updated_at = now()
 
 UPDATE public.auto_system_settings SET value = '[{"code":"err_fb_page_inbox_customer_not_found","source":"message","actions":["fb_message_page_inbox_customer"],"phases":[],"replaces":[],"texts":["Không tìm thấy khách hàng trong inbox page"]},{"code":"err_fb_page_inbox_wrong_conversation","source":"message","actions":["fb_message_page_inbox_customer"],"phases":[],"replaces":[],"texts":["Không tìm thấy đúng khách hàng trong inbox page"]},{"code":"err_fb_upload_form_changed","source":"message","actions":[],"phases":["before_send"],"replaces":[],"texts":["Cần đúng 1 input file trong form đăng bài, tìm thấy 0","Input trong form không nhận ảnh/video"]},{"code":"err_fb_group_cannot_post_unavailable","source":"page","actions":["fb_post_group"],"phases":[],"replaces":["err_fb_group_composer_editor_not_found"],"texts":["Bạn hiện không xem được nội dung này","This content isn''t available right now"]}]', updated_at = now()
  WHERE key = 'facebook.error_signs' AND md5(value) = '7e25dd65faab148bcf55b93654852a16';
-DELETE FROM public.auto_outcome_policies WHERE source = 'v563_fb_signs' AND error_code = 'err_fb_group_cannot_post_not_member' AND action_code = 'fb_post_group';
+DELETE FROM public.auto_outcome_policies WHERE source = 'v563_fb' AND error_code = 'err_fb_group_cannot_post_not_member' AND action_code = 'fb_post_group';
+DELETE FROM public.auto_outcome_policies WHERE source = 'v563_fb' AND action_code = 'fb_comment' AND campaign_action_id = 'facebook_group_post';
 
 DO $post$
 BEGIN
@@ -413,7 +414,7 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'facebook.error_signs' AND md5(value) = '9eae00aad9c77a7b1e248f3a52ba73c0') THEN
     RAISE EXCEPTION 'Gỡ V563 postflight: dòng facebook.error_signs chưa về bản V559';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE source = 'v563_fb_signs') THEN
+  IF EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE source = 'v563_fb') THEN
     RAISE EXCEPTION 'Gỡ V563 postflight: còn chính sách của V563';
   END IF;
 END $post$;

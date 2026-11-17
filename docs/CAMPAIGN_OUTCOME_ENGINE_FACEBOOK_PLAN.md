@@ -586,7 +586,8 @@ Xem trang Facebook thật 17/11 (tài khoản thử của anh, 4 nhóm thử anh
 đã thấy đúng tình huống trên trang thật: nhóm chưa tham gia không có ô đăng bài, có nút đó), chính sách khi đăng nhóm = bản chép FB40; bản
 engine của block tìm nhóm bằng search đọc thẻ tiếng Anh; bản engine của block comment (chỉ trong workflow đăng nhóm) chỉ comment "bài
 của mình" khi ô bình luận nằm trong khung bài có mã bài trùng link vừa lấy, "bài khác" không rơi vào bài vừa đăng; bản engine của block chỉnh
-comment: chưa lấy được link thì bỏ lượt "bài của mình" và báo câu ⚠️ (anh chốt 17/11, chỉ sửa DB). [Kết quả rà](ENGINE_V2_FACEBOOK_ERROR_REVIEW_20261117.md).
+comment: chưa lấy được link thì bỏ lượt "bài của mình" và báo câu ⚠️ (anh chốt 17/11, chỉ sửa DB); chiến dịch đăng nhóm: comment không cộng
+chuỗi data lỗi, FB03 khi comment không tạm dừng (anh chốt 17/11). [Kết quả rà](ENGINE_V2_FACEBOOK_ERROR_REVIEW_20261117.md).
 
 Mã mới đề xuất (`error_type = 'engine v2'` để bộ cũ bỏ qua): FB42 "Thao tác Facebook thất bại" (bắt-tất-cả sau khi gửi, như Z999), FB43
 "Phiên Facebook đã đăng xuất" (`auth`), FB44 "Giao diện Facebook chưa sẵn sàng" (`ui_changed`, trước khi gửi). Số mã chọn lúc làm.

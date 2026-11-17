@@ -46,7 +46,7 @@ lặp nhiều ngày bị nhân lên (lần đầu ra 849 / 3.686 lượt "nhầm
 | "Không dùng Page mà vẫn đăng bằng Page" (24/10) | Mọi bước kiểm / chuyển danh tính trong workflow chỉ chạy khi chiến dịch bật "dùng Page" (13 node `page_identity_*` của 6 workflow đều có điều kiện `vars.runAsPage === true`; đăng trang cá nhân, nhắn tin, newsfeed không có bước danh tính nào); hôm đó hỗ trợ chuyển Page bằng tay trong trình duyệt. **Tái hiện thật 17/11**: chuyển fb LD sang Page "Flyby" trong tab trình duyệt của app, chạy chiến dịch đăng nhóm không bật "Chạy bằng Page" (57675) → bài `posts/1421335610069859` hiện "Bài viết của Flyby - Thuốc giải độc rượu bia"; đã chuyển LD về trang cá nhân ngay sau đó | Lỗi thật (thiếu bước đưa về trang cá nhân), cả bộ cũ lẫn engine | Chưa sửa: chờ anh chọn cách xử lý (tự chuyển về trang cá nhân trước khi chạy, hay dừng và báo khách) |
 | Chuyển Page hay lỗi, phải vào trình duyệt bật Page (24–26/10) | Lỗi tăng 24–28/10, XPath nút tài khoản sửa 27/10, nay 1–7 chiến dịch/ngày; XPath vẫn khớp trang thật | Đã sửa phần lớn 27/10 | Phần còn lại cần thử như dòng trên |
 | Không thêm được Page, tải Page không ra | Hỗ trợ: tài khoản đang bị Facebook đòi xác minh 2 bước ở Business Suite | Không thuộc phần chạy chiến dịch | Ngoài phạm vi |
-| "Lỗi vài comment mà dừng cả chiến dịch", "treo máy quay lại thì đã dừng mấy tiếng" (03/11) | Bộ cũ vẫn dừng chiến dịch đăng nhóm vì comment lỗi (02/11: 4, 10/11: 3 chiến dịch) | Bộ cũ cộng chuỗi lỗi cả khi bài đã đăng | Engine đã khác: comment lỗi sau khi đăng thành công không cộng chuỗi (luật chặn theo thao tác `fb_comment`), đăng nhóm không dừng vì comment. Comment seeding vẫn dừng sau 4 data lỗi liên tiếp như bộ cũ (đổi là quyết định chính sách) |
+| "Lỗi vài comment mà dừng cả chiến dịch", "treo máy quay lại thì đã dừng mấy tiếng" (03/11); anh báo lại 17/11 "đăng bài kiêm comment nhưng comment thất bại lại đi dừng chiến dịch" | 30 ngày: 14 chiến dịch đăng nhóm tạm dừng với ghi chú về comment, 3 đường khác nhau. (1) Tổ chức 518 (5 chiến dịch, "comment tất cả"): chiến dịch bật "bỏ qua nhóm cần duyệt", nhóm đã biết cần duyệt thì không bấm Đăng (`fb_skip_group_post_for_known_approval`, không có dòng "Đăng bài") nhưng vòng comment vẫn chạy; comment hỏng (XPath ô bình luận 30/10–01/11) bị cộng chuỗi vì data không có kết quả gửi nào, dừng sau 4 data (đọc lượt 4900757 chiến dịch 46878). Bộ cũ chỉ bỏ qua comment lỗi khi data đã đăng thành công (`targetOnlyFailure`, actionResultRuntime.ts), engine tới V562 cũng vậy (`streak_after_delivery`). (2) Tổ chức 701: ghi dòng comment lỗi mạng "fetch failed" → bộ cũ coi là lỗi ghi kết quả, tạm dừng. (3) Tổ chức 1231 (17/11): FB03 "Facebook báo giới hạn tần suất comment" → chính sách bộ cũ tạm dừng chiến dịch ngay | Lỗi thật | (1) và (3) sửa ở V563, chỉ chiến dịch đăng nhóm: comment không cộng / không đặt lại chuỗi data lỗi (chuỗi chỉ theo đăng bài); FB03 khi comment không tạm dừng, chạy tiếp (anh chọn "Chạy tiếp ngay"). (2) engine đã khác: DB từ chối / lỗi khi báo kết quả chỉ dừng lượt, lượt sau chạy tiếp, không tạm dừng chiến dịch. Comment seeding (comment là thao tác chính) vẫn dừng sau 4 data lỗi liên tiếp như bộ cũ |
 | Nhóm "chỉ có nút Mua bán" làm dừng chiến dịch; khách 09/11 "gần 2 tuần không đăng được" | Tổ chức của khách: lỗi tính chuỗi 28/10–04/11, từ 04/11 ghi "bỏ qua" không tính; sau đó đăng đều 400–1.500 bài/ngày tới 17/11 | Đã sửa 04/11 (anh chốt 17/11 giữ "bỏ qua") | Không sửa lại |
 
 ## V563 (chưa apply)
@@ -79,14 +79,26 @@ không nạp block "[engine] …" và không đọc dòng `facebook.error_signs`
 4. Dấu hiệu FB11 (thêm vào `facebook.error_signs`, md5 `9eae00aa…` → `7e25dd65…`): đăng nhóm ra FB40 mà trang có nút "Tham gia nhóm" /
    "Join group" thì ra FB11 "Tài khoản chưa vào nhóm này nên chưa đăng bài được" (câu anh duyệt 17/11). Chính sách FB11 khi đăng nhóm là bản
    chép dòng FB40 (ghi "bỏ qua", không tính lượt, không cộng chuỗi, data hoàn thành), như FB14 ở V559. FB11 ở thao tác khác giữ như V559.
+5. Đăng nhóm kiêm comment (anh báo 17/11 "comment thất bại lại đi dừng chiến dịch, fix lỗi này luôn"): 2 dòng `auto_outcome_policies` chỉ cho
+   chiến dịch `facebook_group_post`, thao tác `fb_comment`:
+   - dòng chặn theo thao tác (áp sau cùng): `target_streak_effect = ignore`. Kết quả comment (thành công lẫn lỗi) không cộng / không đặt lại
+     chuỗi data lỗi, chuỗi chỉ theo kết quả đăng bài. Mã chung có ngưỡng (SYS99, SYS04, ngưỡng chung theo `err_undefined`) vì thế không dừng
+     chiến dịch vì comment. Khác trước: data bị bỏ qua đăng (nhóm cần duyệt) mà comment thành công không còn đặt lại chuỗi.
+   - FB03 (Facebook báo bình luận quá nhanh): `campaign_effect = none`, `run_effect = continue` (bộ cũ / engine tới V562: tạm dừng chiến dịch,
+     không khoá thao tác). Data sau vẫn đăng bài và vẫn thử comment (anh chọn "Chạy tiếp ngay").
+   - Khoá thao tác, trạng thái đăng nhập, tạm dừng tài khoản, ghi lịch sử, tính lượt của comment giữ như cũ; comment seeding không đổi
+     (postflight và bài kiểm so chính sách hiệu lực trước / sau ở mọi mã, pha, loại chiến dịch có comment).
 
-Kiểm: `CHROMIUM_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" node scripts/engine-v2-facebook/v563-smoke.cjs` (15 nhóm:
+Kiểm: `CHROMIUM_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" node scripts/engine-v2-facebook/v563-smoke.cjs` (16 nhóm:
 3 block, block chỉnh comment so với code bộ cũ ở 11 ca, chạy code block comment mới trong Chromium với trang mô phỏng tường nhóm (bài vừa đăng ở trên / chưa hiện / có bài ghim đứng trước /
 có chia sẻ bài khác / chưa lấy được link / link chờ duyệt, bài khác rơi vào bài mình, comment seeding như bộ cũ), dấu hiệu, preflight chặn khi
-lệch, apply, chính sách hiệu lực FB11 = FB40 ở mọi pha và trạng thái, thao tác khác không đổi, apply lại bị từ chối, gỡ rồi apply lại),
-`node scripts/engine-v2-facebook/desktop-fb-smoke.cjs` (26 nhóm; thêm ca FB11 và ca block chỉnh comment V563 thật chạy qua bộ lập lịch +
+lệch, apply, chính sách hiệu lực FB11 = FB40 ở mọi pha và trạng thái, chính sách comment trước / sau chỉ đổi ở chiến dịch đăng nhóm, thao tác
+khác không đổi, apply lại bị từ chối, gỡ rồi apply lại),
+`node scripts/engine-v2-facebook/desktop-fb-smoke.cjs` (28 nhóm; thêm ca FB11, ca block chỉnh comment V563 thật chạy qua bộ lập lịch +
 bộ dựng lịch sử của engine: chưa có link thì có câu ⚠️, không dòng comment, không bấm ô bình luận; "comment tất cả" còn lượt bài khác; có link
-thì comment như cũ). Gỡ:
+thì comment như cũ; và hai ca comment hỏng chạy hai lần (tắt rồi bật 2 dòng chính sách comment): bài bị bỏ qua mà comment hỏng 5 data liền thì
+trước V563 dừng sau 4 data, sau V563 không dừng, 5 data hoàn thành; FB03 khi comment sau khi đăng thì trước V563 dừng ngay, sau V563 cả 3 data
+đều đăng). Gỡ:
 `migrations/rollback_v563_engine_facebook_signs_search.sql` (chỉ chạy khi đang đúng bản V563).
 
 ## Việc cần ảnh lỗi / chữ thật (để sau)

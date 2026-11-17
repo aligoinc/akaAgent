@@ -25,6 +25,12 @@
 //      đăng bài, có nút "Tham gia nhóm"; nhóm đã tham gia có ô "Bạn viết gì đi...", không có nút đó). Chính sách FB11 khi đăng nhóm = bản chép
 //      chính sách FB40 (ghi "bỏ qua", không tính lượt, không cộng chuỗi, data hoàn thành), chỉ đổi câu cho khách thành câu anh đã duyệt 17/11
 //      ("Tài khoản chưa vào nhóm này nên chưa đăng bài được"), như FB14 ở V559. Dòng FB11 chung của V559 giữ nguyên (FB11 chưa có chỗ phát khác).
+//   4. Đăng nhóm kiêm comment (anh chốt 17/11: "comment thất bại lại đi dừng chiến dịch, fix lỗi này luôn"): chỉ trong chiến dịch "Đăng bài vào
+//      group", kết quả comment (thành công lẫn lỗi) không cộng / không đặt lại chuỗi data lỗi, chuỗi chỉ theo kết quả đăng bài. Bộ cũ và engine
+//      tới V562 chỉ bỏ qua comment lỗi khi data đã đăng bài thành công trong lượt; nhóm đã biết cần duyệt mà chiến dịch bật "bỏ qua nhóm cần
+//      duyệt" thì bài không đăng nhưng vòng comment vẫn chạy, comment hỏng bị cộng chuỗi và dừng sau 4 data (30 ngày: 5 chiến dịch tổ chức 518).
+//      FB03 (Facebook báo bình luận quá nhanh) khi comment trong chiến dịch đăng nhóm: không tạm dừng, không dừng lượt (anh chọn "Chạy tiếp
+//      ngay"; bộ cũ tạm dừng chiến dịch). Comment seeding (comment là thao tác chính) giữ nguyên.
 //
 // Nguồn guard: scripts/fixtures/engine-v2-facebook/v563-live-20261117.json (đọc chỉ đọc production 17/11). Preflight từ chối khi code block,
 // danh mục bước, dòng dấu hiệu hay dòng chính sách FB40 khác bản đã đọc. Chạy: node scripts/build-v563-sql.cjs (ghi migration + bản gỡ).
@@ -42,7 +48,9 @@ const SIGNS_KEY = 'facebook.error_signs'
 const FB11 = 'err_fb_group_cannot_post_not_member'
 const FB40 = 'err_fb_group_composer_editor_not_found'
 const FB11_TITLE = 'Tài khoản chưa vào nhóm này nên chưa đăng bài được'
-const SOURCE = 'v563_fb_signs'
+const SOURCE = 'v563_fb'
+const GROUP_POST = 'facebook_group_post'
+const FB03 = 'err_comment_frequency_limit'
 /** Câu tiến trình khi bỏ qua comment "bài của mình" (anh duyệt 17/11, bản "Câu ⚠️, chỉ sửa DB"). */
 const OWN_POST_SKIP_MESSAGE = 'Chưa thấy bài vừa đăng trên trang nhóm nên bỏ qua comment vào bài của mình'
 
@@ -226,7 +234,8 @@ const sqlText = value => `'${String(value).replace(/'/g, "''")}'`
 const HEADER = `-- V563: engine v2 Facebook, sửa riêng phần engine (bộ cũ không đổi): bản "[engine] fb_collect_search_groups" đọc số bài/ngày + tên nhóm
 -- giao diện tiếng Anh; bản "[engine] fb_comment_at_position" chỉ comment "bài của mình" khi thấy đúng bài vừa đăng (không comment nhầm bài người
 -- khác); bản "[engine] fb_adjust_group_post_comments_after_pending" bỏ lượt comment "bài của mình" khi chưa lấy được link bài vừa đăng và báo
--- khách một câu ⚠️; dấu hiệu FB11 "Tham gia nhóm" khi đăng nhóm không thấy ô đăng bài (chính sách = FB40, chỉ đổi câu).
+-- khách một câu ⚠️; dấu hiệu FB11 "Tham gia nhóm" khi đăng nhóm không thấy ô đăng bài (chính sách = FB40, chỉ đổi câu); đăng nhóm kiêm comment:
+-- comment không cộng chuỗi data lỗi, FB03 khi comment không tạm dừng chiến dịch (comment seeding không đổi).
 -- SINH TỪ scripts/build-v563-sql.cjs (nguồn guard: scripts/fixtures/engine-v2-facebook/v563-live-20261117.json), không sửa tay.
 -- Rà soát và số liệu: docs/ENGINE_V2_FACEBOOK_ERROR_REVIEW_20261117.md. Chỉ dữ liệu, không DDL (không nạp lại schema PostgREST).
 -- Bộ cũ không nạp block "[engine]" và không đọc ${SIGNS_KEY}. Desktop đọc lại block / dấu hiệu / danh mục ở lần nạp danh mục kế tiếp.
@@ -257,8 +266,14 @@ const blockPost = BLOCKS.map(block => `  IF NOT EXISTS (SELECT 1 FROM public.aut
     RAISE EXCEPTION 'V563 postflight: block bộ cũ ${block.live.sourceId} đã đổi (V563 không được đụng bộ cũ)';
   END IF;`).join('\n')
 
-/** Dấu hiệu + chính sách FB11 (bộ kiểm engine Desktop chạy riêng phần này vì DB thử của nó có block giả cùng số với block bộ cũ). */
-const SIGN_POLICY_SQL = `-- 3. Dấu hiệu FB11: nút "Tham gia nhóm" / "Join group" trên trang khi đăng nhóm ra FB40.
+const COMMENT_GUARD_DESCRIPTION = '[anh chốt 17/11, V563] Đăng nhóm kiêm comment: kết quả comment (thành công lẫn lỗi) không cộng / không đặt lại '
+  + 'chuỗi data lỗi, chuỗi chỉ theo kết quả đăng bài; comment hỏng không làm dừng chiến dịch đăng nhóm, kể cả khi bài bị bỏ qua vì nhóm cần duyệt '
+  + '(trước V563: dừng sau 4 data).'
+const COMMENT_FB03_DESCRIPTION = '[anh chốt 17/11, V563, "Chạy tiếp ngay"] FB03 khi comment trong chiến dịch đăng nhóm: không tạm dừng chiến dịch, '
+  + 'không dừng lượt; data sau vẫn đăng bài và vẫn thử comment (bộ cũ tạm dừng chiến dịch).'
+
+/** Dấu hiệu + chính sách (bộ kiểm engine Desktop chạy riêng phần này vì DB thử của nó có block giả cùng số với block bộ cũ). */
+const POLICY_SQL = `-- 3. Dấu hiệu FB11: nút "Tham gia nhóm" / "Join group" trên trang khi đăng nhóm ra FB40.
 UPDATE public.auto_system_settings SET value = ${sqlText(NEW_SIGNS)}, updated_at = now()
  WHERE key = ${sqlText(SIGNS_KEY)} AND md5(value) = '${LIVE.signs.md5}';
 
@@ -269,7 +284,15 @@ SELECT '${FB11}', 'fb_post_group', ${COPY_COLUMNS.map(c => `p.${c}`).join(', ')}
   ${sqlText(DESCRIPTION)}, '${SOURCE}', true, false
   FROM public.auto_outcome_policies p
  WHERE p.error_code = '${FB40}' AND p.action_code IS NULL AND p.campaign_action_id IS NULL AND p.runtime_target IS NULL AND p.is_active AND NOT p.is_delete
-   AND ${ROW_SQL} = '${fb40.md5}';`
+   AND ${ROW_SQL} = '${fb40.md5}';
+
+-- 5. Đăng nhóm kiêm comment: chặn theo thao tác riêng chiến dịch đăng nhóm (áp sau cùng): comment không cộng / đặt lại chuỗi data lỗi.
+INSERT INTO public.auto_outcome_policies (action_code, campaign_action_id, target_streak_effect, description, source, is_active, is_delete)
+VALUES ('fb_comment', '${GROUP_POST}', 'ignore', ${sqlText(COMMENT_GUARD_DESCRIPTION)}, '${SOURCE}', true, false);
+-- 6. FB03 khi comment trong chiến dịch đăng nhóm: không tạm dừng, chạy tiếp (dòng theo mã + thao tác + loại chiến dịch, hẹp nhất).
+INSERT INTO public.auto_outcome_policies (error_code, action_code, campaign_action_id, campaign_effect, run_effect, description, source, is_active, is_delete)
+VALUES ('${FB03}', 'fb_comment', '${GROUP_POST}', 'none', 'continue', ${sqlText(COMMENT_FB03_DESCRIPTION)}, '${SOURCE}', true, false);`
+const SIGN_POLICY_SQL = POLICY_SQL
 
 const migration = `${HEADER}
 BEGIN;
@@ -305,16 +328,23 @@ ${blockPre}
                    AND customer_title = ${sqlText(FB11_TITLE)} AND customer_help IS NULL) THEN
     RAISE EXCEPTION 'V563: mã FB11 không bật hoặc câu cho khách không phải câu anh duyệt';
   END IF;
+  -- Đăng nhóm kiêm comment: chưa có dòng chính sách nào riêng cho comment trong chiến dịch đăng nhóm; FB03 đang bật.
+  IF EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE action_code = 'fb_comment' AND campaign_action_id = '${GROUP_POST}' AND NOT is_delete) THEN
+    RAISE EXCEPTION 'V563: đã có chính sách riêng cho comment trong chiến dịch đăng nhóm';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = '${FB03}' AND public_code = 'FB03' AND is_active AND NOT is_delete) THEN
+    RAISE EXCEPTION 'V563: mã FB03 không bật';
+  END IF;
 END $pre$;
 
 -- 1–2. Bản engine của block tìm nhóm bằng search và block comment theo vị trí (bộ cũ: block ${BLOCKS.map(b => b.live.sourceId).join(', ')} giữ nguyên);
 -- danh mục bước của block comment ghi md5 bản đã duyệt mới (mức cam kết 2, gửi bằng Enter như cũ).
 ${blockUpdates}
 
-${SIGN_POLICY_SQL}
+${POLICY_SQL}
 
 DO $post$
-DECLARE v_n integer; v_phase text; v_mine jsonb; v_today jsonb;
+DECLARE v_n integer; v_phase text; v_mine jsonb; v_today jsonb; v_code text;
 BEGIN
 ${blockPost}
   SELECT count(*) INTO v_n FROM public.auto_system_settings WHERE key = ${sqlText(SIGNS_KEY)} AND md5(value) = '${NEW_SIGNS_MD5}'
@@ -331,13 +361,37 @@ ${blockPost}
       RAISE EXCEPTION 'V563 postflight: chính sách FB11 khi đăng nhóm khác FB40 ở pha %: % / %', v_phase, v_mine, v_today;
     END IF;
   END LOOP;
+  -- Đăng nhóm kiêm comment: đúng 2 dòng mới; comment không cộng chuỗi ở mọi pha (mã chung, mã Facebook, thành công); FB03 khi comment không
+  -- tạm dừng, chạy tiếp; comment seeding vẫn cộng chuỗi và FB03 vẫn tạm dừng như trước.
+  SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE source = '${SOURCE}' AND action_code = 'fb_comment' AND campaign_action_id = '${GROUP_POST}'
+     AND is_active AND NOT is_delete;
+  IF v_n <> 2 THEN RAISE EXCEPTION 'V563 postflight: cần đúng 2 dòng chính sách comment cho đăng nhóm, có %', v_n; END IF;
+  FOREACH v_phase IN ARRAY ARRAY['before_send', 'in_flight', 'after_send'] LOOP
+    FOREACH v_code IN ARRAY ARRAY['err_undefined', 'err_engine_fb_action_failed', 'err_engine_fb_ui_not_ready', 'err_fb_comment_box_not_found', '${FB03}'] LOOP
+      IF public.aka_agent_engine_resolve_policy(v_code, NULL, 'fb_comment', '${GROUP_POST}', 'desktop', v_phase)->>'target_streak_effect' IS DISTINCT FROM 'ignore' THEN
+        RAISE EXCEPTION 'V563 postflight: % khi comment trong chiến dịch đăng nhóm vẫn đổi chuỗi lỗi ở pha %', v_code, v_phase;
+      END IF;
+    END LOOP;
+    IF public.aka_agent_engine_resolve_policy(NULL, NULL, 'fb_comment', '${GROUP_POST}', 'desktop', v_phase)->>'target_streak_effect' IS DISTINCT FROM 'ignore' THEN
+      RAISE EXCEPTION 'V563 postflight: comment thành công trong chiến dịch đăng nhóm vẫn đổi chuỗi lỗi';
+    END IF;
+    v_mine := public.aka_agent_engine_resolve_policy('${FB03}', NULL, 'fb_comment', '${GROUP_POST}', 'desktop', v_phase);
+    IF v_mine->>'campaign_effect' IS DISTINCT FROM 'none' OR v_mine->>'run_effect' IS DISTINCT FROM 'continue' THEN
+      RAISE EXCEPTION 'V563 postflight: FB03 khi comment trong chiến dịch đăng nhóm vẫn dừng (% / %)', v_mine->>'campaign_effect', v_mine->>'run_effect';
+    END IF;
+    IF public.aka_agent_engine_resolve_policy('err_engine_fb_ui_not_ready', NULL, 'fb_comment', 'facebook_comment_seeding', 'desktop', v_phase)->>'target_streak_effect'
+       IS DISTINCT FROM 'increment'
+       OR public.aka_agent_engine_resolve_policy('${FB03}', NULL, 'fb_comment', 'facebook_comment_seeding', 'desktop', v_phase)->>'campaign_effect' IS DISTINCT FROM 'pause' THEN
+      RAISE EXCEPTION 'V563 postflight: chính sách comment seeding bị đổi ở pha %', v_phase;
+    END IF;
+  END LOOP;
 END $post$;
 
 COMMIT;
 `
 
-const rollback = `-- Gỡ V563: trả bản "[engine] fb_collect_search_groups", "[engine] fb_comment_at_position" (kèm md5 đã duyệt của danh mục bước) và dòng
--- ${SIGNS_KEY} về bản trước V563, xoá chính sách FB11 khi đăng nhóm (V563). Chỉ chạy khi các thứ đó đang đúng bản V563 (đã ai sửa sau V563 thì
+const rollback = `-- Gỡ V563: trả 3 bản "[engine]" (tìm nhóm bằng search, comment theo vị trí kèm md5 đã duyệt của danh mục bước, chỉnh comment sau đăng) và dòng
+-- ${SIGNS_KEY} về bản trước V563, xoá chính sách FB11 khi đăng nhóm và hai dòng comment trong chiến dịch đăng nhóm (V563). Chỉ chạy khi các thứ đó đang đúng bản V563 (đã ai sửa sau V563 thì
 -- dừng, không ghi đè). Bộ cũ không đổi. SINH TỪ scripts/build-v563-sql.cjs.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -360,6 +414,7 @@ ${block.steps.map(step => `UPDATE public.auto_engine_block_steps SET reviewed_co
 UPDATE public.auto_system_settings SET value = ${sqlText(OLD_SIGNS)}, updated_at = now()
  WHERE key = ${sqlText(SIGNS_KEY)} AND md5(value) = '${NEW_SIGNS_MD5}';
 DELETE FROM public.auto_outcome_policies WHERE source = '${SOURCE}' AND error_code = '${FB11}' AND action_code = 'fb_post_group';
+DELETE FROM public.auto_outcome_policies WHERE source = '${SOURCE}' AND action_code = 'fb_comment' AND campaign_action_id = '${GROUP_POST}';
 
 DO $post$
 BEGIN
@@ -385,7 +440,7 @@ module.exports = {
   LIVE, BLOCKS, SEARCH, COMMENT, ADJUST, OWN_POST_SKIP_MESSAGE,
   // Giữ tên cũ cho bài kiểm block tìm nhóm.
   EDITS: SEARCH.edits, OLD_MD5: SEARCH.oldMd5, NEW_MD5: SEARCH.newMd5, newCode: SEARCH.newCode,
-  OLD_SIGNS, NEW_SIGNS, FB11_SIGN, SIGN_COUNT, SOURCE, FB11, FB40, FB11_TITLE, SIGN_POLICY_SQL, migration, rollback
+  OLD_SIGNS, NEW_SIGNS, FB11_SIGN, SIGN_COUNT, SOURCE, FB11, FB40, FB03, GROUP_POST, FB11_TITLE, POLICY_SQL, SIGN_POLICY_SQL, migration, rollback
 }
 if (require.main === module) {
   fs.writeFileSync(path.join(ROOT, 'migrations/migration_v563_engine_facebook_signs_search.sql'), migration)
