@@ -1,0 +1,2986 @@
+{
+ "source": "production cgjbsmqtfhqvttudyjzq (chỉ đọc)",
+ "blocks": [
+  {
+   "category": "control",
+   "id": 1,
+   "isBuiltin": true,
+   "kind": "system",
+   "md5": "d41d8cd98f00b204e9800998ecf8427e",
+   "name": "if_else",
+   "systemType": "ifElse"
+  },
+  {
+   "category": "control",
+   "id": 2,
+   "isBuiltin": true,
+   "kind": "system",
+   "md5": "d41d8cd98f00b204e9800998ecf8427e",
+   "name": "loop",
+   "systemType": "loop"
+  },
+  {
+   "category": "control",
+   "id": 4,
+   "isBuiltin": true,
+   "kind": "system",
+   "md5": "d41d8cd98f00b204e9800998ecf8427e",
+   "name": "merge",
+   "systemType": "merge"
+  },
+  {
+   "category": "navigation",
+   "id": 5,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "d4c57e147ff32ee34f078054b8ee2e93",
+   "name": "nav_to_url",
+   "systemType": null
+  },
+  {
+   "category": "utility",
+   "id": 20,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8df12ecd2bde4c3d195bb886b3c0df79",
+   "name": "sleep",
+   "systemType": null
+  },
+  {
+   "category": "utility",
+   "id": 21,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "edaf9168d99d318d08f48acc3eab0144",
+   "name": "wait_for_selector",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 27,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "62b842acb7b45fdf4aad976775db3c56",
+   "name": "fb_open_composer",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 28,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "d6c5e9a59ac466b0ba8101bf3f74d4a2",
+   "name": "fb_type_post_content",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 29,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "61194e7c1fb6209a292c30694e27efac",
+   "name": "fb_drop_post_images",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 30,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "4389c339487296b488aa010edb3ddcef",
+   "name": "fb_click_post_button",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 31,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "eec629d6f10f6d6dcdf0ccd14a0cd1a9",
+   "name": "fb_detect_pending_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 32,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "351b610c082252c7bce43ec265a631dc",
+   "name": "fb_leave_group_if_pending",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 33,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "44b7afc900086ae9f18a3944f9910b70",
+   "name": "fb_join_group_if_not_member",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 34,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "30126bae87ff755164c80dbffda9d263",
+   "name": "fb_comment_at_position",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 35,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e65666791c6edd4dfe9fc6bcecb49ada",
+   "name": "fb_scrape_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 36,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "a05d68d56972e9192da4c4881e3fee65",
+   "name": "fb_share_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 37,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "0a417bced486afa5f7300e2af1536d9d",
+   "name": "fb_post_reels",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 38,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "fb11e928304d044f50f3a11a93821463",
+   "name": "fb_send_message",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 39,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e8712f551ee23df11353fca29c15525a",
+   "name": "fb_add_friend",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 612,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "53b25536ff2817b75617e345df5ea408",
+   "name": "fb_resolve_url",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2074,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e7bac83982f82367dbd66c3c1a66b5bd",
+   "name": "fb_click_like",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2554,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "68fe2e31c508a4657e4de1470eedf01b",
+   "name": "fb_prepare_seeding_iterations",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2599,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e7e1c871b792dc43cc3abf193e551a61",
+   "name": "fb_open_group_discussion",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2600,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "4447307bc327781dae154ee8f06d96d1",
+   "name": "fb_sort_group_posts",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2601,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "ddce66dba9f4a21a183c77e6a01baee8",
+   "name": "fb_collect_group_posts",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2602,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8bba818627fde233ec1b9421c2a7bf7d",
+   "name": "fb_extract_data_from_group_posts",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2603,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "ffb7329bfa391d3e9a747c4562974cc6",
+   "name": "fb_collect_group_comments",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2604,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "20b1a8e8f90d5d83811ba24cae1249ce",
+   "name": "fb_extract_data_from_group_comments",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2605,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "683ec3378ed300612211e91a7163b72a",
+   "name": "fb_find_group_data_summary",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2614,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8ecbc8b429a48ae1af25085f4742a7fa",
+   "name": "fb_prepare_post_link_comment_iteration",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2615,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "67b3e20da40485d2e73cf517203ae88a",
+   "name": "fb_click_like_current_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2616,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "83bcdb4081685f2c858f4e0937348767",
+   "name": "fb_comment_current_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2620,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "104881f824eb3ea0765a1160862a1cfc",
+   "name": "fb_collect_suggested_friends",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2624,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e433ac1a58ac08535c53010fdc5e9ba7",
+   "name": "fb_verify_group_post_form_closed",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2625,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f140852a8cea1eb236e8e4cd61176a09",
+   "name": "fb_click_group_post_prompt_if_present",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2626,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "cc85473ba26554663972e4422fc62a41",
+   "name": "fb_get_first_group_post_link",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2627,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "ffeb17c8967ab564098da8f641650674",
+   "name": "fb_adjust_group_post_comments_after_pending",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2629,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "645d1a88189ac8dc6989f9058756eabe",
+   "name": "fb_skip_group_post_for_known_approval",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2638,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "009c8a8073f2a9dce394f3544f0e271f",
+   "name": "fb_open_group_members",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2639,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "90f95c262b940285c7f6f252183d934f",
+   "name": "fb_collect_group_members",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2669,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "21136df214634903530caa9d40c3eefb",
+   "name": "fb_page_post_api",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2670,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "dfc2ad1c4bf6a6831968cedf206807ed",
+   "name": "fb_get_current_identity_name",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2671,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "aaf3d54ca1041881d67073359168647f",
+   "name": "fb_switch_identity_by_name",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2672,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f279e39fa90960d939fe59803e253f33",
+   "name": "fb_post_current_identity_ui",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2674,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f0715301148a3638b583784c2724c3a0",
+   "name": "fb_rewrite_source_content_ai",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2676,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "a3f89671b43fbb8631c01042ad36cab2",
+   "name": "fb_navigate_to_target_url",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2678,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f5aa7e10d3b3161ae25e3e98ff3f112c",
+   "name": "fb_page_inbox_open",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2679,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "86217720edd3c1c04495c7c061d26bea",
+   "name": "fb_send_page_inbox_message",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2700,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "b37265faa06b09328f03cf396cada23f",
+   "name": "fb_newsfeed_init_state",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2701,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "0210577bdd0ad903ec293a4c049cd999",
+   "name": "fb_newsfeed_select_next_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2702,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8231de8d27d4a8ef9d2ad5c9441fd2e0",
+   "name": "fb_newsfeed_read_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2703,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "1e24e978e34b08b778d66075ef25fb89",
+   "name": "fb_newsfeed_wait_read",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2704,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "94d7b477f6bd6b49698b44bb0fa650ca",
+   "name": "fb_newsfeed_check_like",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2705,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "574f7c5c2a81bae0cde37f68a0cad089",
+   "name": "fb_newsfeed_like_post",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2706,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "9105a60844ad6defe21c828ef004c795",
+   "name": "fb_newsfeed_check_comment",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2707,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "6335a9a666cb67bdd6604cd33c9a8e29",
+   "name": "fb_newsfeed_comment_open",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2708,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f20fed2c18410ce56c64eba954f019b5",
+   "name": "fb_newsfeed_comment_focus",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2709,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "91a6dcba5d1b6ce801087b0a4406e0cc",
+   "name": "fb_newsfeed_comment_paste",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2710,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "183af4001118b2caf939ff3f9e1c0a22",
+   "name": "fb_newsfeed_comment_submit",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2711,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "3d274008eed248e013028c1e09e1b243",
+   "name": "fb_newsfeed_comment_close_dialog",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2712,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "16887a33d5593b1668af511d36ee5f0a",
+   "name": "fb_newsfeed_advance_cursor",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2713,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "e50f1dae914863609917bace6b8bff8e",
+   "name": "fb_newsfeed_finalize",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2714,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "38175586a1f8651540f7265ed4d3fa2b",
+   "name": "fb_prepare_search_data_context",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2715,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "71bf21addc966e91845edc89b43dd3d8",
+   "name": "fb_open_search_posts",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2716,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "0c535c727d632fe545b9790451aa4119",
+   "name": "fb_apply_search_post_filters",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2717,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "16114084f2b8de479b91b43c946d7a5d",
+   "name": "fb_collect_search_posts",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2718,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "b001a18aa3c3dbb33cf2490386f5b92f",
+   "name": "fb_extract_data_from_search_posts",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2719,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "6acf4fe3889a851e176aee9ceba9f5a4",
+   "name": "fb_collect_search_post_comments",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2720,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "0d19081ebb3b203827b3469e9b431c68",
+   "name": "fb_extract_data_from_search_comments",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2721,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8d099ee22b98b835feec0d7fc1ffbb4c",
+   "name": "fb_open_search_groups",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2722,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "db34c5a1f8223560b4ed5ea6fa970db7",
+   "name": "fb_apply_search_group_filters",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2723,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "91e809e62911aea2c2391ae14676dc3b",
+   "name": "fb_collect_search_groups",
+   "systemType": null
+  },
+  {
+   "category": "data",
+   "id": 2724,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "c78abe7a868cedbd8db485278d109ba7",
+   "name": "fb_find_search_data_summary",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2793,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "64c2e8c2337c17a859e8f085ac83f2e2",
+   "name": "fb_join_group",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2794,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "ba3dde28271aa8c9cff3528f3591efe0",
+   "name": "fb_select_group_post_share_targets",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2819,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "39ff2a24ff1338afafba00e509d463d5",
+   "name": "fb_group_invite",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2824,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "ea4f24997390f946082cd12936fe24c9",
+   "name": "fb_compose_source_manual_content",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2829,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "8c88628c05657002ea0675ae2ff3eedb",
+   "name": "fb_campaign_page_identity_state",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2830,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "1dd3d71d643031445cd720e36b9c6974",
+   "name": "fb_rest_browse_feed",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2831,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "a885ba0a1fa24a31e16c03cd2c4da2a9",
+   "name": "fb_rest_browse_rest",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2832,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "110beef02e1f403157659d0bc4b1a321",
+   "name": "fb_get_first_profile_post_link",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2834,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "fde5a4b592c39cfff6e4b5c22677b771",
+   "name": "fb_prepare_native_group_share",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2835,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "6e915411019a6b09db768797c406b743",
+   "name": "fb_select_native_share_group",
+   "systemType": null
+  },
+  {
+   "category": "facebook",
+   "id": 2836,
+   "isBuiltin": true,
+   "kind": "js",
+   "md5": "f5425652ce36b9f43d2126227b16cda0",
+   "name": "fb_submit_native_group_share",
+   "systemType": null
+  }
+ ],
+ "columns": {
+  "auto_blocks": [
+   "id",
+   "name",
+   "description",
+   "icon",
+   "category",
+   "kind",
+   "system_type",
+   "code",
+   "config_schema",
+   "output_schema",
+   "default_config",
+   "is_builtin",
+   "staff_id",
+   "organization_id",
+   "created_at",
+   "updated_at"
+  ],
+  "auto_workflows": [
+   "id",
+   "name",
+   "description",
+   "nodes",
+   "edges",
+   "variables_schema",
+   "default_variables",
+   "is_builtin",
+   "staff_id",
+   "organization_id",
+   "created_at",
+   "updated_at"
+  ]
+ },
+ "engineBlocks": 0,
+ "engineWorkflows": 0,
+ "missingBlocks": [],
+ "readAt": "2026-11-16T14:15:20.541337+00:00",
+ "workflows": [
+  {
+   "id": 157,
+   "md5": "997f6d5af5f35d61fffe8f0a6287b564",
+   "name": "facebook_comment_seeding",
+   "nodes": [
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_url",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav",
+     "systemType": null
+    },
+    {
+     "blockId": "21",
+     "blockName": "wait_for_selector",
+     "configKeys": [
+      "selector",
+      "timeout"
+     ],
+     "id": "wait_main",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep_after_nav",
+     "systemType": null
+    },
+    {
+     "blockId": "2600",
+     "blockName": "fb_sort_group_posts",
+     "configKeys": [
+      "commentFeedSort"
+     ],
+     "id": "sort_posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2554",
+     "blockName": "fb_prepare_seeding_iterations",
+     "configKeys": [],
+     "id": "prepare_iters",
+     "systemType": null
+    },
+    {
+     "blockId": "2",
+     "blockName": "loop",
+     "configKeys": [
+      "itemsExpr",
+      "loopType"
+     ],
+     "id": "loop_comment",
+     "systemType": "loop"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_like",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2074",
+     "blockName": "fb_click_like",
+     "configKeys": [
+      "enabled"
+     ],
+     "id": "like_at_pos",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_like",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "34",
+     "blockName": "fb_comment_at_position",
+     "configKeys": [],
+     "id": "comment_at_pos",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_end",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_comment_seeding"
+  },
+  {
+   "id": 207,
+   "md5": "1ee0f7c880e8afa2f205e649d22c2ff9",
+   "name": "facebook_comment_seeding_post",
+   "nodes": [
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_url",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav",
+     "systemType": null
+    },
+    {
+     "blockId": "21",
+     "blockName": "wait_for_selector",
+     "configKeys": [
+      "selector",
+      "timeout"
+     ],
+     "id": "wait_main",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep_after_nav",
+     "systemType": null
+    },
+    {
+     "blockId": "2614",
+     "blockName": "fb_prepare_post_link_comment_iteration",
+     "configKeys": [],
+     "id": "prepare_iters",
+     "systemType": null
+    },
+    {
+     "blockId": "2",
+     "blockName": "loop",
+     "configKeys": [
+      "itemsExpr",
+      "loopType"
+     ],
+     "id": "loop_comment",
+     "systemType": "loop"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_like",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2615",
+     "blockName": "fb_click_like_current_post",
+     "configKeys": [
+      "enabled"
+     ],
+     "id": "like_current_post",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_like",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2616",
+     "blockName": "fb_comment_current_post",
+     "configKeys": [],
+     "id": "comment_current_post",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_end",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_comment_seeding_post"
+  },
+  {
+   "id": 206,
+   "md5": "0805b2f6a9e5062ac22c9c6b83549329",
+   "name": "[Built-in] Facebook - Tìm kiếm data trong group",
+   "nodes": [
+    {
+     "blockId": "2599",
+     "blockName": "fb_open_group_discussion",
+     "configKeys": [],
+     "id": "node-open-group",
+     "systemType": null
+    },
+    {
+     "blockId": "2600",
+     "blockName": "fb_sort_group_posts",
+     "configKeys": [],
+     "id": "node-sort-posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2601",
+     "blockName": "fb_collect_group_posts",
+     "configKeys": [],
+     "id": "node-collect-posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2602",
+     "blockName": "fb_extract_data_from_group_posts",
+     "configKeys": [],
+     "id": "node-extract-posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2603",
+     "blockName": "fb_collect_group_comments",
+     "configKeys": [],
+     "id": "node-collect-comments",
+     "systemType": null
+    },
+    {
+     "blockId": "2604",
+     "blockName": "fb_extract_data_from_group_comments",
+     "configKeys": [],
+     "id": "node-extract-comments",
+     "systemType": null
+    },
+    {
+     "blockId": "2605",
+     "blockName": "fb_find_group_data_summary",
+     "configKeys": [],
+     "id": "node-summary",
+     "systemType": null
+    },
+    {
+     "blockId": "2638",
+     "blockName": "fb_open_group_members",
+     "configKeys": [],
+     "id": "node-open-members",
+     "systemType": null
+    },
+    {
+     "blockId": "2639",
+     "blockName": "fb_collect_group_members",
+     "configKeys": [],
+     "id": "node-collect-members",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_find_data_group"
+  },
+  {
+   "id": 239,
+   "md5": "a7159797e8b002fe486af069026850dc",
+   "name": "[Built-in] Facebook - Tìm kiếm data bằng search",
+   "nodes": [
+    {
+     "blockId": "2714",
+     "blockName": "fb_prepare_search_data_context",
+     "configKeys": [],
+     "id": "prepare",
+     "systemType": null
+    },
+    {
+     "blockId": "2715",
+     "blockName": "fb_open_search_posts",
+     "configKeys": [],
+     "id": "open_posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2716",
+     "blockName": "fb_apply_search_post_filters",
+     "configKeys": [],
+     "id": "post_filters",
+     "systemType": null
+    },
+    {
+     "blockId": "2717",
+     "blockName": "fb_collect_search_posts",
+     "configKeys": [],
+     "id": "collect_posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2718",
+     "blockName": "fb_extract_data_from_search_posts",
+     "configKeys": [],
+     "id": "extract_posts",
+     "systemType": null
+    },
+    {
+     "blockId": "2719",
+     "blockName": "fb_collect_search_post_comments",
+     "configKeys": [],
+     "id": "collect_comments",
+     "systemType": null
+    },
+    {
+     "blockId": "2720",
+     "blockName": "fb_extract_data_from_search_comments",
+     "configKeys": [],
+     "id": "extract_comments",
+     "systemType": null
+    },
+    {
+     "blockId": "2721",
+     "blockName": "fb_open_search_groups",
+     "configKeys": [],
+     "id": "open_groups",
+     "systemType": null
+    },
+    {
+     "blockId": "2722",
+     "blockName": "fb_apply_search_group_filters",
+     "configKeys": [],
+     "id": "group_filters",
+     "systemType": null
+    },
+    {
+     "blockId": "2723",
+     "blockName": "fb_collect_search_groups",
+     "configKeys": [],
+     "id": "collect_groups",
+     "systemType": null
+    },
+    {
+     "blockId": "2724",
+     "blockName": "fb_find_search_data_summary",
+     "configKeys": [],
+     "id": "summary",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_find_data_search"
+  },
+  {
+   "id": 304,
+   "md5": "2c0b07f9029d28c0e1c00380a89b85cd",
+   "name": "facebook_group_invite",
+   "nodes": [
+    {
+     "blockId": "2819",
+     "blockName": "fb_group_invite",
+     "configKeys": [],
+     "id": "group_invite",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_group_invite"
+  },
+  {
+   "id": 1,
+   "md5": "c29504544a7900ae11ccda48f9ae6d73",
+   "name": "facebook_group_post",
+   "nodes": [
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_url",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav",
+     "systemType": null
+    },
+    {
+     "blockId": "21",
+     "blockName": "wait_for_selector",
+     "configKeys": [
+      "selector",
+      "timeout"
+     ],
+     "id": "wait_main",
+     "systemType": null
+    },
+    {
+     "blockId": "27",
+     "blockName": "fb_open_composer",
+     "configKeys": [
+      "composerActionCode"
+     ],
+     "id": "open_composer",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep1",
+     "systemType": null
+    },
+    {
+     "blockId": "28",
+     "blockName": "fb_type_post_content",
+     "configKeys": [],
+     "id": "type_content",
+     "systemType": null
+    },
+    {
+     "blockId": "29",
+     "blockName": "fb_drop_post_images",
+     "configKeys": [],
+     "id": "drop_images",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep2",
+     "systemType": null
+    },
+    {
+     "blockId": "30",
+     "blockName": "fb_click_post_button",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "click_post",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep3",
+     "systemType": null
+    },
+    {
+     "blockId": "31",
+     "blockName": "fb_detect_pending_post",
+     "configKeys": [],
+     "id": "detect_pending",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_comment",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2",
+     "blockName": "loop",
+     "configKeys": [
+      "itemsExpr",
+      "loopType"
+     ],
+     "id": "loop_comment",
+     "systemType": "loop"
+    },
+    {
+     "blockId": "34",
+     "blockName": "fb_comment_at_position",
+     "configKeys": [],
+     "id": "comment",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_comment",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_leave",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "32",
+     "blockName": "fb_leave_group_if_pending",
+     "configKeys": [
+      "enabled"
+     ],
+     "id": "leave_group",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_leave",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_join",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "33",
+     "blockName": "fb_join_group_if_not_member",
+     "configKeys": [
+      "enabled"
+     ],
+     "id": "join_group",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2625",
+     "blockName": "fb_click_group_post_prompt_if_present",
+     "configKeys": [],
+     "id": "dismiss_after_nav",
+     "systemType": null
+    },
+    {
+     "blockId": "2624",
+     "blockName": "fb_verify_group_post_form_closed",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "verify_submit",
+     "systemType": null
+    },
+    {
+     "blockId": "2625",
+     "blockName": "fb_click_group_post_prompt_if_present",
+     "configKeys": [],
+     "id": "dismiss_after_submit",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_submitted",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2626",
+     "blockName": "fb_get_first_group_post_link",
+     "configKeys": [],
+     "id": "get_post_link",
+     "systemType": null
+    },
+    {
+     "blockId": "2627",
+     "blockName": "fb_adjust_group_post_comments_after_pending",
+     "configKeys": [],
+     "id": "adjust_comments_after_pending",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_skip_known_approval",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2629",
+     "blockName": "fb_skip_group_post_for_known_approval",
+     "configKeys": [],
+     "id": "skip_known_approval",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_known_approval",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_copy_source",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "35",
+     "blockName": "fb_scrape_post",
+     "configKeys": [],
+     "id": "scrape_source",
+     "systemType": null
+    },
+    {
+     "blockId": "2674",
+     "blockName": "fb_rewrite_source_content_ai",
+     "configKeys": [],
+     "id": "source_ai_prompt",
+     "systemType": null
+    },
+    {
+     "blockId": "2676",
+     "blockName": "fb_navigate_to_target_url",
+     "configKeys": [],
+     "id": "nav_group_after_source",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_source_ready",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2794",
+     "blockName": "fb_select_group_post_share_targets",
+     "configKeys": [],
+     "id": "select_group_share_targets",
+     "systemType": null
+    },
+    {
+     "blockId": "2824",
+     "blockName": "fb_compose_source_manual_content",
+     "configKeys": [],
+     "id": "compose_formatted_content",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_composer_opened",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_native_group_share",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2834",
+     "blockName": "fb_prepare_native_group_share",
+     "configKeys": [],
+     "id": "fb_prepare_native_group_share",
+     "systemType": null
+    },
+    {
+     "blockId": "2835",
+     "blockName": "fb_select_native_share_group",
+     "configKeys": [],
+     "id": "fb_select_native_share_group",
+     "systemType": null
+    },
+    {
+     "blockId": "2836",
+     "blockName": "fb_submit_native_group_share",
+     "configKeys": [],
+     "id": "fb_submit_native_group_share",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_native_group_selected",
+     "systemType": "ifElse"
+    }
+   ],
+   "purpose": "facebook_group_post"
+  },
+  {
+   "id": 284,
+   "md5": "2497dcc12bc7e7e84f63fee8990cc9e4",
+   "name": "facebook_join_group",
+   "nodes": [
+    {
+     "blockId": "2793",
+     "blockName": "fb_join_group",
+     "configKeys": [],
+     "id": "join_group",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_restore_only",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_switch",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "page_identity_original",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "page_identity_switch",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_ready",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_enter",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_capture_result",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_restore_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "page_identity_needs_restore",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "page_identity_restore",
+     "systemType": null
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_restored",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "page_identity_result_join",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2829",
+     "blockName": "fb_campaign_page_identity_state",
+     "configKeys": [
+      "pageIdentityStateOperation"
+     ],
+     "id": "page_identity_result",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_join_group"
+  },
+  {
+   "id": 3,
+   "md5": "0699561d8bf0531d7553874634ddebbd",
+   "name": "facebook_message_friend",
+   "nodes": [
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_msg",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "38",
+     "blockName": "fb_send_message",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "send_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_msg",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_friend",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_profile",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav_profile",
+     "systemType": null
+    },
+    {
+     "blockId": "39",
+     "blockName": "fb_add_friend",
+     "configKeys": [],
+     "id": "add_friend",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_friend",
+     "systemType": "merge"
+    }
+   ],
+   "purpose": "facebook_message_friend"
+  },
+  {
+   "id": 208,
+   "md5": "b579a38dfb165ace89672ddde24485fc",
+   "name": "facebook_message_uid",
+   "nodes": [
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_msg",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "38",
+     "blockName": "fb_send_message",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "send_msg",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_msg",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_friend",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "612",
+     "blockName": "fb_resolve_url",
+     "configKeys": [
+      "urlType"
+     ],
+     "id": "resolve_profile",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [],
+     "id": "nav_profile",
+     "systemType": null
+    },
+    {
+     "blockId": "39",
+     "blockName": "fb_add_friend",
+     "configKeys": [],
+     "id": "add_friend",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_friend",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_collect_suggested_friends",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2620",
+     "blockName": "fb_collect_suggested_friends",
+     "configKeys": [],
+     "id": "collect_suggested_friends",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_message_uid"
+  },
+  {
+   "id": 238,
+   "md5": "e438fa1760a7cfc70634d9c0461913f3",
+   "name": "facebook_newsfeed_interaction",
+   "nodes": [
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [
+      "url"
+     ],
+     "id": "nav_home",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep_home",
+     "systemType": null
+    },
+    {
+     "blockId": "2700",
+     "blockName": "fb_newsfeed_init_state",
+     "configKeys": [],
+     "id": "init_state",
+     "systemType": null
+    },
+    {
+     "blockId": "2",
+     "blockName": "loop",
+     "configKeys": [
+      "condition",
+      "loopType",
+      "maxIterations"
+     ],
+     "id": "loop_newsfeed",
+     "systemType": "loop"
+    },
+    {
+     "blockId": "2701",
+     "blockName": "fb_newsfeed_select_next_post",
+     "configKeys": [],
+     "id": "select_post",
+     "systemType": null
+    },
+    {
+     "blockId": "2702",
+     "blockName": "fb_newsfeed_read_post",
+     "configKeys": [],
+     "id": "read_post",
+     "systemType": null
+    },
+    {
+     "blockId": "2703",
+     "blockName": "fb_newsfeed_wait_read",
+     "configKeys": [],
+     "id": "wait_read",
+     "systemType": null
+    },
+    {
+     "blockId": "2704",
+     "blockName": "fb_newsfeed_check_like",
+     "configKeys": [],
+     "id": "check_like",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_like",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2705",
+     "blockName": "fb_newsfeed_like_post",
+     "configKeys": [],
+     "id": "like_post",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_like",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2706",
+     "blockName": "fb_newsfeed_check_comment",
+     "configKeys": [],
+     "id": "check_comment",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_comment",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2707",
+     "blockName": "fb_newsfeed_comment_open",
+     "configKeys": [],
+     "id": "comment_open",
+     "systemType": null
+    },
+    {
+     "blockId": "2708",
+     "blockName": "fb_newsfeed_comment_focus",
+     "configKeys": [],
+     "id": "comment_focus",
+     "systemType": null
+    },
+    {
+     "blockId": "2709",
+     "blockName": "fb_newsfeed_comment_paste",
+     "configKeys": [],
+     "id": "comment_paste",
+     "systemType": null
+    },
+    {
+     "blockId": "2710",
+     "blockName": "fb_newsfeed_comment_submit",
+     "configKeys": [],
+     "id": "comment_submit",
+     "systemType": null
+    },
+    {
+     "blockId": "2711",
+     "blockName": "fb_newsfeed_comment_close_dialog",
+     "configKeys": [],
+     "id": "comment_close",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_comment",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2712",
+     "blockName": "fb_newsfeed_advance_cursor",
+     "configKeys": [],
+     "id": "advance_cursor",
+     "systemType": null
+    },
+    {
+     "blockId": "2713",
+     "blockName": "fb_newsfeed_finalize",
+     "configKeys": [],
+     "id": "finalize",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_newsfeed_interaction"
+  },
+  {
+   "id": 226,
+   "md5": "0829b08893c56fcddc99a9b9d6ca23f0",
+   "name": "facebook_page_post",
+   "nodes": [
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_copy_source",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "35",
+     "blockName": "fb_scrape_post",
+     "configKeys": [],
+     "id": "scrape_source",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_source",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_ui_mode",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2670",
+     "blockName": "fb_get_current_identity_name",
+     "configKeys": [],
+     "id": "get_original_identity",
+     "systemType": null
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "identityNameFromVars"
+     ],
+     "id": "switch_to_page",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_page_switched",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "2672",
+     "blockName": "fb_post_current_identity_ui",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "post_current_identity_ui",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_restore_identity",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2671",
+     "blockName": "fb_switch_identity_by_name",
+     "configKeys": [
+      "useOriginalIdentity"
+     ],
+     "id": "restore_original_identity",
+     "systemType": null
+    },
+    {
+     "blockId": "2669",
+     "blockName": "fb_page_post_api",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "post_page_api",
+     "systemType": null
+    },
+    {
+     "blockId": "2674",
+     "blockName": "fb_rewrite_source_content_ai",
+     "configKeys": [],
+     "id": "source_ai_prompt",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_page_post"
+  },
+  {
+   "id": 227,
+   "md5": "aaa7d7b40c3566af360bfe6dfea1d177",
+   "name": "facebook_page_to_message",
+   "nodes": [
+    {
+     "blockId": "2678",
+     "blockName": "fb_page_inbox_open",
+     "configKeys": [],
+     "id": "open_page_inbox",
+     "systemType": null
+    },
+    {
+     "blockId": "2679",
+     "blockName": "fb_send_page_inbox_message",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "send_message",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_page_to_message"
+  },
+  {
+   "id": 2,
+   "md5": "833f37b629c90021a8651abce91c8a30",
+   "name": "facebook_timeline_post",
+   "nodes": [
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [
+      "url"
+     ],
+     "id": "nav",
+     "systemType": null
+    },
+    {
+     "blockId": "21",
+     "blockName": "wait_for_selector",
+     "configKeys": [
+      "selector",
+      "timeout"
+     ],
+     "id": "wait_main",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_reels",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "37",
+     "blockName": "fb_post_reels",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming"
+     ],
+     "id": "post_reels",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_share",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "36",
+     "blockName": "fb_share_post",
+     "configKeys": [],
+     "id": "share_post",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_copy",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "35",
+     "blockName": "fb_scrape_post",
+     "configKeys": [],
+     "id": "scrape",
+     "systemType": null
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [
+      "url"
+     ],
+     "id": "nav_home_after_scrape",
+     "systemType": null
+    },
+    {
+     "blockId": "21",
+     "blockName": "wait_for_selector",
+     "configKeys": [
+      "selector",
+      "timeout"
+     ],
+     "id": "wait_main_after_scrape",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_compose",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "27",
+     "blockName": "fb_open_composer",
+     "configKeys": [
+      "composerActionCode"
+     ],
+     "id": "open_composer",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep_after_open",
+     "systemType": null
+    },
+    {
+     "blockId": "28",
+     "blockName": "fb_type_post_content",
+     "configKeys": [],
+     "id": "type_content",
+     "systemType": null
+    },
+    {
+     "blockId": "29",
+     "blockName": "fb_drop_post_images",
+     "configKeys": [],
+     "id": "drop_images",
+     "systemType": null
+    },
+    {
+     "blockId": "20",
+     "blockName": "sleep",
+     "configKeys": [
+      "ms"
+     ],
+     "id": "sleep_after_drop",
+     "systemType": null
+    },
+    {
+     "blockId": "30",
+     "blockName": "fb_click_post_button",
+     "configKeys": [
+      "screenshotCaptureOn",
+      "screenshotCaptureTiming",
+      "verifyPostAfterClick"
+     ],
+     "id": "click_post",
+     "systemType": null
+    },
+    {
+     "blockId": "4",
+     "blockName": "merge",
+     "configKeys": [
+      "mode"
+     ],
+     "id": "merge_all",
+     "systemType": "merge"
+    },
+    {
+     "blockId": "2674",
+     "blockName": "fb_rewrite_source_content_ai",
+     "configKeys": [],
+     "id": "source_ai_prompt",
+     "systemType": null
+    },
+    {
+     "blockId": "1",
+     "blockName": "if_else",
+     "configKeys": [
+      "condition"
+     ],
+     "id": "if_composer_opened",
+     "systemType": "ifElse"
+    },
+    {
+     "blockId": "5",
+     "blockName": "nav_to_url",
+     "configKeys": [
+      "url"
+     ],
+     "id": "nav_profile",
+     "systemType": null
+    },
+    {
+     "blockId": "2832",
+     "blockName": "fb_get_first_profile_post_link",
+     "configKeys": [],
+     "id": "get_post_link",
+     "systemType": null
+    }
+   ],
+   "purpose": "facebook_timeline_post"
+  },
+  {
+   "id": 314,
+   "md5": "7c44ad02c50ad13a1746bbf76d75c883",
+   "name": "fb_campaign_rest_browse",
+   "nodes": [
+    {
+     "blockId": "2830",
+     "blockName": "fb_rest_browse_feed",
+     "configKeys": [],
+     "id": "browse",
+     "systemType": null
+    },
+    {
+     "blockId": "2831",
+     "blockName": "fb_rest_browse_rest",
+     "configKeys": [],
+     "id": "rest",
+     "systemType": null
+    }
+   ],
+   "purpose": "rest_browse"
+  }
+ ]
+}

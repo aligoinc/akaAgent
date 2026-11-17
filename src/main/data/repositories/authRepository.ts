@@ -28,6 +28,7 @@ import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
 import { resolveZaloServerOnFlyAtLogin } from '../../../shared/zaloServerOnFly'
 import { loadCampaignEngineV2Enabled } from './campaignEngineFlagRepository'
+import { loadFacebookEngineEnabled } from './facebookEngineRepository'
 
 const client = () => getSupabaseClient()
 
@@ -177,6 +178,9 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   // V513: cờ engine v2 của tổ chức; chỉ hỏi khi tổ chức có quyền Zalo. Cờ chọn bộ chạy chiến dịch Zalo QR/Web của bản này, và
   // chọn nơi chạy tài khoản Zalo Server: bật = Fly (ChatApi), tắt = App Server (không còn hỏi V498 lúc đăng nhập).
   const campaignEngineV2 = entitlements.zalo === true ? await loadCampaignEngineV2Enabled() : false
+  // V556: engine v2 cho Facebook theo thiết lập engine.facebook; chỉ hỏi khi tổ chức có quyền Facebook.
+  const facebookEngineV2 = entitlements.facebookCore === true || entitlements.facebookFanpage === true
+    ? await loadFacebookEngineEnabled() : false
   const zaloServerOnFly = resolveZaloServerOnFlyAtLogin({
     isChatSync,
     separateAccess: appAccess.separateAccess,
@@ -201,6 +205,7 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
     isChatSync,
     zaloServerOnFly,
     campaignEngineV2,
+    facebookEngineV2,
     appAccess,
     chatSyncProducts,
     deviceLabel: deviceRecord.device_label || null,

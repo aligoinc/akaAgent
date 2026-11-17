@@ -15,6 +15,11 @@ export interface DesktopPollingSettings {
    * src/shared/zaloShareRepeat.ts). Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = ẩn.
    */
   zaloShareRepeatEnabled?: boolean
+  /**
+   * Trần "Số comment tối đa" / "Số bài cần comment" của chiến dịch Facebook (`facebook.max_comments`, anh chốt Q10 16/11/2026; mặc định 20,
+   * sửa ở DB không cần phát hành). Đọc chung câu này, không thêm request.
+   */
+  facebookMaxComments?: number
   /** Ngừng đọc theo hẹn giờ/sự kiện khi cửa sổ chính thu nhỏ, ẩn hoặc màn hình khóa. Thiếu = tắt. */
   hiddenPauseEnabled?: boolean
   /** Cả máy không có thao tác từ ngần này giây thì coi là không ai nhìn. 0/thiếu = tắt. */
@@ -34,7 +39,20 @@ export interface DesktopPollingSettings {
    */
   affPartnerAudience?: AffPartnerAudience
 }
-export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, affPartnerAudience: 'off' }
+export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, affPartnerAudience: 'off',
+  facebookMaxComments: 20 }
+export const FACEBOOK_MAX_COMMENTS_KEY = 'facebook.max_comments'
+export const DEFAULT_FACEBOOK_MAX_COMMENTS = 20
+/** Số nguyên 1–1000; thiếu / sai = 20. */
+export function parseFacebookMaxComments(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(String(value ?? '').trim())
+  return Number.isSafeInteger(n) && n >= 1 && n <= 1000 ? n : DEFAULT_FACEBOOK_MAX_COMMENTS
+}
+/** Số comment / số bài sau khi áp trần (tối thiểu 1). */
+export function clampFacebookCommentCount(value: unknown, max: number = DEFAULT_FACEBOOK_MAX_COMMENTS): number {
+  const n = Math.floor(Number(value))
+  return Math.min(max, Number.isFinite(n) ? Math.max(1, n) : 1)
+}
 export function parseDesktopPollSeconds(value: unknown): number {
   const text = String(value ?? '').trim()
   const seconds = Number(text)

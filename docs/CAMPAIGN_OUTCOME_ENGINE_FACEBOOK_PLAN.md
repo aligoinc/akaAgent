@@ -1,7 +1,9 @@
 # Engine v2 cho chiến dịch Facebook: phương án (16/11/2026)
 
-> **Trạng thái: phương án; anh đã chốt đủ Q1–Q24 ngày 16/11.** Chưa viết code, chưa tạo hay apply migration, không ghi gì lên production.
-> Nhánh `claude/fb-engine-v2-plan` (tách từ `dev_3` `0ae0d6f2`), chưa commit.
+> **Trạng thái: phương án; anh đã chốt đủ Q1–Q24 ngày 16/11.** Phương án ở commit `e8859777` (nhánh `claude/fb-engine-v2-plan`, tách từ
+> `dev_3` `0ae0d6f2`); code làm ở nhánh `claude/fb-engine-v2` tách từ commit đó. Chưa apply migration nào, không ghi gì lên production.
+> **Thứ tự (anh chốt 16/11 tối): làm hoàn chỉnh code đợt 0–3 trước, bảng duyệt FB để cuối** (trước khi apply migration chính sách và bật
+> tổ chức thử; mục 10). Danh sách thay đổi schema chờ anh duyệt trước khi viết migration: [CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_SCHEMA.md](CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_SCHEMA.md).
 > Cập nhật 16/11 chiều theo trao đổi với anh: bắt lỗi theo từng thao tác nhỏ (3.6), sửa block / workflow không ảnh hưởng bản cũ (3.7),
 > ghi dấu ba mức (3.3), ảnh chụp khi lỗi và lấy ảnh từ máy khách (12), câu hỏi Q7 sửa lại, Q12–Q14 mới.
 > Đã chốt: Q1 bật FB chỉ theo tổ chức, không có công tắc theo loại (như Zalo), danh sách tổ chức nằm trong thiết lập `engine.facebook`;
@@ -16,6 +18,88 @@
 > Q15 block lỗi thì giữ toàn bộ vết thao tác (trần 200 thao tác / 64 KB); Q16 tra lỗi bằng hàm + script trước, màn hình Web sau;
 > Q23 mỗi mã lỗi một câu cho khách dùng chung mọi chỗ, kèm câu bước tiếp theo, anh duyệt từng câu; Q22 không gửi báo giám sát,
 > anh hỏi trong phiên thì chạy hàm kiểm (16/11).
+>
+> **Tình trạng code (16/11 khuya, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, chưa commit, chưa apply gì):**
+> - Migration (chưa apply): V556 p1/p2 (bảng, thiết lập, hàm tra lỗi / ảnh lỗi; bỏ bảng T4 "việc sau kết quả" theo anh chốt), V557 (lượt
+>   theo lịch), V558 (thân hàm engine; `resolve_policy` giải `inherit` đúng như bộ cũ; claim nhận đúng danh sách data trong lượt đang giữ
+>   lease; `report_v1` nhận dòng "Tìm data" không gắn thao tác; gỡ V558 từ chối khi còn chính sách `inherit`), **V559 bản nháp chính sách
+>   FB** (4 mã FB42–FB45, 15 luật phân loại, 90 dòng chính sách = đúng bộ cũ trừ Q6 / Q20; chờ duyệt bảng
+>   [CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_FULL_REVIEW.md](CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_FULL_REVIEW.md)), **V560 chép 84 block + 14 workflow
+>   "[engine]"** kèm sổ chép và 24 dòng danh mục bước. Số migration kiểm lại sổ + `git log --all` ngay trước khi apply (sổ 16/11 tới V552).
+> - Desktop: hook workflow, vết thao tác, cổng FB trong bộ lập lịch, ảnh lỗi + trả lời yêu cầu chẩn đoán, vá AutoCheck (Q6), block treo (Q20),
+>   câu chờ (Q21) và nút "Lý do đang chờ" hiểu engine (R17, cả Zalo), trần comment (Q10), mã lượt workflow trong mọi kết quả + script
+>   `scripts/engine-v2-facebook/trace.cjs` (`--data` / `--run` / `--health` / `--drift`, R1 / R18), nghỉ / lướt FB chạy bản "[engine]". **Cả
+>   13 loại chạy bộ mới khi tổ chức bật** (hàm phủ không còn trả loại nào về bộ cũ, trừ chạy ngẫu nhiên theo tài khoản).
+> - Kiểm (PostgreSQL 17 cục bộ): `sql-smoke` 34/34 (3 nhóm "kết thúc lượt" tự bỏ qua sau 22:00 giờ VN), `policy-parity-smoke` 12/12 (2.640
+>   cặp khớp bộ cũ), `copy-smoke` 7/7, `desktop-fb-smoke` 20/20, `core-smoke` 11/11, `workflow-hooks-smoke` 10/10, `page-trace-smoke` 5/5,
+>   `screenshots-smoke` 4/4, `autocheck-smoke` 4/4, `wait-reason-smoke` 6/6, typecheck Desktop + lõi; `campaign-outcome-engine-check-all`
+>   (Zalo) đạt; bộ kịch bản Zalo trên DB có V556–V558 (`SCENARIO_FACEBOOK_MIGRATIONS=1`): 0 vi phạm mới.
+> - **Ba việc còn lại, anh chốt 16/11 khuya, đã làm:**
+>   (1) **Đăng nhóm kèm chia sẻ sang nhóm đã tham gia** (1.479 chiến dịch đăng nhóm trong 30 ngày): anh chọn "làm y bộ cũ". Ứng viên, số
+>   nhóm tối đa (`min(3, lượt còn - 1)`), chống gửi lặp cho ứng viên và block chọn nhóm giữ nguyên bộ cũ; ngay trước cú bấm Đăng, nhóm đã
+>   chọn được nhận vào lượt (`claimExtraTargets` → `claim_batch_v1` với `inputDataIds`, cùng lease, mỗi nhóm một lượt data riêng) và ghi dấu
+>   "sắp gửi" từng nhóm. Dòng "Đăng bài dạng chia sẻ vào …" của bộ dựng cũ ghi vào lượt data của nhóm đó. Đã đăng: nhóm hoàn thành, ghi chú
+>   "Đăng bài dạng chia sẻ" như bộ cũ; chưa bấm Đăng: nhóm về hàng đợi (SYS01, trả lại lượt); bấm rồi không rõ: nhóm đóng, ghi "không rõ"
+>   (UNK01), không đăng lại (bộ cũ trả về hàng đợi nên có thể đăng trùng). Nhóm đã chọn mà không nhận / không ghi dấu được thì không bấm Đăng.
+>   (2) **Tìm data** (162 chiến dịch): anh nói "cái tìm data này đâu phải là hành động thực hiện fb gì đâu", giữ Q5 đưa vào engine: dòng
+>   "Tìm data" ghi không gắn thao tác như bộ cũ (V558 `report_v1`), không tính lượt, không khoá; lỗi có mã (FB42 theo trạng thái), ảnh lỗi,
+>   giữ lượt; đẩy data đi như bộ cũ.
+>   (3) **Đẩy nốt việc bị ngắt**: anh chọn "Như bộ cũ": việc sau kết quả (đẩy data tìm được, sinh lượt Up tin) chạy trong cùng lượt như bộ
+>   cũ, bị ngắt thì mất phần chưa làm, không trùng. Bỏ bảng T4 `auto_engine_followups` và `aka_agent_engine_followup_v1` khỏi V556 (anh chốt).
+> - **Kiểm như lúc kiểm Zalo (anh bảo "test trước rồi duyệt sau", 16–17/11):**
+>   (a) **Phát lại lịch sử thật** `scripts/engine-v2-facebook/replay.cjs` (mẫu chỉ đọc 3 ngày 14–16/11 bằng `export-replay.cjs`, 114 chiến
+>   dịch 12 loại, 1.081 lượt bộ cũ; dữ liệu khách chỉ ở scratchpad): bộ lập lịch Desktop thật chạy bằng engine, block trả lại đúng kết quả bộ
+>   cũ đã ghi, nhánh / vòng lặp theo đúng lượt bộ cũ. **1.168 / 1.178 data / mốc so được khớp dòng lịch sử bộ cũ** (thao tác, trạng thái, tính lượt) và
+>   trạng thái data; 11/12 loại khớp hết. 10 dòng còn lệch là một câu hỏi cho anh (dưới). 16 lượt bộ cũ thiếu bước trong `auto_run_steps`
+>   (production mất dòng) không so được.
+>   (b) **Bộ kịch bản sự cố** `scripts/engine-v2-facebook/scenarios.cjs`: đăng nhóm (kèm comment, chia sẻ) và trang cá nhân trên trang
+>   Facebook giả ghi mọi cú gửi thật, tiêm lỗi trang (không thấy nút, script lỗi sau cú bấm, form không đóng, cửa sổ ẩn chết, chết tiến trình
+>   ngay sau cú bấm rồi bộ chạy mới nhận lại), DB mất yêu cầu / mất câu trả lời; kiểm bất biến B1–B7 (không đăng / comment trùng, không gửi
+>   khi chưa ghi dấu, data đã gửi không về hàng đợi, không còn lượt mở, không "thành công giả", mỗi mốc một bài). Lần chạy cuối 20 hạt giống:
+>   1.033 cú gửi, 307 lỗi trang, 210 lỗi DB, 88 lần chết tiến trình: **0 vi phạm**. Bộ kịch bản Zalo chạy lại trên DB có V556–V559: 0 vi phạm mới.
+>   **Lỗi engine tìm ra và đã sửa** (đều để y bộ cũ, Q8): engine coi "block chạy xong mà bộ dựng cũ không ghi dòng nào" là thành công và
+>   tính lượt (Like khi comment seeding thêm dòng + tính lượt Like; comment tự bỏ qua khi bài chờ duyệt thành "Comment: thành công") → mã
+>   mới **FB45** `err_engine_fb_no_history` (không ghi, không in, không tính, không cộng chuỗi); comment seeding không có bài hợp điều kiện
+>   bị ghi "lỗi SYS07" và tạm dừng chiến dịch sau 4 lần → đóng data im lặng như bộ cũ (FB45); **FB06** không chuyển được sang Page trước data:
+>   engine đánh data hoàn thành và tính lượt, bộ cũ giữ data và tạm dừng chiến dịch (`pauseBeforePageIdentityTarget`) → chính sách V559 như
+>   bộ cũ; nhắn inbox Page: bộ cũ tự chạy lại một lần sau 4 lỗi liền (tạm dừng ở 8) → V559 thêm ngưỡng 8 cho SYS99 của thao tác này; lỗi
+>   trước khi gửi ghi sai thao tác (khoá jsonb không giữ thứ tự: "Comment" thay cho "Đăng bài") → lấy thao tác chính theo thứ tự của loại;
+>   newsfeed like cùng một bài ở hai vòng bị bỏ một dòng (khoá chống ghi trùng dùng nội dung output) → khoá theo `stepKey`.
+>   **Anh chốt 17/11: giữ dòng "lỗi"** khi block không phải mốc gửi ném lỗi (gõ nội dung, tệp media không dùng được, Facebook không nhận
+>   HTML đã dán…): bộ cũ không ghi dòng lịch sử, chỉ ghi câu lỗi vào ghi chú data và cộng chuỗi; engine ghi thêm dòng "lỗi" (SYS99 / FB44,
+>   không tính lượt, cộng chuỗi) để khách thấy lỗi trong lịch sử. Đây là khác biệt có chủ ý duy nhất trong phát lại (10/1.178); `replay.cjs`
+>   tách riêng khác biệt đã chốt và trả mã thoát 1 khi còn khác biệt chưa giải thích.
+>   Kèm theo: tạm dừng giữa data trước mốc gửi đầu tiên mà data đã có dòng khác (tham gia nhóm) thì data về hàng đợi như bộ cũ (trước đó
+>   bị đóng theo dòng đã có mà chưa đăng bài).
+> - Còn ghi ở bảng duyệt: kết quả "đã gửi lời mời" (mời vào nhóm) DB không coi là đã giao nên dấu gửi thành `not_delivered`; data vẫn hoàn
+>   thành.
+> - **Duyệt bảng mã lỗi FB (17/11), phần hành vi đã chốt**, đều trùng bản nháp nên chính sách engine không đổi:
+>   FB02 / FB03 (Facebook báo đăng nhóm / bình luận quá nhanh) như bộ cũ: tạm dừng chiến dịch ngay để khách giảm tốc độ rồi bấm Tiếp tục.
+>   FB35 / FB41 / FB44 (không thấy ô viết bài trang cá nhân / ô bình luận / nút, ô khác trước khi gửi) như bộ cũ: ghi "lỗi", bỏ data, cộng
+>   chuỗi, 4 lần liền thì tạm dừng. Nhóm mua bán (ô "Bạn đang bán gì?") và nhóm không có ô đăng bài ra FB40 từ V459 (04/11): bỏ qua, không
+>   đếm gì (anh muốn đúng như vậy); 46 chiến dịch đăng nhóm đang dừng vì "Không tìm thấy ô đăng bài" đều dừng 02/10–04/11, trước V459.
+>   FB12 / FB30 như bộ cũ (chưa có code nhận ra; khi viết code nhận ra thì duyệt lại). **FB04: V559 sửa luôn dòng của bộ cũ** (anh chốt:
+>   khoá rồi khách phải tự mở lại): bỏ khoá 11 thao tác và bỏ tạm dừng tài khoản, giữ chiến dịch về chờ xử lý và đăng nhập → checkpoint;
+>   bộ cũ không phát FB04 nên khách không thấy khác; bản gỡ trả lại. **Câu cho khách (Q23): anh duyệt từng câu 17/11** (44 mã, bảng duyệt
+>   mục 1–2) theo bốn nguyên tắc anh chốt: bước tiếp theo chỉ hiện khi khách cần làm gì; chữ dễ hiểu với người bình thường; câu lỗi đã tự rõ thì
+>   không cần bước tiếp theo; bước tiếp theo không đoán nguyên nhân (lỗi giao diện: "Mở tab trình duyệt của tài khoản để kiểm tra."). V559 ghi
+>   câu vào `customer_title` / `customer_help` (bộ cũ không đọc) và chính sách engine dùng câu lỗi cho lịch sử, tiến trình, ghi chú data; ghi chú
+>   chiến dịch khi mã làm dừng / chờ là "câu lỗi (mã). bước tiếp theo"; V558 nối bước tiếp theo của mã FB sau câu "Dừng sau N data lỗi liên tiếp"
+>   (Zalo giữ câu cũ). Bộ cũ giữ câu cũ. Kiểm lại sau khi đưa câu vào (17/11 chiều): `policy-parity-smoke` 14/14 (2.574 cặp khớp bộ cũ, câu và
+>   dòng FB04 đúng như anh chốt, gỡ trả lại), `sql-smoke` 34/34 (sửa mã chiến dịch trùng 96013/96014 giữa nhóm "kết thúc lượt" và hai nhóm
+>   thêm 16/11 tối, lỗi chỉ lộ ban ngày), `desktop-fb-smoke` 20/20 (ghi chú dừng theo chuỗi đúng nguyên văn câu FB44 + bước tiếp theo), các bài
+>   FB khác đạt; phát lại lịch sử thật 1.168 khớp, 10 khác đã chốt, 0 khác chưa giải thích; kịch bản sự cố FB 20 hạt giống (1.108 cú gửi, 248
+>   lỗi trang, 211 lỗi DB, 89 lần chết tiến trình): 0 vi phạm; kịch bản Zalo trên DB có V556–V559: 708 lượt, 0 vi phạm mới.
+> - **Q11 làm 17/11** (tìm ra lúc duyệt câu là engine chưa có; anh bảo "Làm luôn", chốt **chỉ SYS99**, FB44 giữ câu đã duyệt): `report_v1`
+>   (V558) trả thêm `streak.lastErrorCode`; lõi chế độ workflow có `reviseCampaignNote` (gọi trước khi in câu dừng, hạn 60 giây, lỗi chỉ ghi vết;
+>   lượt đang dừng thì không gọi); Desktop FB (`reviseFacebookEnginePauseNote`) khi chiến dịch vừa tạm dừng theo chuỗi mà mã lỗi cuối là SYS99
+>   thì lấy ảnh lỗi engine của data đó (không có thì ảnh mới nhất của chiến dịch trong 30 phút), gọi AI `campaign_error_screenshot_diagnosis`
+>   cùng tham số như bộ cũ, ghi lại ghi chú "Dừng sau N data lỗi/thất bại liên tiếp (ngưỡng N): <câu AI> (SYS99)" bằng CAS
+>   (`reviseEnginePausedCampaignNote`: chỉ khi còn tạm dừng với đúng câu DB vừa ghi, updated_at tiến 1 ms từ giá trị DB); không có ảnh, AI
+>   không trả câu hay lỗi thì giữ câu của DB. Kiểm: `desktop-fb-smoke` ca Q11 (AI viết lại câu, AI không trả câu thì giữ, FB44 không gọi AI);
+>   phát lại / kịch bản dùng AI giả (`aiwrap` trong `desktop-harness.cjs`), không gọi mạng. Kiểm lại sau Q11: `desktop-fb-smoke` 21/21, các bài FB khác đạt, typecheck
+>   Desktop / lõi / renderer sạch; phát lại lịch sử thật 1.168 khớp, 10 khác đã chốt, 0 chưa giải thích; kịch bản sự cố FB 20 hạt giống 0 vi phạm;
+>   kịch bản Zalo 708 lượt 0 vi phạm mới; `campaign-outcome-engine-check-all` (Zalo) đạt.
 >
 > Nguồn: kế hoạch engine v2 (`~/.claude/plans/t-i-mu-n-t-ch-c-composed-wolf.md`, mục 4 quyết định 11, 5.4, 8.2, 10 giai đoạn 7),
 > [thiết kế](CAMPAIGN_OUTCOME_ENGINE.md), [phủ Zalo](CAMPAIGN_OUTCOME_ENGINE_ZALO_COVERAGE.md),
@@ -49,7 +133,7 @@
 - **Bật riêng, chỉ theo tổ chức** (anh chốt Q1). 24/244 tổ chức dùng FB đang bật cờ Zalo nên không dùng chung cờ đó; danh sách tổ chức
   nằm trong thiết lập `engine.facebook` (anh chốt), claim kiểm lại để tắt khẩn cấp không cần đăng nhập lại. Không có công tắc theo loại: loại
   nào chạy bộ mới do bản Desktop quyết định, như Zalo.
-- **Lộ trình.** Đợt 0 DB (không đổi hành vi) → đợt 1 Desktop (thiết lập tắt) → đợt 2 công cụ chép bản engine → đợt 3 làm cả 13 loại cùng
+- **Lộ trình.** Code xong hết đợt 0–3 trước, bảng duyệt FB để cuối (anh chốt 16/11 tối). Đợt 0 DB (không đổi hành vi) → đợt 1 Desktop (thiết lập tắt) → đợt 2 công cụ chép bản engine → đợt 3 làm cả 13 loại cùng
   lúc (anh chốt gộp, Q9), loại nào xong thì tổ chức thử chạy bằng bản cài nội bộ, phát hành Desktop một lần khi đủ 13 loại → mở cho khách
   theo lô như Zalo (Q19). 24 câu hỏi ở mục 11 (Q15–Q23 từ rà soát 16/11, mục 13), đã chốt Q1–Q24.
 
@@ -150,7 +234,8 @@ FB luôn chạy bộ cũ: `DesktopEngineRunner.support()` trả `runtime` cho m�
 3. **Lặp theo thiết kế**: nhiều khung giờ (trang cá nhân, Page), chạy lại sau khi hoàn thành, Up tin thêm lượt mà không kiểm URL bài
    (`:14256`). Ngoài phạm vi; chống gửi lặp N ngày (cổng `delivery_cooldown` của engine) chặn được khi khách bật.
 
-Engine đóng (1) và (2): mỗi mốc có dấu "sắp gửi" ghi trước cú bấm; data chỉ về hàng đợi khi không có dấu nào chưa giải quyết.
+Engine đóng (1) và (2): mỗi mốc có dấu "sắp gửi" ghi trước cú bấm; data chỉ về hàng đợi khi không có dấu nào chưa giải quyết. Với (2),
+engine chỉ nhận vào lượt các nhóm block đã chọn, ngay trước cú bấm Đăng, và ghi dấu từng nhóm; nhóm không được chọn không bị giữ chỗ.
 
 **Tính năng bộ cũ mà cổng FB phải giữ** (đặc tả từng phần ở đợt tương ứng): mở hộp thư Page một lần mỗi lượt và tự mở lại một lần khi lỗi
 (`:10479-10526`); mời vào nhóm theo lô ≤ 50 (`:5212-5637`); chia sẻ vào nhóm đã tham gia (`min(3, lượt còn - 1)`, `:7783-7880`); sinh lượt
@@ -413,13 +498,13 @@ dòng lịch sử "Tìm data" (danh sách tìm được nằm trong `data`) rồ
 - akaBiz Desktop: ghi thẳng vào SQLite của app akaBiz Desktop trên cùng máy (`akaBizDesktopSqliteClient.ts:183`).
 
 Bộ cũ ghi lịch sử trước rồi mới đẩy, và lọc "data mới" bằng cách đọc lại lịch sử các lượt trước. App tắt giữa hai bước thì lượt sau coi
-data đó là đã tìm thấy và không đẩy nữa: mất, nhưng không trùng. Engine:
-- Mốc "Tìm data" là kết quả loại `result`: không có cú bấm gửi, không tính lượt (bộ cũ cũng không kiểm hạn mức); lỗi có mã và ảnh như các
-  loại khác.
-- Việc đẩy là bước sau kết quả (`afterReport`, như kiêm SMS của Zalo ở V506), chạy khi còn lease và ghi dấu "đã đẩy" theo `result_key` +
-  đích, nên gọi lại không đẩy trùng. Nhóm data dùng lại mã lượt nạp có sẵn (chưa kiểm hàm nạp có bỏ qua mã đã nạp hay không); đẩy sang
-  chiến dịch khác qua một RPC mới có khoá chống trùng (bộ cũ không có); akaBiz Desktop ghi một lần theo `result_key` trong nhật ký trên máy.
-- Lượt bị ngắt sau khi có kết quả mà chưa đẩy xong thì lần chạy kế tiếp (hoặc bước khôi phục) đẩy nốt phần còn thiếu, không mất như bộ cũ.
+data đó là đã tìm thấy và không đẩy nữa: mất, nhưng không trùng. Engine (anh chốt 16/11 khuya):
+- Dòng "Tìm data" ghi **không gắn thao tác như bộ cũ** (anh: "cái tìm data này đâu phải là hành động thực hiện fb gì đâu"): claim không có
+  thao tác nào để kiểm (bộ cũ không kiểm hạn mức); V558 `report_v1` nhận kết quả không mã thao tác của chiến dịch Facebook khi có tên ghi
+  lịch sử (`action_code` trống, `action_name` "Tìm data", không tính lượt, không ghi dấu, luật phân loại theo nền tảng của loại chiến dịch).
+  Lỗi có mã và ảnh như các loại khác; dòng "lỗi" không mã đi luật `status:*` → FB42, cộng chuỗi như `err_undefined` của bộ cũ.
+- **Đẩy data đi như bộ cũ** (anh chọn "Như bộ cũ" cho việc đẩy nốt): code đẩy của bộ cũ chạy ngay sau dòng "Tìm data" trong cùng lượt, còn
+  giữ lease; app tắt giữa hai bước thì mất phần chưa đẩy, không trùng. Không có dấu "đã đẩy", không có RPC đẩy mới.
 - "Chạy lại sau N giờ khi xong" (`findDataRerunEnabled`, `:2711-2735`) dùng chung cho tìm data, comment seeding và newsfeed, nên làm một
   lần ở bước kết thúc lượt của engine (`finish_campaign`) từ đợt 0. 6 chiến dịch tìm data chạy dưới danh tính Page cần khôi phục như mục 7.6.
 - Chiến dịch nhận data không phụ thuộc bộ chạy của chiến dịch tìm data.
@@ -487,7 +572,7 @@ Hệ quả theo nhóm mã:
 
 | Nhóm | Mã | Bộ cũ | Seed V495 | Lệch |
 |---|---|---|---|---|
-| `inherit`, `detail_status` trống | FB35 `err_fb_composer_editor_not_found`, FB41 `err_fb_comment_box_not_found` | ghi "lỗi" (trạng thái block), không tính lượt, **tăng chuỗi** (4 liền → tạm dừng: 42 chiến dịch đăng nhóm đang dừng như vậy), data hoàn thành | không ghi lịch sử, về hàng đợi, không chuỗi | **lớn**: chiến dịch không bao giờ tự dừng, data bị thử lại mãi; mẫu ~554 dòng (≈19 nghìn / 30 ngày) |
+| `inherit`, `detail_status` trống | FB35 `err_fb_composer_editor_not_found`, FB41 `err_fb_comment_box_not_found` | ghi "lỗi" (trạng thái block), không tính lượt, **tăng chuỗi** (4 liền → tạm dừng; 46 chiến dịch đăng nhóm còn dừng như vậy đều dừng 02/10–04/11: từ V459 đăng nhóm ra FB40 "bỏ qua", FB35 chỉ còn ở trang cá nhân), data hoàn thành | không ghi lịch sử, về hàng đợi, không chuỗi | **lớn**: chiến dịch không bao giờ tự dừng, data bị thử lại mãi; mẫu ~554 dòng (≈19 nghìn / 30 ngày) |
 | `inherit`, có `detail_status` | FB15–FB18 | trạng thái block (khớp `detail_status`), không lượt, không chuỗi | như vậy | khớp nếu block trả đúng trạng thái |
 | `override` | FB40 | "bỏ qua", không lượt, không chuỗi, hoàn thành | như vậy | khớp |
 | `fb_add_friend` | FB22 | theo cột `auto_error` | như vậy | khớp |
@@ -503,9 +588,11 @@ Hệ quả theo nhóm mã:
 - Ví dụ dòng cần anh chốt: FB35 / FB41 nên về hàng đợi (như seed V495) hay ghi "lỗi" và dừng chiến dịch sau 4 lần (như bộ cũ).
 - Mỗi dòng có thêm cột "áp cả cho bộ cũ?". Mặc định **không**, như Zalo (V500 chỉ đổi chính sách của engine). Chọn có thì sửa luôn
   `auto_error` như V472, và mọi Desktop đang chạy bộ cũ đổi hành vi ngay khi apply.
-- Seed chính sách FB của đợt 0 sinh từ bảng đã chốt; engine thêm cách ghi "trạng thái do block trả" cho chính sách FB (tương đương `inherit`).
-- Bảng đầy đủ (mọi cặp đã có hoặc sắp có code phát mã) chốt xong trước migration chính sách ở đợt 0; mã mới phát sinh trong đợt 3 (producer mới,
-  FB42–FB44) duyệt trước khi phát hành bản Desktop có cả 13 loại.
+- Seed chính sách FB của đợt 0 viết trước bằng bản nháp giữ đúng hành vi bộ cũ (sinh từ code bộ cũ), đủ để kiểm thử cục bộ; anh duyệt bảng
+  xong thì sửa file migration chính sách theo bảng trước khi apply. Engine thêm cách ghi "trạng thái do block trả" cho chính sách FB
+  (tương đương `inherit`).
+- Bảng đầy đủ (mọi cặp đã có hoặc sắp có code phát mã, gồm mã mới của đợt 3 như FB42–FB44) duyệt một lần ở cuối, sau khi code xong cả 13
+  loại (anh chốt 16/11 tối), trước khi apply migration chính sách và bật tổ chức thử.
 - Phát lại dữ liệu thật vẫn so với bộ cũ: mọi chỗ khác nhau phải nằm trong các dòng anh đã duyệt đổi.
 
 V472 là tiền lệ cho dòng "áp cả cho bộ cũ": thêm `detail_mode = 'inherit'` cho 74–77 chính vì bộ cũ bỏ cột đếm của mã FB. Trạng thái của
@@ -701,11 +788,11 @@ bộ mới do lõi trong bản cài quyết định (`zaloCampaignV2Support`, `d
 
 1. **SQL trên PostgreSQL 17 cục bộ** (`scripts/fixtures/campaign-outcome-engine/pg-fixture.cjs`): apply trong transaction rồi ROLLBACK,
    apply thật, chặn apply lần hai, rollback; claim FB (thiết lập bật / tắt, quyền gói 3/10, số tài khoản FB chạy cùng lúc), trần gói FB trong
-   `aka_agent_engine_action_limit`, `mark_sending` có kiểm hạn mức, nhiều dấu trên một data, chính sách FB khớp bảng duyệt đã chốt cho
+   `aka_agent_engine_action_limit`, nhiều dấu trên một data (`mark_sending` không kiểm hạn mức giữa vòng, Q10), chính sách FB khớp bảng duyệt đã chốt cho
    **mọi cặp mã × thao tác FB**; cặp nào khác bộ cũ (so với `ActionStatusCatalog.resolve` kèm luật `actionResultRuntime.ts:151` và `:160`)
    phải là dòng anh đã duyệt đổi. Lượt theo lịch (Q4): mỗi mốc lịch nhận đúng một lần, nhiều khung giờ, lịch kế tiếp như bộ cũ, mọi hàm engine
-   chạy đúng với lượt không có data. Tìm data (Q5): RPC đẩy sang chiến dịch khác gọi lại cùng `result_key` không thêm dòng trùng; chạy lại
-   sau N giờ đúng như bộ cũ. Đợt 0 đổi bảng Zalo đang dùng nên chạy lại cả bộ kiểm của Zalo
+   chạy đúng với lượt không có data. Tìm data (Q5): dòng "Tìm data" không gắn thao tác (chỉ chiến dịch FB, phải có tên, không tính lượt);
+   chạy lại sau N giờ đúng như bộ cũ. Đăng nhóm kèm chia sẻ: claim chỉ nhận đúng danh sách data trong lượt đang giữ lease. Đợt 0 đổi bảng Zalo đang dùng nên chạy lại cả bộ kiểm của Zalo
    (`scripts/campaign-outcome-engine-check-all.cjs`).
 2. **Bộ kiểm danh mục của bản cũ** (`scripts/legacy-catalog-validator-smoke.cjs`): Desktop 8.2.0, 9.3.0, 9.7.0 và chat-sync vẫn đạt sau mọi
    dòng `auto_error` / `auto_status` mới. Bộ chạy FB cũ kiểm mọi dòng `auto_error` có `error_type` chứa "facebook" lúc bắt đầu chạy
@@ -719,9 +806,9 @@ bộ mới do lõi trong bản cài quyết định (`zaloCampaignV2Support`, `d
 4. **Bộ kịch bản sự cố** (mở rộng `scripts/engine-v2-scenarios/`): "thế giới FB" rút theo phân bố 30 ngày (đăng được, không mở được hộp đăng
    bài, bài chờ duyệt, nhóm cần duyệt, comment bị tắt, giới hạn tần suất, checkpoint, đăng xuất…), cộng lỗi tiêm: block ném lỗi trước / sau
    điểm cam kết, cửa sổ ẩn chết, tắt app giữa vòng comment, tạm dừng từ Web giữa vòng comment, DB lỗi trước / sau khi nhận. Bất biến thêm cho
-   FB: mỗi `stepKey` tối đa một lần bấm; không về hàng đợi sau `committed`; không bấm khi chưa có dấu; danh tính Page được khôi phục; không
-   vượt hạn mức trong vòng comment; newsfeed dừng đúng số phút khách cài; một mốc lịch không chạy hai lượt; tìm data tắt app sau khi có kết quả mà chưa đẩy xong thì
-   lần sau đẩy nốt, không mất, không trùng (chiến dịch nhận, nhóm data, SQLite akaBiz Desktop). Thêm lỗi ở từng loại thao tác nhỏ (chờ phần tử, gõ, dán, tải tệp, gọi API) trước và sau cú bấm gửi: phải ra
+   FB: mỗi `stepKey` tối đa một lần bấm; không về hàng đợi sau `committed`; không bấm khi chưa có dấu; danh tính Page được khôi phục; vòng comment không vượt trần số comment (`facebook.max_comments`, Q10); newsfeed dừng đúng số phút khách cài; một mốc lịch không chạy hai lượt; tìm data tắt app sau khi có kết quả mà chưa đẩy xong thì
+   như bộ cũ (anh chốt): mất phần chưa đẩy, không trùng; đăng nhóm kèm chia sẻ: không bấm Đăng khi nhóm đã chọn chưa có dấu, bấm rồi thì
+   nhóm chia sẻ không đăng lại. Thêm lỗi ở từng loại thao tác nhỏ (chờ phần tử, gõ, dán, tải tệp, gọi API) trước và sau cú bấm gửi: phải ra
    đúng mã và đúng pha. Bộ kịch bản Zalo hiện có chạy lại nguyên vẹn, vì đợt 0
    đổi bảng `auto_engine_target_runs` mà Zalo đang dùng.
 5. **Webview thật, không chạm Facebook**: chạy `workflowEngine` + `PageController` thật trong Electron (`xvfb-run`) với trang HTML giả lập
@@ -745,19 +832,22 @@ bộ mới do lõi trong bản cài quyết định (`zaloCampaignV2Support`, `d
 
 ## 10. Lộ trình theo đợt
 
-Mỗi đợt làm như Zalo: đặc tả đọc từ code hiện tại (`docs/engine-v2-specs/facebook-*.md`, có số dòng và câu cho khách nguyên văn) → code
-→ bảng duyệt FB cho anh chốt (bộ cũ là một cột đối chiếu, Q3) → seed theo bảng đã chốt → phát lại dữ liệu thật + bộ kịch bản → cài thử
-máy nội bộ → đưa bản Desktop lên feed.
+**Thứ tự (anh chốt 16/11 tối): làm hoàn chỉnh code cả đợt 0–3 trước, bảng duyệt FB để cuối.** Code mỗi loại theo đặc tả đọc từ code
+hiện tại (`docs/engine-v2-specs/facebook-*.md`, có số dòng và câu cho khách nguyên văn). Chính sách FB trong migration đợt 0 viết trước bằng
+bản nháp giữ đúng hành vi bộ cũ (mục 5.3), đủ để kiểm thử cục bộ; bảng duyệt sinh từ bản nháp đó (bộ cũ là một cột đối chiếu, Q3). Anh
+duyệt xong thì sửa file migration chính sách và câu cho khách theo bảng. Migration nào cũng chỉ apply khi anh bảo, và migration chính sách
+chỉ apply sau khi duyệt bảng, nên sửa theo bảng không cần migration gỡ. Sau đó: phát lại dữ liệu thật + bộ kịch bản → apply → cài thử máy
+nội bộ, bật tổ chức thử → đưa bản Desktop lên feed.
 **Làm như Zalo (anh chốt Q19, 16/11):** trong lúc engine chưa phủ đủ 13 loại FB, thiết lập `engine.facebook` chỉ có tổ chức thử (nội bộ);
 đủ 13 loại mới mở cho khách, theo lô như Zalo 13–14/11. Nhờ vậy khách đã bật gần như không còn lượt FB bộ cũ, nên engine không cần tách khỏi
 cổng bảo trì đầu ngày của bộ cũ.
 
 | Đợt | Nội dung | Migration (apply ngoài giờ cao điểm) | Phát hành Desktop | Sửa block bằng DML | Đổi hành vi khi xong |
 |---|---|---|---|---|---|
-| 0. Nền DB | Thiết lập `engine.facebook` (chưa có dòng = tắt) + RPC đọc cho Desktop; thiết lập trần số comment (đề xuất `facebook.max_comments` = 20, Q10); hàm chỉ đọc tra lỗi theo data / lượt và liệt kê chiến dịch đứng / lỗi lạ tăng (R1, R18; Q16, Q22); claim: kiểm thiết lập với tài khoản FB, quyền gói FB (sản phẩm 3/10), số tài khoản FB chạy cùng lúc; trần gói FB trong `aka_agent_engine_action_limit`; `mark_sending` có kiểm hạn mức cho mốc lặp; khoá lượt theo lịch trong `auto_engine_target_runs` cho trang cá nhân / newsfeed (claim `campaign_slot`, lịch kế tiếp, mục 4.4); chạy lại sau N giờ khi xong trong `finish_campaign` (tìm data, comment seeding, newsfeed, mục 4.5); bảng danh mục bước FB (kèm cú bấm gửi, bảng chọn workflow cho engine) + seed; luật phân loại FB, cả luật theo (thao tác, phần tử); mã mới `engine v2`; chính sách FB theo bảng duyệt đã chốt (Q3, chốt xong trước migration này); phần ảnh lỗi ở mục 12.6 (bảng yêu cầu chẩn đoán, bucket riêng tư, bản presence mới) | có (hàm mới / thay thân hàm engine, bảng mới, dữ liệu; đổi bảng `auto_engine_target_runs` mà Zalo đang dùng, ALTER để giao dịch riêng) | không | không | không (chỉ engine đọc; thiết lập tắt) |
+| 0. Nền DB | Thiết lập `engine.facebook` (chưa có dòng = tắt) + RPC đọc cho Desktop; thiết lập trần số comment (đề xuất `facebook.max_comments` = 20, Q10); hàm chỉ đọc tra lỗi theo data / lượt và liệt kê chiến dịch đứng / lỗi lạ tăng (R1, R18; Q16, Q22); claim: kiểm thiết lập với tài khoản FB, quyền gói FB (sản phẩm 3/10), số tài khoản FB chạy cùng lúc; trần gói FB trong `aka_agent_engine_action_limit`; `mark_sending` giữ như bộ cũ, không kiểm hạn mức giữa vòng (Q10); khoá lượt theo lịch trong `auto_engine_target_runs` cho trang cá nhân / newsfeed (claim `campaign_slot`, lịch kế tiếp, mục 4.4); chạy lại sau N giờ khi xong trong `finish_campaign` (tìm data, comment seeding, newsfeed, mục 4.5); bảng danh mục bước FB (kèm cú bấm gửi, bảng chọn workflow cho engine) + seed; luật phân loại FB, cả luật theo (thao tác, phần tử); mã mới `engine v2`; chính sách FB bản nháp giữ hành vi bộ cũ, sửa theo bảng duyệt trước khi apply (Q3; thứ tự chốt 16/11 tối); phần ảnh lỗi ở mục 12.6 (bảng yêu cầu chẩn đoán, bucket riêng tư, bản presence mới) | có (hàm mới / thay thân hàm engine, bảng mới, dữ liệu; đổi bảng `auto_engine_target_runs` mà Zalo đang dùng, ALTER để giao dịch riêng) | không | không | không (chỉ engine đọc; thiết lập tắt) |
 | 1. Desktop | Lõi chế độ workflow; hook `beforeNode` / `afterNode` trong `workflowEngine`; bọc `PageController` ghi vết thao tác; chụp ảnh ở mọi bước lỗi, lưu JPEG, dọn theo giới hạn, trả lời yêu cầu chẩn đoán; cổng FB (trang ẩn, danh tính Page, nội dung xoay vòng theo lease, nghỉ / lướt FB, nhóm data, chống gửi lặp); `helpers.commitPoint`; bộ chạy Desktop chọn theo thiết lập tổ chức và hàm phủ FB của lõi (mục 8.3); nhận lượt theo lịch, newsfeed dừng theo số phút khách cài (mục 4.4); vá AutoCheck: tài khoản đang `checkpoint` chỉ nâng lại khi hỏi thẳng Facebook thấy hết (Q6, mục 7.3); nhận ra block treo (10 phút liền không có thao tác) và huỷ cửa sổ ẩn (Q20, R16); câu chờ khi chiến dịch đến lịch quá 10 phút chưa chạy được, nút "Lý do đang chờ" hiểu trạng thái engine (Q21, R17); trần số comment đọc từ thiết lập (mặc định 20) cho ô "Số comment tối đa" và "Số bài cần comment…" ở form, AI điền form và lúc chạy, chiến dịch cũ đặt hơn trần chỉ chạy tới trần (Q10); ghi mã lượt engine vào `auto_runs` và script tra lỗi (R1, Q16); nhật ký SQLite dùng chung | không | **có**; cài thử máy nội bộ trước | không | không (thiết lập tắt); riêng việc dọn thư mục ảnh cũ, bản vá AutoCheck, câu chờ và trần 20 comment có hiệu lực ngay với máy cài bản mới, kể cả lượt chạy bộ cũ và Zalo |
 | 2. Công cụ chép bản engine | Script chép + sổ cặp (block cũ ↔ bản engine, md5) + kiểm hai bản khớp (Q7, mục 3.7). Bảng chọn workflow nằm trong danh mục của engine | không (chỉ thêm dòng dữ liệu) | không | thêm dòng mới, không sửa dòng đang dùng | không với bản cũ |
-| 3. Cả 13 loại cùng lúc (anh chốt gộp, Q9) | Chép bản "[engine] …" cho cả 13 loại một lần; 8 block `evaluate` tách cú bấm ra. Một mốc: hộp thư Page (17% lịch sử), tham gia nhóm (5%), nhắn UID + nhắn bạn bè (10%), trang cá nhân (lượt theo lịch, Q4). Vòng comment / like: comment seeding bài (gồm Up tin, 7%; hạn mức giữa vòng, nội dung theo data V531), newsfeed (lượt theo lịch 25 phút – 2 giờ, Q4). Đăng nhóm (53%): đăng, chia sẻ nguyên bài, comment sau đăng, tham gia / rời nhóm, danh tính Page, sinh lượt Up tin, bỏ qua nhóm cần duyệt. Comment seeding (lượt tới 6 giờ), đăng Page (Graph API), mời vào nhóm (theo lô). Tìm data (Q5, mục 4.5): đẩy data theo lease, chống trùng, đẩy nốt phần dở | chính sách theo bảng duyệt; RPC đẩy sang chiến dịch khác và dấu "đã đẩy" của tìm data | **có, một lần** khi cả 13 loại qua phát lại dữ liệu thật và bộ kịch bản; trong lúc làm, loại nào xong thì tổ chức thử chạy bằng bản cài nội bộ (không phát hành) | thêm producer ở bản "[engine]" khi cần | chỉ tổ chức thử (Q19) |
+| 3. Cả 13 loại cùng lúc (anh chốt gộp, Q9) | Chép bản "[engine] …" cho cả 13 loại một lần; 8 block `evaluate` tách cú bấm ra. Một mốc: hộp thư Page (17% lịch sử), tham gia nhóm (5%), nhắn UID + nhắn bạn bè (10%), trang cá nhân (lượt theo lịch, Q4). Vòng comment / like: comment seeding bài (gồm Up tin, 7%; hạn mức giữa vòng, nội dung theo data V531), newsfeed (lượt theo lịch 25 phút – 2 giờ, Q4). Đăng nhóm (53%): đăng, chia sẻ nguyên bài, comment sau đăng, tham gia / rời nhóm, danh tính Page, sinh lượt Up tin, bỏ qua nhóm cần duyệt. Comment seeding (lượt tới 6 giờ), đăng Page (Graph API), mời vào nhóm (theo lô). Đăng nhóm kèm chia sẻ sang nhóm đã tham gia: nhận thêm nhóm đã chọn vào lượt, ghi dấu từng nhóm. Tìm data (Q5, mục 4.5): dòng "Tìm data" không gắn thao tác, đẩy data như bộ cũ | chính sách theo bảng duyệt; claim nhận đúng danh sách data, report_v1 nhận kết quả không gắn thao tác (V558) | **có, một lần** khi cả 13 loại qua phát lại dữ liệu thật và bộ kịch bản; trong lúc làm, loại nào xong thì tổ chức thử chạy bằng bản cài nội bộ (không phát hành) | thêm producer ở bản "[engine]" khi cần | chỉ tổ chức thử (Q19) |
 | 4. Mở cho khách | Thêm tổ chức vào `engine.facebook` theo lô, như Zalo 13–14/11; tắt khẩn cấp bằng `mode: off` | không (chỉ UPDATE thiết lập) | không | không | tổ chức được thêm chạy bộ mới cho cả 13 loại |
 
 Ảnh lỗi và yêu cầu chẩn đoán đi cùng đợt 0 (DB) và đợt 1 (Desktop), chi tiết ở mục 12.6.
@@ -785,7 +875,7 @@ không chép thân từ migration cũ; kiểm sổ migration và `git log --all`
 |---|---|---|
 | Q1 | Bật FB bằng gì? | **Đã chốt 16/11: chỉ theo tổ chức**, không có công tắc theo loại, như Zalo; loại nào chạy bộ mới do bản Desktop quyết định. **Danh sách tổ chức nằm trong thiết lập `engine.facebook`** (`auto_system_settings`), không thêm cột trên `org_organization` (mục 8.2, 8.3) |
 | Q2 | Tạm dừng / đăng xuất khi đang chạy một data dài (vòng comment, lượt tới 6 giờ): dừng ở ranh giới mốc hay chờ hết data như Zalo? | **Đã chốt 16/11: dừng ở ranh giới mốc**; data đã gửi ít nhất một mốc thì "hoàn thành" kèm ghi chú, mốc còn lại không chạy tiếp (mục 7.2) |
-| Q3 | Seed: giữ đúng cách đếm của bộ cũ (mục 5.3, gồm chỗ lệch `actionResultRuntime.ts:151`) ở lần bật đầu, rồi duyệt bảng FB sau? | **Đã chốt 16/11: duyệt bảng FB trước lần bật đầu**; seed sinh từ bảng đã chốt, bộ cũ là một cột đối chiếu, mặc định chỉ đổi engine (mục 5.3) |
+| Q3 | Seed: giữ đúng cách đếm của bộ cũ (mục 5.3, gồm chỗ lệch `actionResultRuntime.ts:151`) ở lần bật đầu, rồi duyệt bảng FB sau? | **Đã chốt 16/11: duyệt bảng FB trước lần bật đầu**; seed sinh từ bảng đã chốt, bộ cũ là một cột đối chiếu, mặc định chỉ đổi engine (mục 5.3). **Thứ tự (16/11 tối): code xong hết đợt 0–3 rồi mới duyệt bảng**, trước khi apply migration chính sách và bật tổ chức thử (mục 10) |
 | Q4 | Trang cá nhân, newsfeed (không có dòng data): giữ bộ cũ ở các đợt đầu? | **Đã chốt 16/11: làm sớm**: lượt theo lịch vào đợt 0 (DB) và đợt 1 (Desktop); trang cá nhân và newsfeed làm trong đợt 3 cùng các loại khác (mục 4.4, 10) |
 | Q5 | Tìm data trong group / bằng search (chỉ đọc): đưa vào engine không? | **Đã chốt 16/11: đưa vào engine**, làm trong đợt 3. Không chỉ đọc: đẩy data sang chiến dịch khác, nhóm data, akaBiz Desktop, nên engine đẩy theo lease và chống trùng (mục 4.5) |
 | Q6 | Checkpoint (FB04): chính sách đang có khoá mọi thao tác FB không thời hạn, tạm dừng tài khoản; chưa từng có code phát mã này. Giữ hay khoá có hạn? | **Đã chốt 16/11: coi checkpoint như trạng thái đăng nhập**, không khoá thao tác, không tạm dừng tài khoản, hết checkpoint thì tự chạy tiếp; kèm vá AutoCheck cho tài khoản thường (mục 7.3) |
@@ -936,8 +1026,9 @@ Còn thiếu:
 - **R9. Luật "không nuốt lỗi"** cho code engine FB: mọi `catch` phải báo kết quả có mã hoặc ném tiếp; thêm vào script kiểm ranh giới để chặn
   `.catch(() => {})` và `console.error` đứng một mình trong cổng FB. Lỗi của chính hook `beforeNode` / `afterNode` thành kết quả SYS, không chỉ
   bọc `try/catch` rồi bỏ qua. Mọi lời gọi RPC của engine có hạn giờ ở app (hôm nay lời gọi DB không có, 13.6).
-- **R10. Việc sau kết quả chạy theo lease, chống trùng, làm nốt khi bị ngắt**: mục 4.5 đã có cho tìm data; còn thiếu sinh lượt Up tin sau khi
-  đăng nhóm thành công (`campaignScheduler.ts:14235-14398`), đẩy sang SMS / akaBiz nếu có.
+- **R10. Việc sau kết quả (anh chốt 16/11 khuya: như bộ cũ)**: đẩy data tìm được, sinh lượt Up tin sau khi đăng nhóm thành công
+  (`campaignScheduler.ts:14235-14398`), đẩy sang SMS / akaBiz chạy trong cùng lượt như bộ cũ; bị ngắt thì mất phần chưa làm, không trùng.
+  Không làm dấu "đã làm" / "lượt sau làm nốt" (bỏ bảng T4 và `followup_v1` khỏi V556).
 - **R11. Mọi trạng thái dừng do engine đặt phải có lối ra**: data / tài khoản / chiến dịch bị "tạm dừng" hoặc khoá thì hoặc có hạn tự mở lại,
   hoặc có câu nói khách cần làm gì. Bảng duyệt (Q3) thêm cột "lối ra" cho từng mã.
 

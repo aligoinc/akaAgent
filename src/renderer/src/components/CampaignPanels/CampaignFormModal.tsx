@@ -149,6 +149,7 @@ import {
   ZALO_SHARE_REPEAT_MINUTES_ERROR, parseZaloShareRepeatMinutes
 } from '../../../../shared/zaloShareRepeat'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
+import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
 import {
   findInvalidAdvancedContentItemIndex,
   normalizeAdvancedContentItems
@@ -1737,6 +1738,8 @@ export default function CampaignFormModal({
   const authUser = useAuthStore(state => state.user)
   // Công tắc hiển thị "Gửi lặp lại sau mỗi x phút" (cùng công tắc với Web, đọc một lần khi đăng nhập).
   const zaloShareRepeatFeatureEnabled = useDesktopPollingStore(state => state.settings.zaloShareRepeatEnabled === true)
+  // Q10: trần số comment / số bài cần comment của Facebook (facebook.max_comments, mặc định 20).
+  const facebookMaxComments = useDesktopPollingStore(state => state.settings.facebookMaxComments ?? DEFAULT_FACEBOOK_MAX_COMMENTS)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -6239,7 +6242,7 @@ export default function CampaignFormModal({
         })
       )
 
-      const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : formData.postsPerTarget
+      const effectivePostsPerTarget = isCommentSeedingPostCampaign ? 1 : clampFacebookCommentCount(formData.postsPerTarget, facebookMaxComments)
       const effectiveEnableMessage = (
         isMessageFriendCampaign ||
         isPageInboxMessageCampaign ||
@@ -6487,7 +6490,7 @@ export default function CampaignFormModal({
             enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
-            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : formData.commentCount,
+            commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : clampFacebookCommentCount(formData.commentCount, facebookMaxComments),
             commentContent: formData.commentContent,
             rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
             enablePostLike: formData.enablePostLike,
@@ -8935,6 +8938,9 @@ export default function CampaignFormModal({
         }
         setFormData(current => {
           const next = { ...current, ...patch }
+          // Q10: AI cũng không đặt quá trần số comment / số bài cần comment.
+          if (patch.commentCount !== undefined) next.commentCount = clampFacebookCommentCount(next.commentCount, facebookMaxComments)
+          if (patch.postsPerTarget !== undefined) next.postsPerTarget = clampFacebookCommentCount(next.postsPerTarget, facebookMaxComments)
           return kind === 'search' ? normalizeFindDataFlagState(next, { isSearchCampaign: isFindDataSearchCampaign }) : next
         })
       }
@@ -12997,7 +13003,7 @@ export default function CampaignFormModal({
       const next = { ...current, actionLimitsByCode: { ...current.actionLimitsByCode } }
       if (patch.sleepBetweenActions !== undefined) next.sleepBetweenActions = patch.sleepBetweenActions
       if (patch.continueWhenActionLimitReached !== undefined) next.continueWhenActionLimitReached = patch.continueWhenActionLimitReached
-      if (patch.postsPerTarget !== undefined) next.postsPerTarget = Math.max(1, patch.postsPerTarget)
+      if (patch.postsPerTarget !== undefined) next.postsPerTarget = clampFacebookCommentCount(patch.postsPerTarget, facebookMaxComments)
       for (const { actionCode, values } of actions) {
         next.actionLimitsByCode[actionCode] = {
           ...(current.actionLimitsByCode[actionCode] || toActionLimitForm(undefined, current)), ...values,
@@ -13225,8 +13231,9 @@ export default function CampaignFormModal({
                   <input
                     type="number"
                     min={1}
+                    max={facebookMaxComments}
                     value={formData.commentCount}
-                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                    onChange={e => setFormData(p => ({ ...p, commentCount: clampFacebookCommentCount(e.target.value, facebookMaxComments) }))}
                     className="stepper-input"
                     style={{ width: 120 }}
                     disabled={formData.commentType !== 'others'}
@@ -13249,8 +13256,9 @@ export default function CampaignFormModal({
                   <input
                     type="number"
                     min={1}
+                    max={facebookMaxComments}
                     value={formData.commentCount}
-                    onChange={e => setFormData(p => ({ ...p, commentCount: Number(e.target.value) }))}
+                    onChange={e => setFormData(p => ({ ...p, commentCount: clampFacebookCommentCount(e.target.value, facebookMaxComments) }))}
                     className="stepper-input"
                     style={{ width: 120 }}
                     disabled={formData.commentType !== 'all'}
@@ -17474,8 +17482,9 @@ export default function CampaignFormModal({
                           <input
                             type="number"
                             min={1}
+                            max={facebookMaxComments}
                             value={formData.postsPerTarget}
-                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: Math.max(1, Number(e.target.value) || 1) }))}
+                            onChange={e => setFormData(p => ({ ...p, postsPerTarget: clampFacebookCommentCount(Number(e.target.value) || 1, facebookMaxComments) }))}
                             className="stepper-input stepper-input-with-unit"
                           />
                           <span className="stepper-input-unit">bài</span>

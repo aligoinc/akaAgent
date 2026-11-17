@@ -45,6 +45,11 @@ export interface BlockHelpers {
   logRunEvents?(events: Record<string, unknown>[]): Promise<OptionalHelperUnsupportedResult | unknown>
   /** Optional helper: call a centralized AI configuration by ai_using.code. */
   callAIUsing?(code: string, payload?: Record<string, unknown>): Promise<OptionalHelperUnsupportedResult | unknown>
+  /**
+   * Engine v2 (Facebook): điểm cam kết ngay trước cú bấm gửi không đảo được. Chỉ có khi engine chạy; bộ cũ không có nên block gọi kiểu
+   * `await helpers.commitPoint?.({ actionCode })`. Ném lỗi (mất lease, DB không cho) thì block phải dừng trước cú bấm.
+   */
+  commitPoint?(options?: { actionCode?: string; key?: string }): Promise<void>
   /** Zalo browserless helpers. Implemented only by campaign runtime. */
   zaloFindPhoneUser(options: ZaloFindPhoneUserOptions): Promise<ZaloActionHelperResult>
   zaloResolveGroupMemberTarget(options: ZaloResolveGroupMemberTargetOptions): Promise<ZaloActionHelperResult>
@@ -97,9 +102,17 @@ export interface BlockRuntimeMetadata {
   nodeId?: string
   blockId?: number
   blockName?: string
+  /** Engine v2: khoá mốc của lần chạy block này (nodeId, thêm #i[.j] khi nằm trong vòng lặp). */
+  stepKey?: string
 }
 
 export interface BlockRuntimeHelpers {
+  /** Engine v2 (Facebook): ghi dấu "sắp gửi" của mốc trước cú bấm; ném lỗi thì block dừng. */
+  commitPoint?: (options: { actionCode?: string; key?: string }, metadata: BlockRuntimeMetadata) => Promise<void>
+  /** Engine v2: báo block bắt đầu / xong một lần nghỉ theo cài đặt (helpers.sleep), để bộ nhận ra block treo không tính lúc nghỉ. */
+  observeSleep?: (phase: 'start' | 'end', ms: number, metadata: BlockRuntimeMetadata) => void
+  /** Engine v2: helpers.element / elementWith vừa đổi tên phần tử ra selector; vết thao tác ghi tên thay cho XPath. */
+  observeElement?: (name: string, selector: string, metadata: BlockRuntimeMetadata) => void
   prepareCampaignContent?: (options: CampaignContentPreparationOptions, metadata: BlockRuntimeMetadata) => Promise<PreparedCampaignContent<string>>
   checkGroupPendingContent?: (options: GroupPendingContentCheckOptions) => Promise<GroupPendingContentCheckResult>
   logRunEvent?: (event: CampaignRunEventInput, metadata: BlockRuntimeMetadata) => Promise<unknown>
@@ -298,17 +311,25 @@ export function createBlockHelpers(
   const baseHelpers: BlockHelpers = {
     async sleep(ms: number, signal?: AbortSignal): Promise<void> {
       if (signal?.aborted) throw new Error('Block bị huỷ trước khi sleep')
-      return new Promise((resolve, reject) => {
-        const timer = setTimeout(() => {
-          if (signal) signal.removeEventListener('abort', onAbort)
-          resolve()
-        }, ms)
-        const onAbort = () => {
-          clearTimeout(timer)
-          reject(new Error('Block bị huỷ trong khi sleep'))
-        }
-        if (signal) signal.addEventListener('abort', onAbort, { once: true })
-      })
+      const observe = (phase: 'start' | 'end') => {
+        try { runtimeHelpers.observeSleep?.(phase, ms, runtimeMetadata) } catch { /* chỉ để quan sát, không ảnh hưởng block */ }
+      }
+      observe('start')
+      try {
+        return await new Promise<void>((resolve, reject) => {
+          const timer = setTimeout(() => {
+            if (signal) signal.removeEventListener('abort', onAbort)
+            resolve()
+          }, ms)
+          const onAbort = () => {
+            clearTimeout(timer)
+            reject(new Error('Block bị huỷ trong khi sleep'))
+          }
+          if (signal) signal.addEventListener('abort', onAbort, { once: true })
+        })
+      } finally {
+        observe('end')
+      }
     },
 
     log(message: string): void {
@@ -363,15 +384,19 @@ export function createBlockHelpers(
     },
 
     async element(name: string): Promise<string> {
-      return await resolveXpathByName(name)
+      const selector = await resolveXpathByName(name)
+      try { runtimeHelpers.observeElement?.(name, selector, runtimeMetadata) } catch { /* chỉ để quan sát */ }
+      return selector
     },
 
     async elementWith(name: string, vars: Record<string, string | number>): Promise<string> {
       const tpl = await resolveXpathByName(name)
-      return tpl.replace(/\$\{(\w+)\}/g, (_, k) => {
+      const selector = tpl.replace(/\$\{(\w+)\}/g, (_, k) => {
         const v = vars[k]
         return v === undefined ? '' : String(v)
       })
+      try { runtimeHelpers.observeElement?.(name, selector, runtimeMetadata) } catch { /* chỉ để quan sát */ }
+      return selector
     },
 
     async checkGroupPendingContent(options: GroupPendingContentCheckOptions): Promise<GroupPendingContentCheckResult> {
@@ -488,6 +513,13 @@ export function createBlockHelpers(
         logCollector(`[warn] helper logRunEvents failed: ${message}`)
         return { ok: false, error: message }
       }
+    }
+  }
+
+  if (runtimeHelpers.commitPoint) {
+    // Không nuốt lỗi như các helper khác: ghi dấu không được thì block phải dừng trước cú bấm gửi.
+    baseHelpers.commitPoint = async (options: { actionCode?: string; key?: string } = {}) => {
+      await runtimeHelpers.commitPoint!(options ?? {}, runtimeMetadata)
     }
   }
 

@@ -2528,6 +2528,39 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
  * part of the CAS: a concurrent edit, pause or claim makes this update affect
  * zero rows instead of overwriting the newer state.
  */
+/**
+ * Q11 (engine v2 Facebook): viết lại ghi chú của chiến dịch engine vừa tạm dừng theo chuỗi lỗi (câu AI đọc ảnh, như bộ cũ). Chỉ ghi khi
+ * chiến dịch còn tạm dừng với đúng câu DB vừa ghi (khách chưa bấm Tiếp tục, chưa có ghi chú mới); updated_at tiến 1 ms từ giá trị DB
+ * (không tin giờ máy), như updatePendingUnclaimedCampaignNote. Trả null khi không ghi.
+ */
+export async function reviseEnginePausedCampaignNote(id: number, expectedNote: string, note: string): Promise<Campaign | null> {
+  const normalizedId = Math.floor(Number(id))
+  if (!Number.isSafeInteger(normalizedId) || normalizedId <= 0) throw new Error('Campaign ID must be a positive integer')
+  const u = requireCurrentUser()
+  const { data: current, error: readError } = await client()
+    .from('auto_campaigns')
+    .select('id, status, note, updated_at')
+    .eq('id', normalizedId)
+    .eq('staff_id', u.staffId)
+    .maybeSingle()
+  if (readError) throw new Error(`Failed to read paused campaign note: ${readError.message}`)
+  const row = current as { status?: string; note?: string | null; updated_at?: string } | null
+  if (!row || row.status !== 'tạm dừng' || row.note !== expectedNote || !row.updated_at) return null
+  const updatedAtMs = Date.parse(row.updated_at)
+  if (!Number.isFinite(updatedAtMs)) return null
+  const { data, error } = await client()
+    .from('auto_campaigns')
+    .update({ note, updated_at: new Date(updatedAtMs + 1).toISOString() })
+    .eq('id', normalizedId)
+    .eq('staff_id', u.staffId)
+    .eq('status', 'tạm dừng')
+    .eq('updated_at', row.updated_at)
+    .select(CAMPAIGN_SELECT)
+    .maybeSingle()
+  if (error) throw new Error(`Failed to revise paused campaign note: ${error.message}`)
+  return data ? mapCampaignFromDB(data) : null
+}
+
 export async function updatePendingUnclaimedCampaignNote(
   id: number,
   expectedUpdatedAt: string,
