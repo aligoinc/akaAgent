@@ -19,7 +19,7 @@
 > Q23 mỗi mã lỗi một câu cho khách dùng chung mọi chỗ, kèm câu bước tiếp theo, anh duyệt từng câu; Q22 không gửi báo giám sát,
 > anh hỏi trong phiên thì chạy hàm kiểm (16/11).
 >
-> **Tình trạng code (16/11 khuya, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, chưa commit, chưa apply gì):**
+> **Tình trạng code (16–17/11, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, PR [aligoinc/akaAgent#690](https://github.com/aligoinc/akaAgent/pull/690) vào `dev_3` mở 17/11, chưa merge, chưa apply gì):**
 > - Migration (chưa apply): V556 p1/p2 (bảng, thiết lập, hàm tra lỗi / ảnh lỗi; bỏ bảng T4 "việc sau kết quả" theo anh chốt), V557 (lượt
 >   theo lịch), V558 (thân hàm engine; `resolve_policy` giải `inherit` đúng như bộ cũ; claim nhận đúng danh sách data trong lượt đang giữ
 >   lease; `report_v1` nhận dòng "Tìm data" không gắn thao tác; gỡ V558 từ chối khi còn chính sách `inherit`), **V559 bản nháp chính sách
