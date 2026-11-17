@@ -1,6 +1,6 @@
 # Lặp lại chiến dịch sau khi chạy xong — phần cài đặt trên Desktop
 
-Trạng thái 17/11/2026: nhánh `claude/campaign-repeat-after-completion` (tách từ `dev_3`), chưa merge, chưa build/phát hành.
+Trạng thái 17/11/2026: đã merge `dev_3` qua [#689](https://github.com/aligoinc/akaAgent/pull/689) theo yêu cầu (nhánh `claude/campaign-repeat-after-completion`; akaAgentWebApp `dev_1` qua #249), chưa build/phát hành.
 
 **Nhánh này chỉ có phần cài đặt**: ô trên form, lưu vào DB khi tạo / sửa / tắt, dòng hiển thị ở chi tiết chiến dịch. **Chưa có gì làm cho chiến dịch thật sự chạy lại** (người dùng chốt 17/11/2026: chỉ làm cài đặt trên giao diện và lưu vào DB). Không có migration, cột, bảng, RPC hay thay đổi bộ chạy nào. Bản đầy đủ từng viết (V556, bộ chạy Desktop, bộ quét của API) còn trong lịch sử nhánh ở commit `3534c4a` và `7f6d5c5`, chưa từng apply hay phát hành.
 
