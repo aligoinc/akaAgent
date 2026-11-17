@@ -549,6 +549,21 @@ export class FacebookLoginService {
       ...(input.twoFactorSecret !== undefined ? { twoFactorSecret: normalizeTwoFactorSecret(input.twoFactorSecret) } : {}) })
   }
   isLoggingIn(accountId: number): boolean { return this.active.has(accountId) }
+
+  /**
+   * Q6 (16/11/2026): tài khoản đang "checkpoint" chỉ được nâng về "đã đăng nhập" khi hỏi thẳng Facebook thấy phiên đã qua xác minh
+   * (checkpoint còn cookie c_user nên AutoCheck theo cookie sẽ nâng nhầm). true = đã hết checkpoint; false = còn / không xác định.
+   */
+  async checkpointCleared(wc: WebContents): Promise<boolean> {
+    if (wc.isDestroyed()) return false
+    try {
+      const observation = await inspectFacebookSession(wc.session, AbortSignal.timeout(20_000),
+        this.proxyRuntime.getSessionProxyAuthentication(wc.session))
+      return observation.state === 'authenticated'
+    } catch {
+      return false
+    }
+  }
   private async runLogin(accountId: number, input?: FacebookCredentialUpdate, takeRestoreTurn?: StartupRestoreTurn): Promise<void> {
     this.check()
     if (this.active.has(accountId)) throw new Error('Tài khoản đang được đăng nhập lại.')

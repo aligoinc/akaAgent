@@ -18,6 +18,7 @@ import {
 import { desktopEngineData, finishEngineCampaign } from './desktopEngineData'
 import { SqliteEngineJournal } from './desktopEngineJournal'
 import { createDesktopZaloPort } from './desktopZaloPort'
+import { facebookEngineSupport, facebookUnitConfig, type DesktopFacebookHost, type FacebookUnitSession } from './facebook/desktopFacebookRunner'
 
 /** Lời gọi Zalo dài nhất của một bước: gửi chữ 90 giây (zaloRuntimeService), tra số tối đa 2 lần. */
 const STEP_TIMEOUT_MS = 150_000
@@ -68,6 +69,8 @@ export interface DesktopEngineHost {
   noteCampaignWait(campaign: Campaign, note: string): Promise<void>
   /** AI viết lại nội dung (rewriteZaloMessageForRun của bộ cũ); ném lỗi kèm câu khi không dùng được. */
   rewriteMessage(account: AutoAccount, campaign: Campaign, inputDataId: number | null, content: string): Promise<string>
+  /** Chiến dịch Facebook (V556–V558): không có thì mọi chiến dịch FB chạy bộ cũ. */
+  facebook?: DesktopFacebookHost
 }
 
 function toCoreCampaign(campaign: Campaign): ZaloCampaign {
@@ -91,15 +94,20 @@ function formatVietnamTime(iso: string): string {
   return `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}`
 }
 
+const isFacebookAccount = (account: AutoAccount): boolean => String(account.flatformType || '').trim().toLowerCase() === 'facebook'
+
 export class DesktopEngineRunner {
   private readonly runs = new Map<number, AbortController>()
   /** Một mã cho tiến trình app này: lease của lần chạy trước (app đã tắt) tự hết hạn, không bị nhận nhầm. */
   private readonly runnerId = `desktop:${randomUUID()}`
+  /** Chiến dịch FB mà claim trả not_enabled (tắt khẩn cấp engine.facebook): chạy bộ cũ tới hết phiên. */
+  private readonly facebookDisabled = new Set<number>()
 
   constructor(private readonly host: DesktopEngineHost) {}
 
   /** Chiến dịch có chạy bằng bộ mới ở bản cài này không. */
   support(account: AutoAccount, campaign: Campaign): V2Support {
+    if (isFacebookAccount(account)) return facebookEngineSupport(this.host.facebook, this.facebookDisabled, account, campaign)
     // Công tắc theo tổ chức (V513): cờ tắt, chưa đọc được hay DB chưa có hàm thì chạy bộ cũ như bản chưa có engine v2.
     // Cờ chốt lúc đăng nhập, nên không đổi bộ chạy giữa lúc chiến dịch đang chạy dở.
     if (!this.host.engineEnabled()) return { ok: false, reason: 'org_flag_off' }
@@ -125,6 +133,7 @@ export class DesktopEngineRunner {
   }
 
   async run(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
+    if (isFacebookAccount(account)) return this.runFacebook(account, campaign)
     const zaloRuntime = this.host.zaloRuntime()
     const staffId = this.host.staffId()
     if (!zaloRuntime || !staffId || this.host.zaloRuntimeBlocked() || this.runs.has(account.id)) return null
@@ -207,18 +216,7 @@ export class DesktopEngineRunner {
         heartbeatMs: HEARTBEAT_MS,
         retry: DEFAULT_RETRY,
         drainTimeoutMs: DRAIN_TIMEOUT_MS,
-        onNoTarget: async (info, signal) => {
-          // Như bộ cũ: chiến dịch chưa có data nào mà đang có nguồn tìm data thì chờ, không tự hoàn thành.
-          if (!info.hasTargets) {
-            const waitNote = await this.host.findDataSourceWaitNote(campaign)
-            if (waitNote) {
-              await this.host.noteCampaignWait(campaign, waitNote)
-              return { reason: 'waiting_linked_source' }
-            }
-          }
-          // note: câu hoàn thành của bước lấy data đầu lượt (không có sinh nhật / đề xuất / lời mời…), như complete*WithoutTargets.
-          return { ...await finishEngineCampaign(account.id, info.leaseToken, info.note ?? null, { signal, timeoutMs: DEFAULT_RETRY.callTimeoutMs }) }
-        },
+        onNoTarget: (info, signal) => this.onNoTarget(account, campaign, info, signal),
         formatTime: formatVietnamTime,
         shouldStopAfterTarget: () => !this.host.acceptingWork() || this.host.isPauseRequested(campaign.id)
       }, controller.signal)
@@ -234,6 +232,95 @@ export class DesktopEngineRunner {
       await this.host.broadcastCampaign(campaign.id).catch(() => undefined)
       this.host.broadcastAccounts()
       if (result) console.info('[CampaignEngine] unit ended', { campaignId: campaign.id, accountId: account.id, reason: result.reason, targets: result.targets })
+    }
+  }
+
+  private async onNoTarget(account: AutoAccount, campaign: Campaign, info: { leaseToken: string; hasTargets: boolean; note?: string | null },
+    signal: AbortSignal): Promise<Record<string, unknown>> {
+    // Như bộ cũ: chiến dịch chưa có data nào mà đang có nguồn tìm data thì chờ, không tự hoàn thành.
+    if (!info.hasTargets) {
+      const waitNote = await this.host.findDataSourceWaitNote(campaign)
+      if (waitNote) {
+        await this.host.noteCampaignWait(campaign, waitNote)
+        return { reason: 'waiting_linked_source' }
+      }
+    }
+    // note: câu hoàn thành của bước lấy data đầu lượt (không có sinh nhật / đề xuất / lời mời…), như complete*WithoutTargets.
+    return { ...await finishEngineCampaign(account.id, info.leaseToken, info.note ?? null, { signal, timeoutMs: DEFAULT_RETRY.callTimeoutMs }) }
+  }
+
+  /**
+   * Chiến dịch Facebook: lõi chạy chế độ workflow, phiên của bộ lập lịch chạy từng data (trang ẩn, biến, workflow cho engine, bộ dựng
+   * dòng lịch sử của bộ cũ). Mỗi tài khoản một lượt; tạm dừng giữa data thì dừng sau mốc đang chạy (Q2).
+   */
+  private async runFacebook(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
+    const facebook = this.host.facebook
+    const staffId = this.host.staffId()
+    if (!facebook || !staffId || this.runs.has(account.id)) return null
+    const controller = new AbortController()
+    this.runs.set(account.id, controller)
+    let progress: Promise<void> = Promise.resolve()
+    const log = (text: string): void => {
+      progress = progress.then(() => this.host.logProgress(campaign, text)).catch(error => {
+        console.error('[CampaignEngine] failed to log progress', { campaignId: campaign.id, error })
+      })
+    }
+    const trace = (event: { type: string; [key: string]: unknown }): void => {
+      if (event.type === 'unit_started') {
+        progress = progress.then(async () => {
+          await this.host.broadcastCampaign(campaign.id)
+          this.host.broadcastAccounts()
+        }).catch(() => undefined)
+        return
+      }
+      if (/failed|error|lost|rejected|refused/.test(event.type)) console.warn('[CampaignEngine]', { campaignId: campaign.id, accountId: account.id, ...event })
+    }
+    let session: FacebookUnitSession | null = null
+    let result: UnitResult | null = null
+    try {
+      session = await facebook.openUnit(account, campaign, controller.signal)
+      const fbConfig = await facebookUnitConfig({ host: facebook, account, campaign, signal: controller.signal }, session)
+      result = await runUnit({
+        data: desktopEngineData,
+        journal: new SqliteEngineJournal(`${staffId}:${account.id}`),
+        clock: systemClock,
+        events: { progress: line => log(line.text), trace }
+      }, {
+        runnerId: this.runnerId,
+        runtimeTarget: 'desktop',
+        staffId,
+        accountId: account.id,
+        campaignId: campaign.id,
+        actionId: campaign.actionId,
+        campaignName: campaign.name,
+        accountName: account.name,
+        campaignNote: campaign.note ?? null,
+        ...fbConfig,
+        stepTimeoutMs: STEP_TIMEOUT_MS,
+        heartbeatMs: HEARTBEAT_MS,
+        retry: DEFAULT_RETRY,
+        drainTimeoutMs: DRAIN_TIMEOUT_MS,
+        onNoTarget: (info, signal) => this.onNoTarget(account, campaign, info, signal),
+        formatTime: formatVietnamTime,
+        shouldStopAfterTarget: () => !this.host.acceptingWork() || this.host.isPauseRequested(campaign.id)
+      }, controller.signal)
+      // Tắt khẩn cấp (engine.facebook đổi): chạy bộ cũ cho chiến dịch này tới hết phiên.
+      if (result.reason === 'not_enabled') this.facebookDisabled.add(campaign.id)
+      return result
+    } finally {
+      this.runs.delete(account.id)
+      if (session) {
+        await session.close(result).catch(error => console.error('[CampaignEngine] failed to close Facebook unit', { campaignId: campaign.id, error }))
+      }
+      await progress
+      if (result && this.host.isPauseRequested(campaign.id)) {
+        await this.host.completeReleasedPause(campaign).catch(error => {
+          console.error('[CampaignEngine] failed to complete pause', { campaignId: campaign.id, error })
+        })
+      }
+      await this.host.broadcastCampaign(campaign.id).catch(() => undefined)
+      this.host.broadcastAccounts()
+      if (result) console.info('[CampaignEngine] Facebook unit ended', { campaignId: campaign.id, accountId: account.id, reason: result.reason, targets: result.targets })
     }
   }
 }

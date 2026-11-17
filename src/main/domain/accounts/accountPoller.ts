@@ -12,6 +12,9 @@ import type { FacebookLoginService } from '../../services/facebookLoginService'
 import { accountOperationRegistry } from '../../services/accountOperationRegistry'
 
 const AUTO_CHECK_INTERVAL = 30_000
+/** Q6: tài khoản đang checkpoint hỏi thẳng Facebook tối đa 5 phút một lần (không theo cookie). */
+const CHECKPOINT_VERIFY_INTERVAL = 5 * 60_000
+const checkpointVerifiedAt = new Map<number, number>()
 const ZALO_AUTO_CHECK_INTERVAL = 30 * 60 * 1000
 const ZALO_WEB_AUTH_COOKIE_NAMES = ['zpsid', 'zpw_sek'] as const
 
@@ -47,7 +50,7 @@ async function checkAccountLogin(accountId: number, wcId: number): Promise<strin
   }
 }
 
-async function checkFacebookWebviewAccounts(
+export async function checkFacebookWebviewAccounts(
   accounts: AutoAccount[],
   webviewRegistry: WebviewRegistry,
   facebookLogin?: FacebookLoginService
@@ -70,6 +73,16 @@ async function checkFacebookWebviewAccounts(
         continue
       }
       const newStatus = await checkAccountLogin(accountId, wcId)
+      // Q6 (16/11/2026): checkpoint là một trạng thái đăng nhập. Tài khoản đang checkpoint còn cookie c_user nên kiểm theo cookie sẽ nâng nhầm
+      // về "đã đăng nhập" rồi engine lại chạy vào trang xác minh; chỉ nâng khi hỏi thẳng Facebook thấy đã hết (vài phút một lần).
+      if (newStatus === 'đã đăng nhập' && account?.loginStatus === 'checkpoint') {
+        const last = checkpointVerifiedAt.get(accountId) ?? 0
+        if (!facebookLogin || Date.now() - last < CHECKPOINT_VERIFY_INTERVAL) continue
+        checkpointVerifiedAt.set(accountId, Date.now())
+        const wc = webContents.fromId(wcId)
+        if (!wc || !(await facebookLogin.checkpointCleared(wc))) continue
+        checkpointVerifiedAt.delete(accountId)
+      }
       if (newStatus && account && account.loginStatus !== newStatus) {
         await accountRepo.updateAccount(accountId, { loginStatus: newStatus })
         hasChanges = true

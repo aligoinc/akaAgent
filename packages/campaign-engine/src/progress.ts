@@ -16,6 +16,8 @@ const SKIP_GATE_ERROR_CODES = new Set([OPT_OUT_ERROR_CODE, 'err_engine_send_excl
   'err_engine_friend_blocklisted'])
 /** Dừng chủ động: không phải kết quả với khách, Desktop không in dòng nào. */
 export const CANCELLED_ERROR_CODE = 'err_engine_cancelled'
+/** Facebook (V559 FB45): bước chạy xong mà bộ dựng lịch sử của bộ cũ không ghi dòng nào; bộ cũ không in gì, engine cũng không in. */
+export const NO_HISTORY_ERROR_CODE = 'err_engine_fb_no_history'
 
 const withCode = (text: string, code: string | null): string =>
   code && !text.includes(`(${code})`) ? `${text} (${code})` : text
@@ -162,7 +164,7 @@ export function campaignWaitProgress(campaignId: number, note: string): Progress
 export function outcomeProgress(campaignId: number, inputDataId: number | null, decision: OutcomeDecision,
   context: { actionName: string; targetLabel: string }): ProgressLine | null {
   const code = decision.publicCode
-  if (decision.errorCode === CANCELLED_ERROR_CODE) return null
+  if (decision.errorCode === CANCELLED_ERROR_CODE || decision.errorCode === NO_HISTORY_ERROR_CODE) return null
   if (decision.errorCode && SKIP_GATE_ERROR_CODES.has(decision.errorCode)) {
     return line(campaignId, inputDataId, `🚫 Bỏ qua "${context.targetLabel}": ${withCode(decision.log, code)}`, 'info', code)
   }

@@ -93,6 +93,7 @@ export async function collectCampaignDiagnostics(id: number, runtime: PendingRea
       if (!reason && !running && campaign.diagnosticHasClaim) reason = 'Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.'
       if (!reason && !running && (accountState.hasOperation || account.status !== 'chờ xử lý')) reason = 'Tài khoản đang bận một tác vụ khác.'
       reason ||= runtime.readinessReason(account, campaign)
+      if (!reason && !running) reason = runtime.engineReason?.(account, campaign) ?? null
       if (!reason && !running && (account.flatformType === 'facebook' || account.isZaloShowWeb)) {
         const limits = await getBrowserRunLimits()
         const max = account.flatformType === 'facebook' ? limits.facebookMax : limits.zaloWebMax

@@ -3119,6 +3119,12 @@ export interface AuthUser {
    * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
    */
   campaignEngineV2?: boolean
+  /**
+   * V556: tổ chức nằm trong thiết lập engine.facebook (aka_agent_engine_facebook_enabled_v1, đọc theo phiên). Chốt lúc đăng nhập,
+   * không phụ thuộc quyền Zalo; chỉ khi true bản Desktop này mới chạy chiến dịch Facebook bằng engine v2 (loại nào do hàm phủ quyết định).
+   * Tắt khẩn cấp có hiệu lực ở lần nhận lượt kế tiếp nhờ claim kiểm lại (not_enabled → bộ cũ tới hết phiên).
+   */
+  facebookEngineV2?: boolean
   /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
   chatWebEnabledAtLogin?: boolean
   /** Opaque desktop login generation; never a Chat authentication token. */

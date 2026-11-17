@@ -227,6 +227,10 @@ export class SupabaseService {
   ) {
     return campaignRepo.finalizeCampaign(campaignId, note, expectedStatus)
   }
+  reviseEnginePausedCampaignNote(id: number, expectedNote: string, note: string) {
+    return campaignRepo.reviseEnginePausedCampaignNote(id, expectedNote, note)
+  }
+
   updatePendingUnclaimedCampaignNote(id: number, expectedUpdatedAt: string, note: string) {
     return campaignRepo.updatePendingUnclaimedCampaignNote(id, expectedUpdatedAt, note)
   }

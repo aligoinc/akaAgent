@@ -23,6 +23,9 @@ import {
 } from './progress.js'
 import type { ConfigIssue } from './validation.js'
 
+/** Hạn giờ cho host viết lại câu dừng chiến dịch (Facebook: một lần gọi AI đọc ảnh, như bộ cũ không có hạn riêng). */
+const REVISE_NOTE_TIMEOUT_MS = 60_000
+
 export interface StepContext {
   /** Lượt chạy data (auto_engine_target_runs.id): khoá idempotency cho lệnh gửi của adapter. */
   targetRunId: number
@@ -111,6 +114,84 @@ export interface BatchUnitConfig {
   /** Tối đa số data mỗi lô (Desktop: 50). */
   maxTargets: number
   run(api: BatchApi): Promise<BatchEnd>
+}
+
+/** Một mốc không đảo được của workflow (đăng bài, từng comment, tin nhắn, kết bạn…): khoá kết quả, mã thao tác, tên ghi lịch sử. */
+export interface WorkflowMilestone {
+  key: string
+  actionCode: string
+  actionName?: string
+  /** Thành công thì lõi không in dòng tiến trình (nơi chạy đã in câu riêng của loại chiến dịch, như bộ cũ); lỗi vẫn in kèm mã. */
+  quietOk?: boolean
+}
+
+export type WorkflowStop = { stop: true; reason: UnitEndReason; detail?: Record<string, unknown> }
+
+/** Một data nhận thêm vào lượt workflow đang chạy (claimExtraTargets): lượt data riêng, cùng lease với data chính. */
+export interface WorkflowExtraTarget { targetRunId: number; target: TargetRow }
+
+/**
+ * Những gì lõi cho một lượt workflow (cfg.workflow.runTarget): workflow vẫn chạy từ DB trên máy (Desktop), lõi giữ lease, nhật ký, dấu
+ * "sắp gửi" theo mốc và chỉ thị của DB. Bất biến: chỉ bấm gửi sau khi beginMilestone trả 'ok'.
+ */
+export interface WorkflowTargetApi {
+  readonly targetRunId: number
+  readonly leaseToken: string
+  /** Data đang chạy; lượt theo lịch (loại không có data) thì id = null, name = tên chiến dịch, slotAt = mốc lịch. */
+  readonly target: TargetRow
+  readonly actions: Readonly<Record<string, GateDecision>>
+  readonly gateSettings: Readonly<Record<string, GateSetting>>
+  readonly signal: AbortSignal
+  /**
+   * Ghi dấu "sắp gửi" của mốc (mark_sending). 'ok' = được bấm; { refused } = DB không cho (không bấm, báo mốc lỗi trước khi gửi);
+   * WorkflowStop = mất lease (dừng ngay, không bấm).
+   */
+  beginMilestone(step: WorkflowMilestone): Promise<'ok' | { refused: string } | WorkflowStop>
+  /** Báo kết quả một mốc (chưa chốt data). Trả quyết định của DB, hoặc WorkflowStop khi mất lease / DB từ chối. */
+  reportMilestone(step: WorkflowMilestone, raw: RawOutcome): Promise<ReportSuccess | WorkflowStop>
+  /** Báo nhiều mốc của cùng một block trong một lần (mời vào nhóm theo lô, chia sẻ vào nhiều nhóm). */
+  reportMilestones(entries: ReadonlyArray<{ step: WorkflowMilestone; raw: RawOutcome }>): Promise<ReportSuccess | WorkflowStop>
+  /**
+   * Nhận thêm các data cụ thể của cùng chiến dịch vào lượt đang chạy (đăng nhóm kèm chia sẻ sang nhóm đã tham gia: bộ cũ giữ chỗ các nhóm
+   * chia sẻ cùng data chính). Gọi claim_batch_v1 cùng lease, chỉ nhận đúng các data này (inputDataIds); trả những data nhận được, có thể ít
+   * hơn hoặc không có. Mỗi data nhận thêm có lượt data riêng; data nào chưa được báo thì lõi chốt trước khi data chính kết thúc (đã ghi dấu
+   * "sắp gửi" thì không rõ kết quả, không gửi lại; chưa ghi dấu thì về hàng đợi).
+   */
+  claimExtraTargets(inputDataIds: readonly number[]): Promise<{ items: readonly WorkflowExtraTarget[] } | WorkflowStop>
+  /** Ghi dấu "sắp gửi" cho một data nhận thêm, trước cú bấm chung với data chính. */
+  beginExtraMilestone(targetRunId: number, step: WorkflowMilestone): Promise<'ok' | { refused: string } | WorkflowStop>
+  /**
+   * Báo và chốt một data nhận thêm. Không đổi data chính, không dùng chỉ thị của DB cho lượt (data chính quyết định). quiet: không in dòng
+   * tiến trình nào cho kết quả này. Mất lease thì dừng lượt; DB từ chối thì trả { stop, reason: 'report_rejected' } nhưng lượt chạy tiếp.
+   */
+  reportExtra(targetRunId: number, step: WorkflowMilestone, raw: RawOutcome, options?: { quiet?: boolean }): Promise<ReportSuccess | WorkflowStop>
+  /**
+   * Có dừng trước mốc gửi kế tiếp không: DB đã chốt data (chính sách bỏ các bước còn lại), dừng lượt / tạm dừng chiến dịch từ ngoài,
+   * thoát app, mất lease (anh chốt Q2: tạm dừng giữa data thì dừng sau mốc đang chạy).
+   */
+  shouldStop(): boolean
+  progress(text: string, level?: ProgressLevel): void
+  trace(event: TraceEvent): void
+}
+
+/** Kết thúc một lượt workflow: chạy hết (hoặc dừng ở ranh giới mốc) thì lõi tự chốt data; stop = dừng cả lượt. */
+export type WorkflowTargetEnd = { done: true } | WorkflowStop
+
+/** Chế độ workflow (Facebook): chạy workflow từ DB cho mỗi data / mỗi mốc lịch thay cho các bước TypeScript. */
+export interface WorkflowUnitConfig {
+  /** Loại không có dòng data (trang cá nhân, newsfeed): nhận lượt theo lịch (claim mode campaign_slot), mỗi mốc lịch một lượt. */
+  slotMode?: boolean
+  /**
+   * Loại chiến dịch không có thao tác nào (tìm data Facebook): tên ghi lịch sử cho kết quả không gắn thao tác (bộ cũ ghi "Tìm data" không
+   * mã thao tác). Có tên này thì lượt chạy không cần thao tác nào; kết quả mặc định của lõi (dừng, không có kết quả…) dùng tên này.
+   */
+  resultName?: string
+  runTarget(api: WorkflowTargetApi): Promise<WorkflowTargetEnd>
+  /**
+   * Data vừa chốt làm chiến dịch tạm dừng: host được viết lại câu dừng trước khi in (Facebook: AI đọc ảnh lỗi khi dừng theo chuỗi lỗi chưa
+   * phân loại SYS99, như bộ cũ, Q11) và tự ghi câu mới vào DB; trả câu mới, null thì giữ câu của DB. Có hạn giờ; lỗi chỉ ghi vết.
+   */
+  reviseCampaignNote?(info: { targetRunId: number; inputDataId: number; response: ReportSuccess }, signal: AbortSignal): Promise<string | null>
 }
 
 export interface PrepareTargetsApi {
@@ -213,6 +294,8 @@ export interface UnitConfig {
    * (như Desktop).
    */
   batch?: BatchUnitConfig
+  /** Chế độ workflow (Facebook): mỗi data / mốc lịch chạy cfg.workflow.runTarget thay cho buildSteps. */
+  workflow?: WorkflowUnitConfig
 }
 
 export type UnitEndReason =
@@ -357,7 +440,8 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
           ...(raw.statusCode ? { statusCode: raw.statusCode } : {}), ...(raw.evidence ? { evidence: raw.evidence } : {}),
           ...(raw.data ? { data: raw.data } : {}), ...(raw.customerLog ? { customerLog: raw.customerLog } : {}) }
       : { resultKey: resultKey(claim, step.key), actionCode: step.actionCode, ...named, stepKey: step.key, ok: false, phase: raw.phase,
-          signal: raw.signal, ...(raw.evidence ? { evidence: raw.evidence } : {}), ...(raw.data ? { data: raw.data } : {}) }
+          signal: raw.signal, ...(raw.statusCode ? { statusCode: raw.statusCode } : {}), ...(raw.evidence ? { evidence: raw.evidence } : {}),
+          ...(raw.data ? { data: raw.data } : {}) }
   }
 
   /** Báo kết quả; đang dừng thì chỉ thử một lần, phần còn lại nằm trong nhật ký. */
@@ -408,11 +492,12 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     }
   }
 
-  const handleResponse = (claim: Claimed, res: ReportResponse | null): ReportSuccess | TargetEnd => {
+  const handleResponse = (claim: Claimed, res: ReportResponse | null, quietOk?: ReadonlySet<string>): ReportSuccess | TargetEnd => {
     if (res === null) return { stop: true, reason: ownershipLost ? 'ownership_lost' : 'cancelled' }
     if (!res.ok) return { stop: true, reason: 'report_rejected', detail: { reason: res.reason, targetRunId: claim.targetRunId } }
     for (const decision of res.outcomes) {
       if (!decision.ok && (decision.deliveryState === 'partial' || decision.deliveryState === 'unknown')) uncertainTargets.add(claim.targetRunId)
+      if (decision.ok && quietOk?.has(decision.resultKey)) continue
       const progress = outcomeProgress(cfg.campaignId, claim.target.id, decision,
         { actionName: actionNameOf(decision.actionCode), targetLabel: labelOf(claim.target) })
       if (progress) deps.events.progress(progress)
@@ -635,6 +720,257 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     }
   }
 
+  // ---- Chế độ workflow: một data / một mốc lịch -------------------------------------------------------------------------
+  /**
+   * Chiến dịch vừa tạm dừng theo data này: host viết lại câu dừng (workflow.reviseCampaignNote, Facebook Q11) trước khi in; lỗi / quá hạn giờ
+   * giữ câu của DB. Lượt đang dừng (thoát app, đăng xuất) thì không gọi.
+   */
+  const withRevisedNote = async (claim: Claimed, res: ReportSuccess, workflow: WorkflowUnitConfig): Promise<ReportSuccess> => {
+    const revise = workflow.reviseCampaignNote
+    if (!revise || res.campaign?.effect !== 'pause' || !res.campaign.note || unit.signal.aborted) return res
+    try {
+      const note = await withDeadline('revise_campaign_note', REVISE_NOTE_TIMEOUT_MS, unit.signal, s =>
+        revise({ targetRunId: claim.targetRunId, inputDataId: Number(claim.target.id ?? 0), response: res }, s))
+      return note ? { ...res, campaign: { ...res.campaign, note } } : res
+    } catch (err) {
+      deps.events.trace({ type: 'revise_campaign_note_failed', targetRunId: claim.targetRunId, error: errorMessage(err) })
+      return res
+    }
+  }
+
+  const runWorkflowTarget = async (claim: Claimed, workflow: WorkflowUnitConfig): Promise<TargetEnd> => {
+    const inputDataId = claim.target.id == null ? null : Number(claim.target.id)
+    deps.events.progress(targetStartProgress(cfg.campaignId, inputDataId as number, labelOf(claim.target), cfg.campaignName))
+    // Loại không có thao tác (tìm data, newsfeed chỉ lướt của Facebook): kết quả mặc định của lõi không gắn thao tác, ghi tên
+    // workflow.resultName. Thiếu cả hai (cấu hình không lường trước) vẫn chạy và chốt bằng tên chung, KHÔNG bỏ lượt đang mở (thử thật
+    // 17/11: lượt bị bỏ không nhả được lease, chiến dịch / tài khoản kẹt "đang chạy" tới khi hàm dọn đóng lượt sau 10 phút).
+    const firstAction = cfg.actions[0]?.code ?? ''
+    const resultName = workflow.resultName ?? (firstAction ? undefined : 'Chạy chiến dịch')
+    if (!firstAction && !workflow.resultName) deps.events.trace({ type: 'workflow_no_actions_error', targetRunId: claim.targetRunId })
+    const fallbackStep = (key: string): WorkflowMilestone =>
+      firstAction || !resultName ? { key, actionCode: firstAction } : { key, actionCode: '', actionName: resultName }
+    let reported = 0
+    let closed: ReportSuccess | null = null
+    let stopped: WorkflowStop | null = null
+    /** Mốc đã ghi dấu "sắp gửi" mà chưa báo kết quả (block đang chạy, hoặc nơi chạy quên báo). */
+    const openMarks = new Map<string, WorkflowMilestone>()
+    const progress = (text: string, level: ProgressLevel = 'warning'): void =>
+      deps.events.progress({ campaignId: cfg.campaignId, inputDataId, text, code: /\(([A-Z]{1,4}[0-9]{2,4})\)\s*$/.exec(text)?.[1] ?? null, level })
+    const asStop = (end: TargetEnd): WorkflowStop => end.stop ? end : { stop: true, reason: 'error', detail: { error: 'unexpected_continue' } }
+
+    const reportEntries = async (entries: ReadonlyArray<{ step: WorkflowMilestone; raw: RawOutcome }>): Promise<ReportSuccess | WorkflowStop> => {
+      if (stopped) return asStop(stopped)
+      // DB đã chốt data (chính sách bỏ các bước còn lại): kết quả báo thêm không còn tác dụng, trả lại quyết định đã chốt.
+      if (closed) {
+        deps.events.trace({ type: 'report_after_close', targetRunId: claim.targetRunId, steps: entries.map(e => e.step.key) })
+        return closed
+      }
+      const quiet = new Set(entries.filter(e => e.step.quietOk).map(e => resultKey(claim, e.step.key)))
+      const res = handleResponse(claim, await send(claim, entries.map(e => toReport(claim, e.step, e.raw)), false), quiet)
+      if (!('ok' in res)) { stopped = asStop(res); return stopped }
+      for (const e of entries) openMarks.delete(e.step.key)
+      reported += entries.length
+      if (res.next === 'ownership_lost') { ownershipLost = true; stopped = { stop: true, reason: 'ownership_lost' }; return asStop(stopped) }
+      const afterReport = cfg.afterReport
+      if (afterReport && !unit.signal.aborted) {
+        for (const e of entries) {
+          // Việc kèm theo dòng lịch sử (đẩy data tìm được, sinh lượt Up tin…): có hạn giờ, lỗi chỉ ghi vết, không đổi kết quả của data.
+          try {
+            await withDeadline('after_report', retry.callTimeoutMs * 2, unit.signal, s => afterReport({ targetRunId: claim.targetRunId,
+              leaseToken: claim.leaseToken, target: claim.target, actionCode: e.step.actionCode, raw: e.raw,
+              decisions: res.outcomes.filter(d => d.actionCode === e.step.actionCode), signal: s, progress,
+              trace: event => deps.events.trace({ ...event, targetRunId: claim.targetRunId }) }))
+          } catch (err) {
+            deps.events.trace({ type: 'after_report_failed', targetRunId: claim.targetRunId, actionCode: e.step.actionCode, error: errorMessage(err) })
+          }
+        }
+      }
+      if (res.target.done) closed = res
+      return res
+    }
+
+    /** Data nhận thêm trong lượt (chia sẻ sang nhóm khác): lượt data riêng cùng lease, chốt trước khi data chính kết thúc. */
+    const extras = new Map<number, { claim: Claimed; marks: Map<string, WorkflowMilestone>; done: boolean }>()
+    /** Chốt data nhận thêm chưa được báo: đã ghi dấu "sắp gửi" → không rõ kết quả (không gửi lại); chưa ghi dấu → về hàng đợi. */
+    const closeExtras = async (): Promise<void> => {
+      for (const extra of extras.values()) {
+        if (extra.done || ownershipLost) continue
+        extra.done = true
+        const outcomes = extra.marks.size > 0
+          ? [...extra.marks.values()].map(step => toReport(extra.claim, step, { ok: false, phase: 'in_flight',
+              signal: { kind: 'engine', code: 'interrupted_while_sending', errorCode: 'err_engine_interrupted_while_sending' } }))
+          : [toReport(extra.claim, fallbackStep('__unused'), { ok: false, phase: 'before_send',
+              signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled' } })]
+        const res = await send(extra.claim, outcomes, true)
+        if (res === null || !res.ok) {
+          deps.events.trace({ type: 'extra_close_failed', targetRunId: extra.claim.targetRunId, reason: res && !res.ok ? res.reason : 'no_response' })
+          continue
+        }
+        handleResponse(extra.claim, res)
+      }
+    }
+
+    const api: WorkflowTargetApi = {
+      targetRunId: claim.targetRunId,
+      leaseToken: claim.leaseToken,
+      target: claim.target,
+      actions: claim.actions,
+      gateSettings: claim.gates ?? {},
+      signal: unit.signal,
+      shouldStop: () => closed !== null || stopped !== null || unit.signal.aborted || stopAfterTarget !== null
+        || (cfg.shouldStopAfterTarget?.() ?? false),
+      beginMilestone: async step => {
+        if (stopped) return asStop(stopped)
+        if (closed || unit.signal.aborted) return { refused: closed ? 'target_closed' : 'cancelled' }
+        const mark = await callUntilAvailable('mark_sending',
+          opts => deps.data.markSending(claim.targetRunId, claim.leaseToken, step.actionCode, step.key, opts), deps.clock, retry, unit.signal, outage)
+        if (mark.ok) { openMarks.set(step.key, step); return 'ok' }
+        if (mark.reason === 'ownership_lost' || mark.reason === 'run_closed') {
+          ownershipLost = true
+          deps.events.trace({ type: 'ownership_lost', via: 'mark_sending', reason: mark.reason, step: step.key })
+          stopped = { stop: true, reason: 'ownership_lost' }
+          return asStop(stopped)
+        }
+        deps.events.trace({ type: 'mark_refused', reason: mark.reason, targetRunId: claim.targetRunId, step: step.key })
+        return { refused: mark.reason }
+      },
+      reportMilestone: (step, raw) => reportEntries([{ step, raw }]),
+      reportMilestones: entries => reportEntries(entries),
+      claimExtraTargets: async ids => {
+        if (stopped) return asStop(stopped)
+        const wanted = [...new Set(ids.map(Number).filter(id => Number.isSafeInteger(id) && id > 0 && id !== inputDataId))].slice(0, 50)
+        const claimBatch = deps.data.claimBatch
+        if (wanted.length === 0 || closed || unit.signal.aborted || !claimBatch) return { items: [] }
+        const ctx = { staffId: cfg.staffId, accountId: cfg.accountId, campaignId: cfg.campaignId, runnerId: cfg.runnerId,
+          runtimeTarget: cfg.runtimeTarget, leaseToken: claim.leaseToken, actions: [], inputDataIds: wanted, maxTargets: wanted.length }
+        const res = await callUntilAvailable('claim_extra', opts => claimBatch(ctx, opts), deps.clock, retry, unit.signal, outage)
+        // Chống gửi lặp N ngày: data đã gửi gần đây bị tạm dừng ngay trong claim, như lần nhận data chính.
+        const paused = 'cooldownPaused' in res && Array.isArray(res.cooldownPaused) ? res.cooldownPaused : []
+        for (const entry of paused) deps.events.progress(cooldownPauseProgress(cfg.campaignId, cfg.actionId, entry))
+        if (res.status !== 'claimed') {
+          deps.events.trace({ type: 'claim_extra_none', targetRunId: claim.targetRunId, status: res.status })
+          return { items: [] }
+        }
+        const items: WorkflowExtraTarget[] = res.items.map(item => {
+          const extraClaim: Claimed = { status: 'claimed', targetRunId: item.targetRunId, leaseToken: res.leaseToken, leaseExpiresAt: res.leaseExpiresAt,
+            target: item.target, targetKey: item.targetKey, actions: item.actions, ...(res.gates ? { gates: res.gates } : {}), campaign: res.campaign }
+          extras.set(item.targetRunId, { claim: extraClaim, marks: new Map(), done: false })
+          return { targetRunId: item.targetRunId, target: item.target }
+        })
+        if (res.leaseToken !== claim.leaseToken) {
+          // Lease của lượt đã hết hạn và DB cấp lease mới: data chính không còn thuộc lượt này. Trả các data vừa nhận về hàng đợi (theo
+          // lease mới), nhả lease mới, dừng lượt.
+          await closeExtras()
+          await withDeadline('release', retry.callTimeoutMs, undefined,
+            s => deps.data.release(cfg.accountId, res.leaseToken, { signal: s, timeoutMs: retry.callTimeoutMs })).catch(() => undefined)
+          ownershipLost = true
+          deps.events.trace({ type: 'ownership_lost', via: 'claim_extra', targetRunId: claim.targetRunId })
+          stopped = { stop: true, reason: 'ownership_lost' }
+          return asStop(stopped)
+        }
+        deps.events.trace({ type: 'claim_extra', targetRunId: claim.targetRunId, inputDataIds: wanted, targetRunIds: items.map(i => i.targetRunId) })
+        return { items }
+      },
+      beginExtraMilestone: async (targetRunId, step) => {
+        if (stopped) return asStop(stopped)
+        const extra = extras.get(targetRunId)
+        if (!extra || extra.done) return { refused: 'extra_unknown' }
+        if (unit.signal.aborted) return { refused: 'cancelled' }
+        const mark = await callUntilAvailable('mark_sending',
+          opts => deps.data.markSending(targetRunId, extra.claim.leaseToken, step.actionCode, step.key, opts), deps.clock, retry, unit.signal, outage)
+        if (mark.ok) { extra.marks.set(step.key, step); return 'ok' }
+        if (mark.reason === 'ownership_lost') {
+          ownershipLost = true
+          deps.events.trace({ type: 'ownership_lost', via: 'mark_sending_extra', reason: mark.reason, step: step.key })
+          stopped = { stop: true, reason: 'ownership_lost' }
+          return asStop(stopped)
+        }
+        deps.events.trace({ type: 'mark_refused', reason: mark.reason, targetRunId, step: step.key })
+        return { refused: mark.reason }
+      },
+      reportExtra: async (targetRunId, step, raw, options = {}) => {
+        if (stopped) return asStop(stopped)
+        const extra = extras.get(targetRunId)
+        if (!extra || extra.done) return { stop: true, reason: 'report_rejected', detail: { reason: 'extra_unknown', targetRunId } }
+        const outcome = toReport(extra.claim, step, raw)
+        const res = await send(extra.claim, [outcome], true)
+        if (res === null) {
+          if (!ownershipLost) return { stop: true, reason: 'cancelled' }
+          stopped = { stop: true, reason: 'ownership_lost' }
+          return asStop(stopped)
+        }
+        if (!res.ok) return { stop: true, reason: 'report_rejected', detail: { reason: res.reason, targetRunId } }
+        extra.marks.delete(step.key)
+        extra.done = res.target.done
+        if (res.next === 'ownership_lost') { ownershipLost = true; stopped = { stop: true, reason: 'ownership_lost' }; return asStop(stopped) }
+        if (!options.quiet) handleResponse(extra.claim, res, step.quietOk ? new Set([outcome.resultKey]) : undefined)
+        return res
+      },
+      progress,
+      trace: event => deps.events.trace({ ...event, targetRunId: claim.targetRunId })
+    }
+
+    let crashed: unknown = null
+    try {
+      const end = await workflow.runTarget(api)
+      if ('stop' in end && !stopped) stopped = end
+    } catch (err) {
+      // Lỗi của nơi chạy (không phải của block: block lỗi đã thành kết quả có mã): không để data treo, chốt bên dưới.
+      crashed = err
+      deps.events.trace({ type: 'workflow_target_failed', targetRunId: claim.targetRunId, error: errorMessage(err) })
+    }
+    // Data nhận thêm chưa được nơi chạy báo: chốt trước data chính (nhả lease cần mọi lượt data đã đóng).
+    if (extras.size > 0 && !ownershipLost) await closeExtras()
+    if (stopped && (stopped.reason === 'ownership_lost' || ownershipLost)) return { stop: true, reason: 'ownership_lost' }
+    if (closed) {
+      const end = afterTarget(claim, await withRevisedNote(claim, closed, workflow))
+      return stopped && !end.stop ? stopped : end
+    }
+    if (stopped && stopped.reason === 'report_rejected') return stopped
+
+    // DB chưa chốt data: chốt ở đây. Mốc đã ghi dấu mà chưa có kết quả thì không rõ đã gửi chưa (block bị ngắt giữa chừng, cửa sổ ẩn chết,
+    // nơi chạy lỗi): báo "không rõ kết quả", data đóng, không gửi lại. Chưa có mốc nào: dừng giữa chừng thì "đã dừng" (về hàng đợi),
+    // lỗi nơi chạy thì lỗi trước khi gửi, chạy hết mà không có kết quả thì no_outcome (không "thành công giả").
+    // Bị dừng từ ngoài (tạm dừng, thoát app, đăng xuất) hay tự dừng: tính một lần (shouldStopAfterTarget của nơi chạy có thể đổi giữa hai lần gọi).
+    const interrupted = unit.signal.aborted || stopAfterTarget !== null || (cfg.shouldStopAfterTarget?.() ?? false) || stopped !== null
+    const outcomes: ReportOutcome[] = []
+    for (const step of openMarks.values()) {
+      outcomes.push(toReport(claim, step, { ok: false, phase: 'in_flight',
+        signal: { kind: 'engine', code: 'interrupted_while_sending', errorCode: 'err_engine_interrupted_while_sending',
+          ...(crashed ? { message: errorMessage(crashed) } : {}) } }))
+    }
+    if (outcomes.length === 0 && reported === 0) {
+      outcomes.push(toReport(claim, fallbackStep(crashed ? '__workflow' : interrupted ? '__stopped' : '__no_outcome'),
+        crashed ? stepFailure(crashed, false)
+          : interrupted ? { ok: false, phase: 'before_send', signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled' } }
+            : { ok: false, phase: 'before_send', signal: { kind: 'engine', code: 'no_outcome', errorCode: 'err_engine_no_outcome' } }))
+    }
+    const res = handleResponse(claim, await send(claim, outcomes, true))
+    if (!('ok' in res)) return res
+    const end = afterTarget(claim, await withRevisedNote(claim, res, workflow))
+    if (stopped && !end.stop) return stopped
+    // Dừng từ ngoài trước khi gửi gì: DB trả end_unit cho kết quả "đã dừng"; lý do kết thúc của lượt là đã dừng (như runTargetSteps).
+    if (interrupted && !stopped && end.stop && end.reason === 'end_unit') return { stop: true, reason: unit.signal.aborted ? 'cancelled' : 'stopped' }
+    return end
+  }
+
+  const runWorkflowTargetWithCleanup = async (claim: Claimed, workflow: WorkflowUnitConfig): Promise<TargetEnd> => {
+    try {
+      return await runWorkflowTarget(claim, workflow)
+    } finally {
+      const onTargetEnd = cfg.onTargetEnd
+      if (onTargetEnd) {
+        // Như runTarget: dọn tài nguyên giữ theo data cả khi lượt đang dừng. Lượt theo lịch không có data: inputDataId = 0.
+        try {
+          await withDeadline('on_target_end', retry.callTimeoutMs, new AbortController().signal,
+            s => onTargetEnd({ targetRunId: claim.targetRunId, inputDataId: Number(claim.target.id ?? 0) }, s))
+        } catch (err) {
+          deps.events.trace({ type: 'on_target_end_failed', targetRunId: claim.targetRunId, error: errorMessage(err) })
+        }
+      }
+    }
+  }
+
   try {
     const flushed = await reporter.flush(unit.signal)
     if (flushed.sent || flushed.rejected) deps.events.trace({ type: 'journal_flushed', ...flushed })
@@ -666,7 +1002,8 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
 
       const claimCtx: ClaimContext = {
         staffId: cfg.staffId, accountId: cfg.accountId, campaignId: cfg.campaignId, runnerId: cfg.runnerId,
-        runtimeTarget: cfg.runtimeTarget, leaseToken, actions: cfg.actions, ...(cfg.requireAny?.length ? { requireAny: cfg.requireAny } : {})
+        runtimeTarget: cfg.runtimeTarget, leaseToken, actions: cfg.actions, ...(cfg.requireAny?.length ? { requireAny: cfg.requireAny } : {}),
+        ...(cfg.workflow?.slotMode ? { mode: 'campaign_slot' as const } : {})
       }
       const batch = cfg.batch
       const claim: ClaimResponse | BatchClaimResponse = batch
@@ -769,8 +1106,12 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
         const issue = (await cfg.validateCampaign?.())?.find(item => item.scope === 'campaign')
         if (issue) {
           deps.events.progress(configIssueProgress(cfg.campaignId, issue))
-          const action = cfg.actions[0]?.code ?? 'unknown'
-          const res = handleResponse(claim, await send(claim, [toReport(claim, { key: '__config', actionCode: action },
+          // Loại không có thao tác (tìm data, newsfeed chỉ lướt): kết quả không gắn thao tác, ghi tên workflow.resultName; chế độ workflow
+          // thiếu cả thao tác lẫn tên vẫn chốt được lượt bằng tên chung (như runWorkflowTarget), không để lượt mở.
+          const resultName = cfg.workflow?.resultName ?? (cfg.workflow && !cfg.actions[0]?.code ? 'Chạy chiến dịch' : undefined)
+          const action = cfg.actions[0]?.code ?? (resultName ? '' : 'unknown')
+          const res = handleResponse(claim, await send(claim, [toReport(claim, { key: '__config', actionCode: action,
+            ...(!action && resultName ? { actionName: resultName } : {}) },
             { ok: false, phase: 'before_send', signal: { kind: 'engine', code: issue.publicCode, errorCode: issue.errorCode, message: issue.message } })], true))
           if (!('ok' in res)) return await finish(res.stop ? res.reason : 'error', res.stop ? res.detail : undefined)
           afterTarget(claim, res)
@@ -779,7 +1120,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       }
 
       targets++
-      const end = await runTarget(claim)
+      const end = cfg.workflow ? await runWorkflowTargetWithCleanup(claim, cfg.workflow) : await runTarget(claim)
       // Bị dừng từ ngoài thì lý do kết thúc là "đã dừng", dù DB chỉ thị end_unit cho data đang dở.
       if (end.stop) {
         if (!unit.signal.aborted && (end.reason === 'stop_account' || end.reason === 'campaign_paused')) printControlStop()
