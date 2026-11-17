@@ -169,7 +169,9 @@ async function main() {
 
     await group('đọc cài đặt lúc đăng nhập có khoá affiliate.program, không thêm request', () => {
       const repo = readFileSync(join(ROOT, 'src/main/data/repositories/desktopUiRepository.ts'), 'utf8')
-      assert.ok(/RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY\]/.test(repo), 'khoá chưa nằm trong câu đọc cài đặt')
+      // Khoá nằm trong đúng mảng .in('key', [...]) của câu đọc cài đặt; vị trí trong mảng không quan trọng (9.9.0: #690 thêm facebook.max_comments sau nó).
+      assert.ok(/\.in\('key', \[[^\]]*\bAFF_PARTNER_SETTING_KEY\b[^\]]*\]\)/.test(repo), 'khoá chưa nằm trong câu đọc cài đặt')
+      assert.equal((repo.match(/from\('auto_system_settings'\)/g) || []).length, 1, 'câu đọc cài đặt phải là một request duy nhất')
       assert.ok(/affPartnerAudience: parseAffPartnerAudience\(values\.get\(AFF_PARTNER_SETTING_KEY\)\)/.test(repo))
     })
 
