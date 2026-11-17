@@ -48,6 +48,12 @@ smoke, gồm smoke của các PR mới phải tự thêm) → `run-builds.sh` �
 giao diff từ Server lần trước) → `make-receipt.cjs` (receipt JSON từ các file kiểm). Đổi số bản trong các script rồi chạy đúng thứ tự.
 Smoke hỏng thì chạy lại ở commit trước PR liên quan (worktree tạm, `node_modules` symlink) để biết lỗi có sẵn hay do bản build.
 
+**Chỉ build Desktop (16/11/2026, 9.8.0).** `dist/build-9.8.0-work/` của repo chính là bộ script trên, bỏ hai bước App Server.
+`verify-build.cjs` kiểm thêm dấu nguồn của các PR mới trong `out/main/index.js` và một dấu phải vắng (lời gọi V498 đã bỏ).
+`server-graph.cjs` phải chạy từ **gốc worktree** (`node dist/build-<ver>-work/server-graph.cjs`): khoá `metafile` của esbuild tính
+theo thư mục đang đứng. Chạy từ thư mục work thì mọi đường dẫn lệch và kết quả luôn là 0 file đổi, không báo lỗi (9.8.0: 0 → 12 khi
+chạy đúng chỗ).
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

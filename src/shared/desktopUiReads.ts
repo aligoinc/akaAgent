@@ -1,3 +1,4 @@
+import type { CampaignRepeatAudience } from './campaignRepeat'
 import type { AutoAccount, CampaignListItem } from './types'
 import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
 import type { RenewalReminderSettings } from './renewalReminder'
@@ -15,6 +16,11 @@ export interface DesktopPollingSettings {
    * src/shared/zaloShareRepeat.ts). Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = ẩn.
    */
   zaloShareRepeatEnabled?: boolean
+  /**
+   * "Lặp lại sau khi chạy xong" mở cho ai (`campaign.repeat_after_completion`, cùng công tắc với Web, src/shared/campaignRepeat.ts).
+   * Đọc cùng lượt chu kỳ tải khi đăng nhập, không thêm request; thiếu/lỗi = `off` = ẩn nhóm cài đặt trong form.
+   */
+  campaignRepeatAudience?: CampaignRepeatAudience
   /**
    * Trần "Số comment tối đa" / "Số bài cần comment" của chiến dịch Facebook (`facebook.max_comments`, anh chốt Q10 16/11/2026; mặc định 20,
    * sửa ở DB không cần phát hành). Đọc chung câu này, không thêm request.
@@ -39,8 +45,8 @@ export interface DesktopPollingSettings {
    */
   affPartnerAudience?: AffPartnerAudience
 }
-export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, affPartnerAudience: 'off',
-  facebookMaxComments: 20 }
+export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, campaignRepeatAudience: 'off',
+  affPartnerAudience: 'off', facebookMaxComments: 20 }
 export const FACEBOOK_MAX_COMMENTS_KEY = 'facebook.max_comments'
 export const DEFAULT_FACEBOOK_MAX_COMMENTS = 20
 /** Số nguyên 1–1000; thiếu / sai = 20. */

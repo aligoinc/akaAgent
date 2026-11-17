@@ -16,6 +16,7 @@ import {
   supportsFormattedContent
 } from '../../../../shared/formattedContent'
 import { isRecentDeliveryCooldownEnabled } from '../../../../shared/campaignDeliveryCooldown'
+import { campaignRepeatIntervalLabel, readCampaignRepeat } from '../../../../shared/campaignRepeat'
 import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 
 interface CampaignInfoViewProps {
@@ -844,6 +845,14 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Giờ dừng trong ngày', value: formatTime(campaign.dailyStopTime) },
           { label: 'Gửi lặp lại', value: onOff(true), hidden: extra.zaloShareRepeatEnabled !== true },
           { label: 'Lặp lại sau mỗi', value: `${Number(extra.zaloShareRepeatAfterMinutes) || 60} phút, tính từ lúc gửi xong lượt trước`, hidden: extra.zaloShareRepeatEnabled !== true },
+          // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts).
+          ...(() => {
+            const repeat = readCampaignRepeat(extra as Record<string, unknown>)
+            return [
+              { label: 'Lặp lại sau khi chạy xong', value: repeat.every !== null && repeat.unit ? `Sau mỗi ${campaignRepeatIntervalLabel(repeat.every, repeat.unit)}, tính từ lúc chạy xong lượt trước` : onOff(true), hidden: !repeat.enabled },
+              { label: 'Số lượt tối đa', value: repeat.maxRuns !== null ? `${repeat.maxRuns} lượt (tính cả lượt đầu)` : '—', hidden: !repeat.enabled }
+            ]
+          })(),
           { label: 'Chạy nhiều khung giờ', value: onOff(extra.multiDailyTimeSlotsEnabled), hidden: !supportsMultiDailyTimeSlots && !extra.multiDailyTimeSlotsEnabled },
           {
             label: 'Các khung giờ trong ngày',

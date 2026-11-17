@@ -1,3 +1,4 @@
+import { parseCampaignRepeatAudience } from '../../../shared/campaignRepeat'
 import { create } from 'zustand'
 import {
   DEFAULT_DESKTOP_POLLING, DESKTOP_UI_TUNING_RANGES, parseDesktopPollSeconds, parseDesktopUiSeconds,
@@ -23,6 +24,8 @@ export const useDesktopPollingStore = create<{
         accounts: parseDesktopPollSeconds(settings.accounts),
         campaigns: parseDesktopPollSeconds(settings.campaigns),
         zaloShareRepeatEnabled: settings.zaloShareRepeatEnabled === true,
+        // "Lặp lại sau khi chạy xong": giá trị lạ = ẩn.
+        campaignRepeatAudience: parseCampaignRepeatAudience({ audience: settings.campaignRepeatAudience }),
         // Kiểm lại ở giao diện: thiếu/sai = tắt = đọc như trước (docs/DESKTOP_UI_IDLE_READS.md).
         hiddenPauseEnabled: settings.hiddenPauseEnabled === true,
         idleAfterSeconds: parseDesktopUiSeconds(settings.idleAfterSeconds, DESKTOP_UI_TUNING_RANGES.idleAfterSeconds),
