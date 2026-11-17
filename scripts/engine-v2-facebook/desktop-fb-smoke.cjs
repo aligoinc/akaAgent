@@ -18,7 +18,8 @@ if (!process.versions.electron) {
 
 const { build } = require('esbuild')
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS } = require('./fixture.cjs')
+const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly } = require('./fixture.cjs')
+const V563 = require('../build-v563-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 async function check(name, fn) {
@@ -148,6 +149,7 @@ class FakePage {
     if (this.destroyed) throw new Error('Browser page is not connected')
     if (this.scenario.hangOn === sel) return this.hang()
     if (this.scenario.notFound?.includes(sel)) throw new Error('Element not found: ' + sel)
+    if (this.scenario.clickError?.[sel]) throw new Error(this.scenario.clickError[sel])
     this.scenario.onClick?.(sel)
     this.clicks.push(sel)
     if (this.scenario.failAfterClick === sel) throw new Error('Script failed to execute')
@@ -160,6 +162,7 @@ class FakePage {
     if (this.destroyed) throw new Error('Browser page is not connected')
     if (code === 'formClosed') return this.scenario.formClosed !== false
     if (code === 'typeError') return this.scenario.typeError ?? null
+    if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
     if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
     return null
@@ -235,6 +238,54 @@ const workflow = () => ({
   ]
 })
 
+// Đăng nhóm kèm comment theo đúng chuỗi bước production sau cú Đăng (V563): xác nhận đã đăng (ghi vars.groupPostSubmitted như block 2871),
+// lấy link (ghi vars.groupPostPostUrl như block 2873, link lấy từ kịch bản trang), block chỉnh comment = code bản engine V563 thật, rồi cổng
+// và vòng comment như workflow "[engine] facebook_group_post" (điều kiện / itemsExpr chép từ production 17/11). Tên trong DB thử khác tên bước
+// (DB thử có block giả cùng tên); bộ dựng lịch sử nhận bước theo tên trong node như production.
+const ADJUST_BLOCKS = [
+  { id: 2625, name: 'v563_verify_group_post_form_closed', code: `vars.groupPostSubmitted = true
+return { ok: true, posted: true, submitClosed: true, message: 'Form đăng bài đã đóng' }` },
+  { id: 2835, name: 'v563_get_first_group_post_link', code: `const postUrl = String(await page.evaluate('postLink') || '')
+vars.groupPostPostUrl = postUrl
+return { ok: postUrl.length > 0, postUrl, link: postUrl }` },
+  { id: 2874, name: 'v563_adjust_group_post_comments_after_pending', code: V563.ADJUST.newCode }
+]
+const adjustWorkflow = () => ({
+  id: WORKFLOW_ID, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
+    { id: 'a1', source: 'open', target: 'gate' }, { id: 'a2', source: 'gate', target: 'type', sourceHandle: 'true' },
+    { id: 'a3', source: 'type', target: 'post' }, { id: 'a4', source: 'post', target: 'verify' }, { id: 'a5', source: 'verify', target: 'link' },
+    { id: 'a6', source: 'link', target: 'adjust' }, { id: 'a7', source: 'adjust', target: 'if_comment' },
+    { id: 'a8', source: 'if_comment', target: 'loop_comment', sourceHandle: 'true' },
+    { id: 'a9', source: 'loop_comment', target: 'comment', sourceHandle: 'body' }
+  ],
+  nodes: [
+    { id: 'open', blockId: 27, blockName: 'fb_open_composer', config: { composerActionCode: 'fb_post_group' } },
+    { id: 'gate', blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition: 'input.opened === true' } },
+    { id: 'type', blockId: 28, blockName: 'fb_type_post_content', config: {} },
+    { id: 'post', blockId: 30, blockName: 'fb_click_post_button', config: { composerActionCode: 'fb_post_group' } },
+    { id: 'verify', blockId: 2625, blockName: 'fb_verify_group_post_form_closed', config: {} },
+    { id: 'link', blockId: 2835, blockName: 'fb_get_first_group_post_link', config: {} },
+    { id: 'adjust', blockId: 2874, blockName: 'fb_adjust_group_post_comments_after_pending', config: {} },
+    { id: 'if_comment', blockId: 0, blockName: 'if_else', systemType: 'ifElse',
+      config: { condition: 'vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0' } },
+    { id: 'loop_comment', blockId: 0, blockName: 'loop', systemType: 'loop', config: { loopType: 'forEach', itemsExpr: 'vars.commentIterations' } },
+    { id: 'comment', blockId: 34, blockName: 'fb_comment_at_position', config: {} }
+  ]
+})
+
+// Bài bị bỏ qua (nhóm đã biết cần duyệt, chiến dịch bật "bỏ qua nhóm cần duyệt": production chạy fb_skip_group_post_for_known_approval, không
+// bấm Đăng) nhưng vòng comment vẫn chạy: workflow chỉ còn lấy link + vòng comment (đọc lượt thật chiến dịch 46878, 02/11).
+const commentOnlyWorkflow = () => ({
+  id: WORKFLOW_ID, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
+    { id: 'o1', source: 'link', target: 'comments' }, { id: 'o2', source: 'comments', target: 'comment', sourceHandle: 'body' }
+  ],
+  nodes: [
+    { id: 'link', blockId: 2835, blockName: 'fb_get_first_group_post_link', config: {} },
+    { id: 'comments', blockId: 0, blockName: 'loop', systemType: 'loop', config: { loopType: 'count', count: 1 } },
+    { id: 'comment', blockId: 34, blockName: 'fb_comment_at_position', config: {} }
+  ]
+})
+
 // Mời bạn vào nhóm: một block trả nhiều kết quả (actionResults) cho cùng một data (block 2819 production làm theo lô). Như block production,
 // block đọc group nhận lời mời và danh sách người mời từ biến (thử thật 17/11: engine từng không truyền các biến này).
 const INVITE_WORKFLOW_ID = 5003
@@ -301,6 +352,9 @@ async function main() {
     await applyFacebookMigrations(db)
     // V559 (luật phân loại + chính sách FB bản nháp): kết quả trong bài này đi đúng đường như khi bật thật.
     await applyFacebookMigrations(db, FACEBOOK_POLICY_MIGRATIONS)
+    // V563: dấu hiệu FB11 "Tham gia nhóm" + chính sách (FB11 khi đăng nhóm, comment trong chiến dịch đăng nhóm; đúng câu của migration). Phần
+    // block của V563 kiểm ở v563-smoke.cjs (DB thử này có block giả cùng số với block bộ cũ).
+    await applyV563SignsOnly(db)
     const one = async (sql, args = []) => (await db.query(sql, args)).rows[0]
     const STAFF = 9201, ORG = 621
     await db.query(`INSERT INTO public.org_organization (id, name) VALUES ($1, 'FB Desktop') ON CONFLICT DO NOTHING`, [ORG])
@@ -308,7 +362,7 @@ async function main() {
     await db.query(`INSERT INTO public.org_organization_product (organization_id, product_id, package_type, expiration_date)
       VALUES ($1, 3, 'paid', now() + interval '30 days')`, [ORG])
     await db.query(`UPDATE public.auto_system_settings SET value = $1 WHERE key = 'engine.facebook'`, [JSON.stringify({ mode: 'orgs', organizationIds: [ORG] })])
-    for (const block of [...BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK]) {
+    for (const block of [...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK]) {
       await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, [block.id, block.name, block.code])
     }
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Đăng nhóm', '[]', '[]')`, [WORKFLOW_ID])
@@ -334,7 +388,7 @@ async function main() {
       userData, client: fakeClient(db), runs: [], runSteps: [], elements: ELEMENTS,
       user: { staffId: STAFF, organizationId: ORG, facebookEngineV2: true, campaignEngineV2: false,
         entitlements: { facebookCore: true, facebookFanpage: false, email: false, zalo: false, sms: false } },
-      blocks: new Map([...BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK].map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
+      blocks: new Map([...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK].map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
       workflows: new Map([[WORKFLOW_ID, workflow()], [TIMELINE_WORKFLOW_ID, timelineWorkflow()], [INVITE_WORKFLOW_ID, inviteWorkflow()],
         [FIND_WORKFLOW_ID, findWorkflow()], [NEWSFEED_WORKFLOW_ID, newsfeedWorkflow()]]),
       runtimeSettings: null
@@ -510,6 +564,107 @@ async function main() {
       const plain = await makeCampaign()
       await run(plain, { missing: [ELEMENTS.fb_composer_button], pageTexts: ['Nhóm Riêng tư', 'Bạn viết gì đi...'] })
       assert.deepEqual((await outcomes(plain.campaign.id)).map(o => o.error_code), ['err_fb_group_composer_editor_not_found'])
+    })
+
+    await check('dấu hiệu V563: nhóm chưa tham gia (nút "Tham gia nhóm", chữ thật 17/11) thì FB11 thay FB40, xử lý y FB40 (bỏ qua, không đếm)', async () => {
+      const entry = await makeCampaign()
+      const { page: fake } = await run(entry, { missing: [ELEMENTS.fb_composer_button],
+        pageTexts: ['Nhóm A', 'Tham gia nhóm', 'Xem các nhóm đề xuất', 'Tìm kiếm trong nhóm này'] })
+      const out = await outcomes(entry.campaign.id)
+      assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_post_group', 'before_send', 'err_fb_group_cannot_post_not_member']])
+      assert.deepEqual((await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]),
+        [['fb_post_group', 'bỏ qua', 'Tài khoản chưa vào nhóm này nên chưa đăng bài được (FB11)']])
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      assert.equal(fake.pageSignReads, 1, 'đọc chữ trên trang đúng một lần, ngay sau block lỗi')
+      assert.equal(fake.clicks.length, 0)
+    })
+
+    await check('V563: đăng nhóm xong chưa lấy được link thì bỏ comment "bài của mình", khách thấy câu ⚠️, không dòng lịch sử; có link thì comment như cũ', async () => {
+      const workflows = globalThis.__fbTest.workflows
+      const original = workflows.get(WORKFLOW_ID)
+      workflows.set(WORKFLOW_ID, adjustWorkflow())
+      try {
+        const warn = `⚠️ ${V563.OWN_POST_SKIP_MESSAGE} tại "Nhóm 1"`
+        const none = await makeCampaign({ extra: { commentType: 'own' } })
+        const a = await run(none, { postLink: '' })
+        assert.deepEqual((await details(none.campaign.id)).map(r => [r.action_code, r.status]), [['fb_post_group', 'thành công']])
+        assert.ok(progress.includes(warn), progress.join('\n'))
+        assert.equal(progress.filter(p => p.startsWith('💬')).length, 0)
+        assert.equal(a.page.clicks.filter(c => c === ELEMENTS.fb_comment_box).length, 0, 'không bấm ô bình luận nào')
+        assert.equal((await inputs(none.campaign.id))[0].status, 'hoàn thành')
+        assert.ok((await marks(none.campaign.id)).every(m => m.state === 'delivered'), JSON.stringify(await marks(none.campaign.id)))
+
+        const all = await makeCampaign({ extra: { commentType: 'all', commentCount: 2 } })
+        const b = await run(all, { postLink: '' })
+        assert.deepEqual((await details(all.campaign.id)).map(r => [r.action_code, r.status]),
+          [['fb_post_group', 'thành công'], ['fb_comment', 'thành công']], '"comment tất cả": còn lượt bài khác')
+        assert.ok(progress.includes(warn), progress.join('\n'))
+        assert.equal(b.page.clicks.filter(c => c === ELEMENTS.fb_comment_box).length, 1)
+
+        const link = await makeCampaign({ extra: { commentType: 'own' } })
+        await run(link, { postLink: 'https://www.facebook.com/groups/g1/posts/7123/' })
+        assert.deepEqual((await details(link.campaign.id)).map(r => [r.action_code, r.status]), [['fb_post_group', 'thành công'], ['fb_comment', 'thành công']])
+        assert.ok(!progress.includes(warn), progress.join('\n'))
+        assert.ok(progress.includes('💬 Đã comment vào bài của mình tại "Nhóm 1"'), progress.join('\n'))
+      } finally {
+        workflows.set(WORKFLOW_ID, original)
+      }
+    })
+
+    // V563 (anh chốt 17/11): đăng nhóm kiêm comment, comment hỏng không làm dừng chiến dịch. Mỗi ca chạy hai lần: tắt 2 dòng V563 (như trước
+    // V563 / bộ cũ: dừng) rồi bật lại (không dừng).
+    const toggleCommentPolicies = on => db.query(`UPDATE public.auto_outcome_policies SET is_active = $1
+      WHERE source = $2 AND action_code = 'fb_comment' AND campaign_action_id = 'facebook_group_post'`, [on, V563.SOURCE])
+    await check('V563: bài bị bỏ qua (nhóm cần duyệt) mà comment hỏng 5 data liền thì không cộng chuỗi, không dừng chiến dịch; trước V563 dừng sau 4 data', async () => {
+      const workflows = globalThis.__fbTest.workflows
+      const original = workflows.get(WORKFLOW_ID)
+      workflows.set(WORKFLOW_ID, commentOnlyWorkflow())
+      try {
+        await toggleCommentPolicies(false)
+        const before = await makeCampaign({ targets: 5, extra: { commentType: 'all', commentCount: 1 } })
+        await run(before, { notFound: [ELEMENTS.fb_comment_box] })
+        const paused = await facade.getCampaign(before.campaign.id)
+        assert.equal(paused.status, 'tạm dừng', JSON.stringify({ status: paused.status, note: paused.note }))
+        assert.match(String(paused.note), /^Dừng sau 4 data lỗi\/thất bại liên tiếp/)
+
+        await toggleCommentPolicies(true)
+        const after = await makeCampaign({ targets: 5, extra: { commentType: 'all', commentCount: 1 } })
+        await run(after, { notFound: [ELEMENTS.fb_comment_box] })
+        const campaign = await facade.getCampaign(after.campaign.id)
+        assert.notEqual(campaign.status, 'tạm dừng', JSON.stringify({ status: campaign.status, note: campaign.note }))
+        assert.deepEqual((await inputs(after.campaign.id)).map(r => r.status), ['hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành'])
+        const out = await outcomes(after.campaign.id)
+        assert.ok(out.length === 5 && out.every(o => o.action_code === 'fb_comment' && o.ok === false), JSON.stringify(out))
+        const streak = await one(`SELECT count_consecutive_bad_targets AS n FROM public.auto_campaign_error_state WHERE campaign_id = $1`, [after.campaign.id])
+        assert.ok(!streak || Number(streak.n) === 0, JSON.stringify(streak))
+      } finally {
+        await toggleCommentPolicies(true)
+        workflows.set(WORKFLOW_ID, original)
+      }
+    })
+
+    await check('V563: FB03 (Facebook báo bình luận quá nhanh) khi comment sau khi đăng nhóm thì không tạm dừng, data sau vẫn đăng (anh chọn "Chạy tiếp ngay"); trước V563 dừng ngay', async () => {
+      const scenario = { clickError: { [ELEMENTS.fb_comment_box]: 'Facebook báo giới hạn tần suất comment' } }
+      try {
+        await toggleCommentPolicies(false)
+        const before = await makeCampaign({ targets: 3 })
+        await run(before, scenario)
+        const paused = await facade.getCampaign(before.campaign.id)
+        assert.equal(paused.status, 'tạm dừng', JSON.stringify({ status: paused.status, note: paused.note }))
+        assert.deepEqual((await inputs(before.campaign.id)).map(r => r.status), ['hoàn thành', 'chờ xử lý', 'chờ xử lý'])
+
+        await toggleCommentPolicies(true)
+        const after = await makeCampaign({ targets: 3 })
+        await run(after, scenario)
+        const campaign = await facade.getCampaign(after.campaign.id)
+        assert.notEqual(campaign.status, 'tạm dừng', JSON.stringify({ status: campaign.status, note: campaign.note }))
+        assert.deepEqual((await inputs(after.campaign.id)).map(r => r.status), ['hoàn thành', 'hoàn thành', 'hoàn thành'])
+        const out = await outcomes(after.campaign.id)
+        assert.equal(out.filter(o => o.action_code === 'fb_post_group' && o.ok).length, 3, JSON.stringify(out))
+        assert.ok(out.filter(o => o.action_code === 'fb_comment').every(o => o.error_code === V563.FB03), JSON.stringify(out))
+      } finally {
+        await toggleCommentPolicies(true)
+      }
     })
 
     await check('dấu hiệu (anh chốt 17/11): block báo không có ô chọn ảnh trước khi đăng thì FB38, xử lý y FB44 (ghi "lỗi", cộng chuỗi)', async () => {
