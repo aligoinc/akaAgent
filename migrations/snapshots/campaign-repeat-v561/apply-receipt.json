@@ -1,0 +1,99 @@
+{
+  "migration": "V561 lặp lại chiến dịch sau khi chạy xong (phần chạy)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_by": "supabase db query --linked -f (dòng sổ migration chèn trong cùng giao dịch, scripts/make-migration-ledger-apply.cjs)",
+  "requested": "người dùng yêu cầu apply ngay 17/11/2026 18:18 VN (không chờ buổi tối)",
+  "preflight_2026-11-17T11:18:29Z": {
+    "ledger_top": "migration_v560_engine_facebook_copies (20261117093246)",
+    "v561_in_ledger": 0,
+    "finish_campaign_v2_md5_pg_get_functiondef": "ffccdf1f6d95d6ed877c22abe945ae0b (V558)",
+    "notification_capture_md5_prosrc": "6e7b852c41ba7565622db56dbb8ec057 (V475)",
+    "repeat_columns": 0,
+    "switch_row": 0,
+    "active_client_backends": 1
+  },
+  "parts": [
+    {
+      "name": "migration_v561_campaign_repeat_after_completion_p1",
+      "version": "20261117111839",
+      "file_md5": "47b696ce90768d6503a3f03159f82416",
+      "ledger_md5": "47b696ce90768d6503a3f03159f82416",
+      "started_utc": "11:18:39",
+      "ended_utc": "11:18:41"
+    },
+    {
+      "name": "migration_v561_campaign_repeat_after_completion_p2",
+      "version": "20261117111855",
+      "file_md5": "3933719d4fa3ee3ec34424599980bab6",
+      "ledger_md5": "3933719d4fa3ee3ec34424599980bab6",
+      "started_utc": "11:18:55",
+      "ended_utc": "11:18:57"
+    }
+  ],
+  "postflight": {
+    "columns": {
+      "repeat_runs_done": "integer NOT NULL DEFAULT 0",
+      "repeat_log": "jsonb NULL"
+    },
+    "aka_agent_desktop_update_on_new_columns": false,
+    "finish_campaign_v2_md5_pg_get_functiondef": "d8c9a144ae30718e7a5aed5d58914fb1 (= bản sinh)",
+    "notification_capture_md5_prosrc": "28c58b148172224c2f88885b55dcb3b9 (= bản sinh)",
+    "functions_aka_agent_campaign_repeat": 15,
+    "switch_row": {
+      "id": 129,
+      "key": "campaign.repeat_after_completion",
+      "value": "{\"audience\":\"admin_akabiz\",\"sweeper\":true}"
+    },
+    "campaigns_with_repeat_log": 0
+  },
+  "impact": {
+    "postgrest_schema_cache_queried_ms": {
+      "p1": 4059.2,
+      "p2": 912.7
+    },
+    "edge_rest_minute_11_18_utc": {
+      "requests": 23799,
+      "p50_ms": 47,
+      "p99_ms": 696,
+      "over_1s": 112,
+      "http_500": 0,
+      "http_503": 0
+    },
+    "edge_rest_minutes_11_14_to_11_19_utc_5xx": 1
+  },
+  "production_simulation": {
+    "script": "scripts/campaign-repeat-v561-prod-sim.sql (một giao dịch, ROLLBACK)",
+    "run_utc": "11:19:29-11:19:32",
+    "checks": 19,
+    "failed": 0,
+    "steps": [
+      "1a sync_v1 đăng ký lặp — đạt",
+      "1b engine lượt 1/3: hẹn lượt kế, đặt lại data trừ tạm dừng — đạt",
+      "1b engine lượt 2/3: hẹn lượt kế, đặt lại data trừ tạm dừng — đạt",
+      "1c engine lượt 3/3: hoàn thành, chốt vòng lặp — đạt",
+      "1d engine: chiến dịch không bật lặp hoàn thành như trước — đạt",
+      "2 engine Facebook trang cá nhân không data: hẹn lượt kế (giờ, trong khung chạy) — đạt",
+      "3a decide_v1 khi chưa chạy: từ chối (not_running) — đạt",
+      "3b decide_v1 lượt 1/2: lặp tiếp, có giờ lượt kế — đạt",
+      "3c decide_v1 lượt 2/2: lượt cuối — đạt",
+      "3d lượt cuối hoàn thành: không bị coi là lượt giữa (will_reopen = false) — đạt",
+      "3e khách cho chạy lại sau lượt cuối: vòng đếm mới — đạt",
+      "4a lượt giữa hoàn thành: bộ quét sẽ mở lại (không báo \"hoàn thành\") — đạt",
+      "4b tick_v1 mở lại: chờ xử lý, lịch ngày mai 08:30, data về chờ, ghi lịch sử chạy — đạt",
+      "4c quét lại: không làm gì thêm — đạt",
+      "4d lượt cuối: bộ quét chốt kết thúc, không mở lại — đạt",
+      "5a state_v1: chỉ chiến dịch đang đăng ký lặp — đạt",
+      "5b state_v1 của nhân viên khác: rỗng — đạt",
+      "5c quyền: desktop không ghi được bộ đếm, không gọi được tick — đạt",
+      "5d phiên Desktop thật: đọc được chiến dịch của mình, chiến dịch người khác bị chặn — đạt"
+    ],
+    "leftover_after_rollback": {
+      "campaigns": 0,
+      "accounts": 0,
+      "campaigns_with_repeat_log": 0,
+      "campaigns_with_runs_done": 0
+    }
+  },
+  "sweeper_scan_cost": "EXPLAIN ANALYZE câu tìm ứng viên của tick_v1: Parallel Seq Scan auto_campaigns (heap 72 MB), 31.8 ms, 9.333 trang từ bộ nhớ đệm, 0 dòng",
+  "customer_effect_at_apply": "Chưa chiến dịch nào bật lặp; API Web có bộ quét và Desktop có bộ chạy mới chưa deploy / phát hành; form trên bản đang chạy chưa có ô cài đặt."
+}
