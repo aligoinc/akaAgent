@@ -19,7 +19,7 @@
 > Q23 mỗi mã lỗi một câu cho khách dùng chung mọi chỗ, kèm câu bước tiếp theo, anh duyệt từng câu; Q22 không gửi báo giám sát,
 > anh hỏi trong phiên thì chạy hàm kiểm (16/11).
 >
-> **Tình trạng code (16–17/11, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, PR [aligoinc/akaAgent#690](https://github.com/aligoinc/akaAgent/pull/690) vào `dev_3` mở 17/11, chưa merge, chưa phát hành Desktop; V556–V560 đã apply production 17/11 16:29–16:32 VN, `engine.facebook` bật tổ chức 1 từ 16:34 VN, [biên nhận](../migrations/snapshots/engine-facebook-v556-v560/apply-receipt.json)):**
+> **Tình trạng code (16–17/11, worktree `akaAgent-fb-engine-plan`, nhánh `claude/fb-engine-v2`, đã merge `dev_3` qua [aligoinc/akaAgent#690](https://github.com/aligoinc/akaAgent/pull/690) 17/11 theo yêu cầu, chưa build/phát hành Desktop; V556–V560 đã apply production 17/11 16:29–16:32 VN, `engine.facebook` bật tổ chức 1 từ 16:34 VN, [biên nhận](../migrations/snapshots/engine-facebook-v556-v560/apply-receipt.json)):**
 > - Migration (đã apply production 17/11 16:29–16:32 VN, biên nhận ở mục cuối khối này): V556 p1/p2 (bảng, thiết lập, hàm tra lỗi / ảnh lỗi; bỏ bảng T4 "việc sau kết quả" theo anh chốt), V557 (lượt
 >   theo lịch), V558 (thân hàm engine; `resolve_policy` giải `inherit` đúng như bộ cũ; claim nhận đúng danh sách data trong lượt đang giữ
 >   lease; `report_v1` nhận dòng "Tìm data" không gắn thao tác; gỡ V558 từ chối khi còn chính sách `inherit`), **V559 bản nháp chính sách
