@@ -11,7 +11,7 @@
 
 **Thời điểm build:** 21:09:22–21:12:42 VN, 17/11/2026. Windows mất 89 giây, Mac ARM64 57 giây, Mac Intel 54 giây.
 
-**Chưa phát hành:** chưa upload; feed cả ba nền tảng vẫn trả 9.7.0 (9.8.0 build ngày 16/11 cũng chưa phát hành). Bước build không đổi DB, không deploy service. Cùng tối, ngoài bước build: V563 đã apply lúc 20:03 VN, worker ChatApi đã deploy lúc 20:59 VN (đồng bộ lõi engine, ChatApi #163).
+**Chưa phát hành:** chưa upload; feed cả ba nền tảng đang trả 9.8.0 (phát hành 08:23–08:24 VN 17/11; bộ cài trên akabiz.net cùng số byte với bản build 9.8.0). Bản đầu của biên nhận này ghi nhầm "feed vẫn 9.7.0", sửa 17/11 tối. Bước build không đổi DB, không deploy service. Cùng tối, ngoài bước build: V563 đã apply lúc 20:03 VN, worker ChatApi đã deploy lúc 20:59 VN (đồng bộ lõi engine, ChatApi #163).
 
 ## Có gì mới
 

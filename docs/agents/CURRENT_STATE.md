@@ -47,7 +47,7 @@ Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
 [Build akaAgent Desktop 9.9.0](../audits/akaagent-9.9.0-20261117/README.md):
-**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; chưa upload/phát hành, feed đang trả 9.8.0.
 Không build App Server** (36/241 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
 `release-9.9.0`, nhánh `codex/release-9.9.0` `c6d41791` (nền `origin/dev_3` `0ca740cf` sau PR #693, commit chỉ đổi version; version và
 biên nhận đã merge `dev_3` qua PR #694 ngày 17/11). Mới so
@@ -58,7 +58,8 @@ apply). Smoke `zalo-message-status-sync` hỏng sẵn như 9.7.0; `aff-partner-d
 Không DB/deploy service trong bước build. [Receipt](../audits/akaagent-9.9.0-20261117/build-receipt.json).
 
 [Build akaAgent Desktop 9.8.0](../audits/akaagent-9.8.0-20261116/README.md):
-**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 23:32:52–23:36:10 VN, 16/11/2026; chưa upload/phát hành, feed vẫn 9.7.0.
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 23:32:52–23:36:10 VN, 16/11/2026. Feed Windows, Mac, Mac Intel trả 9.8.0 từ
+08:23–08:24 VN 17/11 (bộ cài trên akabiz.net cùng số byte với bản build, kiểm 21:40 VN 17/11).
 Không build App Server** (12/229 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
 `release-9.8.0`, nhánh `codex/release-9.8.0` `7707bacc` (nền `origin/dev_3` `0ae0d6f2` sau PR #687, commit chỉ đổi version). Mới so
 với 9.7.0: engine v2 Desktop xếp lỗi mạng khi tải tệp lên trước khi gửi là NET01 (#687), mục "Đối tác akaBiz" cho mọi tài khoản
