@@ -176,4 +176,6 @@ async function main() {
   }
 }
 
-main().catch(err => { console.error(err); process.exit(1) })
+// Bài kiểm engine Facebook (scripts/engine-v2-facebook/legacy-catalog-smoke.cjs) dùng lại đúng các bản chép này.
+module.exports = { desktopBegin, chatBegin, loadCatalogModule, gitShow, CHAT_REPO }
+if (require.main === module) main().catch(err => { console.error(err); process.exit(1) })
