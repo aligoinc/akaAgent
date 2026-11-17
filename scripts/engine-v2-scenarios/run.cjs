@@ -711,6 +711,47 @@ async function faultScenarios(run, db, E) {
     const sentB = sendsOf(b.campaignId).filter(s => s.part === 'text').length
     ok('S15 chống gửi lặp: chiến dịch thứ hai không gửi lại số đã gửi', sentB === 0, { reason: rb.result?.reason, sentB, statusesB: await closedNotes(b.targetIds) })
   }
+  // S30–S31: "Lặp lại sau khi chạy xong" (V561; chỉ khi SCENARIO_CAMPAIGN_REPEAT=1): lõi thật chạy một chiến dịch lặp 1 giờ, tối đa 3 lượt,
+  // trên Desktop và Fly; giữa hai lượt tua thời gian tới giờ lượt kế. Mỗi lượt gửi đúng một lần cho mỗi data, câu tiến trình có "lượt i/3",
+  // lượt 3 hoàn thành "(đã chạy đủ 3 lượt)". Gửi lặp giữa các lượt là đúng cài đặt nên ghi vào nhật ký riêng, không đưa vào bất biến I1.
+  if (process.env.SCENARIO_CAMPAIGN_REPEAT === '1') {
+    const repeatLog = { sends: [], events: [], lines: [], traces: [], units: [], db: [] }
+    const rrun = { ...run, log: repeatLog }
+    const vnDay = new Date(Date.now() + 7 * 3600e3).toISOString().slice(0, 10)
+    const repeatExtra = { repeatAfterCompletionEnabled: true, repeatAfterCompletionEvery: 1, repeatAfterCompletionUnit: 'hour', repeatAfterCompletionMaxRuns: 3 }
+    for (const [id, rt] of [[9030, 'desktop'], [9031, 'fly']]) {
+      const e = await mk(id, rt, 4, repeatExtra, { original_schedule: `${vnDay}T00:05:00+07:00`, daily_stop_time: null })
+      await db.query(`SELECT public.aka_agent_campaign_repeat_sync_v1($1, $2)`, [e.staffId, e.campaignId])
+      const rounds = []
+      for (let round = 1; round <= 3; round++) {
+        const sendFrom = repeatLog.sends.length
+        const lineFrom = repeatLog.lines.length
+        const r = await runCampaignToRest(rrun, e, { ...quiet, scenario: `S${id - 9000}r${round}` })
+        const c = (await db.query(`SELECT status, schedule, repeat_runs_done FROM public.auto_campaigns WHERE id = $1`, [e.campaignId])).rows[0]
+        const st = await statusOf(e.targetIds)
+        const texts = repeatLog.sends.slice(sendFrom).filter(x => x.campaignId === e.campaignId && x.part === 'text')
+        const perTarget = new Map()
+        for (const x of texts) perTarget.set(x.inputDataId, (perTarget.get(x.inputDataId) || 0) + 1)
+        const lines = repeatLog.lines.slice(lineFrom).filter(l => l.campaignId === e.campaignId).map(l => l.text)
+        rounds.push({ round, reason: r.result?.reason, status: c.status, runsDone: c.repeat_runs_done, texts: texts.length,
+          once: e.targetIds.every(t => perTarget.get(t) === 1), data: st.map(t => t.status), lines: lines.filter(t => /lượt|Hoàn thành/.test(t)) })
+        if (round < 3) {
+          // Thời gian trôi tới giờ lượt kế: lịch đến hạn, lịch sử ra khỏi khung hạn mức giờ, khoá theo phút hết hạn.
+          await db.query(`UPDATE public.auto_campaigns SET schedule = now() - interval '1 minute' WHERE id = $1`, [e.campaignId])
+          await db.query(`UPDATE public.auto_campaign_details SET created_at = created_at - interval '70 minutes' WHERE campaign_id = $1`, [e.campaignId])
+          await db.query(`SELECT public.aka_agent_scenario_time_passes($1::bigint[])`, [[e.accountId]])
+        }
+      }
+      const state = (await db.query(`SELECT private.aka_agent_campaign_repeat_state(c) AS s FROM public.auto_campaigns c WHERE c.id = $1`, [e.campaignId])).rows[0].s
+      const midOk = rounds.slice(0, 2).every((x, i) => x.status === 'chờ xử lý' && x.runsDone === i + 1 && x.once && x.texts === 4
+        && x.data.every(d => d === 'chờ xử lý') && x.lines.some(t => t.includes(`⏳ Đã chạy xong lượt ${i + 1}/3, hẹn chạy lại chiến dịch`)))
+      const last = rounds[2]
+      const lastOk = last.status === 'hoàn thành' && last.runsDone === 3 && last.once && last.texts === 4 && last.data.every(d => d === 'hoàn thành')
+        && last.lines.some(t => t.includes('(đã chạy đủ 3 lượt)')) && state.endedReason === 'max_runs'
+      ok(`S${id - 9000} lặp lại sau khi chạy xong (${rt}): 3 lượt, mỗi lượt gửi mỗi data một lần, lượt 3 hoàn thành`, midOk && lastOk,
+        { rounds, state: { runsDone: state.runsDone, endedReason: state.endedReason } })
+    }
+  }
   return out
 }
 

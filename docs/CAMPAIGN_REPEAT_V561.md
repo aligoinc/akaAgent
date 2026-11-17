@@ -105,6 +105,19 @@ runuser -u postgres -- env PG17_BIN=/usr/lib/postgresql/16/bin CHAT_REPO=/var/tm
 
 Chưa kiểm: chạy thật trên production; bộ kịch bản `scripts/engine-v2-scenarios/run.cjs` chưa nạp V561 (fixture của nó chưa có hàm ghi thông báo và hàm phiên Desktop mà preflight V561 đòi); hai trigger chạy ở mọi UPDATE của `auto_campaigns` trên production (`aaa_desktop_parent_ownership`, `trg_auto_table_log`) không có trong fixture, nên lượt ghi hai cột từ phiên Desktop chưa được thử với chúng.
 
+## Giả lập code app thật nhiều lượt (17/11/2026 tối)
+
+Ngoài bài kiểm hàm DB, hai bài chạy code app thật trên DB cục bộ dựng như production (tới V558) cộng V561, tua thời gian giữa các lượt:
+
+```bash
+# Lõi engine thật (Desktop và Fly, Zalo giả): S30, S31 — chiến dịch lặp 1 giờ, 3 lượt
+CHAT_REPO=../akaAgentChatApi SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 node scripts/engine-v2-scenarios/run.cjs --skip-general
+# Bộ chạy cũ Desktop (method + repository thật) và bộ quét API Web (lớp + RPC wrapper thật)
+CHAT_REPO=../akaAgentChatApi WEBAPP_REPO=../akaAgentWebApp node scripts/campaign-repeat-runtime-e2e.cjs
+```
+
+Kết quả 17/11: S30 / S31 đạt (mỗi lượt gửi mỗi data đúng một lần, câu "⏳ Đã chạy xong lượt i/3, hẹn chạy lại…", lượt 3 "✅ Hoàn thành chiến dịch … (đã chạy đủ 3 lượt)"); bài thứ hai 4/4 nhóm (bộ chạy cũ 3 lượt + chạy lại mở vòng mới + chiến dịch không lặp không gọi hàm lặp; bộ quét mở lại, chốt, thông báo chỉ ở lượt cuối, khoá tắt khẩn, đồng hồ tự chạy). Chưa chạy: app Electron đóng gói thật, Zalo / Facebook thật, API Web đã deploy.
+
 ## Apply và gỡ
 
 - Sinh lại file: `node scripts/build-v561-sql.cjs` (không sửa tay ba file trong `migrations/`).
