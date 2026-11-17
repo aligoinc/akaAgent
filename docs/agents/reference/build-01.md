@@ -54,6 +54,12 @@ Smoke hỏng thì chạy lại ở commit trước PR liên quan (worktree tạm
 theo thư mục đang đứng. Chạy từ thư mục work thì mọi đường dẫn lệch và kết quả luôn là 0 file đổi, không báo lỗi (9.8.0: 0 → 12 khi
 chạy đúng chỗ).
 
+**Dấu kiểm trong `out/main/index.js` (17/11/2026, 9.9.0).** Chỉ chọn chuỗi của code thật sự được gọi: hàm repository export mà
+không nơi nào gọi bị bỏ khỏi bản build (9.9.0: `aka_agent_campaign_repeat_state_v1` của `getCampaignRepeatStates`), hậu kiểm báo
+thiếu dấu dù bản build đúng. Kiểm trước bằng `grep -o` trên `out/main/index.js` của worktree sau `npm run build`. Smoke dò mã nguồn bằng
+regex dễ lệch khi PR khác thêm phần tử vào cùng danh sách (`aff-partner-desktop-smoke` hỏng ở 9.9.0 vì #690 thêm khoá sau
+`affiliate.program`): xem log trước khi coi là lỗi app.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

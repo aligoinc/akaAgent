@@ -134,6 +134,6 @@ Kết quả 17/11: S30 / S31 đạt (mỗi lượt gửi mỗi data đúng một
 - Thêm data vào chiến dịch đúng lúc nó vừa "hoàn thành" ở lượt giữa (trước khi bộ quét chạy) làm chiến dịch mở lại theo đường thêm data; lượt đó không được đếm.
 - Form Desktop bản chưa có ô này (tới 9.8.0) ghi đè `extra_settings` theo danh sách khoá cố định: sửa chiến dịch trên bản đó làm mất cài đặt lặp.
 - Chiến dịch Facebook chỉ tạo, sửa được trên Desktop, nên lặp cho Facebook chỉ dùng được sau khi phát hành Desktop có ô này.
-- Lõi engine trên Fly và Desktop đã phát hành in câu của lý do `repeat_scheduled` cũ ("Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch … lúc …"); câu có số lượt (`packages/campaign-engine/src/progress.ts`) chỉ có sau lần phát hành / đồng bộ lõi kế tiếp.
+- Desktop tới 9.8.0 in câu của lý do `repeat_scheduled` cũ ("Đã gửi xong lượt này, hẹn gửi lặp lại chiến dịch … lúc …"); câu có số lượt (`packages/campaign-engine/src/progress.ts`) có trên Fly từ 20:59 VN 17/11 (lõi đồng bộ qua ChatApi #163, worker `dev-dd9a5b1-20261117`) và trên Desktop từ bản 9.9.0.
 - Bốn loại Facebook chuyển sang cài đặt mới: lướt newsfeed lịch Hàng ngày có vài đường hoàn thành thẳng (chạm giới hạn trong ngày) không qua `handleCampaignCompletion`; chiến dịch đang bật lặp hoàn thành theo đường đó được bộ quét đếm là một lượt và mở lại.
 - Bộ quét đọc cả bảng `auto_campaigns` mỗi lượt (không có index riêng, theo yêu cầu chỉ thêm cột). 17/11/2026 bảng có 56,9 nghìn dòng, heap 72 MB; nếu bảng lớn lên nhiều thì thêm index một phần theo `repeat_log IS NOT NULL`.
