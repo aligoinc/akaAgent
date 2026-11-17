@@ -452,13 +452,17 @@ BEGIN
   END IF;
 
   IF v_apply_visibility THEN
-    v_visibility:=private.aka_agent_campaign_visibility_snapshot(p_staff_id,p_organization_id);
+    v_visibility:=private.aka_agent_campaign_visibility_snapshot_v2(p_staff_id,p_organization_id);
   END IF;
   -- Materialize only narrow sort/filter keys. Content, log, images and settings
   -- are never read. Null filters and explicit empty arrays remain distinct.
   WITH scoped AS NOT MATERIALIZED (
     SELECT c.id, c.status, c.name, c.account_id, c.action_id, a.flatform_type,
       CASE WHEN a.flatform_type = 'facebook' OR (a.flatform_type = 'zalo' AND a.is_zalo_server IS NOT TRUE) THEN 'desktop' ELSE 'web' END AS runtime_target,
+      CASE WHEN a.flatform_type = 'sms' THEN 'sms' WHEN a.flatform_type = 'facebook' THEN 'facebook'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web = false AND a.is_zalo_server = true THEN 'zalo_server'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web IS TRUE AND a.is_zalo_server IS NOT TRUE THEN 'zalo_browser'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web IS NOT TRUE AND a.is_zalo_server IS NOT TRUE THEN 'zalo_qr' END AS product_key,
       coalesce(c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz) AS send_time,
       CASE WHEN c.status IN ('tạm dừng', 'hoàn thành') THEN coalesce(c.last_run_at, c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz)
         ELSE coalesce(c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz) END AS sort_time,
@@ -472,6 +476,7 @@ BEGIN
   ), filtered AS NOT MATERIALIZED (
     SELECT id, status, rank, sort_time FROM scoped s
     WHERE (NOT v_apply_visibility OR NOT (coalesce(v_visibility->'hiddenActionIds','[]'::jsonb) ? s.action_id))
+      AND (NOT v_apply_visibility OR s.product_key IS NULL OR NOT (coalesce(v_visibility->'hiddenProductKeys','[]'::jsonb) ? s.product_key))
       AND (NOT p_filters ? 'platforms' OR p_filters->'platforms' ? s.flatform_type)
       AND (NOT p_filters ? 'runtimeTargets' OR p_filters->'runtimeTargets' ? s.runtime_target)
       AND (NOT p_filters ? 'statuses' OR p_filters->'statuses' ? s.status)

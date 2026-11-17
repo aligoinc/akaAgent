@@ -1,9 +1,9 @@
 {
   "migration": "migrations/migration_v530_web_facebook_email_authoring.sql",
   "ledgerName": "migration_v530_web_facebook_email_authoring",
-  "migrationFileMd5": "2b14b8d25f4a165b727a967c0da8a1e8",
+  "migrationFileMd5": "a5c4695e7a304ebea321df707be11624",
   "project": "akachat / cgjbsmqtfhqvttudyjzq",
-  "baselineReadAt": "2026-11-14 11:16–11:25 và 14:20–14:40 VN (read-only qua MCP execute_sql)",
+  "baselineReadAt": "2026-11-14 11:16–11:25 và 14:20–14:40 VN (read-only qua MCP execute_sql); đọc lại 2026-11-17 sau khi gộp dev_3: 10/11 hàm nguồn và 9 hàm phụ thuộc/fixture giữ md5, aka_agent_control_campaign_page đã bị V552 viết lại (367cf7ba… → 0f9e52d5…), baseline và md5 đích của hàm này dựng lại theo bản live",
   "ledgerTopAtBaseline": "20261114015453 migration_v529_desktop_server_on_fly_flag_route (không có migration_v53x nào)",
   "patchedFunctions": [
     {
@@ -44,8 +44,8 @@
     },
     {
       "signature": "public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
-      "sourceMd5": "367cf7ba9d72aff72c4907586cf1c3ba",
-      "targetMd5": "719fcf458eabe2b16fe536de07079c77",
+      "sourceMd5": "0f9e52d510202d53becc374ace8d6ad8",
+      "targetMd5": "4de34b1df7c0a23ed950bce85ce9f9db",
       "owner": "postgres",
       "securityDefiner": false,
       "volatility": "s",

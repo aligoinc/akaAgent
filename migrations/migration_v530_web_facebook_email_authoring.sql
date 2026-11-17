@@ -936,7 +936,7 @@ DECLARE
     {"signature":"public.aka_agent_authenticate_control_session_chat_v2(text)",
      "source":"61e874b9b47b827d78e16c71bc9ef687","target":"e481b2473aa9dda34f91092b98ffdfbe"},
     {"signature":"public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])",
-     "source":"367cf7ba9d72aff72c4907586cf1c3ba","target":"719fcf458eabe2b16fe536de07079c77"},
+     "source":"0f9e52d510202d53becc374ace8d6ad8","target":"4de34b1df7c0a23ed950bce85ce9f9db"},
     {"signature":"public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)",
      "source":"db8942b09904e535987b94745b159ca3","target":"fac3ecfdf45dff239c319656a7365a7c"},
     {"signature":"public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)",

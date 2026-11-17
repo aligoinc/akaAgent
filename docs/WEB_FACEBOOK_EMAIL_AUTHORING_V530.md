@@ -198,7 +198,7 @@ Nguồn đọc trên production 14/11/2026 11:16–11:25 VN (chỉ đọc). Migr
 | `private.aka_agent_web_facebook_campaigns_policy(bigint)` | `592f487518ef14f3bef6f0c7177f2ab5` | `a49d994aa8f5847a0ccd35e4017504f1` |
 | `aka_agent_authenticate_control_session(text)` | `692e2a068ce51377f6bd71fec20a8b0c` | `8012506f60ad1f00aab2b60f7bbec48c` |
 | `aka_agent_authenticate_control_session_chat_v2(text)` | `61e874b9b47b827d78e16c71bc9ef687` | `e481b2473aa9dda34f91092b98ffdfbe` |
-| `aka_agent_control_campaign_page(...)` | `367cf7ba9d72aff72c4907586cf1c3ba` | `719fcf458eabe2b16fe536de07079c77` |
+| `aka_agent_control_campaign_page(...)` | `0f9e52d510202d53becc374ace8d6ad8` | `4de34b1df7c0a23ed950bce85ce9f9db` |
 | `aka_agent_control_account_snapshot(...)` | `db8942b09904e535987b94745b159ca3` | `fac3ecfdf45dff239c319656a7365a7c` |
 | `aka_agent_control_desktop_activity(...)` | `6030f0d9c8429e36955a405920f751f9` | `ed7f9d447f72019feca71d717fd4e1bd` |
 | `aka_agent_control_set_desktop_campaign_status(...)` | `87f7002ac924f647896a7635663562b5` | `2d3fbc42cc31e57138cdc99554af9254` |
@@ -230,7 +230,7 @@ và danh mục loại chiến dịch Web (`type_visibility` chỉ Zalo/SMS).
 | `public.aka_agent_desktop_merge_campaign_runtime_settings(bigint,jsonb,text[])` | `2e3bf66477ad78cf90eba64e1626e8d2` | `aka_agent_desktop` |
 
 Hàm mới đều `SET search_path`, `REVOKE ALL … FROM PUBLIC, anon, authenticated` (và `aka_agent_desktop`/`aka_agent_chat_api`
-khi không dành cho họ), GRANT tường minh. md5 file migration: `2b14b8d25f4a165b727a967c0da8a1e8`. Chi tiết:
+khi không dành cho họ), GRANT tường minh. md5 file migration: `a5c4695e7a304ebea321df707be11624` (bản dựng lại 17/11/2026; trước là `2b14b8d2…`). Chi tiết:
 `migrations/snapshots/web-facebook-email-authoring-v530/baseline.json`.
 
 ## File
@@ -341,6 +341,31 @@ hàm biến mất (PGRST202).
 - Cấu hình SMTP giờ kiểm kiểu chặt: client gửi `port` ngoài 1–65535, `secure` không phải boolean hoặc trường chữ không phải
   chuỗi nhận `invalid_control_email_account_payload` thay vì được tự sửa. API hiện tại luôn gửi đúng kiểu (bài phát lại hợp
   đồng đạt).
+
+## Dựng lại sau khi gộp `dev_3` (17/11/2026, trước khi apply)
+
+Nhánh đã gộp `dev_3` tới `9d565880` (engine v2 Facebook #690, lặp lại chiến dịch #689/#691, build 9.9.0). Kiểm lại production
+(chỉ đọc qua MCP, 17/11/2026):
+
+- Sổ migration đã tới V563; **chưa có `migration_v530_%`**, số 530 chưa ai dùng.
+- 10/11 hàm V530 vá, 5 hàm phụ thuộc và 4 hàm chép vào fixture giữ đúng md5 đã ghi.
+- **`aka_agent_control_campaign_page` đã bị V552 (ẩn chiến dịch theo sản phẩm, 16/11) viết lại**: md5 `367cf7ba…` →
+  `0f9e52d510202d53becc374ace8d6ad8`. Bản V530 cũ sẽ dừng ở bước kiểm md5 nguồn (không đổi gì). Hai đoạn V530 thay trong hàm
+  này vẫn khớp đúng một lần trên thân mới; md5 đích mới là `4de34b1df7c0a23ed950bce85ce9f9db` (tính trên production bằng đúng
+  hai phép thay, không ghi gì).
+- Chiến dịch Email không thuộc sản phẩm nào của V552 (`product_key` NULL) nên không bị ẩn theo sản phẩm.
+
+Đã sửa: `baseline.sql` nhận thân live mới của hàm này (lấy nguyên văn qua MCP, md5 khớp), `migration_v530…sql` /
+`baseline-check.sql` / `baseline.json` đổi md5 nguồn và đích, fixture thêm bảng `auto_campaign_type_visibility` và hàm
+`private.aka_agent_campaign_visibility_snapshot_v2` (nguyên văn production, md5 `b96a58c9…`), sinh lại năm file bằng
+`scripts/build-v530-sql.py`. md5 file migration mới: `a5c4695e7a304ebea321df707be11624`. Bộ kiểm
+`scripts/test-v530-web-facebook-email-authoring.sh` (PG16) đạt đủ các bước.
+
+Desktop: engine v2 Facebook (#690) ghi con trỏ link nguồn bằng cả khối `extra_settings`
+(`runFacebookEngineTarget`), bài kiểm tĩnh `campaign-runtime-settings-merge-smoke.cjs` bắt được sau khi gộp. Đã đổi sang
+`persistCampaignRuntimeSettings` (ghi riêng khoá `sourceLinkIndex` qua RPC V530, thiếu RPC thì ghi cả khối như cũ).
+
+**Trước khi apply vẫn phải kiểm lại sổ và md5 nguồn**: mỗi migration khác sửa một trong 11 hàm này là phải dựng lại như trên.
 
 ## Sửa sau khi rà (14/11/2026 chiều, trước khi apply)
 

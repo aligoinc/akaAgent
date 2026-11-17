@@ -17,6 +17,27 @@ ALTER TABLE public.auto_account_groups
   ADD COLUMN IF NOT EXISTS created_at timestamptz NOT NULL DEFAULT now(),
   ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
+-- V552 (akachat 16/11/2026): danh sách chiến dịch đọc cài đặt hiển thị qua bản _v2 (thêm sản phẩm đang ẩn). Bảng theo cột
+-- production; hàm nguyên văn production (md5 b96a58c9393964526705a6cba14275df, đọc chỉ đọc 17/11/2026).
+CREATE TABLE IF NOT EXISTS public.auto_campaign_type_visibility (
+  organization_id bigint PRIMARY KEY, hidden_action_ids text[], revision bigint, updated_by bigint,
+  updated_at timestamptz, web_hidden_product_keys text[]
+);
+CREATE OR REPLACE FUNCTION private.aka_agent_campaign_visibility_snapshot_v2(p_staff_id bigint, p_organization_id bigint)
+ RETURNS jsonb
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public', 'pg_temp'
+AS $function$
+  SELECT jsonb_build_object('organizationId',p_organization_id,
+    'hiddenActionIds',coalesce(v.hidden_action_ids,'{}'::text[]),'revision',coalesce(v.revision,0),
+    'updatedAt',v.updated_at,'canEdit',s.is_admin IS TRUE AND s.is_active IS TRUE AND s.deleted_at IS NULL,
+    'hiddenProductKeys',coalesce(v.web_hidden_product_keys,'{}'::text[]))
+  FROM public.org_staff s LEFT JOIN public.auto_campaign_type_visibility v ON v.organization_id=s.organization_id
+  WHERE s.id=p_staff_id AND s.organization_id=p_organization_id
+$function$;
+REVOKE ALL ON FUNCTION private.aka_agent_campaign_visibility_snapshot_v2(bigint, bigint) FROM PUBLIC;
+
 -- Production: tổ chức có sản phẩm 5 khi bật chính sách tách quyền. Test bật bằng GUC v530_test.separate_org.
 CREATE OR REPLACE FUNCTION public.aka_agent_app_access_separate(p_org bigint) RETURNS boolean
 LANGUAGE sql STABLE AS $$ SELECT COALESCE(current_setting('v530_test.separate_org', true), '') = p_org::text $$;

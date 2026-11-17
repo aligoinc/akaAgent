@@ -8,7 +8,7 @@ BEGIN
     ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', '{postgres=X/postgres}'),
     ('public.aka_agent_authenticate_control_session(text)', '692e2a068ce51377f6bd71fec20a8b0c', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_authenticate_control_session_chat_v2(text)', '61e874b9b47b827d78e16c71bc9ef687', '{postgres=X/postgres,service_role=X/postgres}'),
-    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '367cf7ba9d72aff72c4907586cf1c3ba', '{postgres=X/postgres,service_role=X/postgres}'),
+    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '0f9e52d510202d53becc374ace8d6ad8', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)', 'db8942b09904e535987b94745b159ca3', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', '{postgres=X/postgres,service_role=X/postgres}'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '{postgres=X/postgres,service_role=X/postgres}'),
@@ -38,7 +38,8 @@ BEGIN
     ('public.lock_auto_account_control_resources()', 'e2643b7a416182ebaf8a508438ef02a1'),
     ('private.aka_agent_staff_scope_for_request()', 'd417807fa9dc08cfecbd6cd0aab7df3e'),
     ('private.aka_agent_assert_request_ownership(bigint,bigint,bigint)', '31494192d0a18efeafa4fb0296008230'),
-    ('private.aka_agent_guard_parent_ownership()', '1e72bdc906b4d905f555c3f6d4114dda')
+    ('private.aka_agent_guard_parent_ownership()', '1e72bdc906b4d905f555c3f6d4114dda'),
+    ('private.aka_agent_campaign_visibility_snapshot_v2(bigint,bigint)', 'b96a58c9393964526705a6cba14275df')
   ) AS x(signature, production_md5) LOOP
     IF md5(pg_get_functiondef(spec.signature::regprocedure)) IS DISTINCT FROM spec.production_md5 THEN
       RAISE EXCEPTION 'fixture_function_mismatch:%:%', spec.signature, md5(pg_get_functiondef(spec.signature::regprocedure));

@@ -5994,10 +5994,12 @@ export class CampaignScheduler {
       sourceLink = unit.sourceLinks[index]
       unit.sourceLinkIndex = (index + 1) % unit.sourceLinks.length
       try {
-        const updated = await this.updateCampaignAndBroadcast(campaign.id, {
-          extraSettings: { ...campaign.extraSettings, sourceLinkIndex: unit.sourceLinkIndex }
-        })
-        campaign.extraSettings = updated.extraSettings
+        // Khoá do bộ chạy sở hữu: ghi riêng khoá này (RPC V530) để không đè chỉnh sửa từ Web/iOS giữa lượt chạy.
+        campaign.extraSettings = await this.persistCampaignRuntimeSettings(
+          campaign.id,
+          { sourceLinkIndex: unit.sourceLinkIndex },
+          { ...campaign.extraSettings, sourceLinkIndex: unit.sourceLinkIndex }
+        )
       } catch { /* như bộ cũ: không lưu được con trỏ thì lượt sau dùng lại link này */ }
       progress(`🔗 Link nguồn #${index + 1}/${unit.sourceLinks.length}${detail ? ` cho "${name}"` : ''}: ${sourceLink}`)
     }

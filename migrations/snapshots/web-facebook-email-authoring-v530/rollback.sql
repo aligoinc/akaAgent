@@ -34,7 +34,7 @@ BEGIN
     ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', 'a49d994aa8f5847a0ccd35e4017504f1'),
     ('public.aka_agent_authenticate_control_session(text)', '692e2a068ce51377f6bd71fec20a8b0c', '8012506f60ad1f00aab2b60f7bbec48c'),
     ('public.aka_agent_authenticate_control_session_chat_v2(text)', '61e874b9b47b827d78e16c71bc9ef687', 'e481b2473aa9dda34f91092b98ffdfbe'),
-    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '367cf7ba9d72aff72c4907586cf1c3ba', '719fcf458eabe2b16fe536de07079c77'),
+    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '0f9e52d510202d53becc374ace8d6ad8', '4de34b1df7c0a23ed950bce85ce9f9db'),
     ('public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)', 'db8942b09904e535987b94745b159ca3', 'fac3ecfdf45dff239c319656a7365a7c'),
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', 'ed7f9d447f72019feca71d717fd4e1bd'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '2d3fbc42cc31e57138cdc99554af9254'),
@@ -505,13 +505,17 @@ BEGIN
   END IF;
 
   IF v_apply_visibility THEN
-    v_visibility:=private.aka_agent_campaign_visibility_snapshot(p_staff_id,p_organization_id);
+    v_visibility:=private.aka_agent_campaign_visibility_snapshot_v2(p_staff_id,p_organization_id);
   END IF;
   -- Materialize only narrow sort/filter keys. Content, log, images and settings
   -- are never read. Null filters and explicit empty arrays remain distinct.
   WITH scoped AS NOT MATERIALIZED (
     SELECT c.id, c.status, c.name, c.account_id, c.action_id, a.flatform_type,
       CASE WHEN a.flatform_type = 'facebook' OR (a.flatform_type = 'zalo' AND a.is_zalo_server IS NOT TRUE) THEN 'desktop' ELSE 'web' END AS runtime_target,
+      CASE WHEN a.flatform_type = 'sms' THEN 'sms' WHEN a.flatform_type = 'facebook' THEN 'facebook'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web = false AND a.is_zalo_server = true THEN 'zalo_server'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web IS TRUE AND a.is_zalo_server IS NOT TRUE THEN 'zalo_browser'
+        WHEN a.flatform_type = 'zalo' AND a.is_zalo_show_web IS NOT TRUE AND a.is_zalo_server IS NOT TRUE THEN 'zalo_qr' END AS product_key,
       coalesce(c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz) AS send_time,
       CASE WHEN c.status IN ('tạm dừng', 'hoàn thành') THEN coalesce(c.last_run_at, c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz)
         ELSE coalesce(c.schedule, c.original_schedule, '1970-01-01Z'::timestamptz) END AS sort_time,
@@ -525,6 +529,7 @@ BEGIN
   ), filtered AS NOT MATERIALIZED (
     SELECT id, status, rank, sort_time FROM scoped s
     WHERE (NOT v_apply_visibility OR NOT (coalesce(v_visibility->'hiddenActionIds','[]'::jsonb) ? s.action_id))
+      AND (NOT v_apply_visibility OR s.product_key IS NULL OR NOT (coalesce(v_visibility->'hiddenProductKeys','[]'::jsonb) ? s.product_key))
       AND (NOT p_filters ? 'platforms' OR p_filters->'platforms' ? s.flatform_type)
       AND (NOT p_filters ? 'runtimeTargets' OR p_filters->'runtimeTargets' ? s.runtime_target)
       AND (NOT p_filters ? 'statuses' OR p_filters->'statuses' ? s.status)
@@ -1808,7 +1813,7 @@ BEGIN
     ('private.aka_agent_web_facebook_campaigns_policy(bigint)', '592f487518ef14f3bef6f0c7177f2ab5', 'a49d994aa8f5847a0ccd35e4017504f1'),
     ('public.aka_agent_authenticate_control_session(text)', '692e2a068ce51377f6bd71fec20a8b0c', '8012506f60ad1f00aab2b60f7bbec48c'),
     ('public.aka_agent_authenticate_control_session_chat_v2(text)', '61e874b9b47b827d78e16c71bc9ef687', 'e481b2473aa9dda34f91092b98ffdfbe'),
-    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '367cf7ba9d72aff72c4907586cf1c3ba', '719fcf458eabe2b16fe536de07079c77'),
+    ('public.aka_agent_control_campaign_page(bigint,bigint,text[],jsonb,integer,jsonb,bigint,boolean,bigint,bigint[])', '0f9e52d510202d53becc374ace8d6ad8', '4de34b1df7c0a23ed950bce85ce9f9db'),
     ('public.aka_agent_control_account_snapshot(bigint,bigint,text[],text,bigint[],jsonb,text)', 'db8942b09904e535987b94745b159ca3', 'fac3ecfdf45dff239c319656a7365a7c'),
     ('public.aka_agent_control_desktop_activity(bigint,bigint,text[],bigint,integer)', '6030f0d9c8429e36955a405920f751f9', 'ed7f9d447f72019feca71d717fd4e1bd'),
     ('public.aka_agent_control_set_desktop_campaign_status(bigint,bigint,bigint,text)', '87f7002ac924f647896a7635663562b5', '2d3fbc42cc31e57138cdc99554af9254'),

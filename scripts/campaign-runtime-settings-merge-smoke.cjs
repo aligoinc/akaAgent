@@ -561,7 +561,9 @@ function staticChecks() {
   assert.deepEqual(persistCalls.map(call => call.method).sort(), [
     'advanceCampaignContentRotation', 'ensureInternalSmsChildCampaign', 'enqueuePostBumpAfterGroupPost', 'executeCampaignV2',
     'markZaloCancelSentFriendRequestMaterialized', 'markZaloFriendRecommendationMaterialized', 'materializeZaloBirthdayInputData',
-    'materializeZaloFriendInputData', 'materializeZaloFriendInputData', 'resolveCreatedPostBumpTargets'
+    'materializeZaloFriendInputData', 'materializeZaloFriendInputData', 'resolveCreatedPostBumpTargets',
+    // Engine v2 cho Facebook (dev_3 #690): con trỏ link nguồn của từng data.
+    'runFacebookEngineTarget'
   ].sort())
   for (const call of persistCalls) {
     assert.ok(call.keys.length > 0)
