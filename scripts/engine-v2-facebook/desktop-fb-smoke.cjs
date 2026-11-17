@@ -159,6 +159,9 @@ class FakePage {
   async evaluate(code) {
     if (this.destroyed) throw new Error('Browser page is not connected')
     if (code === 'formClosed') return this.scenario.formClosed !== false
+    if (code === 'typeError') return this.scenario.typeError ?? null
+    // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
+    if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
     return null
   }
 }
@@ -182,7 +185,9 @@ try { await page.waitForSelector(sel, { timeout: 100 }) } catch (cause) {
 }
 await page.click(sel)
 return { opened: true }` },
-  { id: 28, name: 'fb_type_post_content', code: `await page.type(await helpers.element('fb_composer_editor'), 'Nội dung'); return { typed: true }` },
+  { id: 28, name: 'fb_type_post_content', code: `const failure = await page.evaluate('typeError')
+if (failure) throw new Error(failure)
+await page.type(await helpers.element('fb_composer_editor'), 'Nội dung'); return { typed: true }` },
   { id: 30, name: 'fb_click_post_button', code: `
 const btn = await helpers.element('fb_post_button')
 await page.waitForSelector(btn, { timeout: 100 })
@@ -468,6 +473,36 @@ async function main() {
       // V559: FB40 như bộ cũ (override "bỏ qua", data hoàn thành).
       assert.deepEqual((await details(entry.campaign.id)).map(r => [r.action_code, r.status]), [['fb_post_group', 'bỏ qua']])
       assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+    })
+
+    await check('dấu hiệu (anh chốt 17/11): nhóm hiện "Bạn hiện không xem được nội dung này" thì FB14 thay FB40, xử lý y FB40 (bỏ qua, không đếm)', async () => {
+      const entry = await makeCampaign()
+      const { page: fake } = await run(entry, { missing: [ELEMENTS.fb_composer_button], pageTexts: ['Nhóm Riêng tư', 'Bạn hiện không xem được nội dung này'] })
+      const out = await outcomes(entry.campaign.id)
+      assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_post_group', 'before_send', 'err_fb_group_cannot_post_unavailable']])
+      assert.deepEqual((await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]), [['fb_post_group', 'bỏ qua', 'Nhóm không tồn tại (FB14)']])
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      assert.equal(fake.pageSignReads, 1, 'đọc chữ trên trang đúng một lần, ngay sau block lỗi')
+      assert.equal(fake.clicks.length, 0)
+      // Trang không có chữ đó: như hôm nay (FB40).
+      const plain = await makeCampaign()
+      await run(plain, { missing: [ELEMENTS.fb_composer_button], pageTexts: ['Nhóm Riêng tư', 'Bạn viết gì đi...'] })
+      assert.deepEqual((await outcomes(plain.campaign.id)).map(o => o.error_code), ['err_fb_group_composer_editor_not_found'])
+    })
+
+    await check('dấu hiệu (anh chốt 17/11): block báo không có ô chọn ảnh trước khi đăng thì FB38, xử lý y FB44 (ghi "lỗi", cộng chuỗi)', async () => {
+      const entry = await makeCampaign()
+      const { page: fake } = await run(entry, { typeError: 'Cần đúng 1 input file trong form đăng bài, tìm thấy 0' })
+      const out = await outcomes(entry.campaign.id)
+      assert.deepEqual(out.map(o => [o.phase, o.error_code]), [['before_send', 'err_fb_upload_form_changed']])
+      assert.deepEqual((await details(entry.campaign.id)).map(r => [r.status, r.log]), [['lỗi', 'Không thấy chỗ tải ảnh hoặc video lên Facebook (FB38)']])
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      assert.ok(!fake.clicks.includes(ELEMENTS.fb_post_button), 'chưa bấm nút Đăng')
+      assert.equal(fake.pageSignReads ?? 0, 0, 'block lỗi không mã: không dấu hiệu trang nào dùng được nên không đọc trang')
+      // Câu lỗi khác của cùng block: như hôm nay.
+      const other = await makeCampaign()
+      await run(other, { typeError: 'Cần đúng 1 input file trong form đăng bài, tìm thấy 2' })
+      assert.deepEqual((await outcomes(other.campaign.id)).map(o => o.error_code), ['err_undefined'])
     })
 
     await check('cú bấm đăng không tìm thấy nút (mức 2): dấu giải quyết "chưa gửi" theo vết thao tác, tín hiệu click:fb_post_button', async () => {

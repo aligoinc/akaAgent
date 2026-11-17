@@ -100,6 +100,7 @@ import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
+import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
 import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, saveErrorScreenshot, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
@@ -415,6 +416,20 @@ function safePageUrl(page: PageController | null): string {
   try { return page?.getURL() ?? '' } catch { return '' }
 }
 
+/** Chữ trên trang để so dấu hiệu lỗi (errorSigns.ts); đọc lỗi / quá 2 giây thì null, kết quả như hôm nay. */
+async function readFacebookPageSignTexts(page: PageController): Promise<string[] | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    const texts = await Promise.race([page.evaluate<unknown>(PAGE_SIGN_TEXTS_SCRIPT),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), PAGE_SIGN_TIMEOUT_MS) })])
+    return Array.isArray(texts) ? texts.filter((text): text is string => typeof text === 'string').slice(0, 300) : null
+  } catch {
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 interface FacebookEngineStepInfo {
   step: ResolvedEngineStep
   failure: (ReturnType<PageTrace['failureSignal']> & { threw: boolean; error: string | null }) | null
@@ -422,6 +437,8 @@ interface FacebookEngineStepInfo {
   pageState: Signal | null
   /** Ảnh lỗi chụp sau block lỗi (lưu trên máy, mục 12). */
   screenshotId?: string | null
+  /** Chữ trên trang đọc ngay sau block lỗi / trả mã lỗi, khi có dấu hiệu `page` cho thao tác (errorSigns.ts). */
+  pageTexts?: string[] | null
 }
 
 interface FacebookEngineTargetState {
@@ -5970,6 +5987,18 @@ export class CampaignScheduler {
       }, checkMs)
 
       const stepsInfo = new Map<string, FacebookEngineStepInfo>()
+      const signs: readonly FacebookErrorSign[] = settings.errorSigns ?? []
+      /**
+       * Dấu hiệu có mặt của một lỗi cụ thể cho kết quả lỗi của bước `step` (anh chốt 17/11): chữ trên trang đã đọc lúc bước lỗi, rồi câu lỗi
+       * do block / bộ dựng lịch sử viết. null = không có, kết quả như hôm nay.
+       */
+      const signOf = (step: { stepKey?: string | null } | null | undefined, actionCode: string, phase: Phase, currentErrorCode: string | null,
+        messages: ReadonlyArray<string | null | undefined>): FacebookErrorSign | null => {
+        if (signs.length === 0) return null
+        const entry = step?.stepKey ? stepsInfo.get(step.stepKey) : undefined
+        return pickFacebookErrorSign(signs, { actionCode, phase, currentErrorCode },
+          { pageTexts: entry?.pageTexts ?? null, messages: [...messages, entry?.failure?.error ?? null] })
+      }
       const marks = new Map<string, { actionCode: string; stepKey: string; level: number }>()
       const realtime = new Set<string>()
       /** Số dòng đã báo theo khoá bước (dòng thứ hai trở đi của cùng bước có hậu tố :n). */
@@ -6151,13 +6180,21 @@ export class CampaignScheduler {
             }
           }
         }
+        // Dấu hiệu có mặt (anh chốt 17/11): block lỗi hoặc trả mã lỗi (vd FB40 không thấy ô đăng bài) thì đọc chữ trên trang ngay lúc đó,
+        // chỉ khi có dấu hiệu `page` cho thao tác; đọc lỗi thì như không có chữ.
+        const actionResult = (info.result.output as { actionResult?: { errorCode?: unknown; actionCode?: unknown } } | null | undefined)?.actionResult
+        const signAction = String(actionResult?.actionCode || entry.step.actionCode || firstAction)
+        const resultCode = typeof actionResult?.errorCode === 'string' && actionResult.errorCode ? actionResult.errorCode : null
+        if ((failed || resultCode) && page?.isConnected() && !entry.pageState && hasPageSigns(signs, signAction, resultCode)) {
+          entry.pageTexts = await readFacebookPageSignTexts(page)
+        }
         if (entry.step.commitLevel === 2) entry.sendAttempted = trace.sendAttempted
         // Newsfeed: bộ cũ ghi từng like / comment ngay khi xong (logNewsfeedMilestoneStep); engine báo ngay như vậy.
         if (campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID && info.result.success) {
           realtime.add(info.stepKey)
           await this.reportFacebookEngineRows(campaign, detail, account.id, [{ runId: info.runId, nodeId: info.nodeId, blockId: info.blockId,
             blockName: info.blockName, status: 'success', input: {}, output: info.result.output, stepKey: info.stepKey }], null, {
-            report, placeRow, screenshotOf, firstAction, extraRow: shareRow })
+            report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
         }
       }
 
@@ -6226,7 +6263,7 @@ export class CampaignScheduler {
 
       // 1. Dòng lịch sử của bộ dựng bộ cũ theo đúng thứ tự bước (bỏ bước newsfeed đã báo ngay).
       await this.reportFacebookEngineRows(campaign, detail, account.id, result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
-        result.steps, { report, placeRow, screenshotOf, firstAction, extraRow: shareRow })
+        result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
       for (const log of screenshotLogs) {
         await this.logCampaignProgress(campaign, log.storedMessage, { realtimeMessage: log.realtimeMessage, realtimeAction: log.action, engine: true })
       }
@@ -6249,7 +6286,8 @@ export class CampaignScheduler {
         }
         const out = blockFailureOutcome({ error: entry?.failure?.error ?? step?.error ?? null, threw: entry?.failure?.threw ?? true,
           traced: entry?.failure ?? null, marked: true, sendAttempted: mark.level === 2 ? entry?.sendAttempted ?? null : null,
-          pageState: entry?.pageState ?? null, browserGone: state.browserGone })
+          pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+          signFor: phase => signOf(step, mark.actionCode, phase, null, [step?.error ?? null, entry?.failure?.message ?? null]) })
         await report(key, mark.actionCode, { ok: false, phase: out.phase,
           signal: entry?.screenshotId ? { ...out.signal, screenshotId: entry.screenshotId } : out.signal })
       }
@@ -6268,7 +6306,9 @@ export class CampaignScheduler {
         if (!resolvedSteps.has(key) && !marks.has(key)) {
           const entry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
           const out = blockFailureOutcome({ error: entry?.failure?.error ?? failure?.error ?? result.error ?? null, threw: true,
-            traced: entry?.failure ?? null, marked: false, sendAttempted: null, pageState: entry?.pageState ?? null, browserGone: state.browserGone })
+            traced: entry?.failure ?? null, marked: false, sendAttempted: null, pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+            signFor: phase => signOf(failure, entry?.step.actionCode || firstAction, phase, null,
+              [failure?.error ?? result.error ?? null, entry?.failure?.message ?? null]) })
           await report(`${key}:error`, entry?.step.actionCode || firstAction, { ok: false, phase: out.phase,
             signal: entry?.screenshotId ? { ...out.signal, screenshotId: entry.screenshotId } : out.signal })
         }
@@ -6382,6 +6422,9 @@ export class CampaignScheduler {
       placeRow: (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null) => { key: string; phase: Phase | null }
       /** Mã ảnh lỗi của bước (nếu đã chụp). */
       screenshotOf?: (step: RunStepV2 | null) => string | null
+      /** Dấu hiệu có mặt của lỗi cụ thể cho dòng lỗi (errorSigns.ts, anh chốt 17/11); null = như hôm nay. */
+      signOf?: (step: RunStepV2 | null, actionCode: string, phase: Phase, currentErrorCode: string | null,
+        messages: ReadonlyArray<string | null | undefined>) => FacebookErrorSign | null
       firstAction: string
       /** Dòng của data khác data chính (nhóm chia sẻ kèm): báo lên lượt data của nhóm đó; undefined = dòng của data chính. */
       extraRow?: (action: CreateCampaignDetailInput, outcome: MilestoneOutcome) => Promise<CampaignDetail | null | undefined>
@@ -6395,6 +6438,12 @@ export class CampaignScheduler {
       if (routed !== undefined) return routed
       const place = ctx.placeRow(current, outcome.actionCode, action.resultOutput?.operationState ? null : String(action.status ?? ''))
       if (!outcome.raw.ok && place.phase) outcome.raw = { ...outcome.raw, phase: place.phase }
+      // Dấu hiệu có mặt: mã cụ thể thay mã chung / dòng chưa có mã; chính sách của mã đó giữ cách xử lý như hôm nay (V559), chỉ đổi câu.
+      if (!outcome.raw.ok && ctx.signOf) {
+        const raw = outcome.raw
+        const sign = ctx.signOf(current, outcome.actionCode, raw.phase, raw.signal.errorCode ?? null, [raw.signal.message ?? null, action.log ?? null])
+        if (sign) outcome.raw = { ...raw, signal: { ...raw.signal, kind: 'block', code: sign.code, errorCode: sign.code } }
+      }
       const screenshotId = !outcome.raw.ok ? ctx.screenshotOf?.(current) : null
       if (!outcome.raw.ok && screenshotId) outcome.raw = { ...outcome.raw, signal: { ...outcome.raw.signal, screenshotId } }
       const res = await ctx.report(place.key, outcome.actionCode, outcome.raw, outcome.actionName)

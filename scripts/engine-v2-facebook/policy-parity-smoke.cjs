@@ -80,12 +80,15 @@ async function main() {
     const legacyCatalog = new ActionStatusCatalog(legacyStatuses, legacyPolicies)
     const fbErrors = await q(`SELECT * FROM public.auto_error WHERE error_type = 'external facebook' AND is_active AND NOT is_delete ORDER BY public_code`)
 
+    const { SIGNS, SIGNS_SETTING_KEY, SIGNS_JSON } = require('../build-v559-sql.cjs')
+    const signCodes = new Set(SIGNS.map(s => s.code))
     const parityDiffs = async () => {
       const diffs = []
       let compared = 0
       for (const e of fbErrors) {
-        // Q6 đã chốt; FB06 bộ cũ không đi qua chính sách mã (pauseBeforePageIdentityTarget), kiểm riêng.
-        if (e.error_code === 'err_fb_checkpoint' || e.error_code === 'err_fb_identity_switch_failed') continue
+        // Q6 đã chốt; FB06 bộ cũ không đi qua chính sách mã (pauseBeforePageIdentityTarget), kiểm riêng. Mã có dấu hiệu (anh chốt 17/11) giữ
+        // cách xử lý của mã hôm nay đang xử lý trường hợp đó, không theo danh mục: kiểm riêng ở dưới.
+        if (e.error_code === 'err_fb_checkpoint' || e.error_code === 'err_fb_identity_switch_failed' || signCodes.has(e.error_code)) continue
         for (const action of fbActions) {
           const errorCounting = action === 'fb_add_friend' || e.detail_mode != null
           const override = { detailMode: e.detail_mode, detailStatusId: e.detail_status_id == null ? null : Number(e.detail_status_id), inputEffect: e.input_effect,
@@ -233,6 +236,38 @@ async function main() {
       assert.equal((await effective('err_engine_fb_action_failed', 'fb_post_group', 'after_send', 'campaign_detail_failed')).streak_after_delivery ?? null, null)
     })
 
+    await check('dấu hiệu (anh chốt 17/11): mã có chỗ phát mới tính lượt / chuỗi / dừng y như mã hôm nay đang xử lý, chỉ đổi câu cho khách', async () => {
+      // So mọi trường quyết định hành vi. Không so: câu (đổi có chủ ý), nhóm lỗi (report_v1 chỉ dùng để ghi lại và khi nhóm là
+      // unknown_delivery, không mã nào ở đây), thời gian chờ chạy lại khi data không về hàng đợi (chỉ dùng khi target_effect = requeue).
+      const strip = p => {
+        const out = { ...p }
+        for (const k of ['log_template', 'campaign_note_template', 'policy_ids', 'revisions', 'error_class']) delete out[k]
+        if (out.target_effect !== 'requeue') delete out.requeue_after_minutes
+        return out
+      }
+      for (const sign of SIGNS) {
+        for (const code of [sign.code, sign.mirror]) {
+          assert.notEqual((await resolve(code, null, 'fb_post_group', 'after_send')).error_class, 'unknown_delivery', `${code}: nhóm lỗi unknown_delivery đổi pha giao`)
+        }
+      }
+      let compared = 0
+      for (const sign of SIGNS) {
+        for (const action of fbActions) for (const phase of ['before_send', 'in_flight', 'after_send']) for (const status of [null, ...FAILURE_STATUSES]) {
+          const mine = await effective(sign.code, action, phase, status)
+          const today = await effective(sign.mirror, action, phase, status)
+          assert.deepEqual(strip(mine), strip(today), `${sign.code} ≠ ${sign.mirror} ở ${action} / ${phase} / ${status}`)
+          compared++
+        }
+        const p = await resolve(sign.code, null, sign.actions[0] ?? 'fb_post_group', 'after_send')
+        const title = (await one(`SELECT customer_title AS t FROM public.auto_error WHERE error_code = $1`, [sign.code])).t
+        assert.ok(title && p.log_template === title, `${sign.code}: câu cho khách là câu anh duyệt (${p.log_template} / ${title})`)
+      }
+      const row = await one(`SELECT value, is_active, is_secret FROM public.auto_system_settings WHERE key = $1`, [SIGNS_SETTING_KEY])
+      assert.ok(row && row.is_active && !row.is_secret, 'dòng thiết lập dấu hiệu bật, không bí mật')
+      assert.deepEqual(JSON.parse(row.value), JSON.parse(SIGNS_JSON))
+      console.log(`  ${compared} cặp (mã có dấu hiệu, thao tác, pha, trạng thái) khớp mã hôm nay`)
+    })
+
     await check('luật phân loại tín hiệu Facebook', async () => {
       const classify = async (action, phase, signal, platform = 'facebook') => (await one(
         `SELECT error_code FROM public.aka_agent_engine_classify_signal($1, $2, $3, $4::jsonb)`, [platform, action, phase, JSON.stringify(signal)])).error_code
@@ -276,6 +311,7 @@ async function main() {
       assert.deepEqual(await fb04Row(), FB04_BEFORE)
       assert.equal((await one(`SELECT customer_title AS t FROM public.auto_error WHERE error_code = 'err_fb_comment_unavailable_not_member'`)).t,
         'Chưa đủ quyền thành viên để bình luận trong nhóm', 'gỡ V559 trả câu cho khách về như cũ')
+      assert.equal((await one(`SELECT count(*)::int AS n FROM public.auto_system_settings WHERE key = $1`, [SIGNS_SETTING_KEY])).n, 0, 'gỡ V559 xoá dòng dấu hiệu')
       await db.query(v559)
       assert.equal((await one(`SELECT count(*)::int AS n FROM public.auto_error WHERE error_code = 'err_engine_fb_action_failed' AND is_active`)).n, 1)
       assert.deepEqual(await fb04Row(), FB04_AFTER)

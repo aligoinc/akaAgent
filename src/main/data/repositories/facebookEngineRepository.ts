@@ -4,6 +4,7 @@ import { getSupabaseClient } from '../supabaseClient'
 import {
   mapEngineBlockStepRow, mapEngineWorkflowRow, type EngineBlockStepRow, type EngineWorkflowRow
 } from '../../engineAdapters/facebook/stepCatalog'
+import { parseFacebookErrorSigns, type FacebookErrorSign } from '../../engineAdapters/facebook/errorSigns'
 
 const FLAG_TIMEOUT_MS = 10_000
 const CATALOG_TIMEOUT_MS = 15_000
@@ -90,15 +91,19 @@ export interface FacebookRuntimeSettings {
   blockHangMinutes: number
   /** Câu chờ khi chiến dịch đến lịch quá số phút này chưa chạy được (Q21), mặc định 10. */
   waitNoteMinutes: number
+  /** Dấu hiệu nhận ra lỗi Facebook (V559, anh chốt 17/11): thiếu dòng / sai = rỗng, kết quả như hôm nay. */
+  errorSigns: FacebookErrorSign[]
 }
 
 export const FACEBOOK_RUNTIME_SETTING_KEYS = {
   maxComments: 'facebook.max_comments',
   blockHangMinutes: 'facebook.block_hang_minutes',
-  waitNoteMinutes: 'campaign.wait_note_minutes'
+  waitNoteMinutes: 'campaign.wait_note_minutes',
+  errorSigns: 'facebook.error_signs'
 } as const
 
-export const DEFAULT_FACEBOOK_RUNTIME_SETTINGS: Readonly<FacebookRuntimeSettings> = { maxComments: 20, blockHangMinutes: 10, waitNoteMinutes: 10 }
+export const DEFAULT_FACEBOOK_RUNTIME_SETTINGS: Readonly<FacebookRuntimeSettings> = { maxComments: 20, blockHangMinutes: 10, waitNoteMinutes: 10,
+  errorSigns: [] }
 
 /** Số nguyên dương trong khoảng; chưa có dòng / sai = mặc định (thiết lập do V556 thêm, sửa bằng UPDATE không cần phát hành). */
 export function parseFacebookRuntimeSetting(raw: unknown, fallback: number, max: number): number {
@@ -120,16 +125,17 @@ export async function loadFacebookRuntimeSettings(): Promise<FacebookRuntimeSett
     const value: FacebookRuntimeSettings = {
       maxComments: parseFacebookRuntimeSetting(values.get(FACEBOOK_RUNTIME_SETTING_KEYS.maxComments), DEFAULT_FACEBOOK_RUNTIME_SETTINGS.maxComments, 1000),
       blockHangMinutes: parseFacebookRuntimeSetting(values.get(FACEBOOK_RUNTIME_SETTING_KEYS.blockHangMinutes), DEFAULT_FACEBOOK_RUNTIME_SETTINGS.blockHangMinutes, 1440),
-      waitNoteMinutes: parseFacebookRuntimeSetting(values.get(FACEBOOK_RUNTIME_SETTING_KEYS.waitNoteMinutes), DEFAULT_FACEBOOK_RUNTIME_SETTINGS.waitNoteMinutes, 1440)
+      waitNoteMinutes: parseFacebookRuntimeSetting(values.get(FACEBOOK_RUNTIME_SETTING_KEYS.waitNoteMinutes), DEFAULT_FACEBOOK_RUNTIME_SETTINGS.waitNoteMinutes, 1440),
+      errorSigns: parseFacebookErrorSigns(values.get(FACEBOOK_RUNTIME_SETTING_KEYS.errorSigns))
     }
     runtimeSettings = { at: Date.now(), value }
     return value
   } catch {
-    return runtimeSettings?.value ?? { ...DEFAULT_FACEBOOK_RUNTIME_SETTINGS }
+    return runtimeSettings?.value ?? { ...DEFAULT_FACEBOOK_RUNTIME_SETTINGS, errorSigns: [] }
   }
 }
 
 /** Bản đã nạp gần nhất (đọc đồng bộ ở chỗ không chờ được); chưa nạp thì mặc định. */
 export function cachedFacebookRuntimeSettings(): FacebookRuntimeSettings {
-  return runtimeSettings?.value ?? { ...DEFAULT_FACEBOOK_RUNTIME_SETTINGS }
+  return runtimeSettings?.value ?? { ...DEFAULT_FACEBOOK_RUNTIME_SETTINGS, errorSigns: [] }
 }

@@ -103,6 +103,11 @@ export interface BlockFailureInput {
   pageState: Signal | null
   /** Cửa sổ ẩn đã chết / bị huỷ vì block treo. */
   browserGone?: 'browser_gone' | 'block_hang' | null
+  /**
+   * Dấu hiệu có mặt của một lỗi cụ thể ở pha này (errorSigns.ts: chữ trên trang lúc block lỗi, câu lỗi do chính block viết); null = không có,
+   * kết quả như hôm nay.
+   */
+  signFor?: (phase: Phase) => { code: string } | null
 }
 
 /**
@@ -117,6 +122,12 @@ export function blockFailureOutcome(input: BlockFailureInput): { phase: Phase; s
   }
   if (input.pageState) return { phase, signal: input.pageState }
   const trace = input.traced?.trace
+  // Dấu hiệu có mặt (anh chốt 17/11): mã cụ thể thay mã chung; chính sách của mã đó giữ cách xử lý như mã chung ở pha này (V559).
+  const sign = input.signFor?.(phase) ?? null
+  if (sign) {
+    const message = String(input.error || input.traced?.message || 'Lỗi không xác định').slice(0, 500)
+    return { phase, signal: { kind: 'block', code: sign.code, errorCode: sign.code, message, ...(trace && trace.ops.length ? { trace } : {}) } }
+  }
   if (input.traced && input.traced.code !== 'throw') {
     return { phase, signal: { kind: 'block', code: input.traced.code, message: input.traced.message, ...(trace ? { trace } : {}) } }
   }

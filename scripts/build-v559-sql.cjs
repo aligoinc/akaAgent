@@ -234,6 +234,50 @@ POLICIES.push(['err_undefined', 'fb_message_page_inbox_customer', { streak_thres
 // Bộ cũ: comment lỗi khi data đã có kết quả gửi thành công không cộng chuỗi data lỗi (targetOnlyFailure, actionResultRuntime.ts:160).
 const GUARDS = [['fb_comment', { streak_after_delivery: 'ignore' }, '[bộ cũ] Comment lỗi sau khi đã đăng / gửi thành công: không cộng chuỗi data lỗi.']]
 
+// ------------------------------------------------------------------------------------------------ dấu hiệu nhận ra lỗi
+// Anh chốt 17/11: chỉ phát mã cụ thể khi THẤY dấu hiệu của đúng lỗi (câu lỗi do chính block viết, chữ Facebook hiện trên trang), không suy từ
+// việc "không thấy" phần tử; mã có dấu hiệu chỉ đổi câu cho khách, tính lượt / chuỗi lỗi / dừng chiến dịch giữ y như mã đang xử lý trường hợp
+// đó hôm nay (hộp chọn "Giữ như hôm nay"): chính sách của mã = bản chép chính sách của `mirror`, đổi câu. Desktop đọc dòng thiết lập
+// `facebook.error_signs` (src/main/engineAdapters/facebook/errorSigns.ts): `message` = câu lỗi có chứa chữ, `page` = tiêu đề / hộp thoại / nút
+// trên trang bằng đúng chữ (đọc ngay lúc block lỗi); `replaces` = mã đang có được thay (rỗng = chỉ kết quả chưa có mã); `phases` rỗng = mọi pha.
+// Sửa chữ của dấu hiệu bằng SQL được; thêm mã mới thì thêm ở đây (cần chính sách như hôm nay) rồi sinh lại. "Phần chắc" anh chốt 17/11: chỉ
+// câu block đã tự báo đúng sự thật và chữ đã thấy trên trang thật (xem trang Facebook thật 17/11, tài khoản thử của anh).
+const SIGNS = [
+  { code: 'err_fb_page_inbox_customer_not_found', source: 'message', actions: ['fb_message_page_inbox_customer'], phases: [], replaces: [],
+    texts: ['Không tìm thấy khách hàng trong inbox page'], mirror: 'err_engine_fb_action_failed',
+    note: 'block nhắn inbox Page tự ghi dòng "không tồn tại" khi tìm không thấy khách trong hộp thư' },
+  { code: 'err_fb_page_inbox_wrong_conversation', source: 'message', actions: ['fb_message_page_inbox_customer'], phases: [], replaces: [],
+    texts: ['Không tìm thấy đúng khách hàng trong inbox page'], mirror: 'err_engine_fb_action_failed',
+    note: 'block nhắn inbox Page tự ghi dòng "không tồn tại" khi tên khách trong hộp thư không khớp' },
+  { code: 'err_fb_upload_form_changed', source: 'message', actions: [], phases: ['before_send'], replaces: [],
+    texts: ['Cần đúng 1 input file trong form đăng bài, tìm thấy 0', 'Input trong form không nhận ảnh/video'], mirror: 'err_engine_fb_ui_not_ready',
+    note: 'block `fb_drop_post_images` không thấy ô chọn ảnh / video trong form đăng bài, trước khi đăng' },
+  { code: 'err_fb_group_cannot_post_unavailable', source: 'page', actions: ['fb_post_group'], phases: [], replaces: ['err_fb_group_composer_editor_not_found'],
+    texts: ['Bạn hiện không xem được nội dung này', "This content isn't available right now"], mirror: 'err_fb_group_composer_editor_not_found',
+    note: 'đăng nhóm không thấy ô đăng bài (FB40) mà trang hiện "Bạn hiện không xem được nội dung này" (nhóm đã xoá / không còn xem được)' }
+]
+const publicOf = code => FB_ERRORS.find(e => e.error_code === code)?.public_code ?? NEW_CODES.find(r => r[0] === code)?.[1] ?? code
+const SIGN_CODES = new Set(SIGNS.map(s => s.code))
+for (const sign of SIGNS) {
+  if (!CUSTOMER[sign.code] || !FB_ERRORS.some(e => e.error_code === sign.code)) throw new Error(`Dấu hiệu ${sign.code}: không phải mã Facebook đang có`)
+  sign.mirrorRows = POLICIES.filter(([code]) => code === sign.mirror).map(([, action, fields]) => [action, fields])
+  if (sign.mirrorRows.length === 0) throw new Error(`Dấu hiệu ${sign.code}: chưa có chính sách của ${sign.mirror}`)
+}
+for (let i = POLICIES.length - 1; i >= 0; i--) if (SIGN_CODES.has(POLICIES[i][0])) POLICIES.splice(i, 1)
+for (const sign of SIGNS) {
+  const pub = publicOf(sign.code)
+  for (const [action, fields] of sign.mirrorRows) {
+    POLICIES.push([sign.code, action, { ...fields, log_template: CUSTOMER[sign.code][0], campaign_note_template: customerNote(sign.code, pub) },
+      `[anh chốt 17/11] ${pub}: có chỗ phát (dấu hiệu: ${sign.note}); giữ cách xử lý như ${publicOf(sign.mirror)} hôm nay, chỉ đổi câu cho khách.`])
+  }
+}
+const SIGNS_SETTING_KEY = 'facebook.error_signs'
+const SIGNS_JSON = JSON.stringify(SIGNS.map(({ code, source, actions, phases, replaces, texts }) => ({ code, source, actions, phases, replaces, texts })))
+const SIGNS_DESCRIPTION = 'Dấu hiệu nhận ra lỗi Facebook của engine v2 (V559, anh chốt 17/11): chỉ phát mã cụ thể khi thấy dấu hiệu có mặt, không suy từ việc '
+  + '"không thấy" phần tử. JSON: mảng {code, source message | page, actions, phases, replaces, texts}. message = câu lỗi của block có chứa chữ; '
+  + 'page = tiêu đề / hộp thoại / nút trên trang lúc block lỗi bằng đúng chữ. Mã có dấu hiệu giữ cách xử lý như mã đang xử lý trường hợp đó hôm nay, '
+  + 'chỉ đổi câu cho khách. Sửa chữ bằng UPDATE, Desktop đọc lại sau 10 phút; thiếu dòng / sai định dạng = không nhận dấu hiệu nào (như hôm nay).'
+
 const COLS = ['detail_mode', 'log_template', 'campaign_note_template', 'quota_effect', 'target_streak_effect', 'streak_threshold', 'target_effect',
   'requeue_after_minutes', 'remaining_steps', 'lock_action_codes', 'lock_mode', 'lock_minutes', 'lock_days', 'lock_time', 'run_effect', 'pace_mode',
   'pace_seconds', 'campaign_effect', 'campaign_hold_minutes', 'account_effect', 'login_effect', 'streak_after_delivery']
@@ -269,10 +313,12 @@ const customerRows = FB_ERRORS.map(e => `  (${lit(e.error_code)}, ${lit(CUSTOMER
 const customerOldRows = FB_ERRORS.map(e =>
   `  (${lit(e.error_code)}, ${lit(e.customer_title ?? null)}, ${lit(e.customer_help ?? null)}, ${lit(CUSTOMER[e.error_code][0])})`)
 
-const migration = `-- V559 (BẢN NHÁP, CHƯA DUYỆT): engine v2 Facebook: ${NEW_CODES.length} mã mới (FB42–FB45), ${RULES.length} luật phân loại tín hiệu Facebook, chính sách Facebook giữ đúng
+const migration = `-- V559 (anh duyệt bảng 17/11): engine v2 Facebook: ${NEW_CODES.length} mã mới (FB42–FB45), ${RULES.length} luật phân loại tín hiệu Facebook, chính sách Facebook giữ đúng
 -- hành vi bộ cũ (trừ Q6 checkpoint / đăng xuất, Q20 block treo đã chốt). SINH TỪ scripts/build-v559-sql.cjs, không sửa tay.
 -- Danh mục nguồn: ${path.relative(ROOT, CATALOG_FILE)} (đọc chỉ đọc ${catalog.readAt ?? ''}); vân tay auto_error FB ${FINGERPRINT}.
--- Bảng duyệt: docs/CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_FULL_REVIEW.md. Anh duyệt bảng ở cuối (Q3, Q23) rồi sửa bộ sinh theo bảng TRƯỚC KHI apply.
+-- Bảng duyệt: docs/CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_FULL_REVIEW.md (anh duyệt xong 17/11, Q3, Q23).
+-- Dấu hiệu nhận ra lỗi (anh chốt 17/11): dòng thiết lập ${SIGNS_SETTING_KEY} (${SIGNS.length} dấu hiệu, Desktop đọc); ${SIGNS.map(s => publicOf(s.code)).join(', ')} có chỗ phát
+-- nhờ dấu hiệu, chính sách của các mã này = bản chép chính sách của mã đang xử lý trường hợp đó hôm nay (chỉ đổi câu cho khách).
 --
 -- Chỉ dữ liệu. Chính sách và luật chỉ engine v2 đọc; ${NEW_CODES.length} mã mới là 'engine v2' (bộ cũ bỏ qua).
 -- Sửa đúng MỘT dòng auto_error của bộ cũ (anh chốt 17/11): FB04 err_fb_checkpoint bỏ khoá ${FB04.disable_action_codes.length} thao tác Facebook không thời hạn và bỏ tạm dừng
@@ -322,7 +368,14 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.auto_error WHERE error_code IN (${newCodeList}) AND error_type <> 'engine v2') THEN
     RAISE EXCEPTION 'V559: mã mới trùng mã không phải engine v2';
   END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = '${SIGNS_SETTING_KEY}') THEN
+    RAISE EXCEPTION 'V559: đã có dòng thiết lập ${SIGNS_SETTING_KEY}';
+  END IF;
 END $pre$;
+
+-- Dấu hiệu nhận ra lỗi Facebook (anh chốt 17/11). Chỉ Desktop chạy engine đọc; bộ cũ không đọc.
+INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
+  ('${SIGNS_SETTING_KEY}', ${lit(SIGNS_JSON)}, ${lit(SIGNS_DESCRIPTION)}, false, true);
 
 -- Mã mới chỉ cho engine v2 (gỡ rồi apply lại thì bật lại dòng cũ).
 INSERT INTO public.auto_error (error_type, error_code, error_name, error_desc, noti_running_process, noti_campaign,
@@ -399,6 +452,16 @@ BEGIN
   IF EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE source = '${SOURCE}' AND action_code LIKE 'zalo\\_%') THEN
     RAISE EXCEPTION 'V559 postflight: có chính sách cho thao tác Zalo';
   END IF;
+  -- Dấu hiệu: đủ ${SIGNS.length} mục, mỗi mã là mã Facebook đang bật và có chính sách V559.
+  SELECT string_agg(coalesce(d->>'code', '?'), ', ') INTO v_bad
+    FROM public.auto_system_settings s CROSS JOIN LATERAL jsonb_array_elements(s.value::jsonb) d
+   WHERE s.key = '${SIGNS_SETTING_KEY}'
+     AND (NOT EXISTS (SELECT 1 FROM public.auto_error e WHERE e.error_code = d->>'code' AND e.is_active AND NOT e.is_delete)
+          OR NOT EXISTS (SELECT 1 FROM public.auto_outcome_policies p WHERE p.source = '${SOURCE}'
+                           AND p.error_code = d->>'code' AND p.is_active AND NOT p.is_delete));
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V559 postflight: dấu hiệu trỏ tới mã không bật / chưa có chính sách: %', v_bad; END IF;
+  SELECT jsonb_array_length(s.value::jsonb) INTO v_n FROM public.auto_system_settings s WHERE s.key = '${SIGNS_SETTING_KEY}' AND s.is_active;
+  IF v_n IS DISTINCT FROM ${SIGNS.length} THEN RAISE EXCEPTION 'V559 postflight: dòng ${SIGNS_SETTING_KEY} có % dấu hiệu, cần ${SIGNS.length}', v_n; END IF;
 END $post$;
 
 COMMIT;
@@ -412,6 +475,7 @@ SET LOCAL statement_timeout = '60s';
 
 DELETE FROM public.auto_outcome_policies WHERE source = '${SOURCE}';
 DELETE FROM public.auto_outcome_signal_rules WHERE source = '${SOURCE}';
+DELETE FROM public.auto_system_settings WHERE key = '${SIGNS_SETTING_KEY}';
 UPDATE public.auto_outcome_policies SET is_active = true, updated_at = now()
  WHERE source = 'seed_v495_error' AND error_code IN (${fbCodeList}) AND action_code IS NULL AND NOT is_active AND NOT is_delete;
 UPDATE public.auto_error SET is_active = false, is_delete = true
@@ -451,7 +515,8 @@ const PRODUCERS = {
   err_fb_comment_unavailable_not_member: 'block 2616 (V472)',
   err_fb_comment_box_not_found: 'block 2616 (V472)',
   err_fb_composer_editor_not_found: 'block `fb_open_composer` (27)',
-  err_fb_group_composer_editor_not_found: 'block `fb_open_composer` (27)'
+  err_fb_group_composer_editor_not_found: 'block `fb_open_composer` (27)',
+  ...Object.fromEntries(SIGNS.map(s => [s.code, `bộ cũ: chưa có; engine: dấu hiệu \`${SIGNS_SETTING_KEY}\` (${s.source === 'page' ? 'chữ trên trang' : 'câu lỗi của block'}): ${s.note}`]))
 }
 // Quyết định của anh cho các dòng từng cần chốt (17/11). Cả bốn đều trùng bản nháp nên chính sách không đổi.
 const ASK = {
@@ -509,9 +574,14 @@ const reviewRows = FB_ERRORS.map(e => {
   const seed = SEED_ROWS.find(p => p.error_code === e.error_code)
   const seedFields = seed ? { ...seed, detail_status: statusById(seed.detail_status_id)?.code ?? null } : null
   const legacyText = legacyBehaviour(e)
-  const draftText = describe(draft) === legacyText ? '= bộ cũ' : describe(draft)
-  return `| ${e.public_code} | \`${e.error_code}\` | ${esc(PRODUCERS[e.error_code] ?? 'chưa có code phát (danh mục V346)')} | ${esc(legacyText)} | ${esc(seedFields ? describe(seedFields) : '-')} | ${esc(draftText)}${DECIDED[e.error_code] ? ` **(${DECIDED[e.error_code].why.split(':')[0]})**` : ''} | ${esc(title)} | ${esc(help)} | ${esc(ASK[e.error_code] ?? '')} |`
+  const sign = SIGNS.find(s => s.code === e.error_code)
+  const draftText = sign ? `= ${publicOf(sign.mirror)} hôm nay: ${describe(sign.mirrorRows.find(([action]) => action === null)?.[1] ?? {})}`
+    : describe(draft) === legacyText ? '= bộ cũ' : describe(draft)
+  const ask = sign ? `Anh chốt 17/11: có chỗ phát mới thì chỉ đổi câu cho khách, cách xử lý giữ như ${publicOf(sign.mirror)} đang xử lý trường hợp này hôm nay.`
+    : ASK[e.error_code] ?? ''
+  return `| ${e.public_code} | \`${e.error_code}\` | ${esc(PRODUCERS[e.error_code] ?? 'chưa có code phát (danh mục V346)')} | ${esc(legacyText)} | ${esc(seedFields ? describe(seedFields) : '-')} | ${esc(draftText)}${DECIDED[e.error_code] ? ` **(${DECIDED[e.error_code].why.split(':')[0]})**` : ''} | ${esc(title)} | ${esc(help)} | ${esc(ask)} |`
 })
+const signTable = SIGNS.map(s => `| ${publicOf(s.code)} \`${s.code}\` | ${s.source === 'page' ? 'chữ trên trang (bằng)' : 'câu lỗi của block (chứa)'} | ${esc(s.actions.join(', ') || 'mọi thao tác')} | ${esc(s.phases.join(', ') || 'mọi pha')} | ${esc(s.replaces.map(publicOf).join(', ') || 'chỉ kết quả chưa có mã')} | ${esc(s.texts.map(t => `"${t}"`).join('; '))} | ${publicOf(s.mirror)} |`)
 const newRows = NEW_CODES.map(([code, pub, , , title, help]) => {
   const fields = POLICIES.find(p => p[0] === code && p[1] === null)[2]
   const when = { err_engine_fb_action_failed: 'dòng "thất bại / lỗi / không tồn tại" không mã của bộ dựng cũ (luật `status:*`)',
@@ -534,6 +604,8 @@ const review = `# Bảng duyệt mã lỗi Facebook cho engine v2 (anh duyệt x
 
 > **Hành vi đã chốt 17/11** (cột "Anh chốt" ghi quyết định): không dòng nào đổi chính sách engine so với bản nháp giữ hành vi bộ cũ;
 > riêng dòng FB04 của bộ cũ được sửa luôn (bỏ khoá thao tác, bỏ tạm dừng tài khoản). **Câu cho khách / bước tiếp theo: anh duyệt từng câu 17/11 (Q23).**
+> ${SIGNS.length} mã có chỗ phát mới nhờ dấu hiệu (${SIGNS.map(s => publicOf(s.code)).join(', ')}, mục 6): chỉ đổi câu cho khách, cách xử lý như mã đang xử lý
+> trường hợp đó hôm nay (anh chốt 17/11).
 >
 > Anh chốt (Q3, Q23; 16/11 tối): duyệt bảng này ở cuối, sau khi code xong cả 13 loại, trước khi apply migration chính sách
 > và bật tổ chức thử. Bảng và \`migrations/migration_v559_engine_facebook_policies.sql\` sinh cùng lúc bằng \`node scripts/build-v559-sql.cjs\`
@@ -596,12 +668,26 @@ Mã block trả trong \`actionResult.errorCode\` dùng thẳng, không qua luậ
 ## 5. Quyết định đã chốt áp sẵn trong bản nháp
 
 - **Q6**: checkpoint (FB04) và đăng xuất (FB43) chỉ đổi trạng thái đăng nhập; data chưa tới mốc gửi về hàng đợi, đã tới mốc thì chốt như Q2;
-  không khoá thao tác, không tạm dừng tài khoản hay chiến dịch. Dòng auto_error FB04 của bộ cũ chưa đổi (chờ anh chọn "áp cả bộ cũ").
+  không khoá thao tác, không tạm dừng tài khoản hay chiến dịch. Dòng auto_error FB04 của bộ cũ sửa luôn (anh chốt 17/11: bỏ khoá thao tác,
+  bỏ tạm dừng tài khoản).
 - **Q20**: block treo / cửa sổ chạy ngầm chết: chưa tới mốc gửi → SYS04 (data về hàng đợi, 4 lần liền thì tạm dừng chiến dịch); đã có dấu
   "sắp gửi" → UNK01 (không rõ kết quả, không gửi lại).
+
+## 6. Dấu hiệu nhận ra lỗi (\`${SIGNS_SETTING_KEY}\`, anh chốt 17/11)
+
+Chỉ phát mã cụ thể khi **thấy** dấu hiệu của đúng lỗi, không suy từ việc "không thấy" phần tử (Facebook đổi giao diện thì không thấy dấu hiệu
+nữa, kết quả quay về như hôm nay, chiến dịch không hỏng). Mã có dấu hiệu chỉ đổi câu cho khách; tính lượt, chuỗi lỗi, dừng chiến dịch giữ y như
+mã đang xử lý trường hợp đó hôm nay (cột cuối). FB40 / FB22 (bỏ qua data khi không thấy ô đăng bài / nút kết bạn) giữ như bộ cũ (anh chốt 17/11).
+Đợt này chỉ làm phần chắc: câu block đã tự báo đúng sự thật và chữ đã thấy trên trang Facebook thật (17/11); các mã còn lại chưa có chỗ phát,
+khi thêm dấu hiệu cho mã nào thì chính sách của mã đó cũng lấy theo cách đang xử lý trường hợp đó hôm nay.
+
+| Mã | Nguồn | Thao tác | Pha | Thay mã | Chữ | Cách xử lý như |
+|---|---|---|---|---|---|---|
+${signTable.join('\n')}
 `
 
-module.exports = { FB_CODES, NEW_CODES, RULES, POLICIES, GUARDS, FINGERPRINT, FINGERPRINT_SQL, SOURCE, legacyDraft, migration, rollback, review, POLICY_COUNT }
+module.exports = { FB_CODES, NEW_CODES, RULES, POLICIES, GUARDS, FINGERPRINT, FINGERPRINT_SQL, SOURCE, legacyDraft, migration, rollback, review, POLICY_COUNT,
+  SIGNS, SIGNS_SETTING_KEY, SIGNS_JSON }
 if (require.main === module) {
   fs.writeFileSync(path.join(ROOT, 'migrations/migration_v559_engine_facebook_policies.sql'), migration)
   fs.writeFileSync(path.join(ROOT, 'migrations/rollback_v559_engine_facebook_policies.sql'), rollback)
