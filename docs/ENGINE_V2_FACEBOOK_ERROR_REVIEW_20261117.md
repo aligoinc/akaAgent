@@ -28,8 +28,8 @@ Anh yêu cầu 17/11: rà lỗi Facebook 30 ngày và tin khách báo lỗi, tì
 | Up tin "Không thấy ô bình luận" (FB41) | ~850/tuần từ 06/11, 37 tài khoản | Chưa biết trang hiện gì (block đã nhận ra bài xoá / tắt bình luận / chờ duyệt / chưa vào nhóm) | Chưa sửa: cần ảnh lỗi |
 | Inbox Page "Không tìm thấy ô để nhập tin nhắn" | 4.307 dòng / 31 tài khoản (~5% lượt nhắn) | Có thể hội thoại quá hạn trả lời (FB25 đã có câu), chưa thấy chữ thật | Chưa sửa: cần chữ thật / ảnh lỗi |
 | Đăng nhóm "Form đăng bài chưa đóng sau 60 giây" | 1.610 dòng / 254 tài khoản, tăng dần | Chưa biết Facebook hiện gì sau cú bấm Đăng | Chưa sửa: cần ảnh lỗi |
-| Đổi sang Page để đăng ("Không tìm thấy nút mở menu profile/page") | ~60 chiến dịch dừng, nhiều nhất 24–28/10, nay 1–7/ngày | XPath nút tài khoản vẫn khớp trên trang thật (tài khoản cá nhân); chưa rõ ca còn lại | Chưa sửa: cần tài khoản có Page |
-| Bài đăng không kèm ảnh / video (khách báo 31/10–06/11) | Không đếm được từ DB | Block chỉ kiểm số tệp đưa vào ô chọn, không kiểm ảnh đã lên | Chưa sửa: cần thử với tệp thật |
+| Đổi sang Page để đăng ("Không tìm thấy nút mở menu profile/page") | ~60 chiến dịch dừng, nhiều nhất 24–28/10, nay 1–7/ngày | XPath nút tài khoản vẫn khớp trên trang thật (tài khoản cá nhân); chưa rõ ca còn lại | Chưa sửa: tài khoản thử LD có Page "Flyby" (thấy 17/11), chưa chạy chiến dịch bật "Chạy bằng Page" bằng engine |
+| Bài đăng không kèm ảnh / video (khách báo 31/10–06/11) | Không đếm được từ DB | Block chỉ kiểm số tệp đưa vào ô chọn, không kiểm ảnh đã lên. Thử thật 17/11 (xem bảng dưới): bài 10 ảnh + video và bài 3 ảnh + video 15 MB giữ đủ media | Không tái hiện được, không sửa |
 | Gõ tiếng Việt trong app, đăng nhập / cập nhật app | Tin khách | Không thuộc phần chạy chiến dịch | Ngoài phạm vi |
 
 Bài học đo: đếm comment nhầm bài phải ghép mỗi comment với **lần đăng ngay trước** của cùng data. Ghép theo `input_data_id` thì data đăng
