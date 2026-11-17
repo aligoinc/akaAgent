@@ -58,6 +58,39 @@ async function applyFacebookMigrations(db, names = FACEBOOK_MIGRATIONS) {
   for (const name of names) await db.query(readMigration(name))
 }
 
+/**
+ * V563 (sửa riêng phần engine sau khi rà lỗi FB 30 ngày): cần V559 (dấu hiệu, chính sách FB) và ba cặp block cũ / bản "[engine]"
+ * (fb_collect_search_groups, fb_comment_at_position kèm dòng danh mục bước, fb_adjust_group_post_comments_after_pending) như production (V560
+ * chép; DB thử không chép đủ 84 block nên chỉ dựng đúng ba cặp này, code thật đọc 17/11).
+ */
+const V563_MIGRATION = 'migration_v563_engine_facebook_signs_search.sql'
+const V563_ROLLBACK = 'rollback_v563_engine_facebook_signs_search.sql'
+async function seedV563Blocks(db) {
+  const live = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/engine-v2-facebook/v563-live-20261117.json'), 'utf8'))
+  for (const block of [live.block, live.commentBlock, live.adjustBlock]) {
+    await db.query(`INSERT INTO public.auto_blocks (id, name, code, category) VALUES ($1, $2, $3, 'facebook'), ($4, $5, $3, 'facebook')`,
+      [block.sourceId, block.sourceName, block.code, block.id, block.name])
+    await db.query(`INSERT INTO public.auto_engine_block_copies (engine_block_id, source_block_id, source_md5_at_copy, engine_md5_at_copy)
+      VALUES ($1, $2, $3, $3)`, [block.id, block.sourceId, block.md5])
+    for (const step of block.steps || []) {
+      await db.query(`INSERT INTO public.auto_engine_block_steps (id, block_id, step_kind, action_code, commit_level, send_ops, reviewed_code_md5)
+        VALUES ($1, $2, 'delivery', 'fb_comment', $3, $4::jsonb, $5)`, [step.id, block.id, step.commitLevel, JSON.stringify(step.sendOps), step.reviewedMd5])
+    }
+  }
+  return live
+}
+/** Cả V563 (DB thử không có block giả trùng số với block bộ cũ). */
+async function applyV563(db) {
+  const live = await seedV563Blocks(db)
+  await db.query(readMigration(V563_MIGRATION))
+  return live
+}
+/** Riêng phần dấu hiệu + chính sách FB11 của V563 (đúng câu trong migration), cho DB thử có block giả số 34 như bộ kiểm engine Desktop. */
+async function applyV563SignsOnly(db) {
+  const { SIGN_POLICY_SQL } = require('../build-v563-sql.cjs')
+  await db.query(`BEGIN;\n${SIGN_POLICY_SQL}\nCOMMIT;`)
+}
+
 /** Dựng DB engine như production rồi thêm phần tối thiểu cho Facebook. notes: ghi chú bootstrap. */
 async function buildFacebookFixture(db, notes = []) {
   await bootstrap(db, notes)
@@ -65,4 +98,5 @@ async function buildFacebookFixture(db, notes = []) {
   return notes
 }
 
-module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, readMigration, applyFacebookStubs, applyFacebookMigrations, buildFacebookFixture }
+module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, readMigration, applyFacebookStubs,
+  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly }
