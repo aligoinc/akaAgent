@@ -1,3 +1,4 @@
+import { CAMPAIGN_REPEAT_SETTING_KEY, parseCampaignRepeatAudience } from '../../../shared/campaignRepeat'
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { loadCurrentUserEffectiveEntitlements, loadCurrentUserZaloAccountCapabilities } from './entitlementRepository'
@@ -34,7 +35,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
@@ -42,6 +43,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       campaigns: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.campaigns)),
       accounts: parseDesktopPollSeconds(values.get(DESKTOP_POLL_KEYS.accounts)),
       zaloShareRepeatEnabled: parseZaloShareRepeatSetting(values.get(ZALO_SHARE_REPEAT_SETTING_KEY)),
+      campaignRepeatAudience: parseCampaignRepeatAudience(values.get(CAMPAIGN_REPEAT_SETTING_KEY)),
       // Giảm đọc khi không ai nhìn/khi số không đổi: cùng câu đọc này, thiếu dòng hoặc sai = tắt (như trước).
       hiddenPauseEnabled: parseDesktopUiFlag(values.get(DESKTOP_UI_TUNING_KEYS.hiddenPauseEnabled)),
       idleAfterSeconds: parseDesktopUiSeconds(values.get(DESKTOP_UI_TUNING_KEYS.idleAfterSeconds), DESKTOP_UI_TUNING_RANGES.idleAfterSeconds),

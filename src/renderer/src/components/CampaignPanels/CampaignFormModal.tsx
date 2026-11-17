@@ -148,6 +148,10 @@ import {
   ZALO_SHARE_REPEAT_DEFAULT_MINUTES, ZALO_SHARE_REPEAT_MAX_MINUTES, ZALO_SHARE_REPEAT_MIN_MINUTES,
   ZALO_SHARE_REPEAT_MINUTES_ERROR, parseZaloShareRepeatMinutes
 } from '../../../../shared/zaloShareRepeat'
+import {
+  CAMPAIGN_REPEAT_DEFAULTS, CAMPAIGN_REPEAT_EVERY_LIMITS, CAMPAIGN_REPEAT_MAX_RUNS, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_UNIT_LABELS,
+  campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
+} from '../../../../shared/campaignRepeat'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import {
   findInvalidAdvancedContentItemIndex,
@@ -1737,6 +1741,9 @@ export default function CampaignFormModal({
   const authUser = useAuthStore(state => state.user)
   // Công tắc hiển thị "Gửi lặp lại sau mỗi x phút" (cùng công tắc với Web, đọc một lần khi đăng nhập).
   const zaloShareRepeatFeatureEnabled = useDesktopPollingStore(state => state.settings.zaloShareRepeatEnabled === true)
+  // Công tắc "Lặp lại sau khi chạy xong" (campaign.repeat_after_completion, cùng công tắc với Web, đọc một lần khi đăng nhập).
+  const campaignRepeatAudience = useDesktopPollingStore(state => state.settings.campaignRepeatAudience)
+  const campaignRepeatFeatureVisible = campaignRepeatVisible(campaignRepeatAudience, authUser?.isAdminAkabiz === true)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -1925,6 +1932,17 @@ export default function CampaignFormModal({
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
     zaloShareRepeatEnabled: campaign?.extraSettings?.zaloShareRepeatEnabled === true,
     zaloShareRepeatAfterMinutes: String(parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes) ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES),
+    // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts): số giữ dạng chuỗi như ô nhập; ngày kết thúc chỉ có khi đang bật lặp.
+    ...(() => {
+      const saved = readCampaignRepeat(campaign?.extraSettings as Record<string, unknown> | undefined)
+      return {
+        repeatAfterCompletionEnabled: saved.enabled,
+        repeatAfterCompletionEvery: String(saved.every ?? CAMPAIGN_REPEAT_DEFAULTS.every),
+        repeatAfterCompletionUnit: (saved.unit ?? CAMPAIGN_REPEAT_DEFAULTS.unit) as CampaignRepeatUnit,
+        repeatAfterCompletionMaxRuns: String(saved.maxRuns ?? CAMPAIGN_REPEAT_DEFAULTS.maxRuns),
+        repeatEndDate: saved.enabled && campaign?.scheduleEndDate ? formatScheduleVietnam(new Date(campaign.scheduleEndDate)).slice(0, 10) : ''
+      }
+    })(),
     content: initialManualDraft.content,
     formattedContentEnabled: initialManualDraft.formattedContentEnabled,
     advancedContentEnabled: hasSavedAdvancedGroupSnapshot
@@ -3485,6 +3503,24 @@ export default function CampaignFormModal({
   // Ô đang ẩn (công tắc tắt) vẫn giữ cài đặt đã lưu, trừ khi người dùng bật nhiều khung giờ hoặc chống gửi lặp.
   const usesZaloShareRepeat = supportsZaloShareRepeatOption && formData.zaloShareRepeatEnabled === true &&
     !usesMultiDailyTimeSlots && !recentDeliveryCooldownActive
+  // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts): lịch Hàng ngày, data nhập trực tiếp, chọn một trong hai với nhiều
+  // khung giờ. Đơn vị theo loại chiến dịch; mảng rỗng = loại này không có nhóm lặp.
+  const campaignRepeatSupportedUnits = isMobileManagedSmsCampaign ? [] : campaignRepeatUnits(formData.actionId, {
+    zaloMessageSendMode: isZaloShareMessageMode ? 'share' : undefined,
+    dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct',
+    scheduleType: isZaloMessageGroupRealtimeCampaign ? 'daily' : formData.scheduleType
+  })
+  const showCampaignRepeat = campaignRepeatFeatureVisible && campaignRepeatSupportedUnits.length > 0
+  const campaignRepeatActive = showCampaignRepeat && formData.repeatAfterCompletionEnabled === true && !usesMultiDailyTimeSlots
+  // Đơn vị đã lưu không còn hợp loại chiến dịch thì dùng đơn vị ngày (đơn vị cuối của danh sách).
+  const campaignRepeatUnit: CampaignRepeatUnit = campaignRepeatSupportedUnits.includes(formData.repeatAfterCompletionUnit)
+    ? formData.repeatAfterCompletionUnit
+    : (campaignRepeatSupportedUnits[campaignRepeatSupportedUnits.length - 1] ?? CAMPAIGN_REPEAT_DEFAULTS.unit)
+  const campaignRepeatEvery = parseCampaignRepeatInteger(formData.repeatAfterCompletionEvery,
+    CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit].min, CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit].max)
+  const campaignRepeatMaxRuns = parseCampaignRepeatInteger(formData.repeatAfterCompletionMaxRuns, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_MAX_RUNS)
+  // Nhóm đang ẩn vì công tắc (không phải vì loại chiến dịch) vẫn giữ cài đặt đã lưu, trừ khi người dùng bật nhiều khung giờ.
+  const usesCampaignRepeat = campaignRepeatSupportedUnits.length > 0 && formData.repeatAfterCompletionEnabled === true && !usesMultiDailyTimeSlots
   const showLimitsSection = canUseSleepBetweenActions || generalLimitActionCodes.length > 0 ||
     isCommentSeedingFeedCampaign
   const canUseFacebookRestBrowse = supportsFacebookRestBrowse(formData.actionId)
@@ -6274,8 +6310,11 @@ export default function CampaignFormModal({
       const formOriginalSchedule = isEditingSavedCampaign && usesMultiDailyTimeSlots && preservedDraftSchedule?.multiSlotStart
         ? (campaign?.originalSchedule ?? formSchedule)
         : formSchedule
-      const normalizedScheduleEndDate = formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
+      // Lịch Hàng ngày chỉ có ngày kết thúc khi đang bật "Lặp lại sau khi chạy xong" và người dùng có đặt.
+      const normalizedScheduleEndDate = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
         ? null
+        : formData.scheduleType === 'daily'
+          ? (usesCampaignRepeat && formData.repeatEndDate ? new Date(formData.repeatEndDate + 'T23:59:59+07:00').toISOString() : null)
         : (preservedDraftSchedule?.end?.iso
           ?? (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59+07:00').toISOString() : null))
       const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign ? 'daily' : formData.scheduleType
@@ -6705,6 +6744,11 @@ export default function CampaignFormModal({
                 ?? parseZaloShareRepeatMinutes(campaign?.extraSettings?.zaloShareRepeatAfterMinutes)
                 ?? ZALO_SHARE_REPEAT_DEFAULT_MINUTES
             } : {}),
+            // "Lặp lại sau khi chạy xong" (src/shared/campaignRepeat.ts).
+            repeatAfterCompletionEnabled: usesCampaignRepeat,
+            repeatAfterCompletionEvery: campaignRepeatEvery ?? CAMPAIGN_REPEAT_DEFAULTS.every,
+            repeatAfterCompletionUnit: campaignRepeatUnit,
+            repeatAfterCompletionMaxRuns: campaignRepeatMaxRuns ?? CAMPAIGN_REPEAT_DEFAULTS.maxRuns,
             isFindPostByKeywords: canUsePostContentConditionsForSave ? formData.isFindPostByKeywords : false,
             postKeywords: canUsePostContentConditionsForSave ? formData.postKeywords : '',
             isFindPostByContentAI: canUsePostContentConditionsForSave ? formData.isFindPostByContentAI : false,
@@ -7176,6 +7220,21 @@ export default function CampaignFormModal({
     if (usesZaloShareRepeat && parseZaloShareRepeatMinutes(formData.zaloShareRepeatAfterMinutes) === null) {
       showAlert(ZALO_SHARE_REPEAT_MINUTES_ERROR, 'error')
       return
+    }
+    if (campaignRepeatActive) {
+      const repeatError = campaignRepeatError(
+        { unit: campaignRepeatUnit, every: campaignRepeatEvery, maxRuns: campaignRepeatMaxRuns },
+        campaignRepeatSupportedUnits,
+        recentDeliveryCooldownActive
+          ? { recentDeliveryCooldownEnabled: true, recentDeliveryCooldownDays: formData.recentDeliveryCooldownDays }
+          : {}
+      ) ?? (formData.repeatEndDate && formData.repeatEndDate < String(formData.schedule || '').slice(0, 10)
+        ? 'Ngày kết thúc phải từ ngày chạy trở đi.'
+        : null)
+      if (repeatError) {
+        showAlert(repeatError, 'error')
+        return
+      }
     }
     let validatedMultiDailyTimeSlots: string[] | null = null
     if (usesMultiDailyTimeSlots) {
@@ -13504,7 +13563,7 @@ export default function CampaignFormModal({
             <input
               type="checkbox"
               checked={formData.multiDailyTimeSlotsEnabled}
-              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked, ...(e.target.checked && showZaloShareRepeat ? { zaloShareRepeatEnabled: false } : {}) }))}
+              onChange={e => setFormData(p => ({ ...p, multiDailyTimeSlotsEnabled: e.target.checked, ...(e.target.checked && showZaloShareRepeat ? { zaloShareRepeatEnabled: false } : {}), ...(e.target.checked && showCampaignRepeat ? { repeatAfterCompletionEnabled: false } : {}) }))}
             />
             <span>Chạy trong nhiều khung giờ trong 1 ngày</span>
           </label>
@@ -13573,6 +13632,81 @@ export default function CampaignFormModal({
             </div>
           </>
         )}
+      </div>
+    )
+  }
+
+  // "Lặp lại sau khi chạy xong": cùng nội dung và câu chữ với Form 1 của Web (akaAgentWebApp CampaignRepeatFields).
+  const renderCampaignRepeatSection = () => {
+    if (!showCampaignRepeat) return null
+    const limits = CAMPAIGN_REPEAT_EVERY_LIMITS[campaignRepeatUnit]
+    const rowStyle = { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 10 } as const
+    const numberStyle = { width: 96, maxWidth: 96, marginTop: 0 } as const
+    return (
+      <div className="schedule-multi-window-panel schedule-repeat-panel">
+        <div className="schedule-multi-window-header"><span>Lặp lại sau khi chạy xong</span></div>
+        <div className="schedule-multi-window-body">
+          <label className="schedule-checkbox-label schedule-multi-window-checkbox">
+            <input
+              type="checkbox"
+              checked={campaignRepeatActive}
+              onChange={e => setFormData(p => ({
+                ...p,
+                repeatAfterCompletionEnabled: e.target.checked,
+                ...(e.target.checked ? { multiDailyTimeSlotsEnabled: false, zaloShareRepeatEnabled: false } : {})
+              }))}
+            />
+            <span>Chạy hết danh sách thì tự chạy lại <span className="schedule-hint-inline">(Không bật: chạy hết danh sách là hoàn thành chiến dịch)</span></span>
+          </label>
+          {campaignRepeatActive && (
+            <>
+              <div className="schedule-share-repeat-row" style={rowStyle}>
+                <span>Chạy lại sau mỗi</span>
+                <input
+                  type="number" inputMode="numeric" aria-label="Khoảng lặp lại" className="stepper-input" style={numberStyle}
+                  min={limits.min} max={limits.max} step={1}
+                  value={formData.repeatAfterCompletionEvery ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionEvery: e.target.value, repeatAfterCompletionUnit: campaignRepeatUnit }))}
+                />
+                {campaignRepeatSupportedUnits.length > 1 ? (
+                  <select
+                    aria-label="Đơn vị lặp lại" className="stepper-input" style={{ width: 110, maxWidth: 110, marginTop: 0 }}
+                    value={campaignRepeatUnit}
+                    onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionUnit: e.target.value as CampaignRepeatUnit }))}
+                  >
+                    {campaignRepeatSupportedUnits.map(unit => <option key={unit} value={unit}>{CAMPAIGN_REPEAT_UNIT_LABELS[unit]}</option>)}
+                  </select>
+                ) : <span>{CAMPAIGN_REPEAT_UNIT_LABELS[campaignRepeatUnit]}</span>}
+              </div>
+              <div className="schedule-share-repeat-row" style={rowStyle}>
+                <span>Số lượt tối đa</span>
+                <input
+                  type="number" inputMode="numeric" aria-label="Số lượt tối đa" className="stepper-input" style={numberStyle}
+                  min={CAMPAIGN_REPEAT_MIN_RUNS} max={CAMPAIGN_REPEAT_MAX_RUNS} step={1}
+                  value={formData.repeatAfterCompletionMaxRuns ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, repeatAfterCompletionMaxRuns: e.target.value }))}
+                />
+                <span>lượt, tính cả lượt đầu</span>
+              </div>
+              <div className="schedule-share-repeat-row" style={rowStyle}>
+                <span>Ngày kết thúc</span>
+                <input
+                  type="date" aria-label="Ngày kết thúc lặp lại" className="stepper-input" style={{ width: 180, maxWidth: 180, marginTop: 0 }}
+                  min={String(formData.schedule || '').slice(0, 10) || undefined}
+                  value={formData.repeatEndDate ?? ''}
+                  onChange={e => setFormData(p => ({ ...p, repeatEndDate: e.target.value }))}
+                />
+                <span className="schedule-hint-inline">Để trống: chỉ dừng khi đủ số lượt.</span>
+              </div>
+              <div className="schedule-multi-window-notes">
+                <div>- Chạy hết danh sách thì nghỉ đủ khoảng trên rồi chạy lại từ đầu. Thời gian tính từ lúc chạy xong lượt trước.</div>
+                <div>- Dừng khi đủ số lượt tối đa hoặc tới ngày kết thúc, điều kiện nào tới trước thì dừng.</div>
+                <div>- Lượt kế tiếp luôn nằm trong khung giờ chạy. Data đang tạm dừng không được chạy lại.</div>
+                <div>- Mỗi lượt vẫn tính vào giới hạn trong ngày của tài khoản.</div>
+              </div>
+            </>
+          )}
+        </div>
       </div>
     )
   }
@@ -17394,6 +17528,7 @@ export default function CampaignFormModal({
                   )}
 
                   {!isMobileManagedSmsCampaign && renderMultiDailyTimeSlotsSection()}
+                  {renderCampaignRepeatSection()}
                 </div>
               )}
             </div>
