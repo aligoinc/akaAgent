@@ -49,7 +49,7 @@ lặp nhiều ngày bị nhân lên (lần đầu ra 849 / 3.686 lượt "nhầm
 | "Lỗi vài comment mà dừng cả chiến dịch", "treo máy quay lại thì đã dừng mấy tiếng" (03/11); anh báo lại 17/11 "đăng bài kiêm comment nhưng comment thất bại lại đi dừng chiến dịch" | 30 ngày: 14 chiến dịch đăng nhóm tạm dừng với ghi chú về comment, 3 đường khác nhau. (1) Tổ chức 518 (5 chiến dịch, "comment tất cả"): chiến dịch bật "bỏ qua nhóm cần duyệt", nhóm đã biết cần duyệt thì không bấm Đăng (`fb_skip_group_post_for_known_approval`, không có dòng "Đăng bài") nhưng vòng comment vẫn chạy; comment hỏng (XPath ô bình luận 30/10–01/11) bị cộng chuỗi vì data không có kết quả gửi nào, dừng sau 4 data (đọc lượt 4900757 chiến dịch 46878). Bộ cũ chỉ bỏ qua comment lỗi khi data đã đăng thành công (`targetOnlyFailure`, actionResultRuntime.ts), engine tới V562 cũng vậy (`streak_after_delivery`). (2) Tổ chức 701: ghi dòng comment lỗi mạng "fetch failed" → bộ cũ coi là lỗi ghi kết quả, tạm dừng. (3) Tổ chức 1231 (17/11): FB03 "Facebook báo giới hạn tần suất comment" → chính sách bộ cũ tạm dừng chiến dịch ngay | Lỗi thật | (1) và (3) sửa ở V563, chỉ chiến dịch đăng nhóm: comment không cộng / không đặt lại chuỗi data lỗi (chuỗi chỉ theo đăng bài); FB03 khi comment không tạm dừng, chạy tiếp (anh chọn "Chạy tiếp ngay"). (2) engine đã khác: DB từ chối / lỗi khi báo kết quả chỉ dừng lượt, lượt sau chạy tiếp, không tạm dừng chiến dịch. Comment seeding (comment là thao tác chính) vẫn dừng sau 4 data lỗi liên tiếp như bộ cũ |
 | Nhóm "chỉ có nút Mua bán" làm dừng chiến dịch; khách 09/11 "gần 2 tuần không đăng được" | Tổ chức của khách: lỗi tính chuỗi 28/10–04/11, từ 04/11 ghi "bỏ qua" không tính; sau đó đăng đều 400–1.500 bài/ngày tới 17/11 | Đã sửa 04/11 (anh chốt 17/11 giữ "bỏ qua") | Không sửa lại |
 
-## V563 (chưa apply)
+## V563 (đã apply akachat 17/11 20:03:02 VN, `20261117130301`, không apply lại)
 
 Ban đầu đặt số V562; tối 17/11 sổ production đã có `migration_v562_campaign_agent_prompt_ios` (apply 18:46 VN từ phiên khác) nên đổi
 thành V563 (lúc 19:00 VN không nhánh nào trong 4 repo giữ số này). Số chỉ được giữ khi đẩy nhánh: kiểm lại sổ và `git log --all` ngay trước khi apply.
@@ -100,6 +100,19 @@ thì comment như cũ; và hai ca comment hỏng chạy hai lần (tắt rồi b
 trước V563 dừng sau 4 data, sau V563 không dừng, 5 data hoàn thành; FB03 khi comment sau khi đăng thì trước V563 dừng ngay, sau V563 cả 3 data
 đều đăng). Gỡ:
 `migrations/rollback_v563_engine_facebook_signs_search.sql` (chỉ chạy khi đang đúng bản V563).
+
+## Thử thật sau khi apply V563 (17/11 20:04–20:15 VN)
+
+Tài khoản fb LD (id 135, tổ chức 1), "Nhóm private 1", app chạy từ nhánh `claude/fb-engine-v2-error-fixes`, engine bật cho tổ chức 1.
+
+| Chiến dịch | Cài đặt | Kết quả |
+|---|---|---|
+| 57682 | 10 ảnh + 1 video, comment "bài của mình" | Đăng thành công; bài video chưa lấy được link (`fb_get_first_group_post_link` `ok: false`). Block chỉnh comment trả `skippedByGroupMode: true`, khách thấy "⚠️ Chưa thấy bài vừa đăng trên trang nhóm nên bỏ qua comment vào bài của mình tại "Nhóm private 1""; không có bước comment, không dòng lịch sử comment, chỉ một kết quả `fb_post_group`; chiến dịch hoàn thành. Trước V563 (57671) comment rơi vào bài cũ khác |
+| 57686 | 10 ảnh, "comment tất cả", tối đa 2 | Đăng thành công, lấy được link `posts/1421359133400840`. Comment 1 nằm đúng bài vừa đăng (`permalink/1421359133400840`), comment 2 nằm ở bài thử cũ khác (`permalink/1421199990083421`); mở cả hai trên Facebook thấy đúng chữ comment |
+| 57688 | Chạy bằng Page "Flyby", không comment | Lượt chạy đọc danh tính ban đầu "Lee Danh", chuyển sang "Flyby - Thuốc giải độc rượu bia", đăng thành công (`posts/1421362446733842`, Facebook hiện "Bài viết của Flyby - Thuốc giải độc rượu bia"); lượt trả danh tính chuyển về "Lee Danh". Lần đầu engine đăng bằng Page trên Facebook thật (V563 không đổi phần Page) |
+
+Không thử thật được, đã kiểm bằng bộ kiểm: FB11 (4 nhóm thử của LD đều đã tham gia), tìm nhóm bằng search giao diện tiếng Anh (phải đổi ngôn
+ngữ tài khoản), comment hỏng nhiều data liền và FB03 (không tạo được thật).
 
 ## Việc cần ảnh lỗi / chữ thật (để sau)
 
