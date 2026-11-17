@@ -37,6 +37,13 @@ async function bootstrap(db, notes) {
     await require('../engine-v2-facebook/fixture.cjs').applyFacebookMigrations(db)
     notes.push('V556–V558 (engine Facebook): đã apply')
   }
+  // "Lặp lại sau khi chạy xong" (V561, dựng trên thân V558 của finish_campaign_v2): SCENARIO_CAMPAIGN_REPEAT=1 (kèm
+  // SCENARIO_FACEBOOK_MIGRATIONS=1) để chạy bộ kịch bản trên DB đã có V561, chứng minh chiến dịch không bật lặp không đổi hành vi.
+  if (process.env.SCENARIO_CAMPAIGN_REPEAT === '1') {
+    if (process.env.SCENARIO_FACEBOOK_MIGRATIONS !== '1') throw new Error('SCENARIO_CAMPAIGN_REPEAT=1 cần SCENARIO_FACEBOOK_MIGRATIONS=1 (V561 dựng trên V558)')
+    await require('../fixtures/campaign-outcome-engine/campaign-repeat-v561.cjs').applyCampaignRepeatV561(db)
+    notes.push('V561 (lặp lại sau khi chạy xong): đã apply')
+  }
   // Nhóm data: hàm kết thúc thật của production + bảng nguồn tối thiểu (như replay.cjs).
   await db.query(`CREATE TABLE public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,
     organization_id bigint, status text NOT NULL, stopped_at timestamptz, stop_reason text, updated_at timestamptz DEFAULT now())`)
