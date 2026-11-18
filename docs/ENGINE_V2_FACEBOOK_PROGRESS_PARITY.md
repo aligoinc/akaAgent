@@ -103,7 +103,8 @@ Không dùng giao diện Facebook thật; mục nào phụ thuộc trang thật 
 
 ## Tình trạng
 
-Code + V575 + bộ kiểm xong ở nhánh `claude/fb-engine-progress-parity` (chưa commit / đẩy). Chưa build Desktop, chưa chép lõi sang ChatApi.
+Code + V575 + bộ kiểm đã merge `dev_3` qua [#709](https://github.com/aligoinc/akaAgent/pull/709) ngày 18/11 theo yêu cầu ("ok create pr rồi merge đi"),
+nhánh `claude/fb-engine-progress-parity`. Chưa build Desktop, chưa chép lõi sang ChatApi.
 
 **V575 đã apply akachat 17:08:06 VN 18/11** theo yêu cầu ("apply bây giờ luôn được ko?"). Dòng sổ `20261118100806`, md5 sổ = file
 `80d0fc41…`, **không apply lại**. Trước khi apply, các điểm kiểm trước của file khớp production (đọc 17:07 VN). Sau apply:
