@@ -10,10 +10,17 @@ import { tmpdir } from 'os'
 import type { CampaignMediaInput } from '../../shared/types'
 import { getRuntimeMediaDownloadExtensionForMimeType } from '../../shared/mediaTypes'
 
+/**
+ * Vì sao không dùng được tệp (engine v2 chọn mã theo đây, anh chốt 18/11/2026): tệp chỉ có trên máy mà không còn (CFG20), tải từ kho lưu trữ
+ * không được hoặc mục không có nguồn nào (CFG01). Bộ chạy cũ chỉ đọc câu lỗi, không đọc trường này.
+ */
+export type CampaignMediaResolveFailure = 'local_missing' | 'download_failed' | 'no_source'
+
 export class CampaignMediaResolveError extends Error {
   constructor(
     public readonly mediaName: string,
-    public readonly reason: string
+    public readonly reason: string,
+    public readonly failure: CampaignMediaResolveFailure = 'no_source'
   ) {
     super(`Không dùng được media "${mediaName}": ${reason}`)
     this.name = 'CampaignMediaResolveError'
@@ -22,6 +29,13 @@ export class CampaignMediaResolveError extends Error {
 
 export function isCampaignMediaResolveError(err: unknown): err is CampaignMediaResolveError {
   return err instanceof CampaignMediaResolveError
+}
+
+/** Mã engine v2 của lỗi tệp (V575): tệp không còn trên máy → CFG20, còn lại (tải không được, không có nguồn) → CFG01. */
+export const MEDIA_LOCAL_FILE_MISSING_ERROR_CODE = 'err_media_local_file_missing'
+export const MEDIA_FILE_MISSING_ERROR_CODE = 'err_media_file_missing'
+export function campaignMediaErrorCode(error: CampaignMediaResolveError): string {
+  return error.failure === 'local_missing' ? MEDIA_LOCAL_FILE_MISSING_ERROR_CODE : MEDIA_FILE_MISSING_ERROR_CODE
 }
 
 export function hasDeclaredMediaSource(item: CampaignMediaInput): boolean {
@@ -72,7 +86,7 @@ export async function downloadCampaignMediaUrl(url: string, mediaName: string, m
     return tempPath
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
-    throw new CampaignMediaResolveError(mediaName, `cloud URL không tải được (${message})`)
+    throw new CampaignMediaResolveError(mediaName, `cloud URL không tải được (${message})`, 'download_failed')
   }
 }
 
@@ -85,7 +99,7 @@ export async function resolveCampaignMediaSource(item: CampaignMediaInput, media
     if (value.startsWith('data:')) return value
     if (/^https?:\/\//i.test(value)) return downloadCampaignMediaUrl(value, mediaName, mediaTempPaths)
     if (existsSync(value)) return value
-    throw new CampaignMediaResolveError(mediaName, 'local path không tồn tại và không có cloud URL fallback')
+    throw new CampaignMediaResolveError(mediaName, 'local path không tồn tại và không có cloud URL fallback', 'local_missing')
   }
 
   const localPath = String(item?.localPath || '').trim()
@@ -100,14 +114,14 @@ export async function resolveCampaignMediaSource(item: CampaignMediaInput, media
       return await downloadCampaignMediaUrl(cloudUrl, mediaName, mediaTempPaths)
     } catch (err) {
       if (isCampaignMediaResolveError(err)) {
-        throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và ${err.reason}`)
+        throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và ${err.reason}`, err.failure)
       }
       throw err
     }
   }
 
   if (localPath) {
-    throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và không có cloud URL fallback`)
+    throw new CampaignMediaResolveError(mediaName, `${localMissingReason} và không có cloud URL fallback`, 'local_missing')
   }
   throw new CampaignMediaResolveError(mediaName, 'không có local path hoặc cloud URL hợp lệ')
 }

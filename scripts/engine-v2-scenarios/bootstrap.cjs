@@ -61,6 +61,17 @@ async function bootstrap(db, notes) {
     await db.query(v571.migrationP2)
     notes.push('V571 (kiểm người nhận trên toàn hệ thống, mode off): đã apply')
   }
+  // V575 (mã cụ thể, lỗi tệp CFG20 / CFG01, NET01 khi mở trang Facebook, câu chờ tới 00:00 chỉ ghi ngày; apply production 18/11 17:08 VN):
+  // SCENARIO_V575=1 (kèm SCENARIO_FACEBOOK_MIGRATIONS=1) để chạy bộ kịch bản trên DB như production sau V575. Kiểm trước trong file đòi V559 và
+  // dấu hiệu của V563 đúng như production nên nạp hai phần đó trước.
+  if (process.env.SCENARIO_V575 === '1') {
+    if (process.env.SCENARIO_FACEBOOK_MIGRATIONS !== '1') throw new Error('SCENARIO_V575=1 cần SCENARIO_FACEBOOK_MIGRATIONS=1 (V575 dựng trên V558, V559, V563)')
+    const fb = require('../engine-v2-facebook/fixture.cjs')
+    await fb.applyFacebookMigrations(db, fb.FACEBOOK_POLICY_MIGRATIONS)
+    await fb.applyV563SignsOnly(db)
+    await fb.applyV575(db)
+    notes.push('V559, dấu hiệu V563, V575 (mã cụ thể, câu chờ chỉ ghi ngày): đã apply')
+  }
   // Nhóm data: hàm kết thúc thật của production + bảng nguồn tối thiểu (như replay.cjs).
   await db.query(`CREATE TABLE public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,
     organization_id bigint, status text NOT NULL, stopped_at timestamptz, stop_reason text, updated_at timestamptz DEFAULT now())`)

@@ -18,8 +18,8 @@ import { callUntilAvailable, DEFAULT_RETRY, OutcomeReporter, type OutageHandler,
 import { paceDelayMs, type PaceSettings } from './pacing.js'
 import {
   accountStopProgress, campaignNoteProgress, cooldownPauseProgress, campaignPausedProgress, campaignWaitProgress, configIssueProgress, dailyBoundaryProgress,
-  finishProgress, formatVietnamDateTime, gateSkipProgress, outageProgress, outcomeProgress, paceProgress, policyPausedProgress, recoveredProgress,
-  shuffleProgress, targetDoneProgress, targetStartProgress, unitStartProgress
+  finishProgress, formatVietnamDateTime, gateSkipProgress, NO_HISTORY_ERROR_CODE, outageProgress, outcomeProgress, paceProgress, policyPausedProgress,
+  recoveredProgress, shuffleProgress, targetDoneProgress, targetSkippedProgress, targetStartProgress, unitStartProgress
 } from './progress.js'
 import type { ConfigIssue } from './validation.js'
 
@@ -174,8 +174,11 @@ export interface WorkflowTargetApi {
   trace(event: TraceEvent): void
 }
 
-/** Kết thúc một lượt workflow: chạy hết (hoặc dừng ở ranh giới mốc) thì lõi tự chốt data; stop = dừng cả lượt. */
-export type WorkflowTargetEnd = { done: true } | WorkflowStop
+/**
+ * Kết thúc một lượt workflow: chạy hết (hoặc dừng ở ranh giới mốc) thì lõi tự chốt data; stop = dừng cả lượt. skippedNote: data chạy xong
+ * mà bị bỏ qua (đăng nhóm kèm chia sẻ, như bộ cũ) thì in "ℹ️ Bỏ qua" thay cho "✅ Hoàn thành".
+ */
+export type WorkflowTargetEnd = { done: true; skippedNote?: string | null } | WorkflowStop
 
 /** Chế độ workflow (Facebook): chạy workflow từ DB cho mỗi data / mỗi mốc lịch thay cho các bước TypeScript. */
 export interface WorkflowUnitConfig {
@@ -481,11 +484,13 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
    * CFG01 tạm dừng chiến dịch, data chỉ chốt ở lần báo cuối, lúc đó hiệu ứng là 'none'), nên ghi lại rồi in một lần ở afterTarget.
    */
   let pausedByPolicy = false
-  const afterTarget = (claim: Claimed, res: ReportSuccess): TargetEnd => {
-    // Như Desktop: data chạy xong (kể cả thao tác lỗi) in "✅ Hoàn thành"; về hàng đợi, tạm dừng, hay đóng vì không gửi lại
-    // được (giao một phần, không rõ kết quả) thì không.
+  const afterTarget = (claim: Claimed, res: ReportSuccess, skippedNote?: string | null): TargetEnd => {
+    // Như Desktop: data chạy xong (kể cả thao tác lỗi) in "✅ Hoàn thành" (bị bỏ qua thì "ℹ️ Bỏ qua"); về hàng đợi, tạm dừng, hay đóng
+    // vì không gửi lại được (giao một phần, không rõ kết quả) thì không.
     if (res.target.done && res.target.status === 'hoàn thành' && !uncertainTargets.delete(claim.targetRunId)) {
-      deps.events.progress(targetDoneProgress(cfg.campaignId, claim.target.id, labelOf(claim.target)))
+      const note = String(skippedNote ?? '').trim()
+      deps.events.progress(note ? targetSkippedProgress(cfg.campaignId, claim.target.id, labelOf(claim.target), note)
+        : targetDoneProgress(cfg.campaignId, claim.target.id, labelOf(claim.target)))
     }
     if (res.campaign.note) deps.events.progress(campaignNoteProgress(cfg.campaignId, res.campaign.note))
     // Dòng lý do không nói chiến dịch đã dừng: chính sách tạm dừng thì in thêm dòng riêng kèm tên (anh chốt 18/11/2026).
@@ -514,7 +519,9 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     if (res === null) return { stop: true, reason: ownershipLost ? 'ownership_lost' : 'cancelled' }
     if (!res.ok) return { stop: true, reason: 'report_rejected', detail: { reason: res.reason, targetRunId: claim.targetRunId } }
     for (const decision of res.outcomes) {
-      if (!decision.ok && (decision.deliveryState === 'partial' || decision.deliveryState === 'unknown')) uncertainTargets.add(claim.targetRunId)
+      // FB45 (bước không ghi lịch sử, như bộ cũ): chỉ giải dấu im lặng, không phải "không rõ đã gửi"; bộ cũ vẫn in "✅ Hoàn thành".
+      if (!decision.ok && decision.errorCode !== NO_HISTORY_ERROR_CODE
+        && (decision.deliveryState === 'partial' || decision.deliveryState === 'unknown')) uncertainTargets.add(claim.targetRunId)
       if (decision.ok && quietOk?.has(decision.resultKey)) continue
       const progress = outcomeProgress(cfg.campaignId, claim.target.id, decision,
         { actionName: actionNameOf(decision.actionCode), targetLabel: labelOf(claim.target) })
@@ -940,9 +947,11 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     }
 
     let crashed: unknown = null
+    let skippedNote: string | null = null
     try {
       const end = await workflow.runTarget(api)
       if ('stop' in end && !stopped) stopped = end
+      if ('done' in end) skippedNote = end.skippedNote ?? null
     } catch (err) {
       // Lỗi của nơi chạy (không phải của block: block lỗi đã thành kết quả có mã): không để data treo, chốt bên dưới.
       crashed = err
@@ -952,7 +961,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     if (extras.size > 0 && !ownershipLost) await closeExtras()
     if (stopped && (stopped.reason === 'ownership_lost' || ownershipLost)) return { stop: true, reason: 'ownership_lost' }
     if (closed) {
-      const end = afterTarget(claim, await withRevisedNote(claim, closed, workflow))
+      const end = afterTarget(claim, await withRevisedNote(claim, closed, workflow), skippedNote)
       return stopped && !end.stop ? stopped : end
     }
     if (stopped && stopped.reason === 'report_rejected') return stopped
@@ -976,7 +985,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     }
     const res = handleResponse(claim, await send(claim, outcomes, true))
     if (!('ok' in res)) return res
-    const end = afterTarget(claim, await withRevisedNote(claim, res, workflow))
+    const end = afterTarget(claim, await withRevisedNote(claim, res, workflow), skippedNote)
     if (stopped && !end.stop) return stopped
     // Dừng từ ngoài trước khi gửi gì: DB trả end_unit cho kết quả "đã dừng"; lý do kết thúc của lượt là đã dừng (như runTargetSteps).
     if (interrupted && !stopped && end.stop && end.reason === 'end_unit') return { stop: true, reason: unit.signal.aborted ? 'cancelled' : 'stopped' }

@@ -23,7 +23,7 @@ import {
   type MaterializeContext, type PhoneSearchLimitScope, type ZaloCampaignPort, type ZaloFoundUser, type ZaloJoinGroupLinkResult,
   type ZaloOutgoingText, type ZaloResolvedTarget
 } from '../../../packages/campaign-engine/src/index'
-import { cleanupCampaignMediaTempFiles, isCampaignMediaResolveError, resolveCampaignMediaSource } from '../services/campaignMediaSource'
+import { campaignMediaErrorCode, cleanupCampaignMediaTempFiles, isCampaignMediaResolveError, resolveCampaignMediaSource } from '../services/campaignMediaSource'
 import { isZaloPreCallError } from '../services/zaloPreCallError'
 import { isCampaignMediaUploadNotSent } from '../services/campaignMediaExecution'
 import { engineMaterialize, engineSendExclusion, engineSmsPush, takeEngineContentIndex } from './desktopEngineData'
@@ -199,7 +199,7 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
         try {
           files.push({ name: campaignMediaName(item), ref: await resolveCampaignMediaSource(item as CampaignMediaInput, temp) })
         } catch (error) {
-          if (isCampaignMediaResolveError(error)) throw mediaUnavailableError(error.message)
+          if (isCampaignMediaResolveError(error)) throw mediaUnavailableError(error.message, campaignMediaErrorCode(error))
           throw error
         }
       }

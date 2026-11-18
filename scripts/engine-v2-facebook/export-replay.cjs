@@ -118,6 +118,14 @@ const details = [
     order by d.campaign_id, d.id`, 'details_slot')
 ]
 
+// 6b. Dòng tiến trình bộ cũ của các chiến dịch trong cửa sổ (auto_campaign_logs theo (campaign_id, id), dạng đã lưu): replay.cjs so loại dòng
+// tiến trình của engine với bộ cũ theo cửa sổ từng lượt (anh chốt 18/11/2026: tiến trình như bộ cũ).
+const progressLines = query(`select l.campaign_id, l.id, l.log, l.created_at
+  from unnest(array[${ids(campaignIds)}]::bigint[]) c(id)
+  cross join lateral (select * from public.auto_campaign_logs l where l.campaign_id = c.id
+                        and l.created_at >= '${since}'::timestamptz - interval '1 minute' order by l.id desc limit 4000) l
+  order by l.campaign_id, l.id`, 'progress_lines')
+
 // 7. Workflow thật của các lượt, danh mục loại chiến dịch FB.
 const workflows = query(`select w.id, w.name, w.nodes, w.edges, w.default_variables from public.auto_workflows w
   where w.id in (${ids(runs.map(r => r.workflow_id).filter(Boolean))}) order by w.id`, 'workflows')
@@ -141,11 +149,11 @@ const staff = query(`select s.id, s.organization_id, s.max_running_facebook_acco
 const snapshot = {
   source: { projectRef: ref, exportedAt: new Date().toISOString(), days: DAYS, campaignCaps: CAMPAIGN_CAP, runsPerCampaign: RUNS_PER_CAMPAIGN,
     note: 'Dữ liệu khách thật, chỉ dùng cho môi trường thử trên máy; không đưa vào repo.' },
-  campaigns, runs, steps, inputData, details, workflows, campaignActions, accounts, accountGroups, orgProducts, staff
+  campaigns, runs, steps, inputData, details, workflows, campaignActions, accounts, accountGroups, orgProducts, staff, progressLines
 }
 const file = path.join(OUT_DIR, `engine-v2-fb-replay-${ONLY_IDS ? 'ids-' : ''}${new Date().toISOString().slice(0, 10)}.json`)
 fs.writeFileSync(file, JSON.stringify(snapshot))
 const byType = {}
 for (const c of campaigns) byType[c.action_id] = (byType[c.action_id] || 0) + 1
 console.log(JSON.stringify({ file, bytes: fs.statSync(file).size, campaigns: campaigns.length, byType, runs: runs.length, steps: steps.length,
-  targets: inputData.length, details: details.length, workflows: workflows.length, accounts: accounts.length }))
+  targets: inputData.length, details: details.length, progressLines: progressLines.length, workflows: workflows.length, accounts: accounts.length }))

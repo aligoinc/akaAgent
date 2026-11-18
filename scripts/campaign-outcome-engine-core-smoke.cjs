@@ -288,8 +288,8 @@ async function integration(E) {
     for (const id of Object.values(c1.ids)) assert.equal((await target(id)).status, 'hoàn thành')
     assert.deepEqual(r1.clock.sleeps, [120000, 120000], 'nghỉ sau data 1 và 2, không nghỉ sau data cuối')
     assert.ok(r1.lines.some(l => /\(Z216\)/.test(l.text)))
-    // Như logHelperMilestoneProgress của Desktop: "<thao tác>: <câu>" (có dòng lịch sử thì không emoji), mã ngắn ở cuối.
-    assert.ok(r1.lines.some(l => l.level === 'error' && /^[^❌⚠️].*: .*\(Z122\)$/u.test(l.text)), JSON.stringify(r1.lines.map(l => l.text)))
+    // Anh chốt 18/11/2026 (docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md mục 9): dòng lỗi "❌ <thao tác> "<data>": <câu> (mã)", data đã đóng.
+    assert.ok(r1.lines.some(l => l.level === 'error' && /^❌ .+ "Khách 0901000003": .*\(Z122\)$/u.test(l.text)), JSON.stringify(r1.lines.map(l => l.text)))
     assert.equal(await val(`SELECT status FROM public.auto_campaigns WHERE id = $1`, [c1.campaign]), 'chờ xử lý')
     pass('runUnit: 3 data (bình thường, 216, 122) đúng lịch sử/trạng thái; tra số hỏng thì bỏ các bước sau; chỉ nghỉ khi còn data; nhả lease cuối lượt')
 
@@ -607,7 +607,7 @@ async function messagePhoneCases(E, env) {
     '✅ Hoàn thành "0911000001"',
     '⏳ Nghỉ 120s trước khi xử lý mục tiếp theo...',
     '▶️ Xử lý "0911000002" trong chiến dịch "Nhắn theo SĐT"',
-    'Tìm SĐT: Không tồn tại (Z216)',
+    '❌ Tìm SĐT "0911000002": Không tồn tại (Z216)',
     '✅ Hoàn thành "0911000002"',
     '⏳ Nghỉ 120s trước khi xử lý mục tiếp theo...',
     '▶️ Xử lý "0911000003" trong chiến dịch "Nhắn theo SĐT"',
@@ -663,7 +663,8 @@ async function messagePhoneCases(E, env) {
     '0911000011': { name: 'Khánh', text: { error: { code: 'ECONNRESET', message: 'read ECONNRESET', uncertain: true } } }
   })
   const lines3 = r3.lines.join('\n')
-  assert.match(lines3, /Nhắn tin người lạ: Người nhận chặn tin nhắn từ người lạ \(Z122\)\nKết bạn: Đã gửi lời mời kết bạn đến Giang\n✅ Hoàn thành "0911000008"/)
+  // Dòng lỗi có emoji + tên data (anh chốt 18/11/2026, docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md mục 9).
+  assert.match(lines3, /❌ Nhắn tin người lạ "0911000008": Người nhận chặn tin nhắn từ người lạ \(Z122\)\nKết bạn: Đã gửi lời mời kết bạn đến Giang\n✅ Hoàn thành "0911000008"/)
   assert.deepEqual((await detailRows(p3.ids['0911000008'])).map(d => [d.action_code, d.status, d.error_code]), [
     ['zalo_find_phone_user', 'thành công', null], ['zalo_message_stranger', 'thất bại', 'err_zalo_receiver_blocks_stranger_message'],
     ['zalo_add_friend', 'thành công', null]])
@@ -671,11 +672,11 @@ async function messagePhoneCases(E, env) {
   assert.deepEqual((await detailRows(p3.ids['0911000009']))[0].data.searchPhoneAttempts,
     [{ reqSrc: 32, outcome: 'error', errorCode: '221', errorMessage: 'Quá giới hạn' }, { reqSrc: 40, outcome: 'success' }])
   assert.deepEqual(r3.calls.filter(x => x.startsWith('find:0911000010')), ['find:0911000010:32'])
-  assert.match(lines3, /Tìm SĐT: Không tồn tại \(Z216\)/)
-  assert.match(lines3, /Nhắn tin người lạ thất bại: read ECONNRESET \(Z999\)\nKết bạn: Đã gửi lời mời kết bạn đến Khánh/)
+  assert.match(lines3, /❌ Tìm SĐT "0911000010": Không tồn tại \(Z216\)/)
+  assert.match(lines3, /⚠️ Nhắn tin người lạ "0911000011" thất bại: read ECONNRESET \(Z999\)\nKết bạn: Đã gửi lời mời kết bạn đến Khánh/)
   const d11 = await detailRows(p3.ids['0911000011'])
   assert.deepEqual([d11[1].status, d11[1].error_code, d11[1].data.deliveryState], ['thất bại', 'err_zalo_api_business_failed', 'unknown'])
-  assert.match(lines3, /Tìm SĐT: Tham số không hợp lệ \(Z114\)\n✅ Hoàn thành "Không số"/)
+  assert.match(lines3, /❌ Tìm SĐT "Không số": Tham số không hợp lệ \(Z114\)\n✅ Hoàn thành "Không số"/)
   assert.equal(r3.calls.filter(x => x.startsWith('text:')).length, 3, 'mỗi data gửi đúng một lần')
   pass('SĐT: nhắn lỗi 122 vẫn kết bạn; reqSrc 40 khi mã có giới hạn tra số; không thì dừng ở 32; mạng lỗi lúc gửi ghi như Desktop (Z999), không gửi lại; thiếu SĐT → Z114')
 
