@@ -1,6 +1,6 @@
 # V572: comment theo mã bài của hộp thoại (engine v2 Facebook, đăng nhóm kèm comment)
 
-18/11/2026. Anh: "Làm bản sửa" (sau khi gỡ V568 lúc 12:31 VN), rồi "Apply rồi tạo PR". **Đã apply akachat lúc 13:53:56 VN 18/11** (sổ `20261118065344`, md5 sổ = file `dd09d472…`, 0 lỗi 5xx; không apply lại). [Biên nhận](../migrations/snapshots/engine-facebook-v572/apply-receipt.json). Code ở PR [#701](https://github.com/aligoinc/akaAgent/pull/701) (nhánh `claude/fb-engine-comment-dialog-post`, chưa merge).
+18/11/2026. Anh: "Làm bản sửa" (sau khi gỡ V568 lúc 12:31 VN), rồi "Apply rồi tạo PR". **Đã apply akachat lúc 13:53:56 VN 18/11** (sổ `20261118065344`, md5 sổ = file `dd09d472…`, 0 lỗi 5xx; không apply lại). [Biên nhận](../migrations/snapshots/engine-facebook-v572/apply-receipt.json). Code **đã merge `dev_3` qua [#701](https://github.com/aligoinc/akaAgent/pull/701) ngày 18/11** theo yêu cầu ("Merge PR #701").
 
 ## Tóm tắt
 
