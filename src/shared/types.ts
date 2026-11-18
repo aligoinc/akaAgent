@@ -997,6 +997,8 @@ export interface CampaignInputData {
   dataTypeName?: string | null
   /** Audit routes that materialized or later converged on this canonical input. */
   origins?: CampaignInputDataOrigin[]
+  /** Chỉ dùng khi tạo dòng: chỉ số nội dung chọn trước theo action code (RPC aka_agent_take_campaign_content_index đọc). */
+  contentRotationIndexes?: Record<string, number>
 }
 
 export interface CampaignInputDataWriteProgress {

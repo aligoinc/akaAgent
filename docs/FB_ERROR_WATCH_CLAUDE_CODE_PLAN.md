@@ -1,6 +1,6 @@
 # Phương án: Claude Code tự kiểm lỗi chạy chiến dịch Facebook qua hàng việc `ai_*`
 
-Ngày lập: 18/11/2026. Bản 7 (đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); đã viết migration đợt 1 và chạy thử trên production trong một giao dịch rồi huỷ, **chưa apply**). Chưa đổi database, chưa dựng phiên cloud. Các câu còn mở ở mục 10.
+Ngày lập: 18/11/2026. Bản 8 (đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); **migration đợt 1 đã apply 17:25 VN 18/11 và phần đọc lỗi đã bật 17:26 VN**, mục 5.6). Chưa chèn việc nào: công tắc chèn việc, xin ảnh, đánh thức, agent và tác vụ cloud đều còn tắt. Các câu còn mở ở mục 10.
 
 ### Anh đã chốt (18/11/2026)
 
@@ -79,9 +79,9 @@ Hệ quả: nhân viên akaBiz thấy agent này trong panel Hỏi đáp AI củ
 
 ## 5. (A) Bộ tạo việc trong database
 
-### 5.1 Thành phần (một migration, đã viết, chưa apply)
+### 5.1 Thành phần (một migration, đã apply 18/11)
 
-[migration_v574_engine_error_watch.sql](../migrations/migration_v574_engine_error_watch.sql) và [bản gỡ](../migrations/rollback_v574_engine_error_watch.sql). **Số 574 là số tạm**: chọn lại ngay trước khi apply. Migration chỉ thêm đối tượng mới, không sửa bảng hay hàm nào đang có.
+[migration_v574_engine_error_watch.sql](../migrations/migration_v574_engine_error_watch.sql) và [bản gỡ](../migrations/rollback_v574_engine_error_watch.sql). Số 574 lúc viết là số tạm; lúc apply sổ chưa có V574 nên giữ nguyên. Migration chỉ thêm đối tượng mới, không sửa bảng hay hàm nào đang có.
 
 | Thứ | Việc |
 |---|---|
@@ -149,6 +149,23 @@ Hậu kiểm sau khi huỷ (chỉ đọc): không còn bảng, hàm, thiết l�
 
 Lần thử này chưa phủ: xin ảnh (`imageRequests`), đường `/fire`, mã lỗi tăng bất thường (chưa đủ 3 ngày dữ liệu), và job pg_cron tự chạy theo lịch.
 
+### 5.6 Apply và bật phần đọc lỗi (18/11, 17:25 VN)
+
+Anh đồng ý làm tiếp ngay ("ok giờ làm tiếp luôn được ko?"). [Biên nhận](../migrations/snapshots/engine-error-watch-v574/apply-receipt.json).
+
+| Bước | Kết quả |
+|---|---|
+| Kiểm trước (17:25:11 VN) | 2 phiên đang hoạt động, không phiên nào chờ khoá. Sổ migration chưa có V574; mới nhất là V575 của phiên khác (17:08 VN) |
+| Apply (17:25:16–17:25:20 VN) | Đạt. Dòng sổ `20261118102303`, md5 nội dung trong sổ trùng md5 tệp |
+| Hậu kiểm | Có đủ 3 bảng (đã bật RLS), 3 hàm (chỉ `service_role` gọi được), job số 122 lịch `*/2 * * * *`, thiết lập cả bốn công tắc tắt, agent `is_active = false` |
+| Ảnh hưởng tới API | PostgREST nạp lại schema mất 3,4 giây. Trong 30 giây đó có 211 request chậm hơn 1 giây (bình thường 0–2), 0 lỗi 5xx |
+| Bật `enabled` (17:26:58 VN) | Chỉ đổi công tắc đọc lỗi. Ba công tắc còn lại và agent giữ tắt |
+| Hai lượt đầu (17:28, 17:30 VN) | 316 và 73 mili giây, không lỗi. Lượt đầu sau khi bật đọc lùi 30 phút. Sổ có 6 ca: 5 ca mã chưa có kết luận, 1 ca lượt bị bỏ dở. Không câu nào được chèn, không yêu cầu ảnh nào |
+
+Tắt lại phần đọc lỗi: đặt `enabled` thành `false` trong thiết lập `engine.error_watch`; có hiệu lực ở lượt kế, không cần migration.
+
+Cùng lúc đó phiên khác đã apply `migration_v575_engine_specific_codes_wait_note` (17:08 VN), cho hai trong ba ca của đợt 0 mã riêng: lỗi mạng khi mở trang Facebook ra NET01, tệp media không còn trên máy ra CFG20. Hai mã này chưa nằm trong danh sách "đã biết" của bộ tạo việc, nên khi bật chèn việc chúng vẫn sẽ thành việc. Muốn bỏ thì thêm vào `knownCodes` của thiết lập (danh sách này thay cả danh sách mặc định trong hàm, phải ghi đủ).
+
 ## 6. Ảnh lỗi từ máy khách (anh chốt điểm 5)
 
 - Khi một ca **lỗi chưa phân loại** hoặc **mẫu lỗi lạ** được tạo, bộ tạo việc gọi luôn `aka_agent_desktop_diagnostic_request_v1(nhân viên của lượt mẫu, {"targetRunId": …}, 'error-watch')`. Hàm này có sẵn từ V556.
@@ -203,7 +220,7 @@ Chỉ gửi khi ca là mới hoặc tăng bất thường, một thông báo m�
 ### 7.4 Lệnh cho phiên cloud và lệnh xem cho người vận hành (đã viết)
 
 - [error-watch-agent.cjs](../scripts/engine-v2-facebook/error-watch-agent.cjs): phiên cloud dùng để nhận việc (`next`), gia hạn (`progress`), kiểm và nộp báo cáo (`check`, `answer`), trả việc (`requeue`, `fail`). Không cần thư viện ngoài. Lệnh chỉ nhận câu của đúng agent này (nhận nhầm thì trả về hàng đợi), chỉ lấy con số từ đoạn chữ gửi kèm lúc đánh thức, và từ chối báo cáo sai khuôn hoặc có chuỗi giống số điện thoại, UID dài, khoá, token. Nhờ vậy tệp công việc ngắn đi và phiên không phải tự ghép lệnh gọi API. Kiểm: `node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs` (9 nhóm, máy chủ giả cục bộ); đã gọi thử `next` với API thật khi agent chưa tồn tại, trả "hết việc".
-- [error-watch-status.cjs](../scripts/engine-v2-facebook/error-watch-status.cjs): chỉ đọc, cho anh xem công tắc, lượt tick gần nhất, sổ ca theo trạng thái, ca đang chờ báo, các câu gần đây của agent và yêu cầu ảnh. Trước khi apply migration nó chỉ in "chưa apply"; phần còn lại chưa chạy được lần nào.
+- [error-watch-status.cjs](../scripts/engine-v2-facebook/error-watch-status.cjs): chỉ đọc, cho anh xem công tắc, lượt tick gần nhất, sổ ca theo trạng thái, ca đang chờ báo, các câu gần đây của agent và yêu cầu ảnh. Đã chạy trên production sau khi apply (18/11 17:30 VN): in đúng công tắc, lượt gần nhất và 6 ca trong sổ; phần câu của agent và yêu cầu ảnh chưa có dữ liệu để in.
 
 ### 7.4b Tác vụ cloud (đã tạo 18/11 17:01 VN, đang TẮT)
 
@@ -279,7 +296,7 @@ Từ đó em đề xuất cho câu Q-F:
 | Đợt | Nội dung | Chạm production |
 |---|---|---|
 | 0 | **Đã làm 18/11** ([kết quả](FB_ERROR_WATCH_DOT0_20261118.md)): câu phát hiện ca lỗi [error-watch-dryrun.sql](../scripts/engine-v2-facebook/error-watch-dryrun.sql) chạy chỉ đọc; tệp công việc [FB_ERROR_WATCH_TASK.md](FB_ERROR_WATCH_TASK.md); kiểm tay 3 ca thật và viết 3 báo cáo mẫu. Đường đánh thức tác vụ cloud: xem mục 7.5 | Không |
-| 1 | Migration đã viết (mục 5.1) và đã chạy thử trong một giao dịch rồi huỷ (mục 5.5). Thứ tự làm tiếp: (a) chọn số thật ngay trước khi apply; (b) apply ngoài giờ cao điểm, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`, xem sổ ca 1–2 ngày; (d) anh sửa câu lệnh phiên Hỏi đáp để bỏ qua agent mới, rồi bật agent; (e) dựng tác vụ cloud riêng; bật job với trần thấp (10 việc mỗi ngày), chưa xin ảnh, chưa thông báo | 1 migration, 2 dòng dữ liệu, 1 job |
+| 1 | Migration đã viết (mục 5.1) và đã chạy thử trong một giao dịch rồi huỷ (mục 5.5). **Đã làm 18/11 (mục 5.6)**: (a) chọn số thật ngay trước khi apply; (b) apply, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`. **Còn lại**: xem sổ ca 1–2 ngày; (d) anh sửa câu lệnh phiên Hỏi đáp để bỏ qua agent mới, rồi bật agent; (e) dựng tác vụ cloud riêng; bật job với trần thấp (10 việc mỗi ngày), chưa xin ảnh, chưa thông báo | 1 migration, 2 dòng dữ liệu, 1 job |
 | 2 | Bật xin ảnh tự động và thông báo app Claude; nâng trần việc lên 30 mỗi ngày | Thiết lập |
 | 3 | Tuỳ kết quả: mở sang engine Zalo (`auto_outcome_unmatched` Zalo đang có 316 mẫu, 1.362 lượt) | Thiết lập |
 
@@ -296,7 +313,7 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 
 ## 11. Chưa kiểm
 
-- Migration mới chạy thử trong một giao dịch rồi huỷ (mục 5.5), chưa apply thật. Chưa thử trên production: xin ảnh, job pg_cron tự chạy, mã lỗi tăng bất thường.
+- Migration đã apply và job pg_cron đã tự chạy phần đọc lỗi (mục 5.6). Chưa thử trên production ngoài giao dịch thử ở mục 5.5: chèn việc. Chưa thử lần nào: xin ảnh, mã lỗi tăng bất thường.
 - Tác vụ cloud đã tạo nhưng chưa chạy lượt nào: chưa biết phiên có đọc được database qua connector, có gọi được API từ môi trường `full`, và có công cụ gửi thông báo app Claude không (mục 7.4b).
 - Chưa thử đọc ảnh 2 MB dạng base64 qua connector Supabase trong phiên cloud.
 - Chưa đo thời gian kiểm một ca trên phiên cloud. Ba ca kiểm tay ở đợt 0 mỗi ca cần 5–10 lượt đọc database và vài tệp code, khớp ước lượng 5–15 phút.

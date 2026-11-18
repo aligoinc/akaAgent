@@ -58,6 +58,10 @@ import {
 } from '../../shared/mediaTypes'
 import { renderContentSpin, renderContentSpinNonEmpty, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import {
+  isPostBumpTargetCampaign, planPostBumpContentIndexes, POST_BUMP_COMMENT_ACTION_CODE, POST_BUMP_POST_NOT_FOUND_ERROR_CODE,
+  POST_BUMP_POST_NOT_FOUND_NOTE, POST_BUMP_SLEEP_BETWEEN_COMMENTS_SECONDS, POST_BUMP_TARGET_NAME_PREFIX
+} from '../../shared/postBumpContent'
+import {
   isFormattedContentEmpty,
   sanitizeFormattedContent,
   splitFormattedContentVariants,
@@ -101,16 +105,17 @@ import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
-import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
+import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
 import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, saveErrorScreenshot, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
 import { mapCampaignInputDataFromDB } from '../data/mappers'
-import type { ConfigIssue, DeliveryState, Phase, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop, WorkflowTargetApi, WorkflowTargetEnd } from '../../../packages/campaign-engine/src/index'
+import type { ConfigIssue, DeliveryState, Phase, PrepareTargetsApi, PrepareTargetsResult, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop,
+  WorkflowTargetApi, WorkflowTargetEnd } from '../../../packages/campaign-engine/src/index'
 import { FACEBOOK_FIND_DATA_RESULT_NAME, facebookDefaultActionCodes, facebookResultName } from '../../../packages/campaign-engine/src/facebook/registry'
 import {
-  CampaignMediaResolveError, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName, getMediaDownloadExtension,
-  hasDeclaredMediaSource, resolveCampaignMediaSource
+  CampaignMediaResolveError, campaignMediaErrorCode, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName,
+  getMediaDownloadExtension, hasDeclaredMediaSource, resolveCampaignMediaSource
 } from './campaignMediaSource'
 import {
   ensureCurrentUserCanUseCampaignAction,
@@ -2258,7 +2263,9 @@ export class CampaignScheduler {
           if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
         }
         if (engineResult) this.observeEngineResult(account, currentCampaign, engineResult)
-        if (engineResult?.reason === 'wait') await this.rememberEngineWait(account, currentCampaign, engineResult)
+        if (engineResult?.reason === 'wait' && !(await this.completeEngineNewsfeedDailyWhenLimited(account, currentCampaign, engineResult))) {
+          await this.rememberEngineWait(account, currentCampaign, engineResult)
+        }
         // Như bộ cũ: chiến dịch FB vừa chạy xong lượt thì cho lướt / làm giàu dữ liệu sau chiến dịch.
         if (engineResult && account.flatformType === 'facebook' && ['no_target', 'not_due', 'end_unit', 'max_targets'].includes(engineResult.reason)) {
           this.webEnrichment?.campaignFinished(account.id)
@@ -3799,6 +3806,37 @@ export class CampaignScheduler {
     if (this.engineObservations.size > 2000) {
       const cutoff = Date.now() - ENGINE_OBSERVATION_TTL_MS
       for (const [id, observation] of this.engineObservations) if (observation.at < cutoff) this.engineObservations.delete(id)
+    }
+  }
+
+  /**
+   * Newsfeed hằng ngày bật "Tiếp tục khi chạm giới hạn" mà mọi thao tác newsfeed đều hết lượt: bộ cũ cho chiến dịch hoàn thành kèm lý do
+   * (resolveNewsfeedActionAvailability → completeNewsfeedDailyWithoutNextDay), bảo trì lịch ngày mới không mở lại; engine chờ tới khi
+   * mở lượt rồi sáng hôm sau bảo trì mới đóng. Anh chốt 18/11: về như bộ cũ. Chỉ khi claim báo mọi thao tác newsfeed đều chờ hạn mức (thao
+   * tác tuỳ chọn), đọc lại đúng bước kiểm của bộ cũ để có cùng lý do; bộ cũ không thấy hết lượt (đọc lệch) thì để engine chờ như cũ.
+   */
+  private async completeEngineNewsfeedDailyWhenLimited(account: AutoAccount, campaign: Campaign,
+    result: { detail?: Record<string, unknown> }): Promise<boolean> {
+    if (String(account.flatformType || '').trim().toLowerCase() !== 'facebook' || !this.isNewsfeedDailyCampaign(campaign)) return false
+    const claim = result.detail?.claim as { actions?: Record<string, { decision?: string; gate?: string; required?: boolean }> } | undefined
+    const decisions = ['fb_like_post', 'fb_comment'].map(code => claim?.actions?.[code]).filter(Boolean)
+    if (decisions.length === 0 || !decisions.every(d => d?.decision === 'wait' && d.gate === 'quota' && d.required === false)) return false
+    const limitConfig = campaign.extraSettings?.actionLimits
+    if (!this.shouldContinueWhenActionLimitReached(limitConfig)) return false
+    try {
+      const action = await this.supabase.getCampaignAction(campaign.actionId)
+      if (!action) return false
+      const availability = await this.resolveNewsfeedActionAvailability(account, campaign,
+        this.getCampaignExecutableActionDescriptors(campaign, action), this.getCampaignActionDescriptors(campaign, action), limitConfig)
+      if (availability.disabledStatus || !availability.allCheckedActionsBlocked) return false
+      const fresh = await this.supabase.getCampaign(campaign.id)
+      if (!fresh || fresh.isDelete || fresh.status !== 'chờ xử lý') return false
+      await this.completeNewsfeedDailyWithoutNextDay(fresh,
+        availability.blockedReasons.join('; ') || 'Các hành động newsfeed đang đạt giới hạn')
+      return true
+    } catch (error) {
+      console.warn(`[CampaignEngine] newsfeed limit completion skipped for campaign ${campaign.id}:`, error)
+      return false
     }
   }
 
@@ -5780,7 +5818,71 @@ export class CampaignScheduler {
       runTarget: api => this.runFacebookEngineTarget(unit, api),
       onTargetEnd: async () => undefined,
       reviseCampaignNote: (info, reviseSignal) => this.reviseFacebookEnginePauseNote(unit, info, reviseSignal),
+      ...(this.shouldUseSuggestedFriends(campaign) ? { prepareTargets: (api: PrepareTargetsApi) => this.prepareFacebookSuggestedFriends(unit, api) } : {}),
       close: result => this.closeFacebookEngineUnit(unit, result)
+    }
+  }
+
+  /**
+   * Nhắn UID "Lấy đề xuất bạn bè" chạy bằng engine (anh chốt 18/11/2026: làm bước này trong engine). Như collectSuggestedFriendInputData của
+   * bộ cũ: lượt không còn data nào để chạy thì đọc đề xuất bạn bè bằng workflow của loại (bước chỉ đọc, không có mốc gửi), thêm data rồi để
+   * lõi claim lại. Không lấy được đề xuất nào thì ghi chú chiến dịch và kết thúc lượt, chiến dịch chờ lượt sau như bộ cũ. Bộ cũ giữ lượt bằng
+   * claim của nó; ở đây lõi đang giữ lease của lượt engine (prepareTargets chạy lúc còn giữ lease, có heartbeat).
+   */
+  private async prepareFacebookSuggestedFriends(unit: FacebookEngineUnit, api: PrepareTargetsApi): Promise<PrepareTargetsResult> {
+    const { account, campaign } = unit
+    // Như bộ cũ (details.length === 0): chỉ lấy đề xuất khi chiến dịch chưa có data nào; đã có (đã chạy hết) thì kết thúc như thường.
+    if (api.hasTargets) return { kind: 'none' }
+    const count = this.normalizeSuggestedFriendsCount(campaign.extraSettings?.suggestedFriendsCount)
+    api.markStarted()
+    api.progress(`ℹ️ Bắt đầu lấy ${count} đề xuất bạn bè từ Facebook`)
+    const action = await this.supabase.getCampaignAction(campaign.actionId)
+    const resolved = action ? this.resolveCampaignWorkflow(action) : null
+    if (!resolved?.workflowId) throw new Error(resolved?.missingNote || 'Loại chiến dịch chưa được liên kết workflow')
+    const automationPage = await this.getAutomationPage(account, campaign.id)
+    const page = automationPage.page
+    if (!page) throw new Error('Không khởi tạo được trình duyệt cho Facebook')
+    if (automationPage.source === 'background') this.startBackgroundPreview(account.id, campaign.id, page)
+    try {
+      const result = await this.engineV2.run(resolved.workflowId, {
+        accountId: account.id,
+        campaignId: campaign.id,
+        campaignName: campaign.name,
+        collectSuggestedFriendsOnly: true,
+        count,
+        suggestedFriendsCount: count
+      }, page, {
+        organizationId: campaign.organizationId ?? account.organizationId ?? null,
+        accountId: account.id,
+        campaignId: campaign.id,
+        signal: api.signal,
+        persist: true,
+        onStepProgress: (step: RunStepV2) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch {}
+        },
+        onLog: (entry) => {
+          try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_LOG, { runKey: `campaign-${campaign.id}`, ...entry }) } catch {}
+        }
+      })
+      if (result.status !== 'completed') throw new Error(result.error || 'Không lấy được đề xuất bạn bè')
+      const profiles = this.normalizeSuggestedFriendProfiles(result.output.suggestedProfiles, count)
+      if (profiles.length === 0) {
+        const message = 'Không lấy được đề xuất bạn bè từ Facebook'
+        await this.updateCampaignAndBroadcast(campaign.id, { note: message })
+        api.progress(`⚠️ ${message}`, 'warning')
+        return { kind: 'end', reason: 'wait', detail: { note: message } }
+      }
+      await this.createMaterializedCampaignInputDataBatch(profiles.map<Partial<CampaignInputData>>(profile => ({
+        campaignId: campaign.id,
+        name: profile.name,
+        uid: profile.uid,
+        status: 'chờ xử lý',
+        note: ''
+      })))
+      api.progress(`✅ Đã thêm ${profiles.length} đề xuất bạn bè vào chiến dịch "${campaign.name}"`, 'success')
+      return { kind: 'retry' }
+    } finally {
+      if (automationPage.source === 'background') this.stopBackgroundPreview(account.id, campaign.id)
     }
   }
 
@@ -6044,7 +6146,7 @@ export class CampaignScheduler {
       } catch (error) {
         if (this.isCampaignMediaResolveError(error)) {
           const res = await api.reportMilestone(milestone('__media', firstAction), { ok: false, phase: 'before_send',
-            signal: { kind: 'engine', code: 'media_unavailable', errorCode: 'err_media_file_missing', message: error.message } })
+            signal: { kind: 'engine', code: 'media_unavailable', errorCode: campaignMediaErrorCode(error), message: error.message } })
           return 'stop' in res ? res : { done: true }
         }
         throw error
@@ -6373,7 +6475,8 @@ export class CampaignScheduler {
       }
 
       // 1. Dòng lịch sử của bộ dựng bộ cũ theo đúng thứ tự bước (bỏ bước newsfeed đã báo ngay).
-      await this.reportFacebookEngineRows(campaign, detail, account.id, result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
+      const skippedNote = await this.reportFacebookEngineRows(campaign, detail, account.id,
+        result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
         result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
       for (const log of screenshotLogs) {
         await this.logCampaignProgress(campaign, log.storedMessage, { realtimeMessage: log.realtimeMessage, realtimeAction: log.action, engine: true })
@@ -6443,7 +6546,8 @@ export class CampaignScheduler {
       // 6. Nhóm chia sẻ chưa có kết quả: theo kết quả cú bấm Đăng của data chính. Đã đăng: ghi như bộ cũ (bộ dựng thường đã ghi); không rõ:
       //    không gửi lại; chưa bấm: về hàng đợi. Không biết kết quả cú bấm (hiếm) thì coi như không rõ, không đăng lại.
       await this.closeFacebookEngineShareRuns(campaign, detail, name, api, share, state)
-      return state.stopped ?? { done: true }
+      // Đăng nhóm kèm chia sẻ bị bỏ qua: như bộ cũ in "ℹ️ Bỏ qua" thay cho "✅ Hoàn thành" (lõi in khi data đóng).
+      return state.stopped ?? { done: true, ...(skippedNote ? { skippedNote } : {}) }
     } catch (error) {
       if (error instanceof FacebookEngineReportStop) return state.stopped ?? { stop: true, reason: 'report_rejected' }
       throw error
@@ -6539,10 +6643,13 @@ export class CampaignScheduler {
       firstAction: string
       /** Dòng của data khác data chính (nhóm chia sẻ kèm): báo lên lượt data của nhóm đó; undefined = dòng của data chính. */
       extraRow?: (action: CreateCampaignDetailInput, outcome: MilestoneOutcome) => Promise<CampaignDetail | null | undefined>
-    }): Promise<void> {
+    }): Promise<string | null> {
     const allSteps = context ?? steps
     let current: RunStepV2 | null = null
     const captured: Array<{ message: string; options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } }> = []
+    // Dòng lỗi đã có dòng của lõi (kèm mã, tên data): câu "⚠️ …" bộ dựng cũ in ngay sau khi ghi dòng đó là dòng trùng, bỏ (anh chốt 18/11/2026
+    // "giữ dòng có mã"). Ghi vị trí câu kế tiếp trong captured lúc báo dòng lỗi.
+    const duplicateWarningAt = new Set<number>()
     this.facebookEngineSinks.set(campaign.id, async action => {
       const outcome = detailInputOutcome(action, ctx.firstAction)
       const routed = ctx.extraRow ? await ctx.extraRow(action, outcome) : undefined
@@ -6553,12 +6660,16 @@ export class CampaignScheduler {
       if (!outcome.raw.ok && ctx.signOf) {
         const raw = outcome.raw
         const sign = ctx.signOf(current, outcome.actionCode, raw.phase, raw.signal.errorCode ?? null, [raw.signal.message ?? null, action.log ?? null])
-        if (sign) outcome.raw = { ...raw, signal: { ...raw.signal, kind: 'block', code: sign.code, errorCode: sign.code } }
+        if (sign) {
+          outcome.raw = { ...raw, signal: { ...raw.signal, kind: 'block', code: sign.code, errorCode: sign.code,
+            ...(raw.signal.message != null ? { message: rewriteFacebookSignMessage(sign.code, raw.signal.message) } : {}) } }
+        }
       }
       const screenshotId = !outcome.raw.ok ? ctx.screenshotOf?.(current) : null
       if (!outcome.raw.ok && screenshotId) outcome.raw = { ...outcome.raw, signal: { ...outcome.raw.signal, screenshotId } }
       const res = await ctx.report(place.key, outcome.actionCode, outcome.raw, outcome.actionName)
       if (!res) throw new FacebookEngineReportStop()
+      if (!outcome.raw.ok) duplicateWarningAt.add(captured.length)
       const decision = res.outcomes.find(item => item.actionCode === outcome.actionCode) ?? res.outcomes[0]
       if (!decision || decision.detailId == null) return null
       return {
@@ -6585,11 +6696,13 @@ export class CampaignScheduler {
           await this.logMilestonesV2(campaign, detail, accountId, allSteps, true, [], new Set(), { step, summary })
         }
       }
+      return (!summary.hasFailure && !summary.hasError && summary.skippedInputNote) || null
     } finally {
       this.facebookEngineSinks.delete(campaign.id)
       this.facebookEngineProgress.delete(campaign.id)
-      for (const line of captured) {
+      for (const [index, line] of captured.entries()) {
         if (line.message.startsWith('❌')) continue
+        if (duplicateWarningAt.has(index) && line.message.startsWith('⚠️')) continue
         await this.logCampaignProgress(campaign, line.message, { ...line.options, engine: true })
       }
     }
@@ -12461,6 +12574,7 @@ export class CampaignScheduler {
           if (shareTarget && created && output.operationState === 'committed') {
             await this.finishGroupPostShareTarget(campaign, shareTarget, consumedGroupPostInputDataIds)
           }
+          if (created && inputDataId === detail?.id) await this.closePostBumpRowsOfMissingPost(campaign, detail, output.errorCode)
           const resultInput = inputDataId === detail?.id ? detail : null
           const helperProgress = helperLegacy ?? {
             actionCode: output.actionCode,
@@ -15455,6 +15569,9 @@ export class CampaignScheduler {
     const initialDelay = this.normalizePostBumpMinutes(extra.postBumpInitialDelayMinutes, 30, 0)
     const interval = this.normalizePostBumpMinutes(extra.postBumpIntervalMinutes, 10, 1)
     const startIndex = this.normalizePostBumpRotationIndex(extra.postBumpRotationIndex, targets.length)
+    // Mỗi lượt up của bài giữ trước một câu riêng, bắt đầu từ câu ngẫu nhiên, không phụ thuộc lượt rơi vào tài khoản nào
+    // (xem postBumpContent.ts).
+    const contentPlan = planPostBumpContentIndexes(count)
     const now = await this.getDatabaseBusinessNow()
     const earliestByCampaign = new Map<number, Date>()
 
@@ -15466,7 +15583,8 @@ export class CampaignScheduler {
         uid: postUrl,
         status: 'chờ xử lý',
         schedule: schedule.toISOString(),
-        note: `Đã thêm từ chiến dịch "${campaign.name}"`
+        note: `Đã thêm từ chiến dịch "${campaign.name}"`,
+        contentRotationIndexes: { [POST_BUMP_COMMENT_ACTION_CODE]: contentPlan.indexes[i] }
       })
       const currentEarliest = earliestByCampaign.get(target.campaignId)
       if (!currentEarliest || schedule.getTime() < currentEarliest.getTime()) {
@@ -15507,6 +15625,7 @@ export class CampaignScheduler {
       try {
         const targetCampaign = await this.supabase.getCampaign(targetId)
         if (targetCampaign && targetCampaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) {
+          if (await this.isPostBumpAccountGone(targetCampaign.accountId)) continue
           targets.push({ campaignId: targetCampaign.id })
         }
       } catch (err) {
@@ -15514,6 +15633,38 @@ export class CampaignScheduler {
       }
     }
     return targets
+  }
+
+  /**
+   * Tài khoản up tin đã xoá (hoặc không còn dùng được: khác nhân viên, hết quyền gói) thì không chia lượt cho nó (anh chốt
+   * 18/11/2026; 8 ngày tới 18/11 có 624 lượt thêm vào chiến dịch up tin của tài khoản đã xoá, không bao giờ chạy). getAccount trả
+   * null trong các trường hợp đó; đọc lỗi (mạng) thì coi như còn, giữ cách cũ.
+   */
+  private async loadPostBumpAccount(accountId: number): Promise<AutoAccount | null | undefined> {
+    try {
+      return await this.supabase.getAccount(accountId)
+    } catch (err) {
+      console.error('Failed load post bump account:', err)
+      return undefined
+    }
+  }
+
+  /**
+   * Up tin: bài không còn trên Facebook thì các lượt còn chờ khác của bài này trong cùng chiến dịch up tin cũng không up được; đóng
+   * luôn ("hoàn thành", ghi chú câu lỗi đã có, không ghi dòng lịch sử; anh chốt 18/11/2026; 8 ngày tới 18/11: 146 bài, 415 lượt
+   * thử thừa). Gọi sau khi ghi kết quả của lượt (bộ cũ lẫn engine đều qua logExplicitActionResultStep).
+   */
+  private async closePostBumpRowsOfMissingPost(campaign: Campaign, detail: CampaignInputData | null,
+    errorCode: string | null | undefined): Promise<void> {
+    if (errorCode !== POST_BUMP_POST_NOT_FOUND_ERROR_CODE || !detail?.uid || !isPostBumpTargetCampaign(campaign)) return
+    await this.supabase.closePendingPostBumpRowsForPost(campaign.id, detail.uid, detail.id, POST_BUMP_POST_NOT_FOUND_NOTE)
+      .catch(err => console.error('Failed close post bump rows of missing post:', err))
+  }
+
+  private async isPostBumpAccountGone(accountId: number | null | undefined): Promise<boolean> {
+    const id = Number(accountId)
+    if (!Number.isSafeInteger(id) || id <= 0) return false
+    return (await this.loadPostBumpAccount(id)) === null
   }
 
   private async resolveCreatedPostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
@@ -15531,11 +15682,14 @@ export class CampaignScheduler {
 
     for (const accountId of accountIds) {
       const key = String(accountId)
+      // Tài khoản đã xoá: không chia lượt, không tạo chiến dịch up tin mới (giữ nguyên ánh xạ cũ).
+      const account = await this.loadPostBumpAccount(accountId)
+      if (account === null) continue
       let targetCampaignId = Number(mapping[key])
       let targetCampaign = targetCampaignId ? await this.supabase.getCampaign(targetCampaignId).catch(() => null) : null
 
       if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID || targetCampaign.isDelete) {
-        targetCampaign = await this.createPostBumpTargetCampaign(campaign, accountId)
+        targetCampaign = await this.createPostBumpTargetCampaign(campaign, accountId, account)
         targetCampaignId = targetCampaign.id
         mapping[key] = targetCampaignId
         mappingChanged = true
@@ -15556,12 +15710,16 @@ export class CampaignScheduler {
     return targets
   }
 
-  private async createPostBumpTargetCampaign(sourceCampaign: Campaign, accountId: number): Promise<Campaign> {
-    const account = await this.supabase.getAccount(accountId).catch(() => null)
+  private async createPostBumpTargetCampaign(
+    sourceCampaign: Campaign, accountId: number, knownAccount?: AutoAccount | null
+  ): Promise<Campaign> {
+    const account = knownAccount ?? await this.supabase.getAccount(accountId).catch(() => null)
     const content = String(sourceCampaign.extraSettings?.postBumpContent || '').trim()
     const rateLimitMinutes = this.normalizeRateLimitMinutes(account?.rateLimitMinutes)
     const actionLimits: CampaignActionLimitSettings = {
-      sleepBetweenActions: 0,
+      // Nghỉ giữa hai comment (anh chốt 18/11/2026): trước là 0 giây, nhiều lượt đến hạn cùng lúc thì Facebook báo giới hạn
+      // tần suất comment (FB03) và chiến dịch up tin dừng (28 lần / 16 chiến dịch trong 8 ngày tới 18/11).
+      sleepBetweenActions: POST_BUMP_SLEEP_BETWEEN_COMMENTS_SECONDS,
       enabledActionCodes: ['fb_comment'],
       dailyLimit: 1000,
       rateLimitCount: 1000,
@@ -15576,7 +15734,7 @@ export class CampaignScheduler {
     }
 
     const created = await this.supabase.createCampaign({
-      name: `Up tin cho chiến dịch ${sourceCampaign.name}${account?.name ? ` - ${account.name}` : ''}`,
+      name: `${POST_BUMP_TARGET_NAME_PREFIX}${sourceCampaign.name}${account?.name ? ` - ${account.name}` : ''}`,
       actionId: COMMENT_SEEDING_POST_ACTION_ID,
       accountId,
       status: 'chờ xử lý',
@@ -15585,7 +15743,9 @@ export class CampaignScheduler {
       scheduleEndDate: null,
       dailyStopTime: null,
       continueNextDay: true,
-      refreshData: true,
+      // Không làm mới data: lượt up tin đã xong không chạy lại (khách đổi sang lịch tuần thì bảo trì từng đặt lại mọi bài cũ về
+      // "chờ xử lý" và comment lại 3–4 lần, anh chốt 18/11/2026).
+      refreshData: false,
       content,
       extraSettings: {
         enableComment: true,

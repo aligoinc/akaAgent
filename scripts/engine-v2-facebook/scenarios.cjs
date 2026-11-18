@@ -5,6 +5,9 @@
 // biến. Không chạm DB thật, không mở Facebook.
 //
 //   node scripts/engine-v2-facebook/scenarios.cjs [--seeds 3] [--campaigns 6] [--targets 8] [--fault 0.08] [--crash 0.03] [--dbchaos 0.03] [--out r.json]
+//     [--before-v575]
+//
+// DB thử như production 18/11/2026: V556–V558, V564, V559, dấu hiệu của V563, V575 (--before-v575 để chạy trên DB trước V575).
 //
 // Bất biến:
 //   B1 mỗi data (nhóm) được đăng tối đa một lần, kể cả khi được chia sẻ kèm từ data khác;
@@ -29,7 +32,7 @@ if (!process.versions.electron) {
 
 const { loadScheduler, fakeClient } = require('./desktop-harness.cjs')
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS } = require('./fixture.cjs')
+const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly, applyV575 } = require('./fixture.cjs')
 
 const args = process.argv.slice(2)
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def }
@@ -41,6 +44,7 @@ const FAULT = Number(opt('--fault', 0.08))
 const CRASH = Number(opt('--crash', 0.03))
 const DBCHAOS = Number(opt('--dbchaos', 0.03))
 const OUT = opt('--out')
+const WITH_V575 = !args.includes('--before-v575')
 const PORT = Number(process.env.FB_SCENARIO_PORT || 55557)
 
 /** RNG có hạt giống (mulberry32): cùng hạt giống thì cùng chuỗi lỗi. */
@@ -185,12 +189,15 @@ async function main() {
   const db = await cluster.connect()
   db.setTypeParser(20, 'text', value => Number(value))
   const one = async (sql, params = []) => (await db.query(sql, params)).rows[0]
-  const report = { startedAt: new Date().toISOString(), options: { SEEDS, CAMPAIGNS, TARGETS, FAULT, CRASH, DBCHAOS }, seeds: [], violations: [] }
+  const report = { startedAt: new Date().toISOString(), options: { SEEDS, CAMPAIGNS, TARGETS, FAULT, CRASH, DBCHAOS, WITH_V575 }, seeds: [], violations: [] }
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-fb-scenarios-userdata-'))
   try {
     await buildFacebookFixture(db)
     await applyFacebookMigrations(db)
     await applyFacebookMigrations(db, FACEBOOK_POLICY_MIGRATIONS)
+    // Như production 18/11: dấu hiệu FB11 của V563, rồi V575 (mã cụ thể, NET01 khi mở trang, lỗi tệp theo nguyên nhân, câu chờ).
+    await applyV563SignsOnly(db)
+    if (WITH_V575) await applyV575(db)
     // V576 (đóng lượt bị bỏ dở cho đúng: mồ côi, chốt theo kết quả đã báo, hàm reset Desktop): FB_SCENARIO_ORPHAN_RUNS=1 để chạy trên DB đã có
     // V576 (nạp thân report_v1 / close_stale production 18/11 nếu DB thử khác).
     if (process.env.FB_SCENARIO_ORPHAN_RUNS === '1') await require('../fixtures/engine-v2-orphan-runs-v576/setup.cjs').applyV576(db)

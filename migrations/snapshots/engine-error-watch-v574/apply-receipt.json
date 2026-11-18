@@ -1,0 +1,168 @@
+{
+  "migration": "migrations/migration_v574_engine_error_watch.sql",
+  "rollback": "migrations/rollback_v574_engine_error_watch.sql",
+  "ledger": {
+    "version": "20261118102303",
+    "name": "migration_v574_engine_error_watch",
+    "statementsMd5": "62a2c9de3f3934b904992feacad6f4fc",
+    "createdBy": null
+  },
+  "fileMd5": "62a2c9de3f3934b904992feacad6f4fc",
+  "rollbackFileMd5": "4ec252d3304959c55f9c0f792d2af585",
+  "appliedAtUtc": "2026-11-18T10:25:16Z..10:25:20Z",
+  "appliedAtVn": "2026-11-18 17:25",
+  "approvedBy": "anh (\"ok giờ làm tiếp luôn được ko?\", 18/11, sau khi em nêu bước kế là apply rồi bật đọc lỗi)",
+  "numbering": "574 là số tạm lúc viết. Kiểm sổ ngay trước apply (10:25:11 UTC): mới nhất là migration_v575_engine_specific_codes_wait_note (phiên khác, 10:08:06 UTC), không có migration_v574_%; không nhánh nào ở akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard giữ v574 ngoài nhánh này. Giữ số 574. Version trong sổ là giờ dựng tệp apply (10:23:03 UTC), không phải giờ chạy.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Có DDL (3 bảng private, 3 hàm, 1 job pg_cron) nên PostgREST nạp lại schema.",
+  "preApply": {
+    "readAtUtc": "2026-11-18T10:25:11Z",
+    "activeBackends": 2,
+    "lockWaiters": 0,
+    "v574InLedger": false,
+    "casesTableExists": false,
+    "ledgerTail": [
+      "type19_group_invite_backfill_every_30s",
+      "disable_message_gom_ai_evaluate_trigger",
+      "type19_group_invite_backfill_10s_100_per_day",
+      "migration_v575_engine_specific_codes_wait_note"
+    ]
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T10:25:34Z",
+    "tables": [
+      "private.auto_engine_error_cases",
+      "private.auto_engine_error_hourly",
+      "private.auto_engine_error_watch_state"
+    ],
+    "rlsEnabled": true,
+    "functions": {
+      "public.aka_agent_engine_error_watch_tick_v1": {
+        "securityDefiner": true,
+        "acl": "postgres, service_role",
+        "config": [
+          "search_path=\"\"",
+          "lock_timeout=2s",
+          "statement_timeout=20s"
+        ]
+      },
+      "private.aka_agent_engine_error_pattern": {
+        "securityDefiner": false,
+        "acl": "postgres, service_role"
+      },
+      "private.aka_agent_engine_error_num": {
+        "securityDefiner": false,
+        "acl": "postgres, service_role"
+      }
+    },
+    "cronJob": {
+      "jobid": 122,
+      "jobname": "aka-agent-engine-error-watch",
+      "schedule": "*/2 * * * *",
+      "active": true
+    },
+    "setting": {
+      "id": 146,
+      "key": "engine.error_watch",
+      "enabled": false,
+      "enqueue": false,
+      "imageRequests": false,
+      "fire": false
+    },
+    "agentGroup": {
+      "id": 10,
+      "code": "van-hanh-noi-bo",
+      "isActive": true
+    },
+    "agent": {
+      "id": 15,
+      "code": "kiem-loi-chien-dich-facebook",
+      "isActive": false,
+      "audience": "admin_akabiz",
+      "answerMode": "claude_code",
+      "timeoutSeconds": 3600
+    },
+    "postgrestSchemaReload": {
+      "atUtc": "2026-11-18T10:25:25Z",
+      "queriedMs": 3390
+    },
+    "rest30s": [
+      {
+        "fromUtc": "10:24:00",
+        "requests": 18154,
+        "p50Ms": 49,
+        "p99Ms": 286,
+        "over1s": 0,
+        "errors5xx": 0
+      },
+      {
+        "fromUtc": "10:24:30",
+        "requests": 17122,
+        "p50Ms": 47,
+        "p99Ms": 273,
+        "over1s": 1,
+        "errors5xx": 0
+      },
+      {
+        "fromUtc": "10:25:00",
+        "requests": 15711,
+        "p50Ms": 49,
+        "p99Ms": 1157,
+        "over1s": 211,
+        "errors5xx": 0
+      },
+      {
+        "fromUtc": "10:25:30",
+        "requests": 8189,
+        "p50Ms": 50,
+        "p99Ms": 281,
+        "over1s": 2,
+        "errors5xx": 0,
+        "note": "log mới tới ~10:25:45 lúc đọc"
+      }
+    ]
+  },
+  "enableRead": {
+    "atUtc": "2026-11-18T10:26:58Z",
+    "atVn": "2026-11-18 17:26:58",
+    "change": "engine.error_watch: enabled false → true (UPDATE có điều kiện cả bốn công tắc đang false). enqueue, imageRequests, fire vẫn false; agent vẫn is_active = false.",
+    "turnOff": "đặt enabled = false trong auto_system_settings key engine.error_watch; có hiệu lực ở lượt tick kế, không DDL",
+    "firstTicks": [
+      {
+        "startUtc": "10:26:00",
+        "ms": 14,
+        "note": "công tắc còn tắt"
+      },
+      {
+        "startUtc": "10:28:00",
+        "ms": 316,
+        "note": "lượt đầu sau khi bật, đọc lùi 30 phút"
+      },
+      {
+        "startUtc": "10:30:00",
+        "ms": 73,
+        "seen": 5
+      }
+    ],
+    "afterTwoTicks": {
+      "readAtUtc": "2026-11-18T10:30:15Z",
+      "cases": {
+        "ma_chua_ket_luan": 5,
+        "luot_bo_do": 1
+      },
+      "hourlyRows": 17,
+      "aiMessages": 0,
+      "imageRequests": 0,
+      "lastError": null
+    }
+  },
+  "tests": {
+    "smoke": "CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-facebook/error-watch-smoke.cjs: 17/17 (PG17 cục bộ, nền Hỏi đáp AI là bản giả)",
+    "agentSmoke": "node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs: 9/9",
+    "productionTrial": "18/11 16:43 VN: cả migration + chèn câu / list / claim / answer với hàm Hỏi đáp AI thật trong một giao dịch rồi ROLLBACK (docs/FB_ERROR_WATCH_CLAUDE_CODE_PLAN.md mục 5.5)"
+  },
+  "notDone": [
+    "Chưa bật enqueue, imageRequests, fire, agent kiem-loi-chien-dich-facebook và tác vụ cloud trig_01QRNCgX959THHTS7mkdCS3K.",
+    "Trước khi bật agent: sửa câu lệnh phiên Hỏi đáp để bỏ qua agent này (phiên đó tự nhận mọi agent claude_code mới bật).",
+    "Chưa thử thật: xin ảnh, đường /fire, mã lỗi tăng bất thường (cần ít nhất 3 ngày dữ liệu theo giờ), phiên cloud đọc database và nộp báo cáo."
+  ]
+}

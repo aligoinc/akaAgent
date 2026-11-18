@@ -9,7 +9,7 @@ const path = require('node:path')
 const { spawnSync } = require('node:child_process')
 const { pathToFileURL } = require('node:url')
 const { ROOT, startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { buildFacebookFixture, applyFacebookMigrations } = require('./fixture.cjs')
+const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS } = require('./fixture.cjs')
 
 const PORT = Number(process.env.ENGINE_FB_CORE_PORT || 55554)
 let passed = 0
@@ -280,6 +280,54 @@ async function main() {
       })
       assert.equal(clicked, false)
       assert.equal(result.reason, 'ownership_lost')
+    })
+
+    // Tiến trình như bộ cũ (anh chốt 18/11/2026, docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md). Hai ca dưới cần mã / chính sách FB của V559.
+    await applyFacebookMigrations(db, FACEBOOK_POLICY_MIGRATIONS)
+    await check('mục 1: bước thích bài ghi dấu mà bộ cũ không ghi lịch sử (FB45, giải im lặng) vẫn in "✅ Hoàn thành" như bộ cũ', async () => {
+      const entry = await makeCampaign({ actionId: 'facebook_comment_seeding', targets: 1 })
+      const LIKE = { key: 'like', actionCode: 'fb_like_post', actionName: 'Thích bài viết' }
+      const COMMENT = { key: 'comment#0', actionCode: 'fb_comment', actionName: 'Comment' }
+      const { result, lines } = await run(entry, {
+        runTarget: async api => {
+          for (const step of [LIKE, COMMENT]) {
+            const mark = await api.beginMilestone(step)
+            if (mark !== 'ok') return mark.stop ? mark : { done: true }
+            const res = await api.reportMilestone(step, step === LIKE
+              ? { ok: false, phase: 'in_flight', signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history',
+                message: 'Bước không ghi lịch sử (như bộ cũ)' } }
+              : { ok: true, customerLog: 'Đã comment vào bài thứ 1' })
+            if ('stop' in res) return res
+          }
+          return { done: true }
+        }
+      }, { actions: [{ code: 'fb_like_post', required: false }, { code: 'fb_comment' }] })
+      assert.equal(result.targets, 1, JSON.stringify(result))
+      assert.equal((await status(entry.ids[0])).status, 'hoàn thành')
+      assert.ok(lines.includes('✅ Hoàn thành "Nhóm 1"'), lines.join('\n'))
+      assert.ok(!lines.some(l => /FB45|không ghi lịch sử/.test(l)), lines.join('\n'))
+    })
+
+    await check('mục 5: data chạy xong mà bị bỏ qua (đăng nhóm kèm chia sẻ) in "ℹ️ Bỏ qua" như bộ cũ, không in "✅ Hoàn thành"', async () => {
+      const entry = await makeCampaign({ targets: 2 })
+      const note = 'Bài viết gốc không cho phép chia sẻ vào nhóm'
+      const { result, lines } = await run(entry, {
+        runTarget: async api => {
+          const mark = await api.beginMilestone(POST)
+          if (mark !== 'ok') return mark.stop ? mark : { done: true }
+          const skipped = api.target.id === entry.ids[0]
+          const res = await api.reportMilestone(POST, skipped
+            ? { ok: true, statusCode: 'campaign_detail_skipped', customerLog: note }
+            : { ok: true, customerLog: 'Đăng bài thành công' })
+          if ('stop' in res) return res
+          return skipped ? { done: true, skippedNote: note } : { done: true }
+        }
+      }, { actions: [{ code: 'fb_post_group' }] })
+      assert.equal(result.targets, 2, JSON.stringify(result))
+      assert.ok(lines.includes(`ℹ️ Bỏ qua "Nhóm 1": ${note}`), lines.join('\n'))
+      assert.ok(!lines.includes('✅ Hoàn thành "Nhóm 1"'), lines.join('\n'))
+      assert.ok(lines.includes('✅ Hoàn thành "Nhóm 2"'), lines.join('\n'))
+      for (const id of entry.ids) assert.equal((await status(id)).status, 'hoàn thành')
     })
   } finally {
     await db.end().catch(() => {})

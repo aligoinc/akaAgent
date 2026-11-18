@@ -374,6 +374,9 @@ export class SupabaseService {
 
   // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
   listCampaignInputData(campaignId: number) { return campaignRepo.listCampaignInputData(campaignId) }
+  closePendingPostBumpRowsForPost(campaignId: number, uid: string, excludeInputDataId: number | null, note: string) {
+    return campaignRepo.closePendingPostBumpRowsForPost(campaignId, uid, excludeInputDataId, note)
+  }
   listCampaignInputDataPage(query: CampaignInputDataPageQuery) { return campaignRepo.listCampaignInputDataPage(query) }
   listCampaignRelationSummaries(campaignIds: number[]) { return campaignRepo.listCampaignRelationSummaries(campaignIds) }
   createCampaignInputData(action: Partial<CampaignInputData>) { return campaignRepo.createCampaignInputData(action) }

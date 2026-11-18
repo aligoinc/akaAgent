@@ -221,7 +221,8 @@ async function main() {
       assert.ok(r.lines.includes('✅ Đã kiêm gửi SMS cho 0901000002 sang 1 tài khoản Sms'), r.lines.join('\n'))
       // Dòng kiêm SMS ngay sau dòng lịch sử của bước, trước "✅ Hoàn thành" của data (như Desktop).
       const i = r.lines.indexOf('✅ Đã kiêm gửi SMS cho 0901000002 sang 1 tài khoản Sms')
-      assert.match(r.lines[i - 1], /^Nhắn tin người lạ: /)
+      // Dòng lỗi có emoji + tên data (anh chốt 18/11/2026, docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md mục 9).
+      assert.match(r.lines[i - 1], /^❌ Nhắn tin người lạ "0901000002": /)
       // Lượt sau: chiến dịch con đã hoàn thành thì mở lại, không tạo chiến dịch con mới.
       await db.query(`UPDATE public.auto_campaigns SET status = 'hoàn thành' WHERE id = $1`, [kids[0].id])
       const more = ++nextId
