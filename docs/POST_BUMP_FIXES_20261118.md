@@ -57,10 +57,10 @@ Nhận chiến dịch up tin bằng `isPostBumpTargetCampaign`: loại `facebook
 
 ## Chưa làm
 
-Các việc dưới đây cần ghi DB nên hỏi anh riêng.
-
-- Dọn các lượt kẹt ở chiến dịch của tài khoản đã xoá.
 - Build Desktop: chỉ build, anh tự phát hành.
+- Chạy lại lệnh nghỉ 30 giây (trong biên nhận) khi cần, để bắt chiến dịch up tin mới do app cũ tạo. Anh chốt 18/11 chạy tay, không tạo job pg_cron hay trigger. Lần chạy lại lúc 17:55 VN 18/11 đổi 0 chiến dịch.
+
+**Không làm (anh chốt 18/11):** dọn 4.895 lượt kẹt ở chiến dịch up tin của tài khoản đã xoá. Các lượt này không bao giờ chạy, và từ #711 không còn lượt mới nào được thêm cho tài khoản đã xoá.
 
 ## Kiểm
 
