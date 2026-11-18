@@ -55,6 +55,25 @@ Gỡ: [rollback_v531](../migrations/rollback_v531_post_bump_content_rotation_des
 
 Bỏ phần giao câu ở bộ lập lịch thì 2 nhóm kiểm bộ lập lịch FAIL. Chưa chạy trên Electron thật với Facebook thật.
 
+## Phát lại dữ liệu thật (18/11/2026, bản bắt đầu ngẫu nhiên)
+
+Dữ liệu 21 ngày tới 17:26 VN 18/11, xuất chỉ đọc bằng [export.sql](../scripts/fixtures/post-bump-content-rotation/export.sql): 2.286 chiến dịch nguồn, 8.123 chiến dịch up tin, 23.307 lượt up, 15.722 kết quả comment. Kết quả chỉ có số đếm: [replay-20261118-random-start.json](../migrations/snapshots/post-bump-content-rotation-v531/replay-20261118-random-start.json).
+
+- Hiệu chỉnh mô hình cách cũ: 96,1% lượt (11.641/12.111) khớp chỉ số câu production đã dùng.
+- Chia tài khoản qua hàm thật `enqueuePostBumpAfterGroupPost` khớp production 23.307/23.307 lượt.
+- Chạy với hạt giống 1, 2, 3 cho cùng kết quả. Lý do: khi số lượt ≤ số câu thì không bao giờ trùng, dù bắt đầu ở câu nào; khi số lượt > số câu thì luôn trùng.
+
+Bài có ≥ 2 lượt đã chạy, có lượt trùng câu:
+
+| | Số bài | Cách cũ (production) | Bắt đầu ngẫu nhiên |
+|---|---|---|---|
+| Mọi bài | 4.846 | 2.713 (56,0%) | 636 (13,1%) |
+| Lượt chia cho ≥ 2 tài khoản | 1.717 | 1.425 (83,0%) | 122 (7,1%) |
+
+Mọi ca còn trùng đều do số lượt nhiều hơn số câu; không có ca trùng nào khác. Tính cả lượt chưa chạy: 6.420 bài, còn 1.284 bài trùng, cùng lý do. 131/586 chiến dịch đăng nhóm đang bật up tin đặt số lượt / bài > số câu, trong đó 83 chiến dịch đặt 3 lượt cho 1 câu.
+
+So với bản con trỏ (phát lại dữ liệu 14/11, bảng dưới): tỉ lệ còn trùng tương đương (12,7% / 6,4%), vì hai bản giữ cùng tính chất trong một bài.
+
 ## Phát lại dữ liệu thật (14/11/2026, bản con trỏ)
 
 Dữ liệu 21 ngày tới 11:20 VN 14/11, xuất chỉ đọc bằng [export.sql](../scripts/fixtures/post-bump-content-rotation/export.sql): 2.261 chiến dịch nguồn, 8.057 chiến dịch up tin, 24.790 lượt up, 15.475 kết quả comment. File xuất có nội dung khách nên để ngoài repo. Kết quả (chỉ số đếm): [replay-20261114.json](../migrations/snapshots/post-bump-content-rotation-v531/replay-20261114.json).

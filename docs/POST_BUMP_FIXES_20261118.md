@@ -67,4 +67,10 @@ node scripts/post-bump-fixes-smoke.cjs
 AKA_CHAT_REPO=../akaAgentChatApi node scripts/post-bump-content-rotation-smoke.cjs
 ```
 
+Phát lại 21 ngày dữ liệu thật tới 18/11 bằng bản bắt đầu ngẫu nhiên (chỉ đọc; chi tiết ở [POST_BUMP_CONTENT_ROTATION_V531.md](POST_BUMP_CONTENT_ROTATION_V531.md)):
+
+- Bài up tin bị trùng câu giảm từ 56,0% xuống 13,1%.
+- Bài up bằng nhiều tài khoản giảm từ 83,0% xuống 7,1%.
+- Mọi ca còn trùng đều do số lượt nhiều hơn số câu.
+
 `post-bump-fixes-smoke.cjs` chạy hàm thật của bộ lập lịch (chia lượt, tạo chiến dịch up tin, đóng lượt bài bị gỡ) với kho giả. Bài kiểm cũng kiểm phép tính lịch bảo trì, và soi mã nguồn của bảo trì cùng câu cảnh báo trong hai form. Chưa chạy trên Electron thật với Facebook thật.
