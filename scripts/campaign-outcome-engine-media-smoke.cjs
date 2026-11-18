@@ -207,7 +207,12 @@ async function main() {
     const c4 = await rows(`SELECT status, note FROM public.auto_campaigns WHERE id = $1`, [m4.campaign])
     assert.equal(c4[0].status, 'tạm dừng')
     assert.match(c4[0].note || '', /CFG01|media/i)
-    pass('không dùng được tệp: CFG01 — không gửi gì, data về hàng đợi, tạm dừng chiến dịch một lần')
+    // Lịch sử chạy nói rõ chiến dịch đã dừng: dòng riêng kèm tên, ngay sau dòng lý do (anh chốt 18/11/2026), đúng một lần.
+    const reasonAt = r4.lines.findLastIndex(l => l.startsWith('⚠️ ') && /\(CFG01\)$/.test(l))
+    const pauseAt = r4.lines.indexOf('⏸ Chiến dịch "Gửi tệp" đã được tạm dừng.')
+    assert.ok(reasonAt >= 0 && pauseAt === reasonAt + 1, `dòng tạm dừng ngay sau dòng lý do: ${JSON.stringify(r4.lines)}`)
+    assert.equal(r4.lines.filter(l => l.includes('đã được tạm dừng')).length, 1)
+    pass('không dùng được tệp: CFG01 — không gửi gì, data về hàng đợi, tạm dừng chiến dịch một lần, lịch sử có dòng "⏸ Chiến dịch … đã được tạm dừng."')
 
     // M5: chỉ có tệp, không có chữ → gửi tệp, không báo "nội dung rỗng".
     const m5 = await make({ images: ['/x/a.jpg', '/x/b.jpg'], content: '', phones: ['0912000006'] })

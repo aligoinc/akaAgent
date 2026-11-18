@@ -1,0 +1,15 @@
+{
+  "readAt": "2026-11-18T05:00:00Z",
+  "note": "Đọc chỉ đọc production 18/11/2026 (sau V563, V564). Code block 2851 = bản V563 (scripts/build-v563-sql.cjs COMMENT.newCode), so md5 trùng.",
+  "block": { "id": 2851, "name": "[engine] fb_comment_at_position", "md5": "06889369d1c9f77ef62c846fa8e27e82", "updatedAt": "2026-11-17T13:03:02.51898+00:00" },
+  "source": { "id": 34, "name": "fb_comment_at_position", "md5": "30126bae87ff755164c80dbffda9d263" },
+  "copy": { "engineBlockId": 2851, "sourceBlockId": 34, "engineMd5AtCopy": "30126bae87ff755164c80dbffda9d263", "sourceMd5AtCopy": "30126bae87ff755164c80dbffda9d263" },
+  "steps": [
+    { "id": 6, "blockId": 2851, "stepKind": "delivery", "actionCode": "fb_comment", "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedMd5": "06889369d1c9f77ef62c846fa8e27e82" }
+  ],
+  "workflowsUsing": [316, 321],
+  "element": {
+    "name": "fb_comment_box_at_n",
+    "xpath": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về')]|//*[@role='button' and .='Bình luận'])[${n}]"
+  }
+}
