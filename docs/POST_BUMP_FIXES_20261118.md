@@ -53,11 +53,12 @@ Nhận chiến dịch up tin bằng `isPostBumpTargetCampaign`: loại `facebook
 
 **V531 đã apply akachat 17:32:15 VN 18/11/2026** (anh: "Apply V531"; sổ `20261118103215`, md5 sổ = file `aea07ae7…`; [biên nhận](../migrations/snapshots/post-bump-content-rotation-v531/apply-receipt.json)). Desktop chỉ ghi chỉ số câu khi phát hành bản có đợt sửa này.
 
+**Đã đổi nghỉ 30 giây cho chiến dịch up tin cũ** lúc 17:45:09 VN 18/11/2026 (anh: "Đổi luôn"). 1.260 chiến dịch đang 0 giây được đổi: 1.088 hoàn thành, 120 tạm dừng, 52 chờ xử lý. Giữ 5 chiến dịch khách tự đặt số khác; không chiến dịch nào đang chạy. [Biên nhận](../migrations/snapshots/post-bump-sleep-30-20261118/receipt.json) có danh sách id và lệnh gỡ. Chiến dịch up tin tạo trước khi phát hành bản Desktop có #711 vẫn 0 giây, nên chạy lại đúng lệnh sau khi phát hành.
+
 ## Chưa làm
 
 Các việc dưới đây cần ghi DB nên hỏi anh riêng.
 
-- Đổi nghỉ 30 giây cho 1.142 chiến dịch up tin cũ.
 - Dọn các lượt kẹt ở chiến dịch của tài khoản đã xoá.
 - Build Desktop: chỉ build, anh tự phát hành.
 
