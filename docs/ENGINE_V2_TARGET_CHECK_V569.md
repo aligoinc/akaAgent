@@ -1,6 +1,6 @@
 # V569: engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo
 
-Anh chốt 18/11/2026 (thiết kế mở rộng duyệt cùng ngày). Chưa apply production. Đổi số từ V565 trưa 18/11: sổ production đã có `migration_v565_aka_assistant` (11:48 VN, phiên khác) cùng V566–V568; kiểm lại sổ ngay trước khi apply. Sinh bằng `scripts/build-v569-sql.cjs` (không sửa tay các
+Anh chốt 18/11/2026 (thiết kế mở rộng duyệt cùng ngày). Code đã merge `dev_3` qua [#699](https://github.com/aligoinc/akaAgent/pull/699) ngày 18/11 theo yêu cầu ("Mở PR, merge ngay"); chưa apply production (hẹn 22:07 VN 18/11 theo yêu cầu "Apply tối nay", `mode: off`). Đổi số từ V565 trưa 18/11: sổ production đã có `migration_v565_aka_assistant` (11:48 VN, phiên khác) cùng V566–V568; kiểm lại sổ ngay trước khi apply. Sinh bằng `scripts/build-v569-sql.cjs` (không sửa tay các
 file migration): [p1](../migrations/migration_v569_engine_target_check_p1.sql), [p2](../migrations/migration_v569_engine_target_check_p2.sql),
 gỡ [p2](../migrations/rollback_v569_engine_target_check_p2.sql) rồi [p1](../migrations/rollback_v569_engine_target_check_p1.sql).
 
