@@ -141,6 +141,8 @@ export interface ClaimContext {
   runnerId: string
   runtimeTarget: RuntimeTarget
   leaseToken?: string | null
+  /** V564 (chế độ workflow): false khi lượt chưa nhận được data nào, để DB trả shuffle.count cả khi lease đã cấp ở lần gọi trước. */
+  unitStarted?: boolean
   /**
    * Thao tác của loại chiến dịch theo thứ tự; required=false thì bị chặn vẫn nhận data (bước đó bị bỏ qua).
    * skippableGates giới hạn loại cổng được bỏ qua (ví dụ chỉ 'quota'); cổng khác vẫn chặn như bắt buộc.
@@ -186,6 +188,8 @@ export type ClaimResponse =
       gates?: Record<string, GateSetting>
       campaign: { id: number; actionId: string; status: string }
       cooldownPaused?: CooldownPause[]
+      /** V564: lần nhận đầu của lượt ở chiến dịch đăng nhóm bật "Xáo trộn danh sách group": số data chờ đến hạn lúc bắt đầu lượt. */
+      shuffle?: { count: number }
     }
   /** Khoá/hạn mức bắt buộc: không nhận data, lịch chiến dịch giữ nguyên (V501); nơi chạy tự không hỏi lại tới wait.until. */
   | { status: 'wait'; leaseToken: string; wait: GateDecision; actions: Record<string, GateDecision>; cooldownPaused?: CooldownPause[] }

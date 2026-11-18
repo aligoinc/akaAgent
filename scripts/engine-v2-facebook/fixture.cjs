@@ -37,11 +37,13 @@ CREATE FUNCTION public.aka_agent_device_presence(p_username text, p_password tex
   LANGUAGE sql AS $f$ SELECT EXISTS (SELECT 1 FROM public.org_staff s WHERE s.username = btrim(p_username) AND s.password = p_password AND s.is_active) $f$;
 `
 
-/** Migration Facebook theo đúng thứ tự apply (V557 phần 2 là hai lệnh CONCURRENTLY, mỗi lệnh một lần gọi, ngoài giao dịch). */
+/** Migration Facebook theo đúng thứ tự apply (V557 phần 2 là hai lệnh CONCURRENTLY, mỗi lệnh một lần gọi, ngoài giao dịch).
+ *  V564 (xáo trộn danh sách group, dựng trên thân claim của V558) đứng ngay sau V558 như production. */
+const V564_MIGRATION = 'migration_v564_engine_facebook_shuffle_groups.sql'
 const FACEBOOK_MIGRATIONS = [
   'migration_v556_engine_facebook_p1.sql', 'migration_v556_engine_facebook_p2.sql',
   'migration_v557_engine_slot_runs_p1.sql', 'migration_v557_engine_slot_runs_p2a_index.sql', 'migration_v557_engine_slot_runs_p2b_index.sql',
-  'migration_v557_engine_slot_runs_p3.sql', 'migration_v558_engine_facebook_functions.sql'
+  'migration_v557_engine_slot_runs_p3.sql', 'migration_v558_engine_facebook_functions.sql', V564_MIGRATION
 ]
 /** V559 (chính sách FB bản nháp, chưa duyệt): DB thử có thêm để bài kiểm Desktop chạy với luật / chính sách FB như khi bật. */
 const FACEBOOK_POLICY_MIGRATIONS = ['migration_v559_engine_facebook_policies.sql']
@@ -98,5 +100,5 @@ async function buildFacebookFixture(db, notes = []) {
   return notes
 }
 
-module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, readMigration, applyFacebookStubs,
+module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, V564_MIGRATION, readMigration, applyFacebookStubs,
   applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly }

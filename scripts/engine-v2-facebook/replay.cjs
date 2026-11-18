@@ -365,6 +365,9 @@ async function main() {
         facebook_random_run_enabled: false, proxy_id: null }, { conflict: 'ON CONFLICT (id) DO NOTHING' })
       const extra = clone(object(p.campaign.extra_settings))
       delete extra.facebookRestBrowse
+      // Phát lại theo đúng thứ tự lượt bộ cũ đã chạy (id data giả đánh theo thứ tự đó, engine nhận theo id): tắt xáo trộn của V564,
+      // không thì engine đi thứ tự xáo của lease thử và lệch lịch sử. Thứ tự xáo kiểm riêng ở v564-smoke.cjs.
+      if (extra.shuffleGroupList === true) extra.shuffleGroupList = false
       extra.actionLimits = { ...object(extra.actionLimits), sleepBetweenActions: 0 }
       await insertRow('auto_campaigns', { ...p.campaign, status: 'chờ xử lý', note: null, is_delete: false, extra_settings: extra,
         schedule: new Date(Date.now() - 60_000).toISOString(), schedule_end_date: null, daily_stop_time: null, data_group_id: null,

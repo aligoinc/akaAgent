@@ -38,6 +38,11 @@ export function unitStartProgress(campaignId: number, campaignName: string, acco
   return line(campaignId, null, `🚀 Bắt đầu chiến dịch "${campaignName}" trên tài khoản "${accountName}"`, 'info')
 }
 
+/** Như executeCampaignV2 của Desktop: đăng nhóm bật "Xáo trộn danh sách group" xáo các data chờ ở đầu lượt (V564, ngay sau 🚀). */
+export function shuffleProgress(campaignId: number, count: number): ProgressLine {
+  return line(campaignId, null, `🔀 Đã xáo trộn danh sách ${count} group`, 'info')
+}
+
 export function targetStartProgress(campaignId: number, inputDataId: number | null, label: string, campaignName: string): ProgressLine {
   return line(campaignId, inputDataId, `▶️ Xử lý "${label}" trong chiến dịch "${campaignName}"`, 'info')
 }
