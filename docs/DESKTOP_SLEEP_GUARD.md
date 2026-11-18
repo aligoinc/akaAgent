@@ -1,6 +1,6 @@
 # Desktop không nhận việc mới khi máy vừa ngủ dậy mà chưa có người dùng
 
-Trạng thái 18/11/2026: **PR [#707](https://github.com/aligoinc/akaAgent/pull/707) vào `dev_3`, chưa merge / build**.
+Trạng thái 18/11/2026: **đã merge `dev_3` qua [#707](https://github.com/aligoinc/akaAgent/pull/707) theo yêu cầu ("Merge PR #707"), chưa build / phát hành Desktop**.
 Không migration, RPC, quyền hay index mới. Công tắc là một dòng tuỳ chọn trong `auto_system_settings`. **Chưa có dòng
 nào trong DB, nên bản Desktop có mã này chạy theo mặc định: bật trên Mac, tắt trên Windows.**
 
