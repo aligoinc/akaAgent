@@ -2,7 +2,7 @@
 
 Trạng thái 17/11/2026: đã merge `dev_3` qua [#689](https://github.com/aligoinc/akaAgent/pull/689) theo yêu cầu (nhánh `claude/campaign-repeat-after-completion`; akaAgentWebApp `dev_1` qua #249), chưa build/phát hành.
 
-**Phần chạy (17/11/2026 tối, đã merge `dev_3` qua [#691](https://github.com/aligoinc/akaAgent/pull/691), chưa build/phát hành)**: DB V561 (bộ đếm hai cột, hàm quyết định, engine v2, bộ quét), bộ chạy cũ Desktop gọi `aka_agent_campaign_repeat_decide_v1` khi chạy hết danh sách (`handleCampaignRepeatAfterCompletion`), lưu chiến dịch gọi `aka_agent_campaign_repeat_sync_v1`. Xem [CAMPAIGN_REPEAT_V561.md](CAMPAIGN_REPEAT_V561.md). Phần dưới đây mô tả phần cài đặt; các câu "chưa có phần chạy" ở dưới là trạng thái trước V561.
+**Phần chạy (17/11/2026 tối, đã merge `dev_3` qua [#691](https://github.com/aligoinc/akaAgent/pull/691); có trong Desktop 9.9.0 đã phát hành)**. **Công tắc mở cho mọi khách từ 14:01:55 VN 18/11/2026** (`{"audience":"all","sweeper":true}`), nên mục "Công tắc hiển thị" bên dưới đã cũ: DB V561 (bộ đếm hai cột, hàm quyết định, engine v2, bộ quét), bộ chạy cũ Desktop gọi `aka_agent_campaign_repeat_decide_v1` khi chạy hết danh sách (`handleCampaignRepeatAfterCompletion`), lưu chiến dịch gọi `aka_agent_campaign_repeat_sync_v1`. Xem [CAMPAIGN_REPEAT_V561.md](CAMPAIGN_REPEAT_V561.md). Phần dưới đây mô tả phần cài đặt; các câu "chưa có phần chạy" ở dưới là trạng thái trước V561.
 
 ## Lưu ở đâu
 
