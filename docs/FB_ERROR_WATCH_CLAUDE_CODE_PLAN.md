@@ -47,6 +47,7 @@ Phương án này chép cách làm của nó, nên ghi lại ở đây:
 - Song song có một script `curl` gọi `GET /list?limit=20&projectCodes=hoi-dap-chien-dich,hoi-dap-chien-dich-desktop` mỗi 120 giây. Log Edge Function 24 giờ: 1.095 lượt `/list`, 10 lượt `/start`, từ 52 địa chỉ của Anthropic.
 - Có câu chờ thì `/start`, đọc dữ liệu của đúng tổ chức và chiến dịch qua **connector Supabase (chỉ đọc)** và codebase, rồi `/answer`. Mỗi lần một câu.
 - **Điểm phải xử lý:** câu lệnh của phiên đó bảo mỗi lần bật lại script thì đọc bảng `ai_project`, và *agent kiểu `claude_code` nào mới bật thì tự thêm vào danh sách nhận*. Agent kiểm lỗi của phương án này cũng là kiểu `claude_code`, nên phiên Hỏi đáp sẽ tự nhận việc của nó và trả lời theo giọng viết cho khách (cấm mã lỗi, tên bảng, XPath). Anh chốt dùng phiên riêng, nên phải sửa câu lệnh phiên Hỏi đáp trước (mục 7.4).
+- **Đã sửa 17:50 VN 18/11** (anh bảo em làm luôn). Câu lệnh giờ ghi: danh sách nhận cố định là hai mã Hỏi đáp; không tự thêm agent `claude_code` nào khác; agent `kiem-loi-chien-dich-facebook` là việc của phiên khác, không xem, không nhận, không trả lời. Hạn "đến hết ngày 19/11/2026" em không đổi. Cách sửa: câu lệnh nằm trong lượt hẹn một lần mà phiên tự tạo lại mỗi lượt, nên em sửa nội dung của lượt hẹn đang chờ (17:52 VN); lượt đó chạy xong, lượt hẹn kế (17:56 VN) chép lại đúng bản sửa, vẫn gắn đúng phiên cũ. Chưa kiểm được ở lần phiên bật lại script (tối đa 30 phút một lần) nó có giữ đúng hai mã không; khi agent kiểm lỗi còn tắt thì không có gì để nhận nhầm.
 
 ## 3. Số đo hiện tại (chiều 18/11, chỉ đọc)
 
@@ -164,7 +165,9 @@ Anh đồng ý làm tiếp ngay ("ok giờ làm tiếp luôn được ko?"). [Bi
 
 Tắt lại phần đọc lỗi: đặt `enabled` thành `false` trong thiết lập `engine.error_watch`; có hiệu lực ở lượt kế, không cần migration.
 
-Cùng lúc đó phiên khác đã apply `migration_v575_engine_specific_codes_wait_note` (17:08 VN), cho hai trong ba ca của đợt 0 mã riêng: lỗi mạng khi mở trang Facebook ra NET01, tệp media không còn trên máy ra CFG20. Hai mã này chưa nằm trong danh sách "đã biết" của bộ tạo việc, nên khi bật chèn việc chúng vẫn sẽ thành việc. Muốn bỏ thì thêm vào `knownCodes` của thiết lập (danh sách này thay cả danh sách mặc định trong hàm, phải ghi đủ).
+Cùng lúc đó phiên khác đã apply `migration_v575_engine_specific_codes_wait_note` (17:08 VN), cho hai trong ba ca của đợt 0 mã riêng: lỗi mạng khi mở trang Facebook ra NET01, tệp media không còn trên máy ra CFG20. Anh chốt tối 18/11 là hai mã này không báo nữa: em đã đặt `knownCodes` trong thiết lập lúc 20:00:50 VN (9 mã mặc định của hàm cộng `err_network_offline` và `err_media_local_file_missing`; danh sách này thay cả danh sách mặc định nên phải ghi đủ). Lúc đặt, sổ chưa có ca nào của hai mã đó. Chúng chỉ thành việc khi tăng bất thường.
+
+Cũng tối 18/11 anh chốt: bật chạy thật (agent, chèn việc, tác vụ cloud) chờ tới 19/11; không dùng đường đánh thức `/fire`, tác vụ cloud chạy mỗi giờ một lượt. Vì mỗi câu có hạn 60 phút tính từ lúc chèn, khi bật chèn việc phải đặt `enqueueWindow` để database chỉ chèn trong vài phút cuối mỗi giờ, ngay trước lượt chạy của tác vụ cloud (phút 01).
 
 ## 6. Ảnh lỗi từ máy khách (anh chốt điểm 5)
 
@@ -306,8 +309,8 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 
 | # | Câu hỏi | Đề xuất của em |
 |---|---|---|
-| Q-D | Nhân viên nào đứng tên các hội thoại? | Tài khoản nhutlq ở tổ chức 1 (phải là nhân viên akaBiz). Em dùng mặc định này nếu anh không đổi |
-| Q-F | Nhịp nhận việc của phiên cloud: đánh thức khi có việc, 10 phút một lượt, hay 2 phút như Hỏi đáp? | Đánh thức khi có việc bằng đường `/fire`, kèm một lượt quét mỗi giờ làm lưới đỡ (mục 7.5). Tài liệu chính thức xác nhận đường này có; chưa gọi thử vì mã gọi chỉ anh tạo được trên web |
+| Q-D | Nhân viên nào đứng tên các hội thoại? | **Anh chốt tối 18/11: tạm dùng tài khoản nhutlq ở tổ chức 1 (nhân viên 4).** Lõi Hỏi đáp AI đếm 3 câu chờ và 50 câu mỗi ngày theo nhân viên, gộp mọi agent cùng làn, không miễn cho câu do máy tạo; nên việc kiểm lỗi dùng chung hạn mức với câu anh tự hỏi (bộ kiểm lỗi giữ tối đa 2 câu chờ). Muốn tách thì đổi `staffId` trong thiết lập sang một tài khoản akaBiz riêng, không cần sửa hàm |
+| Q-F | Nhịp nhận việc của phiên cloud | **Anh chốt tối 18/11: mỗi giờ một lượt, không dùng đường `/fire`.** Việc này chỉ ra báo cáo nên không cần nhanh hơn; nếu sau này cần biết ngay khi chiến dịch bị dừng thì làm cùng phần thông báo |
 
 Đã chốt 18/11 và chuyển lên bảng đầu tài liệu: Q-A (phiên riêng), Q-B (job trong database), Q-C (cả 5 loại ca), Q-E (không trần xin ảnh theo ngày).
 
