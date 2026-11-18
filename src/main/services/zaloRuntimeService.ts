@@ -16,6 +16,7 @@ import type { ZaloOutgoingText } from './zaloFormattedContent'
 import { buildZaloForwardMessageInfo } from '../../shared/zaloForwardMessage'
 import { ZaloWebRuntimeService } from './zaloWebRuntimeService'
 import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
+import { observeProxyConnectRejections, zaloQrProxyRejectedMessage } from './zaloProxyConnectObserver'
 import { markZaloPreCallError, zaloPreCall } from './zaloPreCallError'
 import { startZaloListenerGuarded, stopZaloListenerGuarded } from './zaloListenerStopGuard'
 
@@ -2288,6 +2289,8 @@ export class ZaloRuntimeService {
 
   private async runLoginQr(account: AutoAccount, active: ActiveQrLogin): Promise<void> {
     let callbackCredentials: ZaloSessionCredentials | null = null
+    // Mã proxy trả cho lệnh CONNECT khác 200 trong lượt quét này (proxy từ chối), để báo rõ thay câu của zca-js.
+    const proxyConnect: { rejectedStatus: number | null } = { rejectedStatus: null }
     const cacheVersion = this.cacheVersion
     const isCurrentLogin = (): boolean => (
       !active.cancelRequested
@@ -2295,7 +2298,9 @@ export class ZaloRuntimeService {
       && this.cacheVersion === cacheVersion
     )
     try {
-      const zalo = await this.createZaloClient(account)
+      const zalo = await this.createZaloClient(account, {
+        onProxyConnectRejected: statusCode => { proxyConnect.rejectedStatus = statusCode }
+      })
       if (!isCurrentLogin()) return
       const api = await zalo.loginQR({
         userAgent: DEFAULT_ZALO_USER_AGENT,
@@ -2344,8 +2349,10 @@ export class ZaloRuntimeService {
       })
     } catch (err) {
       if (!isCurrentLogin() || active.expired) return
-      this.logLoginQrFailure(account.id, err)
-      const message = this.getErrorMessage(err)
+      this.logLoginQrFailure(account.id, err, proxyConnect.rejectedStatus)
+      const message = proxyConnect.rejectedStatus !== null && !(err instanceof ZaloQrCandidateValidationError)
+        ? zaloQrProxyRejectedMessage(proxyConnect.rejectedStatus)
+        : this.getErrorMessage(err)
       // Candidate validation happens after Zalo reveals the identity but before
       // any session/identity write. A conflict or Chat API outage must not
       // downgrade or overwrite the account's previously stored local session.
@@ -3050,7 +3057,10 @@ export class ZaloRuntimeService {
     return zalo.login(session as Credentials)
   }
 
-  private async createZaloClient(account: AutoAccount): Promise<Zalo> {
+  private async createZaloClient(
+    account: AutoAccount,
+    hooks: { onProxyConnectRejected?: (statusCode: number) => void } = {}
+  ): Promise<Zalo> {
     const proxy = account.proxyId ? await this.getProxyById(account.proxyId) : null
     // Tài khoản có gắn proxy mà không đọc được proxy: dừng, không âm thầm chạy bằng IP của máy (V511).
     if (account.proxyId && !proxy) throw new Error(MISSING_ACCOUNT_PROXY_MESSAGE)
@@ -3065,6 +3075,7 @@ export class ZaloRuntimeService {
     }
 
     if (agent) {
+      if (hooks.onProxyConnectRejected) observeProxyConnectRejections(agent, hooks.onProxyConnectRejected)
       options.agent = agent
       options.polyfill = await this.loadFetchPolyfillWithSetCookieSupport()
     }
@@ -3348,9 +3359,9 @@ export class ZaloRuntimeService {
     }
   }
 
-  private logLoginQrFailure(accountId: number, err: unknown): void {
+  private logLoginQrFailure(accountId: number, err: unknown, proxyRejectedStatus: number | null = null): void {
     const message = this.getErrorMessage(err)
-    console.error('[ZaloRuntime] QR login failed', { accountId, message, err })
+    console.error('[ZaloRuntime] QR login failed', { accountId, message, proxyRejectedStatus, err })
     if (message.includes("Can't login")) {
       console.warn('[ZaloRuntime] zca-js reported "Can\'t login" after checksession + /jr/userinfo. This means QR was scanned/confirmed, but Zalo did not mark the web session as logged in.')
     }
