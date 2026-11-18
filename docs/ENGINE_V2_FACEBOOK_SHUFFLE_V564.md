@@ -1,6 +1,11 @@
 # V564: engine v2 Facebook xáo trộn danh sách group như bộ cũ (18/11/2026)
 
-**Tình trạng:** code và migration ở nhánh `claude/fb-engine-shuffle-groups`. **Chưa apply** lên akachat, chưa build Desktop. Anh chốt 18/11: "Giữ, sửa luôn" (giữ 11 tổ chức trong `engine.facebook`, sửa ngay).
+**Tình trạng:**
+- Code và migration ở nhánh `claude/fb-engine-shuffle-groups`, [PR #696](https://github.com/aligoinc/akaAgent/pull/696). Anh chốt 18/11: "Giữ, sửa luôn" (giữ 11 tổ chức trong `engine.facebook`, sửa ngay), rồi "Đẩy PR, apply ngay".
+- **V564 đã apply akachat lúc 10:35:37 VN 18/11/2026**: sổ `20261118033526`, không apply lại, md5 sổ = md5 file = `0bd5c955…` ([biên nhận](../migrations/snapshots/engine-facebook-v564/apply-receipt.json)).
+- PostgREST nạp lại schema xong trong khoảng 6 giây, 0 lỗi 503. Trong lúc nạp có 1 lần `report_v1` của Desktop hết giờ; lõi tự gửi lại kết quả.
+- Lượt đăng nhóm đầu tiên sau apply (chiến dịch 49556) nhận đúng data đứng đầu thứ tự xáo.
+- Chưa build Desktop, nên dòng 🔀 chỉ có từ bản sau.
 
 ## Lỗi
 

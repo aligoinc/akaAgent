@@ -1,0 +1,57 @@
+{
+  "migration": "migrations/migration_v564_engine_facebook_shuffle_groups.sql",
+  "rollback": "migrations/rollback_v564_engine_facebook_shuffle_groups.sql",
+  "ledger": {
+    "version": "20261118033526",
+    "name": "migration_v564_engine_facebook_shuffle_groups",
+    "statementsMd5": "0bd5c955a7e1a6eb5f13cc1314683385",
+    "createdBy": null
+  },
+  "fileMd5": "0bd5c955a7e1a6eb5f13cc1314683385",
+  "appliedAtUtc": "2026-11-18T03:35:37Z",
+  "appliedAtVn": "2026-11-18 10:35:37",
+  "approvedBy": "anh (\"Giữ, sửa luôn\" rồi \"Đẩy PR, apply ngay\", 18/11)",
+  "pr": "https://github.com/aligoinc/akaAgent/pull/696",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT); DDL: CREATE OR REPLACE FUNCTION aka_agent_engine_claim_target_v1",
+  "preApply": {
+    "readAtUtc": "2026-11-18T03:35:15Z",
+    "ledgerMax": "migration_v563_engine_facebook_signs_search",
+    "v564InLedger": 0,
+    "claimMd5": "7ddfa216286849296e6b537c120e291d",
+    "claimAcl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres",
+    "openFacebookEngineRuns": 1,
+    "engineFacebook": "{\"mode\":\"orgs\",\"organizationIds\":[1,124,265,382,444,638,701,1419,1421,1661,2036]}",
+    "restLoad5m": { "rps": 810, "p50Ms": 57, "p95Ms": 250, "errors5xx": 1 }
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T03:35:49Z",
+    "claimMd5": "03d72830d664682c1f51dc3dd9944eda",
+    "claimAcl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres",
+    "securityDefiner": true,
+    "config": ["search_path=\"\""],
+    "postgrest": {
+      "reloadMessageUtc": "2026-11-18T03:35:37.94Z",
+      "poolReconnectedUtc": "2026-11-18T03:35:42.67Z",
+      "configReloadedUtc": "2026-11-18T03:35:44.24Z"
+    },
+    "rest10s": [
+      { "fromUtc": "03:35:30", "requests": 7208, "p50Ms": 61, "p99Ms": 3564, "errors5xx": 1, "errors503": 0 },
+      { "fromUtc": "03:35:40", "requests": 6950, "p50Ms": 484, "p99Ms": 2077, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "03:35:50", "requests": 4718, "p50Ms": 218, "p99Ms": 691, "errors5xx": 0, "errors503": 0 }
+    ],
+    "errorDuringReload": "1 lần aka_agent_engine_report_v1 của Desktop hết giờ 3 giây (57014, câu INSERT auto_engine_outcomes) lúc 03:35:41.73Z, khi PostgREST đang nạp lại schema; lõi gửi lại kết quả (report_v1 không ghi trùng theo result_key). Các lượt engine đóng sau 03:35:43Z đều reported.",
+    "liveShuffleCheck": {
+      "campaign": 49556,
+      "organization": 382,
+      "lease": "6b1029e2-66b7-4bad-87bf-b034252f7c78",
+      "firstClaimedInputData": 12565091,
+      "md5OrderFirst5": [12565091, 12565077, 12565086, 12565097, 12565072],
+      "smallestPendingId": 12565050,
+      "note": "Lượt đầu tiên sau apply nhận đúng data đứng đầu thứ tự md5(id || lease); luật cũ (id tăng dần) sẽ nhận 12565050."
+    }
+  },
+  "notInScope": [
+    "Desktop 9.9.0 bỏ qua khoá shuffle trong câu trả lời: đăng theo thứ tự đã xáo, chưa in dòng 🔀 (cần bản Desktop sau).",
+    "Fly (ChatApi) không chạy Facebook, không cần đồng bộ lõi hay deploy."
+  ]
+}
