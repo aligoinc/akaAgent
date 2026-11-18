@@ -214,7 +214,7 @@ Anh đồng ý tạo sẵn ("Tạo sẵn, để tắt"). Tác vụ **Kiểm lỗ
 | Trạng thái | Tắt | Chưa chạy lượt nào |
 | Lịch | Mỗi giờ một lượt (phút 01) | Lưới đỡ; lịch của tác vụ cloud không được dày hơn một giờ. Đánh thức ngay khi có việc thì dùng đường `/fire` (mục 7.5) |
 | Mỗi lượt | Một phiên mới, làm một câu rồi kết thúc | Không giữ phiên lâu dài, không tự hẹn lại |
-| Repo | `aligoinc/akaAgent` | Nhánh mặc định trên GitHub là `dev_2` (cũ), nên câu lệnh bảo phiên chuyển sang `dev_3` trước. **PR #708 phải merge vào `dev_3` thì phiên mới có tệp công việc**; chưa có thì phiên dừng với một dòng báo |
+| Repo | `aligoinc/akaAgent` | Nhánh mặc định trên GitHub là `dev_2` (cũ), nên câu lệnh bảo phiên chuyển sang `dev_3` trước. Tệp công việc vào `dev_3` qua PR #708 (merge 18/11); thiếu tệp thì phiên dừng với một dòng báo |
 | Mô hình | Sonnet 5.5 | Mặc định của công cụ tạo tác vụ; đổi được trên trang quản lý |
 | Môi trường cloud | `full` | Tài khoản có hai môi trường (`full`, `Default`); em chọn `full` để phiên gọi được API và GitHub. Chưa thử `Default` |
 | Công cụ | Bash, Read, Write, Glob, Grep | Không có công cụ sửa tệp |
