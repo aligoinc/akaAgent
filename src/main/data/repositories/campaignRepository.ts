@@ -55,6 +55,8 @@ import {
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS, renderSmsInputContent, renderVoiceCallInputContent } from '../../../shared/smsContent'
 import { getAdvancedContentItems } from '../../../shared/advancedContent'
 import { getSupabaseClient } from '../supabaseClient'
+import { insertWithContentRotationFallback, normalizeContentRotationIndexes } from '../campaignInputContentRotation'
+import { isPostBumpTargetCampaign, planPostBumpMaintenanceSchedule } from '../../../shared/postBumpContent'
 import { CampaignProgressReuse, type CampaignProgressRow } from '../campaignProgressReuse'
 import { mapCampaignConfigFromDB, mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB, mapCampaignListItemFromDB } from '../mappers'
 import {
@@ -3809,6 +3811,19 @@ export async function maintainCampaignSchedules(
         continue
       }
 
+      // Up tin (Kiêm up tin): lịch thật nằm ở từng lượt (đăng bài + 30 phút…). Dời về giờ:phút lúc tạo chiến dịch làm lượt đã
+      // quá hạn phải đợi tới giờ đó (57420: 126 lượt quá hạn từ 14:37 17/11 bị dời sang 14:07 18/11, máy chỉ mở 08:33–08:41).
+      // Đặt lịch theo lượt chờ sớm nhất, quá hạn thì đầu ngày hôm nay để chạy ngay (anh chốt 18/11/2026). Không còn lượt chờ, hoặc
+      // không đọc được, thì như cũ.
+      if (campaign.status === 'chờ xử lý' && isPostBumpTargetCampaign(campaign)) {
+        const postBumpSchedule = planPostBumpMaintenanceSchedule(await getEarliestPendingInputSchedule(campaign.id, todayStart), todayStart)
+        if (postBumpSchedule) {
+          const updated = await updateCampaign(campaign.id, { schedule: postBumpSchedule.toISOString(), note: null })
+          updatedCampaigns.push(updated)
+          continue
+        }
+      }
+
       if (campaign.status === 'chờ xử lý' && isAtOrAfterDailyDrainTime(nextSchedule)) {
         // 23:59 is reserved for draining the last already-claimed unit. Older
         // app versions allowed recurring campaigns to use that exact slot; if
@@ -3895,7 +3910,9 @@ export async function maintainCampaignSchedules(
 
       const details = await listCampaignInputData(campaign.id)
       const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
-      const shouldRefreshData = campaign.refreshData && (allDataDone || details.length === 0)
+      // Up tin không làm mới data: lượt đã xong không chạy lại. Chiến dịch up tin khách đổi sang lịch tuần từng bị đặt lại mọi
+      // bài cũ về "chờ xử lý" và comment lại 3–4 lần (19362, 53818; anh chốt 18/11/2026).
+      const shouldRefreshData = campaign.refreshData && !isPostBumpTargetCampaign(campaign) && (allDataDone || details.length === 0)
 
       if (campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID) {
         if (details.length > 0) {
@@ -4146,6 +4163,53 @@ export async function deleteCampaignInput(id: number): Promise<void> {
 }
 
 // =========== CAMPAIGN INPUT DATA (việc-cần-làm) ===========
+
+/**
+ * Lịch sớm nhất của lượt còn "chờ xử lý" (bảo trì lịch của chiến dịch up tin). null = không còn lượt chờ hoặc đọc lỗi (bảo trì
+ * giữ cách cũ); lượt không có lịch coi như đến hạn từ đầu ngày.
+ */
+async function getEarliestPendingInputSchedule(campaignId: number, todayStart: Date): Promise<Date | null> {
+  const { data, error } = await client()
+    .from('auto_campaign_input_data')
+    .select('schedule')
+    .eq('campaign_id', campaignId)
+    .eq('status', 'chờ xử lý')
+    .eq('is_delete', false)
+    .order('schedule', { ascending: true, nullsFirst: true })
+    .limit(1)
+  if (error) {
+    console.error(`Failed to read earliest pending schedule of campaign ${campaignId}:`, error.message)
+    return null
+  }
+  const row = (data || [])[0] as { schedule?: string | null } | undefined
+  if (!row) return null
+  if (!row.schedule) return todayStart
+  const at = new Date(row.schedule)
+  return Number.isNaN(at.getTime()) ? todayStart : at
+}
+
+/**
+ * Up tin: bài không còn trên Facebook thì đóng các lượt còn "chờ xử lý" khác của cùng bài trong cùng chiến dịch up tin
+ * (chuyển "hoàn thành", ghi chú câu lỗi đã có, không ghi dòng lịch sử; anh chốt 18/11/2026). Lượt đang chạy không đụng.
+ * Trả số dòng đã đóng.
+ */
+export async function closePendingPostBumpRowsForPost(
+  campaignId: number, uid: string, excludeInputDataId: number | null, note: string
+): Promise<number> {
+  const target = String(uid || '').trim()
+  if (!target || !Number.isSafeInteger(campaignId) || campaignId <= 0) return 0
+  let query = client()
+    .from('auto_campaign_input_data')
+    .update({ status: 'hoàn thành', note, date_action: new Date().toISOString() })
+    .eq('campaign_id', campaignId)
+    .eq('uid', target)
+    .eq('status', 'chờ xử lý')
+    .eq('is_delete', false)
+  if (excludeInputDataId != null) query = query.neq('id', excludeInputDataId)
+  const { data, error } = await query.select('id')
+  if (error) throw new Error(`Failed to close post bump rows: ${error.message}`)
+  return data?.length ?? 0
+}
 
 export async function listCampaignInputData(campaignId: number): Promise<CampaignInputData[]> {
   const rows: CampaignInputData[] = []
@@ -5259,6 +5323,8 @@ type CampaignInputDataInsertPayload = {
   status: CampaignInputStatus
   note: string | null
   schedule: string | null
+  /** Chỉ gửi khi có dòng chọn trước chỉ số nội dung (V531 cấp quyền INSERT cột này cho Desktop). */
+  content_rotation_indexes?: Record<string, number>
 }
 
 type CampaignInputDataBatchInsertResult = {
@@ -5308,10 +5374,10 @@ async function insertCampaignInputDataPayload(
     for (const payloadChunk of chunkArray(payload, CAMPAIGN_INPUT_DATA_INSERT_CHUNK_SIZE)) {
       beforeChunk?.()
       if (returnRows) {
-        const { data, error } = await client()
+        const { data, error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
           .from('auto_campaign_input_data')
-          .insert(payloadChunk)
-          .select()
+          .insert(chunk)
+          .select())
         if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
         insertedCount += data?.length ?? payloadChunk.length
         rows.push(...(data || []).map(row => mapCampaignInputDataFromDB(row)))
@@ -5320,10 +5386,10 @@ async function insertCampaignInputDataPayload(
       }
 
       if (rollbackOnFailure) {
-        const { data, error } = await client()
+        const { data, error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
           .from('auto_campaign_input_data')
-          .insert(payloadChunk)
-          .select('id')
+          .insert(chunk)
+          .select('id'))
         if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
         insertedCount += data?.length ?? payloadChunk.length
         insertedIds.push(...(data || []).map(row => Number(row.id)).filter(id => Number.isSafeInteger(id) && id > 0))
@@ -5331,9 +5397,9 @@ async function insertCampaignInputDataPayload(
         continue
       }
 
-      const { error } = await client()
+      const { error } = await insertWithContentRotationFallback(payloadChunk, chunk => client()
         .from('auto_campaign_input_data')
-        .insert(payloadChunk)
+        .insert(chunk))
       if (error) throw new Error(`Failed to create campaign input data: ${error.message}`)
       insertedCount += payloadChunk.length
       notifyCampaignInputDataWriteProgress(onProgress, insertedCount, payload.length)
@@ -5414,6 +5480,7 @@ async function createCampaignInputDataBatchInternal(
         phone,
         schedule: schedule || undefined
       }
+      const contentRotationIndexes = normalizeContentRotationIndexes(action.contentRotationIndexes)
       return {
         campaign_id: campaignId,
         input_id: action.inputId ?? null,
@@ -5434,7 +5501,8 @@ async function createCampaignInputDataBatchInternal(
           : action.content || null,
         status: action.status || 'chờ xử lý',
         note: action.note || null,
-        schedule: schedule || null
+        schedule: schedule || null,
+        ...(contentRotationIndexes ? { content_rotation_indexes: contentRotationIndexes } : {})
       }
     })
 

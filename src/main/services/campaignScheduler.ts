@@ -58,6 +58,10 @@ import {
 } from '../../shared/mediaTypes'
 import { renderContentSpin, renderContentSpinNonEmpty, splitContentVariants as splitSharedContentVariants } from '../../shared/contentSpin'
 import {
+  isPostBumpTargetCampaign, planPostBumpContentIndexes, POST_BUMP_COMMENT_ACTION_CODE, POST_BUMP_POST_NOT_FOUND_ERROR_CODE,
+  POST_BUMP_POST_NOT_FOUND_NOTE, POST_BUMP_SLEEP_BETWEEN_COMMENTS_SECONDS, POST_BUMP_TARGET_NAME_PREFIX
+} from '../../shared/postBumpContent'
+import {
   isFormattedContentEmpty,
   sanitizeFormattedContent,
   splitFormattedContentVariants,
@@ -12570,6 +12574,7 @@ export class CampaignScheduler {
           if (shareTarget && created && output.operationState === 'committed') {
             await this.finishGroupPostShareTarget(campaign, shareTarget, consumedGroupPostInputDataIds)
           }
+          if (created && inputDataId === detail?.id) await this.closePostBumpRowsOfMissingPost(campaign, detail, output.errorCode)
           const resultInput = inputDataId === detail?.id ? detail : null
           const helperProgress = helperLegacy ?? {
             actionCode: output.actionCode,
@@ -15564,6 +15569,9 @@ export class CampaignScheduler {
     const initialDelay = this.normalizePostBumpMinutes(extra.postBumpInitialDelayMinutes, 30, 0)
     const interval = this.normalizePostBumpMinutes(extra.postBumpIntervalMinutes, 10, 1)
     const startIndex = this.normalizePostBumpRotationIndex(extra.postBumpRotationIndex, targets.length)
+    // Mỗi lượt up của bài giữ trước một câu riêng, bắt đầu từ câu ngẫu nhiên, không phụ thuộc lượt rơi vào tài khoản nào
+    // (xem postBumpContent.ts).
+    const contentPlan = planPostBumpContentIndexes(count)
     const now = await this.getDatabaseBusinessNow()
     const earliestByCampaign = new Map<number, Date>()
 
@@ -15575,7 +15583,8 @@ export class CampaignScheduler {
         uid: postUrl,
         status: 'chờ xử lý',
         schedule: schedule.toISOString(),
-        note: `Đã thêm từ chiến dịch "${campaign.name}"`
+        note: `Đã thêm từ chiến dịch "${campaign.name}"`,
+        contentRotationIndexes: { [POST_BUMP_COMMENT_ACTION_CODE]: contentPlan.indexes[i] }
       })
       const currentEarliest = earliestByCampaign.get(target.campaignId)
       if (!currentEarliest || schedule.getTime() < currentEarliest.getTime()) {
@@ -15616,6 +15625,7 @@ export class CampaignScheduler {
       try {
         const targetCampaign = await this.supabase.getCampaign(targetId)
         if (targetCampaign && targetCampaign.actionId === COMMENT_SEEDING_POST_ACTION_ID) {
+          if (await this.isPostBumpAccountGone(targetCampaign.accountId)) continue
           targets.push({ campaignId: targetCampaign.id })
         }
       } catch (err) {
@@ -15623,6 +15633,38 @@ export class CampaignScheduler {
       }
     }
     return targets
+  }
+
+  /**
+   * Tài khoản up tin đã xoá (hoặc không còn dùng được: khác nhân viên, hết quyền gói) thì không chia lượt cho nó (anh chốt
+   * 18/11/2026; 8 ngày tới 18/11 có 624 lượt thêm vào chiến dịch up tin của tài khoản đã xoá, không bao giờ chạy). getAccount trả
+   * null trong các trường hợp đó; đọc lỗi (mạng) thì coi như còn, giữ cách cũ.
+   */
+  private async loadPostBumpAccount(accountId: number): Promise<AutoAccount | null | undefined> {
+    try {
+      return await this.supabase.getAccount(accountId)
+    } catch (err) {
+      console.error('Failed load post bump account:', err)
+      return undefined
+    }
+  }
+
+  /**
+   * Up tin: bài không còn trên Facebook thì các lượt còn chờ khác của bài này trong cùng chiến dịch up tin cũng không up được; đóng
+   * luôn ("hoàn thành", ghi chú câu lỗi đã có, không ghi dòng lịch sử; anh chốt 18/11/2026; 8 ngày tới 18/11: 146 bài, 415 lượt
+   * thử thừa). Gọi sau khi ghi kết quả của lượt (bộ cũ lẫn engine đều qua logExplicitActionResultStep).
+   */
+  private async closePostBumpRowsOfMissingPost(campaign: Campaign, detail: CampaignInputData | null,
+    errorCode: string | null | undefined): Promise<void> {
+    if (errorCode !== POST_BUMP_POST_NOT_FOUND_ERROR_CODE || !detail?.uid || !isPostBumpTargetCampaign(campaign)) return
+    await this.supabase.closePendingPostBumpRowsForPost(campaign.id, detail.uid, detail.id, POST_BUMP_POST_NOT_FOUND_NOTE)
+      .catch(err => console.error('Failed close post bump rows of missing post:', err))
+  }
+
+  private async isPostBumpAccountGone(accountId: number | null | undefined): Promise<boolean> {
+    const id = Number(accountId)
+    if (!Number.isSafeInteger(id) || id <= 0) return false
+    return (await this.loadPostBumpAccount(id)) === null
   }
 
   private async resolveCreatedPostBumpTargets(campaign: Campaign): Promise<PostBumpTarget[]> {
@@ -15640,11 +15682,14 @@ export class CampaignScheduler {
 
     for (const accountId of accountIds) {
       const key = String(accountId)
+      // Tài khoản đã xoá: không chia lượt, không tạo chiến dịch up tin mới (giữ nguyên ánh xạ cũ).
+      const account = await this.loadPostBumpAccount(accountId)
+      if (account === null) continue
       let targetCampaignId = Number(mapping[key])
       let targetCampaign = targetCampaignId ? await this.supabase.getCampaign(targetCampaignId).catch(() => null) : null
 
       if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID || targetCampaign.isDelete) {
-        targetCampaign = await this.createPostBumpTargetCampaign(campaign, accountId)
+        targetCampaign = await this.createPostBumpTargetCampaign(campaign, accountId, account)
         targetCampaignId = targetCampaign.id
         mapping[key] = targetCampaignId
         mappingChanged = true
@@ -15665,12 +15710,16 @@ export class CampaignScheduler {
     return targets
   }
 
-  private async createPostBumpTargetCampaign(sourceCampaign: Campaign, accountId: number): Promise<Campaign> {
-    const account = await this.supabase.getAccount(accountId).catch(() => null)
+  private async createPostBumpTargetCampaign(
+    sourceCampaign: Campaign, accountId: number, knownAccount?: AutoAccount | null
+  ): Promise<Campaign> {
+    const account = knownAccount ?? await this.supabase.getAccount(accountId).catch(() => null)
     const content = String(sourceCampaign.extraSettings?.postBumpContent || '').trim()
     const rateLimitMinutes = this.normalizeRateLimitMinutes(account?.rateLimitMinutes)
     const actionLimits: CampaignActionLimitSettings = {
-      sleepBetweenActions: 0,
+      // Nghỉ giữa hai comment (anh chốt 18/11/2026): trước là 0 giây, nhiều lượt đến hạn cùng lúc thì Facebook báo giới hạn
+      // tần suất comment (FB03) và chiến dịch up tin dừng (28 lần / 16 chiến dịch trong 8 ngày tới 18/11).
+      sleepBetweenActions: POST_BUMP_SLEEP_BETWEEN_COMMENTS_SECONDS,
       enabledActionCodes: ['fb_comment'],
       dailyLimit: 1000,
       rateLimitCount: 1000,
@@ -15685,7 +15734,7 @@ export class CampaignScheduler {
     }
 
     const created = await this.supabase.createCampaign({
-      name: `Up tin cho chiến dịch ${sourceCampaign.name}${account?.name ? ` - ${account.name}` : ''}`,
+      name: `${POST_BUMP_TARGET_NAME_PREFIX}${sourceCampaign.name}${account?.name ? ` - ${account.name}` : ''}`,
       actionId: COMMENT_SEEDING_POST_ACTION_ID,
       accountId,
       status: 'chờ xử lý',
@@ -15694,7 +15743,9 @@ export class CampaignScheduler {
       scheduleEndDate: null,
       dailyStopTime: null,
       continueNextDay: true,
-      refreshData: true,
+      // Không làm mới data: lượt up tin đã xong không chạy lại (khách đổi sang lịch tuần thì bảo trì từng đặt lại mọi bài cũ về
+      // "chờ xử lý" và comment lại 3–4 lần, anh chốt 18/11/2026).
+      refreshData: false,
       content,
       extraSettings: {
         enableComment: true,
