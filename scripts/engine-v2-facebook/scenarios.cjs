@@ -198,6 +198,9 @@ async function main() {
     // Như production 18/11: dấu hiệu FB11 của V563, rồi V575 (mã cụ thể, NET01 khi mở trang, lỗi tệp theo nguyên nhân, câu chờ).
     await applyV563SignsOnly(db)
     if (WITH_V575) await applyV575(db)
+    // V576 (đóng lượt bị bỏ dở cho đúng: mồ côi, chốt theo kết quả đã báo, hàm reset Desktop): FB_SCENARIO_ORPHAN_RUNS=1 để chạy trên DB đã có
+    // V576 (nạp thân report_v1 / close_stale production 18/11 nếu DB thử khác).
+    if (process.env.FB_SCENARIO_ORPHAN_RUNS === '1') await require('../fixtures/engine-v2-orphan-runs-v576/setup.cjs').applyV576(db)
     await db.query(`CREATE OR REPLACE FUNCTION public.aka_agent_engine_action_limit(p_campaign_id bigint, p_account_id bigint, p_action_code text)
       RETURNS jsonb LANGUAGE sql STABLE AS $f$ SELECT NULL::jsonb $f$`)
     for (const b of BLOCKS) await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3)`, [b.id, b.name, b.code])

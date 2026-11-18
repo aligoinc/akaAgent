@@ -119,6 +119,12 @@ async function bootstrap(db, notes) {
         END IF;
       END LOOP;
     END $f$`)
+  // V576 (đóng lượt bị bỏ dở cho đúng: lượt mồ côi, chốt theo kết quả đã báo, hàm reset Desktop; kiểm thân close_stale V515 / report_v1 V571):
+  // SCENARIO_ORPHAN_RUNS=1 (kèm SCENARIO_TARGET_CHECK=1) để chạy bộ kịch bản trên DB đã có V576. Đặt cuối: dùng hàm khoá nạp data ở trên.
+  if (process.env.SCENARIO_ORPHAN_RUNS === '1') {
+    if (process.env.SCENARIO_TARGET_CHECK !== '1') throw new Error('SCENARIO_ORPHAN_RUNS=1 cần SCENARIO_TARGET_CHECK=1 (V576 kiểm thân report_v1 của V571)')
+    await require('../fixtures/engine-v2-orphan-runs-v576/setup.cjs').applyV576(db, notes)
+  }
 }
 
 module.exports = { bootstrap }
