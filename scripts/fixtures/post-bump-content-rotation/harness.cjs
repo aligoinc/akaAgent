@@ -20,20 +20,44 @@ function loadTs(relativePath, modules = {}) {
 const shared = loadTs('src/shared/postBumpContent.ts')
 const contentSpin = loadTs('src/shared/contentSpin.ts')
 
-/** Hàm thật enqueuePostBumpAfterGroupPost (và các hàm chuẩn hoá nó gọi) của CampaignScheduler. */
-function loadEnqueueHarness() {
+/**
+ * Dựng lớp chỉ gồm các hàm thật (theo tên) của CampaignScheduler; `scope` là các tên ngoài lớp mà các hàm đó dùng
+ * (hằng số, hàm import), truyền vào đúng như mã thật.
+ */
+function loadSchedulerMethods(names, scope) {
   const file = path.join(root, 'src/main/services/campaignScheduler.ts')
   const source = ts.createSourceFile(file, fs.readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   const cls = source.statements.find(node => ts.isClassDeclaration(node) && node.name?.text === 'CampaignScheduler')
-  const methods = ['enqueuePostBumpAfterGroupPost', 'normalizePostBumpCount', 'normalizePostBumpMinutes', 'normalizePostBumpRotationIndex']
+  const methods = names
     .map(name => {
       const method = cls.members.find(node => ts.isMethodDeclaration(node) && node.name.getText(source) === name)
       assert.ok(method, name)
       return method.getText(source)
     }).join('\n')
   const compiled = ts.transpileModule(`class Harness { ${methods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText
-  return new Function('planPostBumpContentIndexes', 'POST_BUMP_COMMENT_ACTION_CODE', `${compiled}; return Harness`)(
-    shared.planPostBumpContentIndexes, shared.POST_BUMP_COMMENT_ACTION_CODE)
+  return new Function(...Object.keys(scope), `${compiled}; return Harness`)(...Object.values(scope))
+}
+
+/**
+ * Hàm thật enqueuePostBumpAfterGroupPost (và các hàm chuẩn hoá nó gọi) của CampaignScheduler. `random` (tuỳ chọn) thay
+ * Math.random khi chọn câu bắt đầu của mỗi bài, để bài kiểm / phát lại cho cùng kết quả mỗi lần chạy.
+ */
+function loadEnqueueHarness(random) {
+  const plan = random ? count => shared.planPostBumpContentIndexes(count, random) : shared.planPostBumpContentIndexes
+  return loadSchedulerMethods(
+    ['enqueuePostBumpAfterGroupPost', 'normalizePostBumpCount', 'normalizePostBumpMinutes', 'normalizePostBumpRotationIndex'],
+    { planPostBumpContentIndexes: plan, POST_BUMP_COMMENT_ACTION_CODE: shared.POST_BUMP_COMMENT_ACTION_CODE })
+}
+
+/** Hàm ngẫu nhiên có hạt giống (LCG), cho kết quả lặp lại được. */
+function seededRandom(seed = 1) {
+  let state = Math.floor(seed) % 2147483648
+  return () => { state = (state * 1103515245 + 12345) % 2147483648; return state / 2147483648 }
+}
+
+/** Hàm ngẫu nhiên cho planPostBumpContentIndexes trả đúng câu bắt đầu `start` (tránh sai số dấu phẩy động). */
+function startAt(start) {
+  return () => (start + 0.5) / 1_000_000_000
 }
 
 /** Số câu mà prepareSelectedCampaignContent đếm cho comment (nội dung cơ bản). */
@@ -103,6 +127,6 @@ async function takeContentIndex(db, campaignId, inputId, count) {
 }
 
 module.exports = {
-  root, loadTs, shared, contentSpin, loadEnqueueHarness, commentVariants, snapshot,
+  root, loadTs, shared, contentSpin, loadSchedulerMethods, loadEnqueueHarness, seededRandom, startAt, commentVariants, snapshot,
   withPostBumpDb, addClaimedCampaigns, takeContentIndex
 }

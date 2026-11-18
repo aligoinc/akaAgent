@@ -1,4 +1,5 @@
-// Kiêm up tin Facebook: mỗi lượt up của một bài lấy một câu khác nhau dù chia cho nhiều tài khoản (V531).
+// Kiêm up tin Facebook: mỗi lượt up của một bài lấy một câu khác nhau dù chia cho nhiều tài khoản (V531); mỗi bài bắt đầu
+// từ một câu ngẫu nhiên (anh chốt 18/11/2026).
 // Không kết nối production: RPC aka_agent_take_campaign_content_index chạy đúng thân đang chạy trên akachat
 // (migrations/snapshots/post-bump-content-rotation-v531/source.json) trong PGlite; bộ lập lịch, chèn data, đồng bộ
 // nội dung chạy mã thật với DB giả.
@@ -8,23 +9,30 @@ const fs = require('node:fs')
 const path = require('node:path')
 const harness = require('./fixtures/post-bump-content-rotation/harness.cjs')
 
-const { root, loadTs, shared } = harness
+const { root, loadTs, shared, startAt, seededRandom } = harness
 const results = []
 const check = (name, fn) => results.push({ name, fn })
 const rotationInsert = loadTs('src/main/data/campaignInputContentRotation.ts')
 const sync = loadTs('src/main/services/postBumpContentSync.ts', { '../../shared/postBumpContent': shared })
 
 // ---------------------------------------------------------------- chia câu
-check('chia câu: lượt thứ i lấy (con trỏ + i), bài sau tiếp nối', () => {
-  assert.deepEqual(shared.planPostBumpContentIndexes(undefined, 3), { indexes: [0, 1, 2], nextCursor: 3 })
-  assert.deepEqual(shared.planPostBumpContentIndexes(3, 3), { indexes: [3, 4, 5], nextCursor: 6 })
-  assert.deepEqual(shared.planPostBumpContentIndexes('7', 2), { indexes: [7, 8], nextCursor: 9 })
-  for (const bad of [-1, 'x', null, NaN, 1.5e20]) {
-    assert.deepEqual(shared.planPostBumpContentIndexes(bad, 1).indexes, [0], String(bad))
+check('chia câu: lượt thứ i lấy (bắt đầu + i), bắt đầu ngẫu nhiên mỗi bài', () => {
+  assert.deepEqual(shared.planPostBumpContentIndexes(3, () => 0), { indexes: [0, 1, 2] })
+  assert.deepEqual(shared.planPostBumpContentIndexes(2, startAt(7)), { indexes: [7, 8] })
+  assert.deepEqual(shared.planPostBumpContentIndexes(1, startAt(123_456_789)), { indexes: [123_456_789] })
+  const top = shared.planPostBumpContentIndexes(10, () => 0.999_999_999_999)
+  assert.equal(top.indexes[0], 999_999_999)
+  assert.ok(top.indexes.every(i => Number.isSafeInteger(i) && String(i).length <= 16), 'RPC nhận 1–16 chữ số')
+  for (const bad of [() => NaN, () => -1, () => Infinity, () => 'x']) {
+    assert.deepEqual(shared.planPostBumpContentIndexes(1, bad).indexes, [0], String(bad))
   }
-  assert.deepEqual(shared.planPostBumpContentIndexes(5, 0), { indexes: [], nextCursor: 5 })
-  const big = shared.planPostBumpContentIndexes(999_999_999_999, 2)
-  assert.deepEqual(big, { indexes: [999_999_999_999, 0], nextCursor: 1 }, 'quấn trước 16 chữ số')
+  assert.deepEqual(shared.planPostBumpContentIndexes(0, () => 0.5), { indexes: [] })
+  assert.deepEqual(shared.planPostBumpContentIndexes(-2, () => 0.5), { indexes: [] })
+  // Mặc định Math.random: luôn liên tiếp, và hai bài liền nhau không buộc phải tiếp nối.
+  const a = shared.planPostBumpContentIndexes(3).indexes
+  assert.deepEqual(a, [a[0], a[0] + 1, a[0] + 2])
+  const starts = new Set(Array.from({ length: 200 }, () => shared.planPostBumpContentIndexes(1).indexes[0] % 5))
+  assert.equal(starts.size, 5, 'bắt đầu rải đều qua mọi câu')
 })
 
 // ---------------------------------------------------------------- quyết định đồng bộ
@@ -157,9 +165,10 @@ check('chèn data: gửi cột chỉ số, thiếu quyền (42501) thì chèn l�
 })
 
 // ---------------------------------------------------------------- bộ lập lịch thật
-const Harness = harness.loadEnqueueHarness()
-
-function enqueueFixture(extra, targetIds) {
+/** `starts`: câu bắt đầu của từng bài theo thứ tự (bộ lập lịch gọi hàm ngẫu nhiên một lần mỗi bài). */
+function enqueueFixture(extra, targetIds, starts = []) {
+  const queue = [...starts]
+  const Harness = harness.loadEnqueueHarness(() => (queue.shift() + 0.5) / 1_000_000_000)
   const campaign = { id: 7, name: 'Đăng nhóm', actionId: 'facebook_group_post', extraSettings: { enablePostBump: true, ...extra } }
   const inserted = []
   const scheduler = Object.assign(new Harness(), {
@@ -171,31 +180,33 @@ function enqueueFixture(extra, targetIds) {
     logCampaignProgress: async () => {},
     supabase: { createCampaignInputData: async row => { inserted.push(row); return row } }
   })
-  return { campaign, inserted, scheduler }
+  return { campaign, inserted, scheduler, queue }
 }
 
-check('bộ lập lịch: 3 lượt chia cho 3 tài khoản mang 3 chỉ số câu liên tiếp, bài sau tiếp nối', async () => {
-  const { campaign, inserted, scheduler } = enqueueFixture({ postBumpCount: 3 }, [101, 102, 103])
+check('bộ lập lịch: 3 lượt chia cho 3 tài khoản mang 3 chỉ số câu liên tiếp từ câu bắt đầu của bài', async () => {
+  const { campaign, inserted, scheduler, queue } = enqueueFixture({ postBumpCount: 3 }, [101, 102, 103], [40, 7])
   await scheduler.enqueuePostBumpAfterGroupPost(campaign, 'https://facebook.com/groups/1/posts/9/')
   assert.deepEqual(inserted.map(r => [r.campaignId, r.contentRotationIndexes]),
-    [[101, { fb_comment: 0 }], [102, { fb_comment: 1 }], [103, { fb_comment: 2 }]])
-  assert.equal(campaign.extraSettings.postBumpContentRotationIndex, 3)
+    [[101, { fb_comment: 40 }], [102, { fb_comment: 41 }], [103, { fb_comment: 42 }]])
+  assert.equal(campaign.extraSettings.postBumpContentRotationIndex, undefined, 'không còn lưu con trỏ câu')
   assert.equal(campaign.extraSettings.postBumpRotationIndex, 0)
   inserted.length = 0
   await scheduler.enqueuePostBumpAfterGroupPost(campaign, 'https://facebook.com/groups/1/posts/10/')
-  assert.deepEqual(inserted.map(r => r.contentRotationIndexes.fb_comment), [3, 4, 5])
-  assert.equal(campaign.extraSettings.postBumpContentRotationIndex, 6)
+  assert.deepEqual(inserted.map(r => r.contentRotationIndexes.fb_comment), [7, 8, 9], 'bài sau bắt đầu lại ngẫu nhiên')
+  assert.equal(queue.length, 0, 'một lần ngẫu nhiên cho mỗi bài')
 })
 
 check('bộ lập lịch: 2 lượt/bài trên 3 tài khoản, chỉ số câu không phụ thuộc tài khoản; bài chờ duyệt không thêm', async () => {
-  const { campaign, inserted, scheduler } = enqueueFixture({ postBumpCount: 2, postBumpContentRotationIndex: 5 }, [101, 102, 103])
+  const { campaign, inserted, scheduler, queue } = enqueueFixture({ postBumpCount: 2, postBumpContentRotationIndex: 5 },
+    [101, 102, 103], [5, 0, 99])
   await scheduler.enqueuePostBumpAfterGroupPost(campaign, 'p1')
   await scheduler.enqueuePostBumpAfterGroupPost(campaign, 'p2')
   assert.deepEqual(inserted.map(r => [r.uid, r.campaignId, r.contentRotationIndexes.fb_comment]),
-    [['p1', 101, 5], ['p1', 102, 6], ['p2', 103, 7], ['p2', 101, 8]])
+    [['p1', 101, 5], ['p1', 102, 6], ['p2', 103, 0], ['p2', 101, 1]])
   inserted.length = 0
   await scheduler.enqueuePostBumpAfterGroupPost(campaign, 'p3', true)
   assert.equal(inserted.length, 0)
+  assert.deepEqual(queue, [99], 'bài chờ duyệt không chọn câu')
 })
 
 // ---------------------------------------------------------------- RPC thật + V531 trên PGlite
@@ -236,9 +247,9 @@ check('PGlite: RPC thật — không chọn trước thì 3 tài khoản cùng c
     assert.deepEqual(await Promise.all(legacy.map((id, i) => take(101 + i, id, 3))), [0, 0, 0])
     assert.deepEqual(await campaignCursors(), { 101: 1, 102: 1, 103: 1 })
 
-    // Bản sửa: bộ lập lịch giao (con trỏ + i) theo planPostBumpContentIndexes.
+    // Bản sửa: bộ lập lịch giao (bắt đầu + i) theo planPostBumpContentIndexes, bắt đầu ngẫu nhiên mỗi bài.
     for (const post of [0, 1, 2, 3]) {
-      const plan = shared.planPostBumpContentIndexes(post * 3, 3)
+      const plan = shared.planPostBumpContentIndexes(3, startAt(post * 3))
       const ids = []
       for (let i = 0; i < 3; i++) ids.push(await addInput(101 + i, { [shared.POST_BUMP_COMMENT_ACTION_CODE]: plan.indexes[i] }))
       const got = await Promise.all(ids.map((id, i) => take(101 + i, id, 3)))
@@ -247,11 +258,24 @@ check('PGlite: RPC thật — không chọn trước thì 3 tài khoản cùng c
     }
     assert.deepEqual(await campaignCursors(), { 101: 1, 102: 1, 103: 1 }, 'chỉ số chọn trước không đụng con trỏ chiến dịch')
 
-    // Con trỏ không chia hết số câu vẫn khác nhau trong một bài.
-    const plan = shared.planPostBumpContentIndexes(7, 3)
+    // Câu bắt đầu không chia hết số câu vẫn khác nhau trong một bài.
+    const plan = shared.planPostBumpContentIndexes(3, startAt(7))
     const ids = []
     for (let i = 0; i < 3; i++) ids.push(await addInput(101 + i, { fb_comment: plan.indexes[i] }))
     assert.deepEqual(await Promise.all(ids.map((id, i) => take(101 + i, id, 3))), [1, 2, 0])
+
+    // Bắt đầu ngẫu nhiên thật (có hạt giống): 30 bài, 5 câu, 3 lượt/bài chia 3 tài khoản → không bài nào trùng câu, và mỗi tài
+    // khoản đổi câu giữa các bài.
+    const random = seededRandom(20261118)
+    const perAccount = new Map()
+    for (let post = 0; post < 30; post++) {
+      const indexes = shared.planPostBumpContentIndexes(3, random).indexes
+      const got = []
+      for (let i = 0; i < 3; i++) got.push(await take(101 + i, await addInput(101 + i, { fb_comment: indexes[i] }), 5))
+      assert.equal(new Set(got).size, 3, `bài ${post}: ${got}`)
+      got.forEach((t, i) => perAccount.set(101 + i, (perAccount.get(101 + i) || new Set()).add(t)))
+    }
+    for (const [account, used] of perAccount) assert.equal(used.size, 5, `tài khoản ${account} dùng đủ 5 câu`)
 
     // Mỗi chiến dịch tự mod theo số câu của nó (khách sửa tay chiến dịch up tin); 1 câu thì luôn 0.
     assert.equal(await take(101, await addInput(101, { fb_comment: 5 }), 4), 1)

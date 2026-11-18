@@ -1266,6 +1266,12 @@ const getCampaignMediaPreviewPath = (item: CampaignMediaInput): string => {
   return getCampaignMediaCloudUrl(item) || localPath
 }
 
+/** Có video trong media của bài đăng (Kiêm up tin không áp dụng cho bài có video, anh chốt 18/11/2026). */
+const campaignMediaHasVideo = (items: CampaignMediaInput[]): boolean => items.some(item => isVideoMediaSource(
+  getCampaignMediaMimeType(item), getCampaignMediaDisplayName(item), getCampaignMediaLocalPath(item),
+  getCampaignMediaCloudUrl(item).split('?')[0]
+))
+
 const getCampaignMediaStableKey = (item: CampaignMediaInput): string => {
   if (typeof item === 'string') return item
   return item.cloudUrl || item.localPath || item.name
@@ -2059,7 +2065,6 @@ export default function CampaignFormModal({
       ? {} as Record<string, number>
       : { ...(campaign?.extraSettings?.postBumpCreatedCampaignIdsByAccount || {}) } as Record<string, number>,
     postBumpRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.postBumpRotationIndex ?? 0),
-    postBumpContentRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.postBumpContentRotationIndex ?? 0),
     // Nhắn tin bạn bè / UID
     enableMessage: campaign?.extraSettings?.enableMessage ?? true,
     enableAddFriend: campaign?.extraSettings?.enableAddFriend ?? initialIsZaloFriendRecommendationCampaign,
@@ -2837,6 +2842,10 @@ export default function CampaignFormModal({
       ? formData.commentImageOption !== 'none' && formData.commentImages.length > 0
     : !isMobileManagedSmsCampaign && formData.imageOption !== 'none' && formData.images.length > 0
   const hasSelectedCommentMedia = formData.commentImageOption !== 'none' && formData.commentImages.length > 0
+  // Kiêm up tin: bài có video chưa có link ngay sau khi đăng nên không được up tin (anh chốt 18/11/2026, câu anh viết).
+  const showPostBumpVideoWarning = formData.enablePostBump && (isAdvancedContentMode
+    ? advancedContentDisplayItems.some(item => item.mediaOption !== 'none' && campaignMediaHasVideo(item.mediaItems || []))
+    : formData.imageOption !== 'none' && campaignMediaHasVideo(formData.images))
   const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
@@ -6597,7 +6606,6 @@ export default function CampaignFormModal({
             postBumpContent: formData.postBumpContent,
             postBumpCreatedCampaignIdsByAccount: formData.postBumpCreatedCampaignIdsByAccount,
             postBumpRotationIndex: formData.postBumpRotationIndex,
-            postBumpContentRotationIndex: formData.postBumpContentRotationIndex,
             enableMessage: effectiveEnableMessage,
             enableAddFriend: effectiveEnableAddFriend,
             useSuggestedFriends: isDataGroupSource ? false : effectiveUseSuggestedFriends,
@@ -13372,6 +13380,11 @@ export default function CampaignFormModal({
           />
           <span>Kiêm up tin</span>
         </label>
+        {!isNativeGroupShareMode && showPostBumpVideoWarning && (
+          <span className="campaign-manual-content-warning" style={{ marginTop: 6 }}>
+            <AlertTriangle size={12} />Bài có video sẽ không được up tin vì Facebook chưa duyệt bài video ngay sau khi đăng.
+          </span>
+        )}
       </div>
 
       {!isNativeGroupShareMode && formData.enablePostBump && renderPostBumpSettings()}

@@ -650,7 +650,6 @@ export interface CampaignExtraSettings {
   postBumpContent?: string                 // Nội dung comment cho campaign up tin tạo mới
   postBumpCreatedCampaignIdsByAccount?: Record<string, number> // account_id -> campaign comment-post đã tạo
   postBumpRotationIndex?: number           // Con trỏ chia đều target qua nhiều bài post
-  postBumpContentRotationIndex?: number    // Con trỏ câu comment up tin: lượt thứ i của một bài lấy câu (con trỏ + i), xem src/shared/postBumpContent.ts
   // Nhắn tin bạn bè / nhắn tin UID & kết bạn
   enableMessage?: boolean                  // Gửi tin nhắn
   enableAddFriend?: boolean                // Kết bạn (facebook_message_uid, zalo_message_phone, zalo_message_group_member, zalo_message_remarketing_customer, zalo_message_friend_recommendation)

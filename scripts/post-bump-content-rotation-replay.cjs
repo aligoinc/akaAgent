@@ -6,19 +6,22 @@
 // 1. Hiệu chỉnh: chạy cách cũ (con trỏ từng chiến dịch) qua RPC thật trên PGlite, so chỉ số câu dự đoán với chỉ số
 //    production đã dùng (content_rotation_indexes của dòng data = chỉ số dùng lần cuối + 1).
 // 2. Cách mới: mỗi bài chạy hàm thật enqueuePostBumpAfterGroupPost (giữ đúng tài khoản nhận từng lượt như production),
-//    chèn dòng data có chỉ số chọn trước, rồi gọi RPC thật theo đúng thứ tự thời gian và số lần chạy lại.
+//    chèn dòng data có chỉ số chọn trước, rồi gọi RPC thật theo đúng thứ tự thời gian và số lần chạy lại. Câu bắt đầu của
+//    mỗi bài là ngẫu nhiên (anh chốt 18/11/2026); bộ phát lại dùng hàm ngẫu nhiên có hạt giống (--seed, mặc định 1) để mỗi lần
+//    chạy ra cùng kết quả.
 // 3. So từng bài: cách cũ / cách mới có lượt nào trùng câu, và phân loại mọi ca còn trùng.
 // 4. Đồng bộ "Nội dung up tin": lưu không đổi thì không ghi; giả lập đổi nội dung thì ghi những chiến dịch nào.
 //
-// AKA_CHAT_REPO=/path/to/akaAgentChatApi node scripts/post-bump-content-rotation-replay.cjs <data.json> [--out summary.json]
+// AKA_CHAT_REPO=/path/to/akaAgentChatApi node scripts/post-bump-content-rotation-replay.cjs <data.json> [--out summary.json] [--seed n]
 const fs = require('node:fs')
 const {
-  shared, loadEnqueueHarness, commentVariants, withPostBumpDb, addClaimedCampaigns, takeContentIndex
+  shared, loadEnqueueHarness, seededRandom, commentVariants, withPostBumpDb, addClaimedCampaigns, takeContentIndex
 } = require('./fixtures/post-bump-content-rotation/harness.cjs')
 
 const args = process.argv.slice(2)
 const dataPath = args[0]
 const outPath = args.includes('--out') ? args[args.indexOf('--out') + 1] : null
+const seed = args.includes('--seed') ? Number(args[args.indexOf('--seed') + 1]) : 1
 if (!dataPath) {
   console.error('Thiếu đường dẫn file dữ liệu')
   process.exit(2)
@@ -168,7 +171,7 @@ function oldInitialCursors() {
 
 // ---------------------------------------------------------------- 2. cách mới qua hàm thật của bộ lập lịch
 async function newSeeds() {
-  const Harness = loadEnqueueHarness()
+  const Harness = loadEnqueueHarness(seededRandom(seed))
   const seeds = new Map()
   const bySource = new Map()
   let unknownSource = 0

@@ -17,7 +17,9 @@ Trong 99 chiến dịch up tin có nhiều câu, không chiến dịch nào ch�
 
 ## Sửa
 
-1. **Giao câu khi thêm lượt up** ([campaignScheduler.ts](../src/main/services/campaignScheduler.ts) `enqueuePostBumpAfterGroupPost`, [postBumpContent.ts](../src/shared/postBumpContent.ts) `planPostBumpContentIndexes`). Lượt thứ i của một bài được giao câu số (con trỏ + i). Con trỏ nằm ở `extraSettings.postBumpContentRotationIndex` của chiến dịch đăng nhóm và tăng N sau mỗi bài. Câu đã giao ghi vào `auto_campaign_input_data.content_rotation_indexes.fb_comment` của dòng data. RPC V350 vốn đã dùng chỉ số ghi sẵn trên dòng data (mod số câu của chiến dịch up tin) và không đụng con trỏ của chiến dịch, nên RPC không phải sửa. Không mod ở Desktop vì các chiến dịch up tin có thể có số câu khác nhau.
+1. **Giao câu khi thêm lượt up** ([campaignScheduler.ts](../src/main/services/campaignScheduler.ts) `enqueuePostBumpAfterGroupPost`, [postBumpContent.ts](../src/shared/postBumpContent.ts) `planPostBumpContentIndexes`). Lượt thứ i của một bài được giao câu số (bắt đầu + i). Câu bắt đầu chọn ngẫu nhiên cho mỗi bài trong [0, 10⁹), không lưu con trỏ. Câu đã giao ghi vào `auto_campaign_input_data.content_rotation_indexes.fb_comment` của dòng data.
+   - **Đổi 18/11/2026 (anh chốt):** bản đầu dùng con trỏ `extraSettings.postBumpContentRotationIndex`, tăng N sau mỗi bài. Con trỏ tài khoản (`postBumpRotationIndex`) cũng tăng N mỗi bài, nên khi số tài khoản = số câu thì mỗi tài khoản luôn đứng yên ở một câu (giả lập: 90/90 cấu hình). Bắt đầu ngẫu nhiên giữ nguyên điều cần nhất: trong một bài không trùng câu khi số lượt ≤ số câu (giả lập 605 cấu hình, 0 ca trùng). Tài khoản có thể dùng lại câu của bài trước; anh chốt chấp nhận ("miễn sao ko trùng trong 1 bài là được").
+   - Form và kiểu dữ liệu không còn `postBumpContentRotationIndex`; giá trị cũ còn trong extraSettings không ai đọc. RPC V350 vốn đã dùng chỉ số ghi sẵn trên dòng data (mod số câu của chiến dịch up tin) và không đụng con trỏ của chiến dịch, nên RPC không phải sửa. Không mod ở Desktop vì các chiến dịch up tin có thể có số câu khác nhau.
 2. **Quyền ghi cột** ([V531](../migrations/migration_v531_post_bump_content_rotation_desktop.sql)): chỉ `GRANT INSERT (content_rotation_indexes) ON auto_campaign_input_data TO aka_agent_desktop`. Desktop vẫn không có quyền UPDATE cột này. Preflight kiểm thân RPC đúng bản đang chạy (md5 `prosrc` = `df449a2b2eb195ddb3110edc4633ddfa`). GRANT không làm PostgREST nạp lại schema.
 3. **Chưa apply V531 thì không hỏng** ([campaignInputContentRotation.ts](../src/main/data/campaignInputContentRotation.ts)): bị từ chối 42501 "permission denied" thì Desktop chèn lại dòng data không kèm cột này (hành vi cũ), và không thử lại cột này trong 10 phút. Lỗi RLS (cũng là 42501, nhưng câu báo là "row-level security") không được chèn lại.
 4. **Đồng bộ "Nội dung up tin"** ([postBumpContentSync.ts](../src/main/services/postBumpContentSync.ts), gọi trong IPC `DB_UPDATE_CAMPAIGN`). Trước đây nội dung chỉ được chép sang chiến dịch up tin lúc tạo. Nay khi khách lưu chiến dịch đăng nhóm mà "Nội dung up tin" khác bản trong DB (bỏ qua khác biệt khoảng trắng ở hai đầu), nội dung mới được chép vào `content` và `extraSettings.commentContent` của các chiến dịch up tin đã tạo. Lịch sử chạy của cả hai bên ghi lại việc này.
@@ -25,14 +27,14 @@ Trong 99 chiến dịch up tin có nhiều câu, không chiến dịch nào ch�
    - Bỏ qua chiến dịch up tin đã xoá, khác loại, của nhân viên khác, hoặc đang dùng nội dung nâng cao.
    - Không đọc được bản cũ thì cũng không ghi gì.
 
-Form tạo/sửa chiến dịch và form Agent giữ `postBumpContentRotationIndex` khi lưu; khi nhân bản thì con trỏ về 0. Sửa nhanh giữ nguyên `extraSettings` cũ nên không cần sửa.
+Bắt đầu ngẫu nhiên không cần lưu gì ở chiến dịch đăng nhóm, nên form không phải giữ con trỏ câu.
 
 ## Giới hạn
 
 - Số lượt up mỗi bài lớn hơn số câu thì chắc chắn có câu lặp; khi đó các câu được dùng đều nhau.
 - Lượt up lỗi rồi chạy lại trên cùng dòng data thì lấy câu kế tiếp (hành vi V350), có thể trùng câu của lượt khác trên cùng bài.
 - Lượt up đã xếp hàng trước khi khách cập nhật app vẫn theo con trỏ của từng chiến dịch.
-- Mở form khi bộ lập lịch vừa tăng con trỏ thì lúc lưu con trỏ có thể bị ghi lùi (giống `postBumpRotationIndex`). Câu trong cùng một bài vẫn khác nhau.
+- Một tài khoản có thể comment lại câu nó vừa dùng ở bài trước (xác suất khoảng 1/số câu); anh chốt chấp nhận.
 - Chế độ "chọn chiến dịch có sẵn" cũng được giao câu, nhưng không đồng bộ nội dung (chiến dịch do khách tự quản lý).
 - Web (V530, đang làm ở nhánh khác: soạn chiến dịch Facebook/Email từ Web) nếu dựng lại `extraSettings` khi lưu thì phải giữ `postBumpContentRotationIndex`. Muốn đồng bộ nội dung từ Web thì gọi cùng quy tắc trong `planPostBumpContentSync`.
 
@@ -53,7 +55,7 @@ Gỡ: [rollback_v531](../migrations/rollback_v531_post_bump_content_rotation_des
 
 Bỏ phần giao câu ở bộ lập lịch thì 2 nhóm kiểm bộ lập lịch FAIL. Chưa chạy trên Electron thật với Facebook thật.
 
-## Phát lại dữ liệu thật (14/11/2026)
+## Phát lại dữ liệu thật (14/11/2026, bản con trỏ)
 
 Dữ liệu 21 ngày tới 11:20 VN 14/11, xuất chỉ đọc bằng [export.sql](../scripts/fixtures/post-bump-content-rotation/export.sql): 2.261 chiến dịch nguồn, 8.057 chiến dịch up tin, 24.790 lượt up, 15.475 kết quả comment. File xuất có nội dung khách nên để ngoài repo. Kết quả (chỉ số đếm): [replay-20261114.json](../migrations/snapshots/post-bump-content-rotation-v531/replay-20261114.json).
 
@@ -66,7 +68,7 @@ Bộ phát lại làm ba việc:
 - **Cách mới.** Mỗi bài chạy hàm thật `enqueuePostBumpAfterGroupPost`, giữ đúng tài khoản nhận từng lượt như production (24.790/24.790 lượt khớp tài khoản). Sau đó gọi RPC thật cho mọi lần lấy câu, kể cả lần chạy lại.
 - **Đồng bộ "Nội dung up tin".** Lưu không đổi nội dung thì không ghi chiến dịch up tin nào: 0/611 chiến dịch đăng nhóm chế độ tạo mới. Giả lập đổi nội dung ở 468 chiến dịch có chiến dịch up tin: 1.274 chiến dịch up tin được ghi, 446 bị bỏ qua vì đã xoá, 0 chiến dịch khác loại hay của nhân viên khác.
 
-Bài có ≥ 2 lượt đã lấy câu, có lượt trùng câu:
+Bài có ≥ 2 lượt đã lấy câu, có lượt trùng câu (số đo của bản con trỏ; bản bắt đầu ngẫu nhiên giữ đúng tính chất "trong một bài không trùng khi số lượt ≤ số câu", nên các ca còn trùng vẫn chỉ do số lượt nhiều hơn số câu; bộ phát lại nay nhận `--seed`):
 
 | | Số bài | Cách cũ | Cách mới |
 |---|---|---|---|
