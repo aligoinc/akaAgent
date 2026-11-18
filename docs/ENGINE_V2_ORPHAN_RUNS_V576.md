@@ -54,10 +54,25 @@ Chi tiết từng điều kiện:
 
 ## Kiểm
 
-- `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-orphan-runs-v576-smoke.cjs` (19 nhóm, PostgreSQL 17): dựng DB engine như
-  production (bootstrap + engine Facebook + V571), nạp đúng thân production 18/11 (close_stale, report_v1, hàm reset Desktop và hàm reset bên
-  trong); chạy trên bản cũ trước (thấy đủ ba lỗi), rồi apply / chạy lại bị chặn / gỡ trả đúng thân cũ / apply lại, quyền, B / D1 / A trên bản
-  mới, và một lượt đầu cuối với claim / mark / report / release thật (mất câu trả lời claim → mồ côi → về hàng đợi → lượt sau chạy lại).
+- `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-orphan-runs-v576-smoke.cjs` (24 nhóm, PostgreSQL 17, ~25 giây): dựng DB engine
+  như production (bootstrap + engine Facebook + V571), nạp đúng thân production 18/11 (close_stale, report_v1, hàm reset Desktop và hàm reset
+  bên trong); chạy trên bản cũ trước (thấy đủ ba lỗi), rồi apply / chạy lại bị chặn / gỡ trả đúng thân cũ / apply lại, quyền, B / D1 / A trên
+  bản mới, và một lượt đầu cuối với claim / mark / report / release thật (mất câu trả lời claim → mồ côi → về hàng đợi → lượt sau chạy lại).
+  Thêm tối 18/11 (anh hỏi "có cần giả lập gì nữa không"):
+  - **X1 trần 3 giây**: hàm reset chạy dưới trần của phiên Desktop (vượt trần thì đăng nhập lỗi sau 3 lần thử, `LOGIN_RECOVERY_MAX_ATTEMPTS`).
+    Cục bộ: 40 lượt mở (20 chốt theo kết quả, 20 về hàng đợi) 9 ms, bản cũ cùng dữ liệu 3 ms; 120 lượt 25 ms. Quy ra production: một lần chốt
+    theo kết quả ≈ một lần `report_v1` (trung bình 12–13 ms trên ~590 nghìn lần gọi từ 11/11), về hàng đợi ≈ 1 ms, hàm reset hiện tại trung bình
+    29–59 ms, nên 40 lượt ≈ 0,3–0,4 giây. Lúc 19:47 VN 18/11 chỉ 10 nhân viên có lượt mở, nhiều nhất 7 lượt một người.
+  - **X2 báo muộn sau D1**: máy thức dậy gửi lại lần báo cũ, lần chốt rỗng, heartbeat: data, lịch sử, chuỗi data lỗi, sổ lượt không đổi; ghi
+    dấu bước mới bị từ chối (`run_closed`) nên không gửi thêm được. Lần báo "đã dừng" (`__stopped`, khi lõi bị dừng) tới sau thì `report_v1`
+    điền `final_error_code` của lượt đã đóng nếu đang trống (`err_engine_cancelled`, cách `report_v1` đang làm với mọi lượt đã đóng, V576 không
+    đổi `report_v1`): chỉ sổ lượt, không thêm dòng lịch sử, data và chuỗi data lỗi giữ nguyên.
+  - **X3 chạy đồng thời**: job close_stale và hàm reset Desktop giành cùng lượt, mỗi bên lần lượt bị dừng 0,8 giây ở 4 chỗ (khi sửa lượt, chuỗi
+    data lỗi, data, khi ghi sự kiện) bằng trigger chỉ có trong bài kiểm, trên 4 kiểu lượt (đã gửi xong chờ D1; cùng chiến dịch hai lượt mở;
+    chưa ghi dấu; mồ côi): 40 ca, 26 ca dừng được giữa chừng. Không khoá chéo, không lỗi, không lượt nào còn mở, data đã giao không về hàng đợi,
+    chuỗi data lỗi giữ nguyên; hàm reset lâu nhất 0,81 giây (chờ job). Một ca data bị đánh "Dừng đột ngột…" như bản cũ: job đã khoá lượt
+    nhưng chưa khoá data (giữa hai câu lệnh, hoặc lượt nằm sau trong lô 10 lượt job khoá trước) đúng lúc hàm reset chạy cho cùng nhân viên.
+    Hàm reset bỏ qua lượt đang bị khoá rồi đánh dấu data như cũ. Khe này chỉ mở trong vài mili giây khi job đang đóng đúng lượt đó.
 - Bộ kịch bản Zalo trên DB có V576: `SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_TARGET_CHECK=1 SCENARIO_ORPHAN_RUNS=1 node
   scripts/engine-v2-scenarios/run.cjs --rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`: 708 lượt, 5.250 lần gửi, 0 vi phạm
   mới (giống hệt khi không có V576).
@@ -81,3 +96,8 @@ Chi tiết từng điều kiện:
   thể bị đánh "hoàn thành" như A. Chưa đo.
 - `heartbeat_v1` nối lại lease đã hết hạn còn `report_v1` / `mark_sending_v1` thì không: sau khi máy thức, lời gọi nào tới trước quyết định
   lượt chạy tiếp hay dừng. Chưa đổi.
+- Khe X3 (job đang đóng đúng lượt lúc hàm reset chạy): bịt hẳn bằng cách cho phần đánh dấu cũ của hàm reset bỏ qua data còn lượt engine mở
+  (`NOT EXISTS` lượt mở, cả hàm reset bên trong cho Zalo). Chưa làm vì khe chỉ vài mili giây, kết quả khi trúng giống bản cũ, và phải ghim
+  thêm thân hàm reset bên trong.
+- `report_v1` sửa `final_error_code` của lượt đã đóng khi đang trống (X2). Chỉ sổ lượt; sửa thì phải thay `report_v1` (hàm gọi nhiều nhất của
+  engine), không đáng.

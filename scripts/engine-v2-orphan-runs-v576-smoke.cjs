@@ -9,6 +9,9 @@
 //   A: hàm reset của Desktop (đăng nhập / đăng xuất / thoát) → cũ: data engine chưa ghi dấu bị đánh "hoàn thành – Dừng đột ngột…"; mới: về hàng
 //      đợi, đã ghi dấu → SYS02; data không có lượt engine giữ cách cũ; lượt của nhân viên khác không đụng.
 // Kèm: apply / chạy lại bị chặn / gỡ trả đúng thân cũ / apply lại; quyền gọi hai hàm mới. Không mạng, không dữ liệu khách.
+// Thêm (18/11 tối): X1 hàm reset Desktop với 40 / 120 lượt mở dưới trần 3 giây của phiên Desktop (so bản cũ); X2 báo muộn sau khi lượt đã
+// chốt theo D1 (gửi lại lần báo, lần chốt rỗng, ghi dấu, heartbeat, "__stopped"); X3 job close_stale và hàm reset chạy đồng thời, mỗi bên
+// bị dừng giữa chừng bằng trigger chỉ có trong bài kiểm (40 ca): không khoá chéo, không lỗi, data đã giao không về hàng đợi.
 // Chạy: CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-orphan-runs-v576-smoke.cjs
 'use strict'
 process.env.SCENARIO_FACEBOOK_MIGRATIONS = '1'
@@ -65,7 +68,8 @@ async function main() {
 
     // ---- Dữ liệu chung --------------------------------------------------------------------------------------------------------------
     await db.query(`INSERT INTO public.org_organization (id, name) OVERRIDING SYSTEM VALUE VALUES (761, 'V576 thử') ON CONFLICT DO NOTHING`)
-    await db.query(`INSERT INTO public.org_staff (id, organization_id, username, password) OVERRIDING SYSTEM VALUE VALUES (7601, 761, 's1', 'p'), (7602, 761, 's2', 'p')`)
+    await db.query(`INSERT INTO public.org_staff (id, organization_id, username, password) OVERRIDING SYSTEM VALUE VALUES (7601, 761, 's1', 'p'), (7602, 761, 's2', 'p'),
+      (7603, 761, 's3', 'p'), (7604, 761, 's4', 'p'), (7605, 761, 's5', 'p')`)
     let seq = 0
     const uuid = () => crypto.randomUUID()
     /** Một tài khoản + chiến dịch + data; trả id. platform: facebook | zalo. */
@@ -170,6 +174,36 @@ async function main() {
       return s
     }
     const resetDesktop = staff => asStaff(staff, `SELECT public.reset_desktop_running_statuses_no_retry($1, false, true) AS r`, [staff]).then(r => r.r)
+    // X1: nhân viên có n tài khoản đang chạy engine, mỗi tài khoản một lượt còn mở (nửa đã gửi xong chờ chốt: D1; nửa chưa ghi dấu), như lúc
+    // đăng xuất / thoát app giữa giờ chạy. Đo hàm reset Desktop dưới trần 3 giây của phiên Desktop (vượt trần thì đăng nhập lỗi sau 3 lần thử).
+    const manyOpenRuns = async (staff, n) => {
+      const out = []
+      for (let i = 0; i < n; i++) {
+        const w = await world({ staff, data: 1 })
+        w.token = await lease(w)
+        w.run = await run(w, w.token, w.data[0], 40)
+        w.sent = i % 2 === 0
+        if (w.sent) {
+          assert.equal((await mark(w, w.run, w.token)).ok, true)
+          assert.equal((await reportOk(w, w.run, w.token)).ok, true)
+        }
+        out.push(w)
+      }
+      return out
+    }
+    const timedReset = async staff => {
+      await db.query('BEGIN')
+      try {
+        await db.query(`SET LOCAL statement_timeout = '3s'`)
+        await db.query(`SELECT set_config('test.desktop_staff', $1, true)`, [String(staff)])
+        const t0 = process.hrtime.bigint()
+        const r = (await db.query(`SELECT public.reset_desktop_running_statuses_no_retry($1, false, true) AS r`, [staff])).rows[0].r
+        const ms = Number(process.hrtime.bigint() - t0) / 1e6
+        await db.query('COMMIT')
+        return { r, ms }
+      } catch (error) { await db.query('ROLLBACK'); throw error }
+    }
+    const timings = {}
 
     // ---- 1. Bản cũ: thấy đủ ba lỗi ------------------------------------------------------------------------------------------------------
     const before = await scenarios()
@@ -191,6 +225,11 @@ async function main() {
       assert.deepEqual(await dataRow(before.a.data[0]), { status: 'hoàn thành', note: LEGACY_NOTE })
       assert.equal((await dataRow(before.az.data[0])).status, 'hoàn thành')
       assert.equal((await runRow(before.a.unsent)).closed, false, 'lượt engine vẫn mở')
+    })
+    const x1Before = await manyOpenRuns(7603, 40)
+    await check('cũ X1: hàm reset Desktop với 40 lượt engine còn mở (đo để so với bản mới)', async () => {
+      timings.old40 = (await timedReset(7603)).ms
+      assert.equal((await dataRow(x1Before[1].data[0])).note, LEGACY_NOTE, 'bản cũ đốt data chưa gửi')
     })
     // Dọn lượt còn mở của phần bản cũ để phần bản mới chỉ thấy dữ liệu của nó.
     await db.query(`UPDATE public.auto_engine_target_runs SET completed_at = now(), close_reason = 'reported', final_target_status = 'hoàn thành'
@@ -282,6 +321,41 @@ async function main() {
       const l = await runRow(after.dl.run)
       assert.equal(l.closed, true); assert.equal(l.final_error_code, 'err_engine_interrupted_while_sending')
       assert.equal((await dataRow(after.dl.data[0])).status, 'đang chạy', 'bộ cũ giữ data')
+    })
+    await check('X2 báo muộn sau D1 (máy thức dậy sau khi lượt đã chốt): gửi lại lần báo cũ, lần chốt rỗng, bước mới, heartbeat → data, chuỗi data lỗi, sổ lượt không đổi; ghi dấu bị từ chối', async () => {
+      const id = after.d.run
+      const snap = async () => ({
+        data: await dataRow(after.d.data[0]),
+        run: await one(`SELECT completed_at, close_reason, final_target_status, final_error_code, final_response->>'next' AS next
+          FROM public.auto_engine_target_runs WHERE id = $1`, [id]),
+        streak: await one(`SELECT count_consecutive_bad_targets AS n, last_reason FROM public.auto_campaign_error_state WHERE campaign_id = $1`, [after.d.camp])
+      })
+      const details = () => val(`SELECT count(*)::int FROM public.auto_campaign_details WHERE input_data_id = $1`, [after.d.data[0]])
+      const report = (outcomes, final) => asStaff(after.d.staff, `SELECT public.aka_agent_engine_report_v1($1, $2, $3, $4, false) AS r`,
+        [id, after.d.token, JSON.stringify(outcomes), final]).then(r => r.r)
+      const s0 = await snap()
+      const d0 = await details()
+      const old = await report([{ resultKey: `v2:${id}:post`, actionCode: 'fb_post_group', stepKey: 'post', ok: true, phase: 'after_send',
+        statusCode: 'campaign_detail_success', data: { runId: '1' } }], true)
+      assert.equal(old.ok, true, JSON.stringify(old)); assert.equal(old.next, 'ownership_lost')
+      const empty = await report([], true)
+      assert.equal(empty.ok, true, JSON.stringify(empty)); assert.equal(empty.next, 'ownership_lost')
+      assert.equal(await details(), d0, 'gửi lại lần báo cũ không thêm dòng lịch sử')
+      const m = await mark(after.d, id, after.d.token, 'comment#0')
+      assert.deepEqual([m.ok, m.reason], [false, 'run_closed'], 'lượt đã chốt thì không ghi dấu được nên không gửi thêm bước nào')
+      const hb = await asStaff(after.d.staff, `SELECT public.aka_agent_engine_heartbeat_v1($1, $2) AS r`, [after.d.acc, after.d.token]).then(r => r.r)
+      assert.equal(hb.ok, false, 'lease đã nhả khi lượt chốt (close_stale), heartbeat không nối lại được')
+      assert.deepEqual(await snap(), s0)
+      // Lõi bị dừng (đăng xuất) thì báo "__stopped" kèm cờ chốt; nếu sau này lõi gửi lần chốt khi nhận ownership_lost (D2) thì cũng là lần này.
+      // report_v1 (bản production, V576 không đổi) điền final_error_code của lượt đã đóng nếu đang trống (coalesce): chỉ sổ lượt, data /
+      // chuỗi data lỗi / trạng thái lượt giữ nguyên. Ghi lại để báo, không coi là lỗi của V576.
+      const fresh = await report([{ resultKey: `v2:${id}:__stopped`, actionCode: 'fb_post_group', stepKey: '__stopped', ok: false, phase: 'before_send',
+        signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled' } }], true)
+      assert.equal(fresh.next, 'ownership_lost', JSON.stringify(fresh))
+      const s2 = await snap()
+      assert.deepEqual(s2.data, s0.data); assert.deepEqual(s2.streak, s0.streak)
+      assert.deepEqual([s2.run.completed_at, s2.run.close_reason, s2.run.final_target_status], [s0.run.completed_at, s0.run.close_reason, s0.run.final_target_status])
+      timings.lateStop = { finalErrorCode: `${s0.run.final_error_code}→${s2.run.final_error_code}`, details: (await details()) - d0 }
     })
     await check('A: reset Desktop → data engine chưa ghi dấu về hàng đợi (FB, Zalo), đã ghi dấu → SYS02, data không có lượt giữ cách cũ', async () => {
       await resetDesktop(7601)
@@ -378,6 +452,168 @@ async function main() {
       assert.equal((await runRow(id)).final_target_status, 'chờ xử lý')
       assert.deepEqual(await dataRow(w.data[0]), { status: 'chờ xử lý', note: SYS01 })
     })
+
+    // ---- 4. Trần 3 giây của phiên Desktop (X1) ------------------------------------------------------------------------------------
+    await db.query(`UPDATE public.auto_engine_target_runs SET completed_at = now(), close_reason = 'reported', final_target_status = 'hoàn thành'
+      WHERE completed_at IS NULL`)
+    const x1 = await manyOpenRuns(7604, 40)
+    await check('X1: hàm reset Desktop đóng 40 lượt engine còn mở (20 chốt theo kết quả, 20 về hàng đợi) dưới trần 3 giây', async () => {
+      const { ms } = await timedReset(7604)
+      timings.new40 = ms
+      assert.ok(ms < 3000, `${ms} ms`)
+      for (const w of x1) {
+        assert.equal((await runRow(w.run)).closed, true)
+        assert.deepEqual(await dataRow(w.data[0]), w.sent ? { status: 'hoàn thành', note: null } : { status: 'chờ xử lý', note: SYS01 })
+      }
+    })
+    const x1Big = await manyOpenRuns(7605, 120)
+    await check('X1: 120 lượt còn mở (gấp 3 số tài khoản nhiều nhất từng chạy cùng lúc) vẫn dưới trần 3 giây', async () => {
+      const { ms } = await timedReset(7605)
+      timings.new120 = ms
+      assert.ok(ms < 3000, `${ms} ms`)
+      assert.equal(await val(`SELECT count(*)::int FROM public.auto_engine_target_runs WHERE id = ANY($1) AND completed_at IS NULL`, [x1Big.map(w => w.run)]), 0)
+    })
+
+    // ---- 5. Chạy đồng thời (X3): job close_stale và hàm reset Desktop giành cùng lượt ---------------------------------------------
+    // Bẫy tạm dừng chỉ có trong bài kiểm: giao dịch đặt test.pause_at = '<bảng>:<thao tác>' thì lần đầu thao tác đó chạy sẽ ngủ, để giao
+    // dịch kia chen vào đúng lúc giao dịch này đang giữ khoá (lượt, chuỗi data lỗi, data). Mỗi ca dùng một nhân viên mới.
+    await db.query(`CREATE FUNCTION public.v576_test_pause() RETURNS trigger LANGUAGE plpgsql AS $f$
+      BEGIN
+        IF current_setting('test.pause_at', true) = TG_TABLE_NAME || ':' || TG_OP AND coalesce(current_setting('test.paused', true), '') = '' THEN
+          PERFORM set_config('test.paused', '1', true);
+          PERFORM pg_sleep(0.8);
+        END IF;
+        RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+      END $f$`)
+    for (const [table, ops] of [['auto_engine_target_runs', 'UPDATE'], ['auto_campaign_input_data', 'UPDATE'],
+      ['auto_campaign_error_state', 'INSERT OR UPDATE OR DELETE'], ['auto_engine_target_events', 'INSERT']]) {
+      await db.query(`CREATE TRIGGER v576_test_pause BEFORE ${ops} ON public.${table} FOR EACH ROW EXECUTE FUNCTION public.v576_test_pause()`)
+    }
+    const SHAPES = {
+      // 179149 rồi đăng xuất: lượt đã gửi xong, lease hết hạn > 10 phút (close_stale chốt D1), data vẫn "đang chạy".
+      d1: async staff => {
+        const w = await world({ staff, data: 1 })
+        const t = await lease(w)
+        const r = await run(w, t, w.data[0], 900)
+        assert.equal((await mark(w, r, t)).ok, true); assert.equal((await reportOk(w, r, t)).ok, true)
+        await db.query(`UPDATE public.auto_engine_leases SET expires_at = now() - interval '11 minutes' WHERE account_id = $1`, [w.acc])
+        return { runs: [r], data: [{ id: w.data[0], want: 'final' }] }
+      },
+      // Cùng chiến dịch hai lượt mở: lượt cũ của lease đã bị thay (close_stale chốt D1) và lượt hiện tại lease còn hạn (chỉ hàm reset đóng);
+      // chuỗi data lỗi đang 2, hai giao dịch cùng khoá dòng chuỗi data lỗi của chiến dịch.
+      twin: async staff => {
+        const w = await world({ staff, data: 2 })
+        const t1 = await lease(w)
+        const old = await run(w, t1, w.data[0], 1200)
+        assert.equal((await mark(w, old, t1)).ok, true); assert.equal((await reportOk(w, old, t1)).ok, true)
+        const t2 = await lease(w)
+        const cur = await run(w, t2, w.data[1], 60)
+        assert.equal((await mark(w, cur, t2)).ok, true); assert.equal((await reportOk(w, cur, t2)).ok, true)
+        await db.query(`INSERT INTO public.auto_campaign_error_state (campaign_id, count_consecutive_bad_targets, last_reason) VALUES ($1, 2, 'trước')`, [w.camp])
+        return { runs: [old, cur], data: [{ id: w.data[0], want: 'final' }, { id: w.data[1], want: 'final' }], camp: w.camp }
+      },
+      // Lượt chưa ghi dấu, lease hết hạn > 10 phút (close_stale trả về hàng đợi).
+      unsent: async staff => {
+        const w = await world({ staff, data: 1 })
+        const t = await lease(w, { alive: false })
+        const r = await run(w, t, w.data[0], 900)
+        return { runs: [r], data: [{ id: w.data[0], want: 'requeue' }] }
+      },
+      // 175931 rồi đăng xuất: lượt mồ côi, cùng lease đã chốt lượt sau, lease còn hạn (close_stale trả về hàng đợi theo B).
+      orphan: async staff => {
+        const w = await world({ staff, data: 2 })
+        const t = await lease(w)
+        const o = await run(w, t, w.data[0], 300)
+        await run(w, t, w.data[1], 200, { closed: true })
+        return { runs: [o], data: [{ id: w.data[0], want: 'requeue' }] }
+      }
+    }
+    const POINTS = ['none', 'auto_engine_target_runs:UPDATE', 'auto_campaign_error_state:UPDATE', 'auto_campaign_input_data:UPDATE',
+      'auto_engine_target_events:INSERT']
+    const x3 = { cases: 0, paused: 0, got: {}, problems: [], maxResetMs: 0 }
+    const ca = await connect()
+    const cb = await connect()
+    try {
+      const pidA = (await ca.query('SELECT pg_backend_pid() AS p')).rows[0].p
+      const tx = async (conn, kind, staff, pauseAt) => {
+        const t0 = Date.now()
+        try {
+          await conn.query('BEGIN')
+          if (pauseAt !== 'none') await conn.query(`SELECT set_config('test.pause_at', $1, true)`, [pauseAt])
+          if (kind === 'stale') {
+            await conn.query(`SELECT public.aka_agent_engine_close_stale_v1(200)`)
+          } else {
+            await conn.query(`SET LOCAL statement_timeout = '3s'`)
+            await conn.query(`SELECT set_config('test.desktop_staff', $1, true)`, [String(staff)])
+            await conn.query(`SELECT public.reset_desktop_running_statuses_no_retry($1, false, true)`, [staff])
+          }
+          await conn.query('COMMIT')
+          return { kind, ok: true, ms: Date.now() - t0 }
+        } catch (error) {
+          await conn.query('ROLLBACK').catch(() => {})
+          return { kind, ok: false, code: error.code, message: error.message, ms: Date.now() - t0 }
+        }
+      }
+      let staff = 7700
+      await db.query(`UPDATE public.auto_engine_target_runs SET completed_at = now(), close_reason = 'reported', final_target_status = 'hoàn thành'
+        WHERE completed_at IS NULL`)
+      for (const shape of Object.keys(SHAPES)) {
+        for (const pausedKind of ['stale', 'reset']) {
+          for (const at of POINTS) {
+            staff++
+            await db.query(`INSERT INTO public.org_staff (id, organization_id, username, password) OVERRIDING SYSTEM VALUE VALUES ($1, 761, $2, 'p')`,
+              [staff, `x3_${staff}`])
+            const s = await SHAPES[shape](staff)
+            const label = `${shape}/${pausedKind === 'stale' ? 'job dừng' : 'reset dừng'}@${at.replace(/^auto_(engine_|campaign_)?/, '')}`
+            let settled = false
+            const first = tx(ca, pausedKind, staff, at).then(r => { settled = true; return r })
+            let slept = false
+            for (let i = 0; i < 150 && !settled && at !== 'none'; i++) {
+              if (await val(`SELECT wait_event FROM pg_stat_activity WHERE pid = $1`, [pidA]) === 'PgSleep') { slept = true; break }
+              await new Promise(resolve => setTimeout(resolve, 20))
+            }
+            if (at === 'none') await first
+            const second = tx(cb, pausedKind === 'stale' ? 'reset' : 'stale', staff, 'none')
+            const results = await Promise.all([first, second])
+            x3.cases++
+            if (slept) x3.paused++
+            for (const r of results) {
+              if (!r.ok) x3.problems.push(`${label}: ${r.kind} lỗi ${r.code} ${r.message}`)
+              if (r.kind === 'reset') x3.maxResetMs = Math.max(x3.maxResetMs, r.ms)
+            }
+            const open = await val(`SELECT count(*)::int FROM public.auto_engine_target_runs WHERE id = ANY($1) AND completed_at IS NULL`, [s.runs])
+            if (open) x3.problems.push(`${label}: còn ${open} lượt mở`)
+            for (const d of s.data) {
+              const row = await dataRow(d.id)
+              const got = row.status === 'hoàn thành' && row.note === null ? 'final'
+                : row.status === 'chờ xử lý' && row.note === SYS01 ? 'requeue'
+                  : row.status === 'hoàn thành' && row.note === SYS02 ? 'sys02'
+                    : row.status === 'hoàn thành' && row.note === LEGACY_NOTE ? 'legacy' : `${row.status}|${row.note}`
+              const key = `${d.want}→${got}`
+              x3.got[key] = x3.got[key] || []
+              x3.got[key].push(label)
+              // Data đã giao không bao giờ được về hàng đợi hay còn "đang chạy"; data chưa gửi không bao giờ thành SYS02.
+              if (!(d.want === got || got === 'legacy' || (d.want === 'final' && got === 'sys02'))) x3.problems.push(`${label}: data ${d.want} thành ${got}`)
+            }
+            if (s.camp) {
+              const es = await one(`SELECT count_consecutive_bad_targets AS n FROM public.auto_campaign_error_state WHERE campaign_id = $1`, [s.camp])
+              if (es?.n !== 2) x3.problems.push(`${label}: chuỗi data lỗi ${es?.n}`)
+            }
+          }
+        }
+      }
+    } finally {
+      await ca.end().catch(() => {})
+      await cb.end().catch(() => {})
+      await db.query(`DROP FUNCTION public.v576_test_pause() CASCADE`).catch(() => {})
+    }
+    await check(`X3 chạy đồng thời (${x3.cases} ca, ${x3.paused} ca có dừng giữa chừng): không khoá chéo, không lỗi, không lượt nào còn mở, data đã giao không về hàng đợi, chuỗi data lỗi giữ nguyên`, async () => {
+      assert.deepEqual(x3.problems, [])
+      assert.ok(x3.paused >= 20, `chỉ ${x3.paused} ca dừng được giữa chừng`)
+    })
+    console.log("X1 / X2:", JSON.stringify(Object.fromEntries(Object.entries(timings).map(([k, v]) => [k, typeof v === "number" ? Math.round(v) : v]))))
+    console.log(`X3 hàm reset lâu nhất ${x3.maxResetMs} ms; kết quả data (mong đợi→thực tế):`)
+    for (const [k, labels] of Object.entries(x3.got)) console.log(`  ${k}: ${labels.length}${k.endsWith('legacy') || k.endsWith('sys02') ? ' — ' + labels.join(', ') : ''}`)
   } finally {
     await db.end().catch(() => {})
     stop()
