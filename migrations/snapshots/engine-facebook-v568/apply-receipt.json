@@ -1,0 +1,50 @@
+{
+  "migration": "migrations/migration_v568_engine_facebook_comment_other_posts.sql",
+  "rollback": "migrations/rollback_v568_engine_facebook_comment_other_posts.sql",
+  "ledger": {
+    "version": "20261118051731",
+    "name": "migration_v568_engine_facebook_comment_other_posts",
+    "statementsMd5": "b2a3b61ca539e9668ba9524adaa7ee4b",
+    "createdBy": null
+  },
+  "fileMd5": "b2a3b61ca539e9668ba9524adaa7ee4b",
+  "appliedAtUtc": "2026-11-18T05:17:31Z",
+  "appliedAtVn": "2026-11-18 12:17:31",
+  "approvedBy": "anh (\"sửa luôn đi\", rồi \"apply rồi create pr\", 18/11)",
+  "numbering": "Đổi số trước khi apply: V565, V566, V567 đã là migration_v565_aka_assistant / v566_aka_assistant_edge_guard / v567_aka_assistant_data của phiên khác (11:48–11:53 VN 18/11); nhánh claude/engine-target-check còn giữ một V565 cũ. Kiểm sổ ngay trước apply: tới V567, không nhánh nào giữ V568.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Chỉ dữ liệu (UPDATE auto_blocks 2851 + auto_engine_block_steps 6), không DDL, không nạp lại schema PostgREST.",
+  "preApply": {
+    "readAtUtc": "2026-11-18T05:15:42Z",
+    "ledgerMax": "migration_v567_aka_assistant_data",
+    "v568InLedger": 0,
+    "block2851Md5": "06889369d1c9f77ef62c846fa8e27e82",
+    "block34Md5": "30126bae87ff755164c80dbffda9d263",
+    "step6": { "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedCodeMd5": "06889369d1c9f77ef62c846fa8e27e82" },
+    "openGroupPostEngineRuns": 8
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T05:17:42Z",
+    "block2851Md5": "d418b5159f1f5bf741877f3f6f650bf6",
+    "block2851UpdatedAtUtc": "2026-11-18T05:17:33.884677Z",
+    "step6": { "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedCodeMd5": "d418b5159f1f5bf741877f3f6f650bf6" },
+    "block34Md5Unchanged": "30126bae87ff755164c80dbffda9d263",
+    "otherEngineBlocksUnchanged": { "2848": "eec629d6f10f6d6dcdf0ccd14a0cd1a9", "2873": "cc85473ba26554663972e4422fc62a41",
+      "2874": "f7c07500e06511bee20f1c409c185211", "2875": "645d1a88189ac8dc6989f9058756eabe", "2909": "499445e4406d2095c951b5c1c9aef03d" },
+    "rest30s": [
+      { "fromUtc": "05:16:00", "requests": 20962, "p50Ms": 46, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "05:16:30", "requests": 20813, "p50Ms": 48, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "05:17:00", "requests": 21713, "p50Ms": 47, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "05:17:30", "requests": 8000, "p50Ms": 47, "errors5xx": 0, "errors503": 0, "note": "cửa sổ đọc tới 05:19 nhưng log mới tới ~05:17:42" }
+    ]
+  },
+  "tests": {
+    "v568Smoke": "CHROMIUM_PATH=<Chrome> node scripts/engine-v2-facebook/v568-smoke.cjs: 14/14",
+    "commentOptionsSim": "CHROMIUM_PATH=<Chrome> node scripts/engine-v2-facebook/comment-options-sim.cjs: 81 tổ hợp, V563 (bản trước) 12 tổ hợp comment 2 lần vào một bài, V568 0",
+    "regression": "v563-smoke 16/16, v564-smoke 12/12, desktop-fb-smoke 28/28, core-smoke 11/11"
+  },
+  "notInScope": [
+    "Bộ cũ (block 34) không đổi: máy dưới 9.9.0 vẫn comment theo ô thứ N như cũ.",
+    "Desktop đọc code block mỗi lượt; danh mục bước (md5 đã duyệt) ở lần nạp danh mục kế tiếp, trong lúc chưa nạp lại bước comment chạy ở mức cam kết 1 (stepCatalog.ts).",
+    "Chưa xác minh trên Facebook thật việc hộp thoại bài trước có còn mở khi bấm ô kế (giả lập: nếu còn, cả bản cũ lẫn V568 gõ vào ô nhập hộp thoại đầu tiên)."
+  ]
+}
