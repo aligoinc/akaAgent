@@ -236,6 +236,11 @@ export interface CampaignSchedulerOptions {
   onRuntimeOwnershipLost?: () => void
   /** Local startup work must finish for this account before a campaign can claim it. */
   isAccountStartupPending?: (account: AutoAccount) => boolean
+  /**
+   * Desktop: false khi máy vừa ngủ dậy mà chưa có người dùng (systemSleepGuard). Không mở lượt / chiến dịch mới; lượt engine v2
+   * đang chạy dừng sau data hiện tại và nhả lease. Không truyền (App Server) = luôn nhận việc.
+   */
+  startWorkGate?: () => boolean
 }
 
 interface RuntimeErrorResult {
@@ -957,6 +962,7 @@ export class CampaignScheduler {
   private logSink?: CampaignSchedulerLogSink
   private onRuntimeOwnershipLost?: () => void
   private isAccountStartupPending?: (account: AutoAccount) => boolean
+  private readonly startWorkGate?: () => boolean
   private runtimeOwnershipLossReported = false
   private campaignRunBoundaries = new Map<number, CampaignRunBoundaryContext>()
   private campaignContentPreparationRuns = new Set<number>()
@@ -1001,12 +1007,14 @@ export class CampaignScheduler {
     this.logSink = options.logSink
     this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
     this.isAccountStartupPending = options.isAccountStartupPending
+    this.startWorkGate = options.startWorkGate
     if (this.runtimeTarget === 'desktop') this.engineRunner = new DesktopEngineRunner({
       zaloRuntime: () => this.zaloRuntime,
       staffId: () => getCurrentUser()?.staffId ?? null,
       engineEnabled: () => getCurrentUser()?.campaignEngineV2 === true,
       zaloRuntimeBlocked: () => this.zaloRuntimeBlockedForRestart || this.zaloRuntimeStopRequested,
-      acceptingWork: () => this.running && !this.zaloRuntimeStopRequested,
+      // Máy vừa ngủ dậy chưa có người dùng: dừng sau data hiện tại, kể cả trong lúc nghỉ giữa 2 data (lõi kiểm mỗi 500 ms).
+      acceptingWork: () => this.running && !this.zaloRuntimeStopRequested && this.startWorkGate?.() !== false,
       logProgress: (campaign, text) => this.logCampaignProgress(campaign, text, { engine: true }),
       broadcastCampaign: async campaignId => {
         const current = await this.supabase.getCampaign(campaignId)
@@ -1828,6 +1836,8 @@ export class CampaignScheduler {
 
   private async tick(): Promise<void> {
     if (!this.running) return
+    // Máy vừa ngủ dậy (Mac thức tạm vài giây) mà chưa có người dùng: không mở lượt mới; thôi giữ thì bộ giữ gọi wakeNow.
+    if (this.startWorkGate?.() === false) return
     if (this.dispatching) {
       this.wakeRequested = true
       return
@@ -1859,7 +1869,7 @@ export class CampaignScheduler {
       if (!this.running) return
 
       for (const account of accounts) {
-        if (!this.running) break
+        if (!this.running || this.startWorkGate?.() === false) break
 
         // This call normally only advances the cached monotonic anchor. It
         // refreshes DB time/maintenance if a long tick crosses cache expiry or
@@ -2052,6 +2062,7 @@ export class CampaignScheduler {
   private async runFacebookRandomQueue(account: AutoAccount): Promise<void> {
     let completedCampaignId: number | undefined
     while (this.running) {
+      if (this.startWorkGate?.() === false) return
       const currentAccount = await this.supabase.getAccount(account.id)
       if (!currentAccount || !currentAccount.isActive || currentAccount.status !== 'chờ xử lý'
         || currentAccount.loginStatus !== 'đã đăng nhập' || accountOperationRegistry.has(account.id)) return
@@ -2092,7 +2103,7 @@ export class CampaignScheduler {
       }
       let progressed = false
       for (const planned of plan.turns) {
-        if (!this.running) return
+        if (!this.running || this.startWorkGate?.() === false) return
         const liveAccount = await this.supabase.getAccount(account.id)
         if (!liveAccount || liveAccount.status !== 'chờ xử lý' || !liveAccount.isActive || liveAccount.loginStatus !== 'đã đăng nhập') return
         await this.browseAfterCampaign(liveAccount, completedCampaignId)
@@ -2200,6 +2211,8 @@ export class CampaignScheduler {
     }
     let completedCampaignId: number | undefined
     for (const campaign of campaigns) {
+      // Máy vừa ngủ dậy chưa có người dùng: không bắt đầu chiến dịch tiếp theo trong hàng đợi (lượt sau của tick chạy lại).
+      if (this.startWorkGate?.() === false) break
       const liveAccount = account.flatformType === 'facebook' ? await this.supabase.getAccount(account.id) : null
       if (liveAccount?.facebookRandomRunEnabled) {
         await this.runFacebookRandomQueue(account)

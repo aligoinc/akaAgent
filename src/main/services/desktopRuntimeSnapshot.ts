@@ -21,9 +21,17 @@ export interface DesktopRuntimeSnapshotSource {
   isBrowserTabOpen(accountId: number): boolean
 }
 
+/** Bộ giữ sau khi máy ngủ đang giữ việc mới (systemSleepGuard); Web bỏ qua khoá lạ nên không đổi hợp đồng cũ. */
+export interface DesktopSleepHoldPayload {
+  since: string
+  reason: string
+}
+
 export interface DesktopRuntimeSnapshotPayload {
   v: 1
   scheduler: { state: DesktopSchedulerState; since: string }
+  /** Chỉ có khi đang giữ, để quét presence biết máy đang đứng chờ người dùng sau khi ngủ. */
+  sleepHold?: DesktopSleepHoldPayload
   accounts: Array<{
     id: number
     ready: boolean
@@ -66,6 +74,7 @@ export function desktopRuntimeAccounts(accounts: readonly AutoAccount[]): AutoAc
 
 export class DesktopRuntimeSnapshot {
   private source: (() => DesktopRuntimeSnapshotSource | null) | null = null
+  private sleepHoldSource: (() => DesktopSleepHoldPayload | null) | null = null
   private maintenanceWaitingSince: string | null = null
   private lastState: DesktopSchedulerState | null = null
   private lastStateSince: string | null = null
@@ -74,6 +83,11 @@ export class DesktopRuntimeSnapshot {
 
   attach(source: () => DesktopRuntimeSnapshotSource | null): void {
     this.source = source
+  }
+
+  /** Trạng thái giữ việc mới sau khi máy ngủ (systemSleepGuard.snapshot); lỗi thì coi như không giữ. */
+  attachSleepHold(source: () => DesktopSleepHoldPayload | null): void {
+    this.sleepHoldSource = source
   }
 
   /** Cổng bảo trì ngày mới đang chờ lượt chạy hôm trước settle. */
@@ -103,9 +117,12 @@ export class DesktopRuntimeSnapshot {
         : this.now().toISOString()
     }
     const accounts = source.running ? desktopRuntimeAccounts(source.accounts) : []
+    let sleepHold: DesktopSleepHoldPayload | null = null
+    try { sleepHold = this.sleepHoldSource?.() ?? null } catch { sleepHold = null }
     return {
       v: 1,
       scheduler: { state, since: this.lastStateSince || this.now().toISOString() },
+      ...(sleepHold ? { sleepHold: { since: sleepHold.since, reason: sleepHold.reason } } : {}),
       accounts: accounts.map(account => {
         const reason = desktopAccountReadiness(account, id => source!.isBrowserTabOpen(id))
         return {

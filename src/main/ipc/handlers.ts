@@ -1,5 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { desktopRuntimeSnapshot } from '../services/desktopRuntimeSnapshot'
+import {
+  SLEEP_GUARD_BEAT_MS, SLEEP_GUARD_SETTING_REFRESH_MS, SystemSleepGuard, parseSleepGuardSwitch, sleepGuardPlatform
+} from '../services/systemSleepGuard'
+import { readDesktopSleepGuardSetting } from '../data/repositories/systemSettingsRepository'
 import { registerZaloPhoneCheckHandlers } from './handlers/zaloPhoneCheckHandlers'
 import { registerFacebookRandomRunHandlers } from './handlers/facebookRandomRunHandlers'
 import { registerWebEnrichmentHandlers } from './handlers/webEnrichmentHandlers'
@@ -352,8 +356,31 @@ export function registerIpcHandlers(
       return `${user.staffId}:desktop-owned`
     }
   })
+  // Máy ngủ vẫn thức tạm vài giây (Mac): không nhận việc mới cho tới khi có người dùng (docs/DESKTOP_SLEEP_GUARD.md).
+  let wakeSchedulerAfterSleep: () => void = () => {}
+  const sleepGuard = new SystemSleepGuard({
+    platform: sleepGuardPlatform(process.platform),
+    idleSeconds: () => {
+      const seconds = Number(powerMonitor.getSystemIdleTime())
+      return Number.isFinite(seconds) && seconds >= 0 ? seconds : null
+    },
+    onHold: reason => console.info('[SleepGuard] hold new work after system sleep', { reason }),
+    onRelease: reason => {
+      console.info('[SleepGuard] release', { reason })
+      wakeSchedulerAfterSleep()
+    }
+  })
+  setInterval(() => sleepGuard.beat(), SLEEP_GUARD_BEAT_MS)
+  // Công tắc theo hệ điều hành; lỗi đọc thì giữ giá trị đang dùng (mặc định: Mac bật, Windows tắt).
+  const refreshSleepGuardSwitch = async (): Promise<void> => {
+    if (!getCurrentUser()) return
+    const raw = await readDesktopSleepGuardSetting()
+    if (raw !== undefined) sleepGuard.setSwitch(parseSleepGuardSwitch(raw))
+  }
+  setInterval(() => { void refreshSleepGuardSwitch() }, SLEEP_GUARD_SETTING_REFRESH_MS)
   desktopRuntimeSnapshot.reset()
   desktopRuntimeSnapshot.attach(() => campaignScheduler.getRuntimeSnapshotSource())
+  desktopRuntimeSnapshot.attachSleepHold(() => sleepGuard.snapshot())
   const campaignScheduler = new CampaignScheduler(
     supabase,
     webviewRegistry,
@@ -362,8 +389,11 @@ export function registerIpcHandlers(
     zaloRuntime,
     emailRuntime,
     { runtimeTarget: 'desktop', maintenanceCoordinator: dailyMaintenance,
-      isAccountStartupPending: account => facebookLogin.isStartupPending(account) }
+      isAccountStartupPending: account => facebookLogin.isStartupPending(account),
+      startWorkGate: () => sleepGuard.canStartWork() }
   )
+  // Thôi giữ có thể xảy ra ngay trong lúc tick hỏi bộ giữ: đánh thức ở vòng sau, không gọi lồng tick.
+  wakeSchedulerAfterSleep = () => setImmediate(() => campaignScheduler.wakeNow('sleep-guard-released'))
   const campaignDiagnostics = registerCampaignDiagnosticsHandlers(mainWindow, campaignScheduler)
   const campaignFormAi = registerCampaignFormAiHandlers(mainWindow)
   const automationProcessor = new AutomationProcessor({
@@ -1233,10 +1263,17 @@ export function registerIpcHandlers(
 
   powerMonitor.on('suspend', () => {
     supabase.invalidateRuntimeClock()
+    sleepGuard.noteSuspend()
   })
+
+  // Có người dùng thật (mở khoá màn hình, phiên người dùng hoạt động lại): thôi giữ việc mới sau khi máy ngủ.
+  powerMonitor.on('unlock-screen', () => sleepGuard.noteUserActive())
+  powerMonitor.on('user-did-become-active', () => sleepGuard.noteUserActive())
 
   powerMonitor.on('resume', () => {
     supabase.invalidateRuntimeClock()
+    // Cả lần thức tạm: chỉ kiểm nhịp; bộ lập lịch bên dưới tự đứng yên khi còn đang giữ.
+    sleepGuard.noteResume()
     if (!getCurrentUser()) return
     void (async () => {
       try {
@@ -1411,6 +1448,7 @@ export function registerIpcHandlers(
         startZaloRemoteClients(user, username, password)
         syncZaloBackgroundForCurrentUser('login')
         facebookLogin.startSession()
+        void refreshSleepGuardSwitch()
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
         await automationProcessor.start()
         crmWeb.startSession()
