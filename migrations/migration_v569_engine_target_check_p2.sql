@@ -1,68 +1,73 @@
--- V565 phần 2: kiểm SĐT trên toàn hệ thống trước khi gọi Zalo (engine v2, "Nhắn tin theo SĐT"). SINH TỪ scripts/build-v565-sql.cjs, không sửa tay.
--- Cần phần 1. Tạo private.auto_engine_phone_results (+ _state), 6 hàm private, thiết lập engine.target_check (mode off: chưa bỏ qua gì), job
--- pg_cron aka-agent-engine-phone-results (mỗi phút, nạp lịch sử 20 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và aka_agent_engine_report_v1
--- (bản V558), giữ chữ ký / chủ sở hữu / quyền. Khi mode off, claim và report trả đúng như trước (chỉ thêm một lần đọc thiết lập mỗi lần nhận
--- data "Nhắn tin theo SĐT").
--- Nguồn = pg_get_functiondef production 18/11/2026: claim 03d72830d664682c1f51dc3dd9944eda, report bb8bc00f9d2a8c51a00dcb525fa2e4ab. Bản mới: claim 4aa166d9f4505c4b2d2023c635029ab9, report 9b088d26bf2c92a93e6d9f082f5f941b.
--- DDL làm PostgREST nạp lại schema: apply ngoài giờ cao điểm. Lần nạp đầu đọc cả auto_campaign_details (~15 triệu dòng) trong vài chục
--- phút (20 giây mỗi phút). Gỡ: rollback_v565_engine_target_check_p2.sql rồi rollback_v565_engine_target_check_p1.sql.
+-- V569 phần 2: kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (engine v2). SINH TỪ scripts/build-v569-sql.cjs, không sửa tay.
+-- Cần phần 1. Tạo private.auto_engine_receiver_results (+ _state), 7 hàm private, thiết lập engine.target_check (mode off: chưa bỏ
+-- qua gì), job pg_cron aka-agent-engine-receiver-results (mỗi phút, nạp lịch sử 20 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
+-- aka_agent_engine_report_v1 (bản V558), giữ chữ ký / chủ sở hữu / quyền. Khi mode off, claim và report trả đúng như trước (chỉ thêm một lần
+-- đọc thiết lập mỗi lần nhận data của chiến dịch nhắn người lạ).
+-- Nguồn = pg_get_functiondef production 18/11/2026: claim 03d72830d664682c1f51dc3dd9944eda, report bb8bc00f9d2a8c51a00dcb525fa2e4ab. Bản mới: claim 62f44b6736a72569a541a40876676395, report e62c020cac3df969b5c3e8a5d03f4e35.
+-- DDL làm PostgREST nạp lại schema: apply ngoài giờ cao điểm. Lần nạp đầu đọc cả auto_campaign_details (~15 triệu dòng), xong trong khoảng
+-- một đêm (20 giây / phút, ban ngày 3 giây / phút). Gỡ: rollback_v569_engine_target_check_p2.sql rồi rollback_v569_engine_target_check_p1.sql.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
-DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'V565 p2';
+DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'V569 p2';
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v565_engine_target_check_p2') THEN
-      RAISE EXCEPTION 'V565 p2 đã có trong sổ migration, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v569_engine_target_check_p2') THEN
+      RAISE EXCEPTION 'V569 p2 đã có trong sổ migration, không chạy lại';
     END IF;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = 'public.auto_outcome_policies'::regclass
                   AND attname = 'target_check_enabled' AND NOT attisdropped) THEN
-    RAISE EXCEPTION 'V565 p2: cần p1 (migration_v565_engine_target_check_p1.sql) trước';
+    RAISE EXCEPTION 'V569 p2: cần p1 (migration_v569_engine_target_check_p1.sql) trước';
   END IF;
-  IF to_regclass('private.auto_engine_phone_results') IS NOT NULL OR to_regprocedure('private.aka_agent_engine_phone_results_ingest(integer,integer)') IS NOT NULL THEN
-    RAISE EXCEPTION 'V565 p2: bảng / hàm kiểm SĐT đã có';
+  IF to_regclass('private.auto_engine_receiver_results') IS NOT NULL OR to_regprocedure('private.aka_agent_engine_receiver_results_ingest(integer,integer)') IS NOT NULL THEN
+    RAISE EXCEPTION 'V569 p2: bảng / hàm kiểm người nhận đã có';
   END IF;
-  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'V565 p2: thiếu public.normalize_phone(text)'; END IF;
-  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'engine.target_check') THEN RAISE EXCEPTION 'V565 p2: thiết lập engine.target_check đã có'; END IF;
+  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'V569 p2: thiếu public.normalize_phone(text)'; END IF;
+  IF (SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = to_regclass('public.zalo_users')
+       AND attname IN ('account_id', 'zalo_uid', 'global_id', 'is_fr') AND NOT attisdropped) <> 4 THEN
+    RAISE EXCEPTION 'V569 p2: thiếu public.zalo_users(account_id, zalo_uid, global_id, is_fr)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'engine.target_check') THEN RAISE EXCEPTION 'V569 p2: thiết lập engine.target_check đã có'; END IF;
   IF to_regclass('cron.job') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'aka-agent-engine-phone-results') THEN RAISE EXCEPTION 'V565 p2: job aka-agent-engine-phone-results đã có'; END IF;
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'aka-agent-engine-receiver-results') THEN RAISE EXCEPTION 'V569 p2: job aka-agent-engine-receiver-results đã có'; END IF;
   END IF;
   v_oid := to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)');
   IF v_oid IS NULL THEN RAISE EXCEPTION '%: không có public.aka_agent_engine_claim_target_v1(jsonb)', v_label; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
-  IF v_md5 = '4aa166d9f4505c4b2d2023c635029ab9' THEN RAISE EXCEPTION 'V565 đã chạy (claim)'; END IF;
-  IF v_md5 IS DISTINCT FROM '03d72830d664682c1f51dc3dd9944eda' THEN RAISE EXCEPTION 'V565: định nghĩa claim khác bản production 18/11 (V564), dừng để đối chiếu bản live (claim: %)', v_md5; END IF;
+  IF v_md5 = '62f44b6736a72569a541a40876676395' THEN RAISE EXCEPTION 'V569 đã chạy (claim)'; END IF;
+  IF v_md5 IS DISTINCT FROM '03d72830d664682c1f51dc3dd9944eda' THEN RAISE EXCEPTION 'V569: định nghĩa claim khác bản production 18/11 (V564), dừng để đối chiếu bản live (claim: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v565_acl_claim', v_acl, true);
+  PERFORM set_config('aka.v569_acl_claim', v_acl, true);
   v_oid := to_regprocedure('public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)');
   IF v_oid IS NULL THEN RAISE EXCEPTION '%: không có public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)', v_label; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
-  IF v_md5 = '9b088d26bf2c92a93e6d9f082f5f941b' THEN RAISE EXCEPTION 'V565 đã chạy (report)'; END IF;
-  IF v_md5 IS DISTINCT FROM 'bb8bc00f9d2a8c51a00dcb525fa2e4ab' THEN RAISE EXCEPTION 'V565: định nghĩa report khác bản production 18/11 (V558), dừng để đối chiếu bản live (report: %)', v_md5; END IF;
+  IF v_md5 = 'e62c020cac3df969b5c3e8a5d03f4e35' THEN RAISE EXCEPTION 'V569 đã chạy (report)'; END IF;
+  IF v_md5 IS DISTINCT FROM 'bb8bc00f9d2a8c51a00dcb525fa2e4ab' THEN RAISE EXCEPTION 'V569: định nghĩa report khác bản production 18/11 (V558), dừng để đối chiếu bản live (report: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v565_acl_report', v_acl, true);
+  PERFORM set_config('aka.v569_acl_report', v_acl, true);
 END $pre$;
 
--- Bảng tóm tắt: mỗi SĐT (md5 của SĐT đã chuẩn hoá) × thao tác một dòng: lần hỏng gần nhất (mã của dòng chính sách bật / theo dõi
--- target_check) và lần thành công gần nhất của cùng thao tác. Chỉ SĐT từng hỏng mới có dòng.
-CREATE TABLE private.auto_engine_phone_results (
-  phone_key uuid NOT NULL,
+-- Sổ người nhận: mỗi người nhận (khoá md5('p:'||SĐT chuẩn hoá) hoặc md5('g:'||global id Zalo)) × thao tác × mã một dòng: lần hỏng gần nhất
+-- và lần thành công gần nhất của cùng thao tác (thành công của tài khoản đã là bạn bè không tính). Chỉ người nhận từng hỏng mới có dòng.
+CREATE TABLE private.auto_engine_receiver_results (
+  receiver_key uuid NOT NULL,
+  key_kind text NOT NULL CHECK (key_kind IN ('phone', 'global')),
   action_code text NOT NULL,
-  bad_error_code text NOT NULL,
+  error_code text NOT NULL,
   bad_zalo_code text,
   bad_at timestamptz NOT NULL,
   bad_detail_id bigint NOT NULL,
   ok_at timestamptz,
-  PRIMARY KEY (phone_key, action_code)
+  PRIMARY KEY (receiver_key, action_code, error_code)
 ) WITH (fillfactor = 90);
-COMMENT ON TABLE private.auto_engine_phone_results IS
-  'V565: kết quả theo SĐT trên toàn hệ thống (md5(normalize_phone(phone))::uuid × thao tác): lần hỏng gần nhất với mã có target_check ở auto_outcome_policies (bad_zalo_code = mã Zalo gốc nếu có), lần thành công gần nhất (ok_at). Nạp nền từ auto_campaign_details (aka_agent_engine_phone_results_ingest); claim_target_v1 đọc qua aka_agent_engine_target_check_probe.';
-ALTER TABLE private.auto_engine_phone_results ENABLE ROW LEVEL SECURITY;
+COMMENT ON TABLE private.auto_engine_receiver_results IS
+  'V569: kết quả theo người nhận trên toàn hệ thống. receiver_key = md5(''p:''||normalize_phone(SĐT))::uuid hoặc md5(''g:''||global id)::uuid (một kết quả có cả hai thì ghi cả hai). Theo dõi mọi mã "thuộc về người nhận" của Tìm SĐT / Nhắn tin người lạ / Kết bạn (aka_agent_engine_target_check_tracked), bật bỏ qua theo cột target_check của auto_outcome_policies. bad_zalo_code = mã Zalo gốc nếu có; ok_at = lần thành công gần nhất của cùng thao tác (trừ khi tài khoản gửi đã là bạn bè). Nạp nền: aka_agent_engine_receiver_results_ingest; claim_target_v1 đọc qua aka_agent_engine_target_check_probe.';
+ALTER TABLE private.auto_engine_receiver_results ENABLE ROW LEVEL SECURITY;
 
-CREATE TABLE private.auto_engine_phone_results_state (
+CREATE TABLE private.auto_engine_receiver_results_state (
   id integer PRIMARY KEY CHECK (id = 1),
   last_detail_id bigint NOT NULL DEFAULT 0,
   stats jsonb NOT NULL DEFAULT '{}'::jsonb,
@@ -71,10 +76,10 @@ CREATE TABLE private.auto_engine_phone_results_state (
   cleaned_at timestamptz,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
-COMMENT ON TABLE private.auto_engine_phone_results_state IS
-  'V565: mốc nạp (id auto_campaign_details đã nạp tới) và số đo cộng dồn: "<thao tác>|all|<bad|ok|other>" = mọi kết quả đã nạp; "<thao tác>|pred|<mã hỏng trước>/<mã Zalo>|<d007|d030|d090|d365|d999>|<bad|ok|other>" = kết quả mà lúc đó SĐT đã có lần hỏng còn hiệu lực (tuổi lần hỏng), tức kết quả lẽ ra bị bỏ qua nếu đã bật. Số đo chỉ đúng ở lần nạp đầu (đặt lại mốc để nạp lại thì xoá cả bảng kết quả lẫn stats).';
-ALTER TABLE private.auto_engine_phone_results_state ENABLE ROW LEVEL SECURITY;
-INSERT INTO private.auto_engine_phone_results_state (id) VALUES (1);
+COMMENT ON TABLE private.auto_engine_receiver_results_state IS
+  'V569: mốc nạp (id auto_campaign_details đã nạp tới) và số đo cộng dồn. "<thao tác>|all|<mã lỗi|ok|other>" = mọi kết quả đã nạp; "<thao tác>|pred|<mã hỏng trước>/<mã Zalo>|<phone|global>|<d007|d030|d090|d365|d999>|<same|bad|ok|other>" = kết quả mà lúc đó người nhận đã có lần hỏng còn hiệu lực (khoá, tuổi lần hỏng), tức kết quả lẽ ra bị bỏ qua nếu mã đó bật: same = hỏng lại đúng mã (bỏ đúng), ok = Zalo lại thành công (bỏ nhầm). Số đo chỉ đúng ở lần nạp đầu (nạp lại thì xoá cả bảng kết quả lẫn stats).';
+ALTER TABLE private.auto_engine_receiver_results_state ENABLE ROW LEVEL SECURITY;
+INSERT INTO private.auto_engine_receiver_results_state (id) VALUES (1);
 
 CREATE FUNCTION private.aka_agent_engine_target_check_config()
 RETURNS jsonb
@@ -91,7 +96,7 @@ BEGIN
   v := v_raw::jsonb;
   RETURN CASE WHEN jsonb_typeof(v) = 'object' THEN v ELSE '{}'::jsonb END;
 END $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_target_check_config() IS 'V565: thiết lập engine.target_check (thiếu dòng / sai định dạng = {}).';
+COMMENT ON FUNCTION private.aka_agent_engine_target_check_config() IS 'V569: thiết lập engine.target_check (thiếu dòng / sai định dạng = {}).';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_on(p_organization_id bigint)
 RETURNS boolean
@@ -113,7 +118,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RETURN false;
 END $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_target_check_on(bigint) IS 'V565: tổ chức có bật kiểm SĐT trên toàn hệ thống không (engine.target_check: mode off | orgs (organizationIds) | all; thiếu / sai = không).';
+COMMENT ON FUNCTION private.aka_agent_engine_target_check_on(bigint) IS 'V569: tổ chức có bật kiểm người nhận trên toàn hệ thống không (engine.target_check: mode off | orgs (organizationIds) | all; thiếu / sai = không).';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_rules()
 RETURNS TABLE(action_code text, error_code text, enabled boolean, days integer)
@@ -127,36 +132,63 @@ AS $function$
      AND p.action_code IS NOT NULL AND p.error_code IS NOT NULL
    GROUP BY p.action_code, p.error_code
 $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_target_check_rules() IS 'V565: các cặp (thao tác, mã lỗi) có target_check ở auto_outcome_policies: enabled = true thì claim bỏ qua bước; false = chỉ nạp lịch sử (theo dõi), không bỏ qua. days = số ngày xét.';
+COMMENT ON FUNCTION private.aka_agent_engine_target_check_rules() IS 'V569: các cặp (thao tác, mã) có target_check ở auto_outcome_policies: enabled = true thì claim bỏ qua bước; false = chỉ theo dõi. days = số ngày xét.';
 
-CREATE FUNCTION private.aka_agent_engine_phone_key(p_phone text)
+CREATE FUNCTION private.aka_agent_engine_target_check_tracked()
+RETURNS TABLE(action_code text, error_code text)
+LANGUAGE sql
+STABLE
+SET search_path TO ''
+AS $function$
+  SELECT a.code, e.error_code
+    FROM unnest(ARRAY['zalo_find_phone_user', 'zalo_message_stranger', 'zalo_add_friend']) a(code)
+    CROSS JOIN public.auto_error e
+   WHERE e.error_class = 'target_permanent' AND starts_with(e.error_code, 'err_zalo_') AND e.is_active AND NOT e.is_delete
+     AND e.error_code <> ALL (ARRAY['err_zalo_api_business_failed', 'err_zalo_invalid_param', 'err_zalo_add_friend_failed'])
+  UNION
+  SELECT rl.action_code, rl.error_code FROM private.aka_agent_engine_target_check_rules() rl
+$function$;
+COMMENT ON FUNCTION private.aka_agent_engine_target_check_tracked() IS 'V569: các cặp (thao tác, mã) được nạp vào sổ: mã Zalo "thuộc về người nhận" (auto_error target_permanent, trừ err_zalo_api_business_failed, err_zalo_invalid_param, err_zalo_add_friend_failed) của zalo_find_phone_user / zalo_message_stranger / zalo_add_friend, cộng mọi cặp có target_check ở bảng chính sách. Bật bỏ qua một mã đã theo dõi có hiệu lực ngay, không phải nạp lại.';
+
+CREATE FUNCTION private.aka_agent_engine_receiver_key(p_kind text, p_value text)
 RETURNS uuid
 LANGUAGE sql
 IMMUTABLE
 PARALLEL SAFE
 SET search_path TO ''
 AS $function$
-  SELECT CASE WHEN n IS NULL OR n = '' THEN NULL ELSE md5(n)::uuid END FROM (SELECT public.normalize_phone(p_phone) AS n) s
+  SELECT CASE
+    WHEN p_kind = 'phone' THEN (SELECT CASE WHEN n IS NULL OR n = '' THEN NULL ELSE md5('p:' || n)::uuid END FROM (SELECT public.normalize_phone(p_value) AS n) s)
+    WHEN p_kind = 'global' THEN (SELECT CASE WHEN g IS NULL OR g = '' THEN NULL ELSE md5('g:' || g)::uuid END FROM (SELECT btrim(p_value) AS g) s)
+  END
 $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_phone_key(text) IS 'V565: khoá SĐT = md5(normalize_phone(phone))::uuid (như idx_campaign_input_cooldown_phone); SĐT không có chữ số = NULL.';
+COMMENT ON FUNCTION private.aka_agent_engine_receiver_key(text,text) IS 'V569: khoá người nhận: phone = md5(''p:''||normalize_phone(SĐT))::uuid (SĐT không có chữ số = NULL); global = md5(''g:''||global id)::uuid.';
 
-CREATE FUNCTION private.aka_agent_engine_target_check_probe(p_phone text)
-RETURNS TABLE(action_code text, error_code text, zalo_code text, bad_at timestamptz)
+CREATE FUNCTION private.aka_agent_engine_target_check_probe(p_phone text, p_global_id text)
+RETURNS TABLE(action_code text, error_code text, key_kind text, zalo_code text, bad_at timestamptz)
 LANGUAGE sql
 STABLE
 SET search_path TO ''
 AS $function$
-  SELECT x.action_code, x.bad_error_code, x.bad_zalo_code, x.bad_at
-    FROM private.auto_engine_phone_results x
-    JOIN private.aka_agent_engine_target_check_rules() rl ON rl.action_code = x.action_code AND rl.error_code = x.bad_error_code
-   WHERE x.phone_key = private.aka_agent_engine_phone_key(p_phone)
-     AND rl.enabled
-     AND x.bad_at > clock_timestamp() - make_interval(days => rl.days)
-     AND (x.ok_at IS NULL OR x.ok_at < x.bad_at)
+  WITH k AS (
+    SELECT private.aka_agent_engine_receiver_key('phone', p_phone) AS pk, private.aka_agent_engine_receiver_key('global', p_global_id) AS gk
+  ), rws AS (
+    SELECT x.* FROM private.auto_engine_receiver_results x, k WHERE x.receiver_key = k.pk OR x.receiver_key = k.gk
+  ), okmax AS (
+    -- Thành công gần nhất của cùng thao tác qua mọi khoá của người nhận.
+    SELECT w.action_code, max(w.ok_at) AS ok_at FROM rws w GROUP BY w.action_code
+  )
+  SELECT DISTINCT ON (w.action_code) w.action_code, w.error_code, w.key_kind, w.bad_zalo_code, w.bad_at
+    FROM rws w
+    JOIN okmax o ON o.action_code = w.action_code
+    JOIN private.aka_agent_engine_target_check_rules() rl ON rl.action_code = w.action_code AND rl.error_code = w.error_code AND rl.enabled
+   WHERE w.bad_at > clock_timestamp() - make_interval(days => rl.days)
+     AND (o.ok_at IS NULL OR o.ok_at < w.bad_at)
+   ORDER BY w.action_code, w.bad_at DESC
 $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_target_check_probe(text) IS 'V565: các thao tác mà SĐT đã biết là hỏng (mã đang bật target_check, trong số ngày xét, chưa thành công lại sau đó).';
+COMMENT ON FUNCTION private.aka_agent_engine_target_check_probe(text,text) IS 'V569: các thao tác mà người nhận (SĐT, global id) đã biết hỏng: mã đang bật target_check, trong số ngày xét, chưa thành công lại (qua mọi khoá); mỗi thao tác lần hỏng gần nhất.';
 
-CREATE FUNCTION private.aka_agent_engine_phone_results_ingest(p_budget_ms integer DEFAULT NULL, p_chunk integer DEFAULT NULL)
+CREATE FUNCTION private.aka_agent_engine_receiver_results_ingest(p_budget_ms integer DEFAULT NULL, p_chunk integer DEFAULT NULL)
 RETURNS jsonb
 LANGUAGE plpgsql
 SET search_path TO ''
@@ -167,7 +199,6 @@ DECLARE
   v_chunk integer;
   v_started timestamptz := clock_timestamp();
   v_deadline timestamptz;
-  v_actions text[];
   v_keep integer;
   v_from bigint;
   v_start bigint;
@@ -190,17 +221,17 @@ DECLARE
 BEGIN
   -- Gọi tay có ngân sách (nạp bù) thì chạy kể cả khi ingest = false.
   IF p_budget_ms IS NULL AND v_cfg->'ingest' = 'false'::jsonb THEN RETURN jsonb_build_object('status', 'off'); END IF;
-  IF NOT pg_try_advisory_xact_lock(hashtextextended('aka-agent-engine-phone-results-ingest', 0)) THEN
+  IF NOT pg_try_advisory_xact_lock(hashtextextended('aka-agent-engine-receiver-results-ingest', 0)) THEN
     RETURN jsonb_build_object('status', 'busy');
   END IF;
   v_budget := greatest(500, least(90000, coalesce(p_budget_ms,
     CASE WHEN jsonb_typeof(v_cfg->'ingestBudgetMs') = 'number' THEN (v_cfg->>'ingestBudgetMs')::numeric::integer END, 20000)));
   v_chunk := greatest(100, least(200000, coalesce(p_chunk,
     CASE WHEN jsonb_typeof(v_cfg->'ingestChunk') = 'number' THEN (v_cfg->>'ingestChunk')::numeric::integer END, 5000)));
-  SELECT array_agg(DISTINCT rl.action_code), max(rl.days) INTO v_actions, v_keep FROM private.aka_agent_engine_target_check_rules() rl;
-  IF v_actions IS NULL THEN RETURN jsonb_build_object('status', 'no_rules'); END IF;
+  -- Giữ ít nhất 365 ngày (giảm số ngày xét rồi tăng lại không mất dữ liệu).
+  SELECT greatest(365, coalesce(max(rl.days), 365)) INTO v_keep FROM private.aka_agent_engine_target_check_rules() rl;
   SELECT s.last_detail_id, s.stats, s.cleaned_at INTO v_from, v_stats, v_cleaned
-    FROM private.auto_engine_phone_results_state s WHERE s.id = 1 FOR UPDATE;
+    FROM private.auto_engine_receiver_results_state s WHERE s.id = 1 FOR UPDATE;
   v_start := v_from;
   SELECT max(d.id) INTO v_top FROM public.auto_campaign_details d;
   v_top := coalesce(v_top, 0);
@@ -221,80 +252,101 @@ BEGIN
     v_throttled := true;
   END IF;
   v_deadline := v_started + make_interval(secs => v_budget / 1000.0);
+
   WHILE v_from < v_cap AND clock_timestamp() < v_deadline LOOP
     v_to := least(v_from + v_chunk, v_cap);
-    WITH rl AS MATERIALIZED (
-      SELECT * FROM private.aka_agent_engine_target_check_rules()
+    WITH tr AS MATERIALIZED (
+      SELECT * FROM private.aka_agent_engine_target_check_tracked()
     ), src AS MATERIALIZED (
       SELECT d.id, d.created_at, d.action_code, d.error_code,
-             (d.error_code IS NULL AND (d.report_group = 'success' OR d.status = 'thành công')) AS is_ok,
+             (d.error_code IS NULL AND (d.report_group = 'success' OR d.status = 'thành công')
+              -- Thành công của tài khoản đã là bạn bè không xoá lần hỏng (bạn bè luôn nhắn được dù người nhận chặn người lạ).
+              AND NOT coalesce(d.data->'target'->'isFriend' = 'true'::jsonb, false)) AS is_ok,
              left(coalesce(nullif(d.data->'signal'->>'code', ''), nullif(d.data->'zalo'->>'code', '')), 40) AS raw_code,
-             -- Như aka_agent_engine_phone_key (viết thẳng để không gọi thêm một hàm mỗi dòng).
-             md5(np.n)::uuid AS phone_key
+             -- Như aka_agent_engine_receiver_key (viết thẳng để không gọi thêm một hàm mỗi dòng).
+             np.n AS phone_n,
+             nullif(btrim(coalesce(d.data->'target'->>'globalId', '')), '') AS global_id
         FROM public.auto_campaign_details d
-        JOIN public.auto_campaign_input_data i ON i.id = d.input_data_id
-        CROSS JOIN LATERAL (SELECT public.normalize_phone(i.phone) AS n) np
+        LEFT JOIN public.auto_campaign_input_data i ON i.id = d.input_data_id
+        CROSS JOIN LATERAL (SELECT nullif(public.normalize_phone(coalesce(nullif(btrim(i.phone), ''), nullif(btrim(d.data->'target'->>'phone'), ''))), '') AS n) np
        WHERE d.id > v_from AND d.id <= v_to
-         AND d.action_code = ANY (v_actions)
-         AND i.phone IS NOT NULL AND btrim(i.phone) <> '' AND np.n IS NOT NULL AND np.n <> ''
+         AND d.action_code = ANY (ARRAY['zalo_find_phone_user', 'zalo_message_stranger', 'zalo_add_friend'])
          -- Dòng do chính việc kiểm ghi (bước bỏ qua) không phải kết quả Zalo thật.
          AND NOT coalesce(d.policy_snapshot->'v2'->'targetCheck' = 'true'::jsonb, false)
+    ), srcf AS MATERIALIZED (
+      SELECT s.*, (tr.error_code IS NOT NULL) AS is_bad FROM src s LEFT JOIN tr ON tr.action_code = s.action_code AND tr.error_code = s.error_code
     ), rws AS MATERIALIZED (
-      SELECT s.*, (rl.error_code IS NOT NULL) AS is_bad
-        FROM src s LEFT JOIN rl ON rl.action_code = s.action_code AND rl.error_code = s.error_code
-    ), agg AS MATERIALIZED (
-      SELECT w.phone_key, w.action_code, max(w.id) FILTER (WHERE w.is_bad) AS bad_id, max(w.created_at) FILTER (WHERE w.is_ok) AS ok_at
-        FROM rws w GROUP BY w.phone_key, w.action_code
+      -- Mỗi kết quả một dòng cho mỗi khoá có được (SĐT, global id).
+      SELECT f.*, k.kind, k.key FROM srcf f
+      CROSS JOIN LATERAL (VALUES ('phone', CASE WHEN f.phone_n IS NOT NULL THEN md5('p:' || f.phone_n)::uuid END),
+                                 ('global', CASE WHEN f.global_id IS NOT NULL THEN md5('g:' || f.global_id)::uuid END)) k(kind, key)
+       WHERE k.key IS NOT NULL
+    ), agg_bad AS MATERIALIZED (
+      SELECT DISTINCT ON (w.key, w.action_code, w.error_code) w.key, w.kind, w.action_code, w.error_code, w.raw_code, w.created_at, w.id
+        FROM rws w WHERE w.is_bad ORDER BY w.key, w.action_code, w.error_code, w.id DESC
+    ), agg_ok AS MATERIALIZED (
+      SELECT w.key, w.action_code, max(w.created_at) AS ok_at FROM rws w WHERE w.is_ok GROUP BY w.key, w.action_code
     ), win AS MATERIALIZED (
-      SELECT w.id, w.phone_key, w.action_code, w.created_at, w.is_bad, w.is_ok,
+      SELECT w.id, w.key, w.kind, w.action_code, w.created_at,
              max(w.id) FILTER (WHERE w.is_bad) OVER pw AS prev_bad_id,
              max(w.created_at) FILTER (WHERE w.is_ok) OVER pw AS prev_ok_at
         FROM rws w
-      WINDOW pw AS (PARTITION BY w.phone_key, w.action_code ORDER BY w.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
-    ), ev AS MATERIALIZED (
-      -- Trạng thái của SĐT ngay trước kết quả này: lần hỏng trước (trong phần đang nạp, không thì trong bảng) và lần thành công trước.
-      SELECT w.action_code, w.created_at,
-             CASE WHEN w.is_bad THEN 'bad' WHEN w.is_ok THEN 'ok' ELSE 'other' END AS outcome,
-             CASE WHEN pb.id IS NOT NULL THEN pb.created_at ELSE x.bad_at END AS prior_bad_at,
-             CASE WHEN pb.id IS NOT NULL THEN pb.error_code ELSE x.bad_error_code END AS prior_code,
-             CASE WHEN pb.id IS NOT NULL THEN pb.raw_code ELSE x.bad_zalo_code END AS prior_raw,
-             greatest(x.ok_at, w.prev_ok_at) AS prior_ok_at
+      WINDOW pw AS (PARTITION BY w.key, w.action_code ORDER BY w.id ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING)
+    ), kp AS MATERIALIZED (
+      -- Theo từng khoá, ngay trước kết quả này: lần hỏng gần nhất (trong phần đang nạp hoặc trong sổ) và lần thành công gần nhất.
+      SELECT w.id, w.kind, b.bad_at, b.error_code AS prior_code, b.raw_code AS prior_raw,
+             greatest(w.prev_ok_at, (SELECT max(x.ok_at) FROM private.auto_engine_receiver_results x
+                                      WHERE x.receiver_key = w.key AND x.action_code = w.action_code)) AS ok_at
         FROM win w
-        LEFT JOIN rws pb ON pb.id = w.prev_bad_id
-        LEFT JOIN private.auto_engine_phone_results x ON x.phone_key = w.phone_key AND x.action_code = w.action_code
+        LEFT JOIN LATERAL (
+          SELECT q.bad_at, q.error_code, q.raw_code FROM (
+            SELECT pb.created_at AS bad_at, pb.error_code, pb.raw_code FROM rws pb WHERE pb.id = w.prev_bad_id AND pb.key = w.key
+            UNION ALL
+            SELECT x.bad_at, x.error_code, x.bad_zalo_code FROM private.auto_engine_receiver_results x
+             WHERE x.receiver_key = w.key AND x.action_code = w.action_code
+          ) q WHERE q.bad_at < w.created_at ORDER BY q.bad_at DESC LIMIT 1) b ON true
+    ), ev AS MATERIALIZED (
+      -- Mỗi kết quả: lần hỏng gần nhất qua mọi khoá, và lần thành công gần nhất qua mọi khoá.
+      SELECT f.id, f.action_code, f.created_at, f.error_code, f.is_bad, f.is_ok,
+             pr.bad_at AS prior_bad_at, pr.prior_code, pr.prior_raw, pr.kind AS prior_kind,
+             (SELECT max(k3.ok_at) FROM kp k3 WHERE k3.id = f.id) AS prior_ok_at
+        FROM srcf f
+        LEFT JOIN LATERAL (SELECT k2.bad_at, k2.prior_code, k2.prior_raw, k2.kind FROM kp k2
+                            WHERE k2.id = f.id AND k2.bad_at IS NOT NULL ORDER BY k2.bad_at DESC LIMIT 1) pr ON true
     ), st AS (
       SELECT jsonb_object_agg(z.k, z.n) AS j FROM (
-        SELECT e.action_code || '|all|' || e.outcome AS k, count(*) AS n FROM ev e GROUP BY 1
+        SELECT e.action_code || '|all|' || CASE WHEN e.is_bad THEN e.error_code WHEN e.is_ok THEN 'ok' ELSE 'other' END AS k, count(*) AS n
+          FROM ev e GROUP BY 1
         UNION ALL
-        SELECT e.action_code || '|pred|' || coalesce(e.prior_code, '?') || '/' || coalesce(e.prior_raw, '-') || '|'
+        SELECT e.action_code || '|pred|' || e.prior_code || '/' || coalesce(e.prior_raw, '-') || '|' || e.prior_kind || '|'
                  || CASE WHEN e.created_at - e.prior_bad_at < interval '7 days' THEN 'd007'
                          WHEN e.created_at - e.prior_bad_at < interval '30 days' THEN 'd030'
                          WHEN e.created_at - e.prior_bad_at < interval '90 days' THEN 'd090'
                          WHEN e.created_at - e.prior_bad_at < interval '365 days' THEN 'd365' ELSE 'd999' END
-                 || '|' || e.outcome, count(*)
+                 || '|' || CASE WHEN e.is_bad AND e.error_code = e.prior_code THEN 'same' WHEN e.is_bad THEN 'bad' WHEN e.is_ok THEN 'ok' ELSE 'other' END,
+               count(*)
           FROM ev e
-         WHERE e.prior_bad_at IS NOT NULL AND e.prior_bad_at < e.created_at AND (e.prior_ok_at IS NULL OR e.prior_ok_at < e.prior_bad_at)
+         WHERE e.prior_bad_at IS NOT NULL AND (e.prior_ok_at IS NULL OR e.prior_ok_at < e.prior_bad_at)
          GROUP BY 1
       ) z
     ), ins AS (
-      INSERT INTO private.auto_engine_phone_results AS x (phone_key, action_code, bad_error_code, bad_zalo_code, bad_at, bad_detail_id, ok_at)
-      SELECT a.phone_key, a.action_code, b.error_code, b.raw_code, b.created_at, b.id, a.ok_at
-        FROM agg a JOIN rws b ON b.id = a.bad_id
-      ON CONFLICT (phone_key, action_code) DO UPDATE SET
-        bad_error_code = CASE WHEN EXCLUDED.bad_detail_id >= x.bad_detail_id THEN EXCLUDED.bad_error_code ELSE x.bad_error_code END,
+      INSERT INTO private.auto_engine_receiver_results AS x (receiver_key, key_kind, action_code, error_code, bad_zalo_code, bad_at, bad_detail_id, ok_at)
+      SELECT b.key, b.kind, b.action_code, b.error_code, b.raw_code, b.created_at, b.id, o.ok_at
+        FROM agg_bad b LEFT JOIN agg_ok o ON o.key = b.key AND o.action_code = b.action_code
+      ON CONFLICT (receiver_key, action_code, error_code) DO UPDATE SET
         bad_zalo_code = CASE WHEN EXCLUDED.bad_detail_id >= x.bad_detail_id THEN EXCLUDED.bad_zalo_code ELSE x.bad_zalo_code END,
         bad_at = CASE WHEN EXCLUDED.bad_detail_id >= x.bad_detail_id THEN EXCLUDED.bad_at ELSE x.bad_at END,
         bad_detail_id = greatest(EXCLUDED.bad_detail_id, x.bad_detail_id),
         ok_at = greatest(x.ok_at, EXCLUDED.ok_at)
       RETURNING 1
     ), upd AS (
-      UPDATE private.auto_engine_phone_results x SET ok_at = a.ok_at
-        FROM agg a
-       WHERE a.bad_id IS NULL AND a.ok_at IS NOT NULL
-         AND x.phone_key = a.phone_key AND x.action_code = a.action_code AND (x.ok_at IS NULL OR x.ok_at < a.ok_at)
+      UPDATE private.auto_engine_receiver_results x SET ok_at = o.ok_at
+        FROM agg_ok o
+       WHERE x.receiver_key = o.key AND x.action_code = o.action_code AND (x.ok_at IS NULL OR x.ok_at < o.ok_at)
+         AND NOT EXISTS (SELECT 1 FROM agg_bad b WHERE b.key = x.receiver_key AND b.action_code = x.action_code AND b.error_code = x.error_code)
       RETURNING 1
     )
-    SELECT (SELECT count(*) FROM rws), (SELECT count(*) FROM ins), (SELECT count(*) FROM upd), (SELECT st.j FROM st)
+    SELECT (SELECT count(*) FROM srcf), (SELECT count(*) FROM ins), (SELECT count(*) FROM upd), (SELECT st.j FROM st)
       INTO v_n, v_nb, v_no, v_add;
     IF v_add IS NOT NULL THEN
       SELECT coalesce(jsonb_object_agg(u.k, u.n), '{}'::jsonb) INTO v_stats FROM (
@@ -309,47 +361,45 @@ BEGIN
     v_from := v_to;
   END LOOP;
 
-  -- Mỗi ngày một lần: bỏ lần hỏng đã quá số ngày xét lớn nhất (+1 ngày).
+  -- Mỗi ngày một lần: bỏ lần hỏng đã quá số ngày giữ (ít nhất 365, hoặc số ngày xét lớn nhất) + 1 ngày.
   IF v_cleaned IS NULL OR v_cleaned < v_started - interval '1 day' THEN
-    DELETE FROM private.auto_engine_phone_results x WHERE x.bad_at < v_started - make_interval(days => coalesce(v_keep, 365) + 1);
+    DELETE FROM private.auto_engine_receiver_results x WHERE x.bad_at < v_started - make_interval(days => v_keep + 1);
     GET DIAGNOSTICS v_deleted = ROW_COUNT;
     v_cleaned := v_started;
   END IF;
 
-  UPDATE private.auto_engine_phone_results_state s SET last_detail_id = v_from, stats = coalesce(v_stats, '{}'::jsonb), runs = s.runs + 1,
+  UPDATE private.auto_engine_receiver_results_state s SET last_detail_id = v_from, stats = coalesce(v_stats, '{}'::jsonb), runs = s.runs + 1,
          cleaned_at = v_cleaned, updated_at = clock_timestamp(),
          last_run = jsonb_build_object('at', v_started, 'from', v_start, 'to', v_from, 'cap', v_cap, 'budgetMs', v_budget, 'throttled', v_throttled,
-           'chunks', v_chunks, 'rows', v_rows,
-           'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted,
+           'chunks', v_chunks, 'rows', v_rows, 'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted,
            'ms', round(extract(epoch FROM clock_timestamp() - v_started) * 1000))
    WHERE s.id = 1;
   RETURN jsonb_build_object('status', 'ok', 'from', v_start, 'to', v_from, 'cap', v_cap, 'budgetMs', v_budget, 'throttled', v_throttled,
-    'chunks', v_chunks, 'rows', v_rows,
-    'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted, 'caughtUp', v_from >= v_cap);
+    'chunks', v_chunks, 'rows', v_rows, 'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted, 'caughtUp', v_from >= v_cap);
 END $function$;
-COMMENT ON FUNCTION private.aka_agent_engine_phone_results_ingest(integer,integer) IS
-  'V565: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_phone_results_state) vào auto_engine_phone_results và số đo. pg_cron aka-agent-engine-phone-results gọi mỗi phút với ngân sách engine.target_check.ingestBudgetMs (mặc định 20 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
+COMMENT ON FUNCTION private.aka_agent_engine_receiver_results_ingest(integer,integer) IS
+  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron aka-agent-engine-receiver-results gọi mỗi phút với ngân sách engine.target_check.ingestBudgetMs (mặc định 20 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
   ('engine.target_check', '{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":20000,"ingestChunk":5000,"backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}',
-   'Kiểm SĐT trên toàn hệ thống trước khi gọi Zalo (V565), chỉ engine v2, chiến dịch "Nhắn tin theo SĐT" không kiêm SMS. JSON: mode off | orgs (chỉ organizationIds) | all; thiếu dòng / sai định dạng = off. Mã nào kiểm: cột target_check_enabled / target_check_days của auto_outcome_policies. ingest = false: job ngừng nạp lịch sử (claim vẫn đọc bảng đã nạp nếu mode bật). ingestBudgetMs / ingestChunk: ngân sách mỗi phút và số id mỗi phần nạp; backfillDayBudgetMs / backfillDayHours [giờ bắt đầu, giờ kết thúc) VN / backfillThresholdIds: ngân sách ban ngày khi còn tồn nhiều (nạp lần đầu). Claim đọc lại mỗi lần nhận data nên đổi có hiệu lực ngay.',
+   'Kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (V569), chỉ engine v2: "Nhắn tin theo SĐT" và nhắn người lạ theo UID (thành viên nhóm, group thời gian thực, đề xuất Zalo, khách hàng cũ), không kiêm SMS. JSON: mode off | orgs (chỉ organizationIds) | all; thiếu dòng / sai định dạng = off. Mã nào bỏ qua: cột target_check_enabled / target_check_days của auto_outcome_policies. ingest = false: job ngừng nạp lịch sử (claim vẫn đọc sổ đã nạp nếu mode bật). ingestBudgetMs / ingestChunk: ngân sách mỗi phút và số id mỗi phần nạp; backfillDayBudgetMs / backfillDayHours [giờ bắt đầu, giờ kết thúc) VN / backfillThresholdIds: ngân sách ban ngày khi còn tồn nhiều (nạp lần đầu). Claim đọc lại mỗi lần nhận data nên đổi có hiệu lực ngay.',
    false, true);
 
 DO $grants$
 DECLARE v_role text; v_obj text;
 BEGIN
-  FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_phone_results', 'private.auto_engine_phone_results_state'] LOOP
+  FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_receiver_results', 'private.auto_engine_receiver_results_state'] LOOP
     EXECUTE format('REVOKE ALL ON TABLE %s FROM PUBLIC', v_obj);
   END LOOP;
-  FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_phone_key(text)', 'private.aka_agent_engine_target_check_probe(text)', 'private.aka_agent_engine_phone_results_ingest(integer,integer)'] LOOP
+  FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_target_check_tracked()', 'private.aka_agent_engine_receiver_key(text,text)', 'private.aka_agent_engine_target_check_probe(text,text)', 'private.aka_agent_engine_receiver_results_ingest(integer,integer)'] LOOP
     EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', v_obj);
   END LOOP;
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role', 'aka_agent_desktop', 'aka_agent_chat_api'] LOOP
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = v_role) THEN
-      FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_phone_results', 'private.auto_engine_phone_results_state'] LOOP
+      FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_receiver_results', 'private.auto_engine_receiver_results_state'] LOOP
         EXECUTE format('REVOKE ALL ON TABLE %s FROM %I', v_obj, v_role);
       END LOOP;
-      FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_phone_key(text)', 'private.aka_agent_engine_target_check_probe(text)', 'private.aka_agent_engine_phone_results_ingest(integer,integer)'] LOOP
+      FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_target_check_tracked()', 'private.aka_agent_engine_receiver_key(text,text)', 'private.aka_agent_engine_target_check_probe(text,text)', 'private.aka_agent_engine_receiver_results_ingest(integer,integer)'] LOOP
         EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', v_obj, v_role);
       END LOOP;
     END IF;
@@ -424,9 +474,11 @@ DECLARE
   -- V564: chiến dịch đăng nhóm bật "Xáo trộn danh sách group" (như bộ cũ xáo các data chờ ở đầu mỗi lượt).
   v_shuffle boolean := false;
   v_shuffle_count integer;
-  -- V565: kiểm SĐT trên toàn hệ thống (engine.target_check): mã lỗi đã biết của SĐT theo từng thao tác; chiến dịch chỉ nhắn tin.
-  v_tc jsonb;
-  v_tc_msg_only boolean := false;
+  -- V569: kiểm người nhận trên toàn hệ thống (engine.target_check).
+  v_tc jsonb;                       -- {thao tác: mã} người nhận đã biết hỏng (mã đang bật, còn hiệu lực)
+  v_tc_global text;                 -- global id của người nhận (zalo_users theo tài khoản + UID)
+  v_tc_friend boolean := false;     -- tài khoản gửi đã là bạn bè (zalo_users.is_fr)
+  v_tc_sends jsonb;                 -- mọi bước gửi đã biết hỏng: {thao tác gửi: mã}, bỏ luôn bước tìm SĐT
 BEGIN
   IF v_staff IS NULL OR v_account_id IS NULL OR v_campaign_id IS NULL OR v_runner IS NULL OR v_runtime IS NULL OR v_runtime NOT IN ('desktop','fly') THEN
     RETURN jsonb_build_object('status', 'invalid_request');
@@ -784,24 +836,37 @@ BEGIN
   END IF;
 
   v_target_key := public.aka_agent_engine_target_key(t.phone, t.uid, t.email);
-  -- V565: "Nhắn tin theo SĐT" (không kiêm SMS): SĐT đã biết là hỏng trên toàn hệ thống (bảng tóm tắt lịch sử, theo các dòng chính sách bật
-  -- target_check) thì bước tương ứng nhận quyết định skip ở vòng dưới. Kiểm lỗi thì coi như chưa biết (chạy như thường).
-  IF NOT v_slot_mode AND c.action_id = 'zalo_message_phone' AND nullif(btrim(coalesce(t.phone, '')), '') IS NOT NULL
+  -- V569: chiến dịch nhắn người lạ (theo SĐT / theo UID), không kiêm SMS, tổ chức bật engine.target_check: tra sổ theo SĐT và global id
+  -- (UID gắn theo tài khoản nên lấy global id ở zalo_users). Bước tương ứng nhận quyết định skip ở vòng dưới. Kiểm lỗi thì coi như chưa
+  -- biết (chạy như thường).
+  IF NOT v_slot_mode AND c.action_id IN ('zalo_message_phone', 'zalo_message_group_member', 'zalo_message_group_realtime', 'zalo_message_friend_recommendation', 'zalo_message_remarketing_customer')
      AND NOT coalesce(c.extra_settings->'internalSmsEnabled' = 'true'::jsonb, false)
      AND NOT coalesce(c.extra_settings->'externalSmsEnabled' = 'true'::jsonb, false)
      AND private.aka_agent_engine_target_check_on(c.organization_id) THEN
     BEGIN
-      SELECT jsonb_object_agg(x.action_code, x.error_code) INTO v_tc FROM private.aka_agent_engine_target_check_probe(t.phone) x;
+      IF nullif(btrim(coalesce(t.uid, '')), '') IS NOT NULL THEN
+        SELECT nullif(btrim(coalesce(zu.global_id, '')), ''), coalesce(zu.is_fr = 1, false) INTO v_tc_global, v_tc_friend
+          FROM public.zalo_users zu WHERE zu.account_id = v_account_id AND zu.zalo_uid = btrim(t.uid) LIMIT 1;
+        v_tc_friend := coalesce(v_tc_friend, false);
+      END IF;
+      SELECT jsonb_object_agg(x.action_code, x.error_code) INTO v_tc FROM private.aka_agent_engine_target_check_probe(t.phone, v_tc_global) x;
     EXCEPTION WHEN OTHERS THEN
       v_tc := NULL;
     END;
-    -- Chỉ nhắn tin (không kết bạn, tag Zalo, đổi tên, tag akaBiz): mã của bước nhắn tin bỏ luôn bước tìm SĐT (cả data).
-    v_tc_msg_only := coalesce(v_tc ? 'zalo_message_stranger', false)
-      AND coalesce(c.extra_settings->'enableMessage' = 'true'::jsonb, false)
-      AND NOT coalesce(c.extra_settings->'enableAddFriend' = 'true'::jsonb, false)
-      AND NOT coalesce(c.extra_settings->'enableZaloTag' = 'true'::jsonb, false)
-      AND NOT coalesce(c.extra_settings->'enableZaloAlias' = 'true'::jsonb, false)
-      AND NOT coalesce(c.extra_settings->'enableAkaBizTag' = 'true'::jsonb, false);
+    -- Chặn tin người lạ không áp với tài khoản đã là bạn bè.
+    IF v_tc IS NOT NULL AND v_tc_friend THEN v_tc := v_tc - 'zalo_message_stranger'; END IF;
+    IF v_tc = '{}'::jsonb THEN v_tc := NULL; END IF;
+    -- "Nhắn tin theo SĐT": mọi bước gửi của chiến dịch đã biết hỏng và không tag Zalo / đổi tên / tag akaBiz (các bước cần kết quả tìm SĐT)
+    -- thì bỏ luôn bước tìm SĐT; report tách thành một dòng cho mỗi bước gửi.
+    IF v_tc IS NOT NULL AND c.action_id = 'zalo_message_phone' AND NOT (v_tc ? 'zalo_find_phone_user')
+       AND NOT coalesce(c.extra_settings->'enableZaloTag' = 'true'::jsonb, false)
+       AND NOT coalesce(c.extra_settings->'enableZaloAlias' = 'true'::jsonb, false)
+       AND NOT coalesce(c.extra_settings->'enableAkaBizTag' = 'true'::jsonb, false) THEN
+      -- (Bí danh "ja": "a" là biến bản ghi tài khoản của hàm.)
+      SELECT CASE WHEN count(*) > 0 AND bool_and(v_tc ? (ja.value->>'code')) THEN jsonb_object_agg(ja.value->>'code', v_tc->(ja.value->>'code')) END
+        INTO v_tc_sends
+        FROM jsonb_array_elements(coalesce(p_ctx->'actions', '[]'::jsonb)) ja WHERE ja.value->>'code' <> 'zalo_find_phone_user';
+    END IF;
   END IF;
   FOR v_act IN SELECT x.value FROM jsonb_array_elements(coalesce(p_ctx->'actions', '[]'::jsonb)) x LOOP
     v_code := v_act->>'code';
@@ -850,15 +915,16 @@ BEGIN
       END IF;
     END IF;
 
-    -- V565: SĐT đã biết là hỏng: bước tìm SĐT bỏ qua kể cả khi đang khoá / hết lượt (không gọi Zalo, không tính lượt); bước gửi chỉ bỏ qua
-    -- khi đang được phép (đang chờ thì vẫn chờ như thường).
+    -- V569: người nhận đã biết hỏng: bước tìm SĐT bỏ qua kể cả khi đang khoá / hết lượt (không gọi Zalo, không tính lượt); bước gửi chỉ bỏ
+    -- qua khi đang được phép (đang chờ thì vẫn chờ như thường) và khi bước tìm SĐT không bị bỏ.
     IF v_tc IS NOT NULL THEN
       IF v_code = 'zalo_find_phone_user' THEN
-        IF coalesce(v_tc->>v_code, CASE WHEN v_tc_msg_only THEN v_tc->>'zalo_message_stranger' END) IS NOT NULL THEN
-          v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check',
-            'errorCode', coalesce(v_tc->>v_code, v_tc->>'zalo_message_stranger'));
+        IF v_tc ? v_code THEN
+          v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc->>v_code);
+        ELSIF v_tc_sends IS NOT NULL THEN
+          v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc_sends::text);
         END IF;
-      ELSIF v_tc->>v_code IS NOT NULL AND NOT v_tc_msg_only AND NOT (v_tc ? 'zalo_find_phone_user')
+      ELSIF v_tc ? v_code AND v_tc_sends IS NULL AND NOT (c.action_id = 'zalo_message_phone' AND v_tc ? 'zalo_find_phone_user')
             AND v_decision->>'decision' = 'allow' THEN
         v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc->>v_code);
       END IF;
@@ -989,9 +1055,8 @@ DECLARE
   v_sem record;
   v_log text;
   v_detail_id bigint;
-  -- V565: bước bỏ qua vì SĐT đã biết là hỏng (gate target_check): mã lỗi đã biết, thao tác ghi lịch sử.
+  -- V569: bước bỏ qua vì người nhận đã biết hỏng (gate target_check): mã lỗi đã biết.
   v_tc_code text;
-  v_tc_action text;
   v_until timestamptz;
   v_lock_until_max timestamptz;
   v_lc text;
@@ -1044,6 +1109,35 @@ BEGIN
   -- Lô rỗng chỉ hợp lệ khi chốt data (các bước còn lại bị bỏ vì bước trước không đạt).
   IF p_outcomes IS NULL OR jsonb_typeof(p_outcomes) <> 'array' OR (jsonb_array_length(p_outcomes) = 0 AND NOT p_final) THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'outcomes_required');
+  END IF;
+  -- V569: bước tìm SĐT bỏ qua vì mọi bước gửi đã biết hỏng (rememberedErrorCode là JSON {thao tác gửi: mã}): tách thành một kết quả cho mỗi
+  -- bước gửi (resultKey đầu giữ nguyên, kết quả sau thêm ':<thao tác>'), như khi các bước đó chạy và Zalo trả lỗi. Gọi lại thì tách y hệt.
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_outcomes) x WHERE x.value->>'statusCode' = 'campaign_detail_skipped'
+              AND x.value->'data'->>'gate' = 'target_check' AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{') THEN
+    SELECT jsonb_agg(z.e ORDER BY z.ord, z.sub) INTO p_outcomes FROM (
+      SELECT x.ordinality AS ord, 0::bigint AS sub, x.value AS e FROM jsonb_array_elements(p_outcomes) WITH ORDINALITY x
+       WHERE NOT (x.value->>'statusCode' = 'campaign_detail_skipped' AND x.value->'data'->>'gate' = 'target_check'
+                  AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{')
+      UNION ALL
+      SELECT x.ordinality, k.n, x.value || jsonb_build_object(
+               'actionCode', k.key,
+               'actionName', CASE k.key WHEN 'zalo_message_stranger' THEN 'Nhắn tin người lạ' WHEN 'zalo_add_friend' THEN 'Kết bạn' ELSE k.key END,
+               'stepKey', k.key,
+               'resultKey', btrim(x.value->>'resultKey') || CASE WHEN k.n = 1 THEN '' ELSE ':' || k.key END,
+               'data', jsonb_build_object('gate', 'target_check', 'rememberedErrorCode', k.code))
+        FROM jsonb_array_elements(p_outcomes) WITH ORDINALITY x
+        CROSS JOIN LATERAL (
+          SELECT e.key, e.value #>> '{}' AS code,
+                 row_number() OVER (ORDER BY CASE e.key WHEN 'zalo_message_stranger' THEN 1 WHEN 'zalo_add_friend' THEN 2 ELSE 3 END, e.key) AS n
+            FROM jsonb_each(CASE WHEN pg_input_is_valid(x.value->'data'->>'rememberedErrorCode', 'jsonb')
+                                  AND jsonb_typeof((x.value->'data'->>'rememberedErrorCode')::jsonb) = 'object'
+                                 THEN (x.value->'data'->>'rememberedErrorCode')::jsonb ELSE '{}'::jsonb END) e) k
+       WHERE x.value->>'statusCode' = 'campaign_detail_skipped' AND x.value->'data'->>'gate' = 'target_check'
+         AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{'
+    ) z;
+    IF p_outcomes IS NULL OR (jsonb_array_length(p_outcomes) = 0 AND NOT p_final) THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'outcomes_required');
+    END IF;
   END IF;
   IF (SELECT count(DISTINCT btrim(x.value->>'resultKey')) FROM jsonb_array_elements(p_outcomes) x) <> jsonb_array_length(p_outcomes) THEN
     RETURN jsonb_build_object('ok', false, 'reason', 'result_key_duplicate');
@@ -1135,22 +1229,12 @@ BEGIN
       v_signal := coalesce(o->'signal', '{}'::jsonb);
       v_evidence := coalesce(o->'evidence', '{}'::jsonb);
       v_error_code := NULL; v_status_id := NULL; v_rule_id := NULL; v_matched_by := NULL; v_catch_all := NULL; v_err := NULL; v_detail_id := NULL;
-      -- V565: bước bỏ qua vì SĐT đã biết là hỏng: ghi như kết quả lỗi thật của mã đã biết (cùng chính sách, trạng thái, câu lịch sử, data
-      -- đi đâu); hiệu ứng phụ bỏ ở dưới. Chỉ nhắn tin thì mã chặn tin người lạ ghi dưới thao tác nhắn tin (bước tìm SĐT không chạy).
-      v_tc_code := NULL; v_tc_action := NULL;
+      -- V569: bước bỏ qua vì người nhận đã biết hỏng: ghi như kết quả lỗi thật của mã đã biết (cùng chính sách, trạng thái, câu lịch sử,
+      -- data đi đâu); hiệu ứng phụ bỏ ở dưới.
+      v_tc_code := NULL;
       IF v_ok AND o->>'statusCode' = 'campaign_detail_skipped' AND o->'data'->>'gate' = 'target_check'
          AND EXISTS (SELECT 1 FROM public.auto_error e WHERE e.error_code = o->'data'->>'rememberedErrorCode') THEN
         v_tc_code := o->'data'->>'rememberedErrorCode';
-        SELECT x.action_code INTO v_tc_action FROM private.aka_agent_engine_target_check_rules() x
-         WHERE x.error_code = v_tc_code ORDER BY (x.action_code = v_action) DESC, x.action_code LIMIT 1;
-        IF v_tc_action IS NOT NULL AND v_tc_action IS DISTINCT FROM v_action THEN
-          v_action := v_tc_action;
-          SELECT aa.flatform_type, coalesce(aa.operation_class, 'delivery'), aa.name INTO v_platform, v_op_class, v_action_name
-            FROM public.auto_account_actions aa WHERE aa.code = v_action;
-          -- Tên như bộ chạy gửi kèm (helper Desktop), không phải tên danh mục.
-          v_action_name := CASE v_action WHEN 'zalo_message_stranger' THEN 'Nhắn tin người lạ' WHEN 'zalo_find_phone_user' THEN 'Tìm SĐT'
-                                         WHEN 'zalo_add_friend' THEN 'Kết bạn' ELSE coalesce(v_action_name, v_action) END;
-        END IF;
         v_ok := false;
         v_phase := 'after_send';
         v_signal := jsonb_build_object('kind', 'engine', 'code', 'target_check', 'errorCode', v_tc_code);
@@ -1184,8 +1268,8 @@ BEGIN
             (SELECT s.id FROM public.auto_status s WHERE s.code = 'campaign_detail_failed' AND s.component_type = 'campaign_detail' ORDER BY s.id LIMIT 1)), v_action, c.action_id, r.runtime_target, v_phase);
         IF v_policy->>'detail_mode' = 'inherit' THEN v_policy := v_policy || jsonb_build_object('detail_mode', 'write'); END IF;
       END IF;
-      -- V565: kết quả thay cho bước bỏ qua vì SĐT đã biết là hỏng: không tính lượt, không đổi chuỗi data lỗi, không nghỉ giữa data, không khoá
-      -- thao tác, không đổi chiến dịch / tài khoản / đăng nhập, lượt chạy tiếp; trạng thái, câu lịch sử, data đi đâu theo chính sách của mã.
+      -- V569: kết quả thay cho bước bỏ qua vì người nhận đã biết hỏng: không tính lượt, không đổi chuỗi data lỗi, không nghỉ giữa data, không
+      -- khoá thao tác, không đổi chiến dịch / tài khoản / đăng nhập, lượt chạy tiếp; trạng thái, câu lịch sử, data đi đâu theo chính sách của mã.
       IF v_tc_code IS NOT NULL THEN
         v_policy := v_policy || jsonb_build_object('quota_effect', 'no_count', 'target_streak_effect', 'ignore', 'pace_mode', 'none',
           'pace_seconds', NULL, 'lock_action_codes', '[]'::jsonb, 'campaign_effect', 'none', 'account_effect', 'none', 'login_effect', 'none',
@@ -1309,7 +1393,7 @@ BEGIN
             error_code, counts_toward_limit, report_group, log, data, policy_snapshot, result_key, created_at, post_url)
           VALUES (r.input_data_id, r.campaign_id, r.account_id, v_action_name, v_action, coalesce(v_sem.status_value, 'thất bại'),
             (v_policy->>'detail_status_id')::bigint, (v_policy->>'sub_status_id')::bigint, v_error_code, v_count, v_sem.report_group, v_log,
-            -- V565: dòng thay cho bước bỏ qua không ghi tín hiệu / dữ liệu của cổng (không có gì nhắc tới việc kiểm).
+            -- V569: dòng thay cho bước bỏ qua không ghi tín hiệu / dữ liệu của cổng (không có gì nhắc tới việc kiểm).
             CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery)
                  ELSE jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery, 'signal', v_signal - 'trace', 'evidence', v_evidence)
                         || coalesce(o->'data', '{}'::jsonb) END,
@@ -1320,7 +1404,7 @@ BEGIN
               'badTargetEffect', v_policy->>'target_streak_effect',
               'v2', jsonb_build_object('errorClass', v_policy->>'error_class', 'ruleId', v_rule_id, 'matchedBy', v_matched_by,
                 'policyIds', v_policy->'policy_ids', 'revisions', v_policy->'revisions', 'targetRunId', r.id)
-                -- V565: dấu nội bộ để việc nạp lịch sử bỏ qua dòng này (không phải kết quả Zalo thật).
+                -- V569: dấu nội bộ để việc nạp lịch sử bỏ qua dòng này (không phải kết quả Zalo thật).
                 || CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('targetCheck', true) ELSE '{}'::jsonb END),
             v_rk, v_now, nullif(o->'data'->>'postUrl', ''))
           RETURNING id INTO v_detail_id;
@@ -1588,7 +1672,7 @@ END $function$
 DO $cron$
 BEGIN
   IF to_regprocedure('cron.schedule(text,text,text)') IS NOT NULL THEN
-    PERFORM cron.schedule('aka-agent-engine-phone-results', '* * * * *', 'SELECT private.aka_agent_engine_phone_results_ingest()');
+    PERFORM cron.schedule('aka-agent-engine-receiver-results', '* * * * *', 'SELECT private.aka_agent_engine_receiver_results_ingest()');
   END IF;
 END $cron$;
 
@@ -1596,37 +1680,37 @@ DO $post$
 DECLARE v_oid oid; v_acl text; v_role text; v_obj text;
 BEGIN
   v_oid := 'public.aka_agent_engine_claim_target_v1(jsonb)'::regprocedure;
-  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '4aa166d9f4505c4b2d2023c635029ab9' THEN
-    RAISE EXCEPTION 'V565 postflight: định nghĩa claim %', md5(pg_get_functiondef(v_oid));
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '62f44b6736a72569a541a40876676395' THEN
+    RAISE EXCEPTION 'V569 postflight: định nghĩa claim %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v565_acl_claim', true) THEN RAISE EXCEPTION 'V565 postflight: quyền / chủ sở hữu claim bị đổi'; END IF;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v569_acl_claim', true) THEN RAISE EXCEPTION 'V569 postflight: quyền / chủ sở hữu claim bị đổi'; END IF;
   v_oid := 'public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'::regprocedure;
-  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '9b088d26bf2c92a93e6d9f082f5f941b' THEN
-    RAISE EXCEPTION 'V565 postflight: định nghĩa report %', md5(pg_get_functiondef(v_oid));
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'e62c020cac3df969b5c3e8a5d03f4e35' THEN
+    RAISE EXCEPTION 'V569 postflight: định nghĩa report %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v565_acl_report', true) THEN RAISE EXCEPTION 'V565 postflight: quyền / chủ sở hữu report bị đổi'; END IF;
-  FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_phone_results', 'private.auto_engine_phone_results_state'] LOOP
-    IF NOT (SELECT c.relrowsecurity FROM pg_catalog.pg_class c WHERE c.oid = v_obj::regclass) THEN RAISE EXCEPTION 'V565 postflight: % chưa bật RLS', v_obj; END IF;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v569_acl_report', true) THEN RAISE EXCEPTION 'V569 postflight: quyền / chủ sở hữu report bị đổi'; END IF;
+  FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_receiver_results', 'private.auto_engine_receiver_results_state'] LOOP
+    IF NOT (SELECT c.relrowsecurity FROM pg_catalog.pg_class c WHERE c.oid = v_obj::regclass) THEN RAISE EXCEPTION 'V569 postflight: % chưa bật RLS', v_obj; END IF;
   END LOOP;
   FOREACH v_role IN ARRAY ARRAY['anon', 'authenticated', 'service_role', 'aka_agent_desktop', 'aka_agent_chat_api'] LOOP
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = v_role) THEN
-      FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_phone_results', 'private.auto_engine_phone_results_state'] LOOP
+      FOREACH v_obj IN ARRAY ARRAY['private.auto_engine_receiver_results', 'private.auto_engine_receiver_results_state'] LOOP
         IF has_table_privilege(v_role, v_obj, 'SELECT') OR has_table_privilege(v_role, v_obj, 'INSERT') OR has_table_privilege(v_role, v_obj, 'UPDATE')
-           OR has_table_privilege(v_role, v_obj, 'DELETE') THEN RAISE EXCEPTION 'V565 postflight: % có quyền trên %', v_role, v_obj; END IF;
+           OR has_table_privilege(v_role, v_obj, 'DELETE') THEN RAISE EXCEPTION 'V569 postflight: % có quyền trên %', v_role, v_obj; END IF;
       END LOOP;
-      FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_phone_key(text)', 'private.aka_agent_engine_target_check_probe(text)', 'private.aka_agent_engine_phone_results_ingest(integer,integer)'] LOOP
-        IF has_function_privilege(v_role, v_obj, 'EXECUTE') THEN RAISE EXCEPTION 'V565 postflight: % chạy được %', v_role, v_obj; END IF;
+      FOREACH v_obj IN ARRAY ARRAY['private.aka_agent_engine_target_check_config()', 'private.aka_agent_engine_target_check_on(bigint)', 'private.aka_agent_engine_target_check_rules()', 'private.aka_agent_engine_target_check_tracked()', 'private.aka_agent_engine_receiver_key(text,text)', 'private.aka_agent_engine_target_check_probe(text,text)', 'private.aka_agent_engine_receiver_results_ingest(integer,integer)'] LOOP
+        IF has_function_privilege(v_role, v_obj, 'EXECUTE') THEN RAISE EXCEPTION 'V569 postflight: % chạy được %', v_role, v_obj; END IF;
       END LOOP;
     END IF;
   END LOOP;
-  IF private.aka_agent_engine_target_check_on(1) THEN RAISE EXCEPTION 'V565 postflight: thiết lập phải ở mode off'; END IF;
+  IF private.aka_agent_engine_target_check_on(1) THEN RAISE EXCEPTION 'V569 postflight: thiết lập phải ở mode off'; END IF;
   IF (SELECT count(*) FROM private.aka_agent_engine_target_check_rules() WHERE enabled) <> 3 THEN
-    RAISE EXCEPTION 'V565 postflight: cần 3 cặp mã đang bật';
+    RAISE EXCEPTION 'V569 postflight: cần 3 cặp mã đang bật';
   END IF;
   IF to_regclass('cron.job') IS NOT NULL THEN
-    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'aka-agent-engine-phone-results') THEN RAISE EXCEPTION 'V565 postflight: chưa có job aka-agent-engine-phone-results'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = 'aka-agent-engine-receiver-results') THEN RAISE EXCEPTION 'V569 postflight: chưa có job aka-agent-engine-receiver-results'; END IF;
   END IF;
 END $post$;
 

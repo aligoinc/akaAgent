@@ -44,17 +44,22 @@ async function bootstrap(db, notes) {
     await require('../fixtures/campaign-outcome-engine/campaign-repeat-v561.cjs').applyCampaignRepeatV561(db)
     notes.push('V561 (lặp lại sau khi chạy xong): đã apply')
   }
-  // Kiểm SĐT trên toàn hệ thống (V565, dựng trên thân claim V564 và report V558): SCENARIO_TARGET_CHECK=1 (kèm SCENARIO_FACEBOOK_MIGRATIONS=1) để
-  // chạy bộ kịch bản trên DB đã có V565 (thiết lập engine.target_check mặc định off), chứng minh Zalo không đổi hành vi khi chưa bật.
+  // Kiểm người nhận trên toàn hệ thống (V569, dựng trên thân claim V564 và report V558): SCENARIO_TARGET_CHECK=1 (kèm SCENARIO_FACEBOOK_MIGRATIONS=1) để
+  // chạy bộ kịch bản trên DB đã có V569 (thiết lập engine.target_check mặc định off), chứng minh Zalo không đổi hành vi khi chưa bật.
   if (process.env.SCENARIO_TARGET_CHECK === '1') {
-    if (process.env.SCENARIO_FACEBOOK_MIGRATIONS !== '1') throw new Error('SCENARIO_TARGET_CHECK=1 cần SCENARIO_FACEBOOK_MIGRATIONS=1 (V565 dựng trên V564)')
+    if (process.env.SCENARIO_FACEBOOK_MIGRATIONS !== '1') throw new Error('SCENARIO_TARGET_CHECK=1 cần SCENARIO_FACEBOOK_MIGRATIONS=1 (V569 dựng trên V564)')
     const phone = JSON.parse(fs.readFileSync(path.join(ROOT, 'migrations/snapshots/cooldown-history-v431/phone-dependency.json'), 'utf8'))
       .find(f => f.signature === 'normalize_phone(text)')
     if (!(await db.query(`SELECT to_regprocedure('public.normalize_phone(text)') AS f`)).rows[0].f) await db.query(phone.definition)
-    const v565 = require('../build-v565-sql.cjs')
-    await db.query(v565.migrationP1)
-    await db.query(v565.migrationP2)
-    notes.push('V565 (kiểm SĐT trên toàn hệ thống, mode off): đã apply')
+    // zalo_users tối thiểu (claim V569 lấy global id + cờ bạn bè theo tài khoản + UID; production có bảng đủ cột).
+    if (!(await db.query(`SELECT to_regclass('public.zalo_users') AS t`)).rows[0].t) {
+      await db.query(`CREATE TABLE public.zalo_users (id bigserial PRIMARY KEY, account_id bigint NOT NULL, zalo_uid text NOT NULL, global_id text,
+        is_fr integer, phone_number text); CREATE UNIQUE INDEX idx_zalo_users_account_uid ON public.zalo_users (account_id, zalo_uid)`)
+    }
+    const v569 = require('../build-v569-sql.cjs')
+    await db.query(v569.migrationP1)
+    await db.query(v569.migrationP2)
+    notes.push('V569 (kiểm người nhận trên toàn hệ thống, mode off): đã apply')
   }
   // Nhóm data: hàm kết thúc thật của production + bảng nguồn tối thiểu (như replay.cjs).
   await db.query(`CREATE TABLE public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,

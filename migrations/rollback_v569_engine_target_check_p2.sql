@@ -1,27 +1,27 @@
--- Gỡ V565 phần 2: trả claim_target_v1 về bản V564 và report_v1 về bản V558, bỏ job, thiết lập, hàm và bảng kiểm SĐT (mất bảng đã nạp).
--- SINH TỪ scripts/build-v565-sql.cjs. Data đang chạy không bị ảnh hưởng (lõi chỉ thấy quyết định skip khi mode bật). Sau đó có thể gỡ
--- phần 1 (rollback_v565_engine_target_check_p1.sql).
+-- Gỡ V569 phần 2: trả claim_target_v1 về bản V564 và report_v1 về bản V558, bỏ job, thiết lập, hàm và bảng kiểm người nhận (mất sổ đã nạp).
+-- SINH TỪ scripts/build-v569-sql.cjs. Data đang chạy không bị ảnh hưởng (lõi chỉ thấy quyết định skip khi mode bật). Sau đó có thể gỡ
+-- phần 1 (rollback_v569_engine_target_check_p1.sql).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
-DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'Gỡ V565 p2';
+DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'Gỡ V569 p2';
 BEGIN
   v_oid := to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)');
   IF v_oid IS NULL THEN RAISE EXCEPTION '%: không có public.aka_agent_engine_claim_target_v1(jsonb)', v_label; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
-  IF v_md5 = '03d72830d664682c1f51dc3dd9944eda' THEN RAISE EXCEPTION 'Gỡ V565: claim đã là bản trước V565'; END IF;
-  IF v_md5 IS DISTINCT FROM '4aa166d9f4505c4b2d2023c635029ab9' THEN RAISE EXCEPTION 'Gỡ V565: định nghĩa claim không phải bản V565 (claim: %)', v_md5; END IF;
+  IF v_md5 = '03d72830d664682c1f51dc3dd9944eda' THEN RAISE EXCEPTION 'Gỡ V569: claim đã là bản trước V569'; END IF;
+  IF v_md5 IS DISTINCT FROM '62f44b6736a72569a541a40876676395' THEN RAISE EXCEPTION 'Gỡ V569: định nghĩa claim không phải bản V569 (claim: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v565_acl_claim', v_acl, true);
+  PERFORM set_config('aka.v569_acl_claim', v_acl, true);
   v_oid := to_regprocedure('public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)');
   IF v_oid IS NULL THEN RAISE EXCEPTION '%: không có public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)', v_label; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
-  IF v_md5 = 'bb8bc00f9d2a8c51a00dcb525fa2e4ab' THEN RAISE EXCEPTION 'Gỡ V565: report đã là bản trước V565'; END IF;
-  IF v_md5 IS DISTINCT FROM '9b088d26bf2c92a93e6d9f082f5f941b' THEN RAISE EXCEPTION 'Gỡ V565: định nghĩa report không phải bản V565 (report: %)', v_md5; END IF;
+  IF v_md5 = 'bb8bc00f9d2a8c51a00dcb525fa2e4ab' THEN RAISE EXCEPTION 'Gỡ V569: report đã là bản trước V569'; END IF;
+  IF v_md5 IS DISTINCT FROM 'e62c020cac3df969b5c3e8a5d03f4e35' THEN RAISE EXCEPTION 'Gỡ V569: định nghĩa report không phải bản V569 (report: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v565_acl_report', v_acl, true);
+  PERFORM set_config('aka.v569_acl_report', v_acl, true);
 END $pre$;
 
 CREATE OR REPLACE FUNCTION public.aka_agent_engine_claim_target_v1(p_ctx jsonb)
@@ -1185,35 +1185,36 @@ END $function$
 DO $cron$
 BEGIN
   IF to_regclass('cron.job') IS NOT NULL THEN
-    PERFORM cron.unschedule(j.jobid) FROM cron.job j WHERE j.jobname = 'aka-agent-engine-phone-results';
+    PERFORM cron.unschedule(j.jobid) FROM cron.job j WHERE j.jobname = 'aka-agent-engine-receiver-results';
   END IF;
 END $cron$;
 
 DELETE FROM public.auto_system_settings WHERE key = 'engine.target_check';
-DROP FUNCTION private.aka_agent_engine_phone_results_ingest(integer,integer);
-DROP FUNCTION private.aka_agent_engine_target_check_probe(text);
-DROP FUNCTION private.aka_agent_engine_phone_key(text);
+DROP FUNCTION private.aka_agent_engine_receiver_results_ingest(integer,integer);
+DROP FUNCTION private.aka_agent_engine_target_check_probe(text,text);
+DROP FUNCTION private.aka_agent_engine_receiver_key(text,text);
+DROP FUNCTION private.aka_agent_engine_target_check_tracked();
 DROP FUNCTION private.aka_agent_engine_target_check_rules();
 DROP FUNCTION private.aka_agent_engine_target_check_on(bigint);
 DROP FUNCTION private.aka_agent_engine_target_check_config();
-DROP TABLE private.auto_engine_phone_results_state;
-DROP TABLE private.auto_engine_phone_results;
+DROP TABLE private.auto_engine_receiver_results_state;
+DROP TABLE private.auto_engine_receiver_results;
 
 DO $post$
 DECLARE v_oid oid; v_acl text;
 BEGIN
   v_oid := 'public.aka_agent_engine_claim_target_v1(jsonb)'::regprocedure;
   IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '03d72830d664682c1f51dc3dd9944eda' THEN
-    RAISE EXCEPTION 'Gỡ V565 postflight: định nghĩa claim %', md5(pg_get_functiondef(v_oid));
+    RAISE EXCEPTION 'Gỡ V569 postflight: định nghĩa claim %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v565_acl_claim', true) THEN RAISE EXCEPTION 'Gỡ V565 postflight: quyền / chủ sở hữu claim bị đổi'; END IF;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v569_acl_claim', true) THEN RAISE EXCEPTION 'Gỡ V569 postflight: quyền / chủ sở hữu claim bị đổi'; END IF;
   v_oid := 'public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'::regprocedure;
   IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'bb8bc00f9d2a8c51a00dcb525fa2e4ab' THEN
-    RAISE EXCEPTION 'Gỡ V565 postflight: định nghĩa report %', md5(pg_get_functiondef(v_oid));
+    RAISE EXCEPTION 'Gỡ V569 postflight: định nghĩa report %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v565_acl_report', true) THEN RAISE EXCEPTION 'Gỡ V565 postflight: quyền / chủ sở hữu report bị đổi'; END IF;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v569_acl_report', true) THEN RAISE EXCEPTION 'Gỡ V569 postflight: quyền / chủ sở hữu report bị đổi'; END IF;
 END $post$;
 
 COMMIT;
