@@ -47,7 +47,7 @@ Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
 [Build akaAgent Desktop 9.9.0](../audits/akaagent-9.9.0-20261117/README.md):
-**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; chưa upload/phát hành, feed đang trả 9.8.0.
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:09:22–21:12:42 VN, 17/11/2026; đã lên máy khách (presence ghi máy khách đầu tiên chạy 9.9.0 lúc 22:28 VN 17/11, 66 nhân viên tới 09:46 VN 18/11; chưa kiểm feed).
 Không build App Server** (36/241 file trong gói Server đổi từ 9.7.0, không file nào đổi hành vi đường Zalo Server). Nguồn worktree
 `release-9.9.0`, nhánh `codex/release-9.9.0` `c6d41791` (nền `origin/dev_3` `0ca740cf` sau PR #693, commit chỉ đổi version; version và
 biên nhận đã merge `dev_3` qua PR #694 ngày 17/11). Mới so

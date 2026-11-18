@@ -1,0 +1,27 @@
+{
+  "change": "auto_system_settings engine.facebook (id 124): bật engine v2 Facebook cho mọi tổ chức",
+  "requestedBy": "anh (\"bật cho toàn bộ tổ chức, edit trigger cho khách hàng mới cũng bật cho fb luôn\", 18/11/2026)",
+  "changedAtUtc": "2026-11-18T03:44:38Z",
+  "changedAtVn": "2026-11-18 10:44:38",
+  "method": "supabase db query --linked, một giao dịch: SELECT … FOR UPDATE, so giá trị cũ, UPDATE",
+  "before": "{\"mode\":\"orgs\",\"organizationIds\":[1,124,265,382,444,638,701,1419,1421,1661,2036]}",
+  "after": "{\"mode\":\"all\"}",
+  "newOrganizations": "Không cần trigger: aka_agent_engine_facebook_org_enabled trả true với mọi tổ chức khi mode = all, kể cả tổ chức tạo sau (kiểm: tổ chức mới nhất 2214 = true). Trigger trg_use_new_zalo_runtime_on_insert (V528) chỉ là cờ Zalo, không liên quan.",
+  "impactAtChange": {
+    "activeFacebookCampaigns": 1329,
+    "organizationsWithActiveFacebookCampaigns": 289,
+    "staffWithActiveFacebookCampaigns": 292,
+    "staffWithFacebookCampaignsSeen24hByVersion": { "9.9.0": 33, "9.8.0": 27, "9.7.0": 15, "9.6.0": 7, "9.5.0": 6, "9.4.0": 5, "9.3.0": 4, "9.2.0": 5, "9.1.0": 6 },
+    "note": "Chỉ Desktop 9.9.0 chạy engine Facebook; máy đọc cờ lúc đăng nhập, nên nhân viên 9.9.0 ngoài 11 tổ chức cũ chuyển sang engine ở lần đăng nhập / mở app kế tiếp. Máy bản cũ chạy bộ cũ tới khi cập nhật. Tài khoản chạy ngẫu nhiên: 0."
+  },
+  "verify": {
+    "settingAfter": "{\"mode\":\"all\"}",
+    "orgEnabled": { "2036": true, "1532": true, "null": false, "2214 (mới nhất)": true },
+    "enabledOrgsWithFacebookCampaigns": 289
+  },
+  "rollback": {
+    "emergencyOff": "{\"mode\":\"off\",\"organizationIds\":[]}",
+    "backTo11Orgs": "{\"mode\":\"orgs\",\"organizationIds\":[1,124,265,382,444,638,701,1419,1421,1661,2036]}",
+    "effect": "Có hiệu lực ở lần nhận data kế tiếp (claim kiểm cờ mỗi lần); Desktop đang chạy engine thì claim trả not_enabled và chạy lại bộ cũ."
+  }
+}
