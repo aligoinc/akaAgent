@@ -40,6 +40,8 @@ Bắt đầu ngẫu nhiên không cần lưu gì ở chiến dịch đăng nhóm
 
 ## Thứ tự đưa vào dùng
 
+**V531 đã apply akachat lúc 17:32:15 VN 18/11/2026** (anh: "Apply V531"). Dòng sổ `20261118103215 migration_v531_post_bump_content_rotation_desktop`, md5 sổ = md5 file `aea07ae7022e9ddc8fe0e13c168cb973`. Sau apply, `aka_agent_desktop` có INSERT cột, không có UPDATE; `anon` / `authenticated` không có quyền; thân RPC giữ nguyên. Không apply lại. [Biên nhận](../migrations/snapshots/post-bump-content-rotation-v531/apply-receipt.json).
+
 1. Apply V531, kiểm sổ migration (md5 `statements[1]` = md5 file) và `has_column_privilege('aka_agent_desktop','public.auto_campaign_input_data','content_rotation_indexes','INSERT')` = true.
 2. Phát hành Desktop. Nếu làm ngược thứ tự thì Desktop dùng cách chèn dự phòng ở mục 3.
 

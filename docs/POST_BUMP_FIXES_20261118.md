@@ -51,11 +51,12 @@ Nhận chiến dịch up tin bằng `isPostBumpTargetCampaign`: loại `facebook
 
 **Giữ nguyên theo anh chốt:** chiến dịch up tin đang tạm dừng vẫn nhận lượt mới và không in câu nào. Dò chờ duyệt cũng giữ nguyên.
 
+**V531 đã apply akachat 17:32:15 VN 18/11/2026** (anh: "Apply V531"; sổ `20261118103215`, md5 sổ = file `aea07ae7…`; [biên nhận](../migrations/snapshots/post-bump-content-rotation-v531/apply-receipt.json)). Desktop chỉ ghi chỉ số câu khi phát hành bản có đợt sửa này.
+
 ## Chưa làm
 
 Các việc dưới đây cần ghi DB nên hỏi anh riêng.
 
-- Apply V531, sau khi kiểm sổ migration.
 - Đổi nghỉ 30 giây cho 1.142 chiến dịch up tin cũ.
 - Dọn các lượt kẹt ở chiến dịch của tài khoản đã xoá.
 - Build Desktop: chỉ build, anh tự phát hành.

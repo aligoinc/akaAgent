@@ -1,0 +1,39 @@
+{
+  "migration": "migrations/migration_v531_post_bump_content_rotation_desktop.sql",
+  "ledger": {
+    "version": "20261118103215",
+    "name": "migration_v531_post_bump_content_rotation_desktop",
+    "statementsMd5": "aea07ae7022e9ddc8fe0e13c168cb973",
+    "createdBy": null
+  },
+  "fileMd5": "aea07ae7022e9ddc8fe0e13c168cb973",
+  "appliedAtUtc": "2026-11-18T10:32:15Z",
+  "appliedAtVn": "2026-11-18 17:32:15",
+  "approvedBy": "anh (\"Apply V531\", 18/11)",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT); chỉ GRANT INSERT (content_rotation_indexes) cho aka_agent_desktop, không đổi hàm / bảng / RLS",
+  "preApply": {
+    "readAtVn": "2026-11-18 17:32:05",
+    "ledgerLatest": ["20261118102303 migration_v574_engine_error_watch", "20261118100806 migration_v575_engine_specific_codes_wait_note"],
+    "v531InLedger": 0,
+    "desktopInsertRotation": false,
+    "desktopUpdateRotation": false,
+    "desktopInsertUid": true,
+    "anonInsertRotation": false,
+    "authenticatedInsertRotation": false,
+    "contentIndexRpcMd5": "df449a2b2eb195ddb3110edc4633ddfa",
+    "rotationObjectCheckExists": true,
+    "inRecovery": false,
+    "defaultTransactionReadOnly": "off"
+  },
+  "postApply": {
+    "readAtVn": "2026-11-18 17:32:28",
+    "ledgerStatements": 1,
+    "statementsMd5EqualsFile": true,
+    "desktopInsertRotation": true,
+    "desktopUpdateRotation": false,
+    "anonInsertRotation": false,
+    "authenticatedInsertRotation": false,
+    "contentIndexRpcMd5": "df449a2b2eb195ddb3110edc4633ddfa"
+  },
+  "notes": "Desktop đang phát hành chưa gửi cột này nên không đổi hành vi cho tới khi phát hành bản có nhánh claude/fb-post-bump-fixes. Không apply lại (preflight chặn v531_already_applied_do_not_reapply). Gỡ: migrations/rollback_v531_post_bump_content_rotation_desktop.sql."
+}
