@@ -233,8 +233,12 @@ async function main() {
     assert.equal(r4.lines.filter(l => l.startsWith('⚠️ Nhắn tin group')).length, 1)
     assert.ok(r4.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'))
     assert.ok(r4.lines.includes('⏸ Kết thúc batch: Toàn bộ 2 target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra'))
+    // Dòng riêng kèm tên sau các dòng của lô (anh chốt 18/11/2026), đúng một lần.
+    const endAt4 = r4.lines.indexOf('⏸ Kết thúc batch: Toàn bộ 2 target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra')
+    assert.equal(r4.lines.indexOf('⏸ Chiến dịch "Chia sẻ" đã được tạm dừng.'), endAt4 + 1, JSON.stringify(r4.lines))
+    assert.equal(r4.lines.filter(l => l.includes('đã được tạm dừng')).length, 1)
     assert.equal(r4.result.reason, 'stop_campaign')
-    pass('cả lô không ai nhận được: tạm dừng chiến dịch "Toàn bộ N target…", mỗi lỗi khác nhau in một lần, "⏸ Kết thúc batch: …"')
+    pass('cả lô không ai nhận được: tạm dừng chiến dịch "Toàn bộ N target…", mỗi lỗi khác nhau in một lần, "⏸ Kết thúc batch: …", rồi "⏸ Chiến dịch … đã được tạm dừng."')
 
     // S5: không ai nhận được, người thứ hai có lỗi khoá: chỉ người đó áp đủ chính sách (khoá), rồi vẫn tạm dừng "toàn bộ thất bại".
     const s5 = await make({ targets: [{ name: 'X', uid: '51' }, { name: 'Y', uid: '52' }] })
@@ -324,7 +328,10 @@ async function main() {
     assert.equal(c13.note, 'Vui lòng nhập nội dung hoặc chọn media để gửi Zalo (CFG17)')
     assert.deepEqual((await inputs(s13)).map(i => i.status), ['chờ xử lý', 'chờ xử lý'])
     assert.equal((await details(s13)).length, 0)
-    pass('không chữ không tệp: CFG17 tạm dừng chiến dịch một lần, data về hàng đợi, không ghi lịch sử')
+    const reasonAt13 = r13.lines.findLastIndex(l => /\(CFG17\)$/.test(l))
+    assert.ok(reasonAt13 >= 0 && r13.lines[reasonAt13 + 1] === '⏸ Chiến dịch "Chia sẻ" đã được tạm dừng.', JSON.stringify(r13.lines))
+    assert.equal(r13.lines.filter(l => l.includes('đã được tạm dừng')).length, 1)
+    pass('không chữ không tệp: CFG17 tạm dừng chiến dịch một lần, data về hàng đợi, không ghi lịch sử, có dòng "⏸ Chiến dịch … đã được tạm dừng."')
 
     // S14: gửi lặp lại sau x phút: xong lượt thì hẹn lại, data về chờ xử lý cho lượt sau (V501).
     const s14 = await make({ extra: { zaloShareRepeatEnabled: true, zaloShareRepeatAfterMinutes: 30 }, targets: [{ name: 'A', uid: '141' }] })

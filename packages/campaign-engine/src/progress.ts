@@ -155,6 +155,15 @@ export function campaignPausedProgress(campaignId: number, campaignName: string,
     : `⏸ Chiến dịch "${campaignName}" đã được tạm dừng.`, 'info')
 }
 
+/**
+ * Chính sách lỗi vừa tạm dừng chiến dịch (DB trả campaign.effect = 'pause'): dòng riêng kèm tên, in sau dòng lý do "⚠️ …", trên cả
+ * Desktop lẫn Fly. Trước đây lịch sử chạy chỉ có dòng lý do, không nói chiến dịch đã dừng; tiến trình hiện lẫn nhiều chiến dịch nên
+ * phải có tên (anh chốt 18/11/2026). Cùng câu Desktop in khi khách bấm tạm dừng (campaignPausedProgress).
+ */
+export function policyPausedProgress(campaignId: number, campaignName: string): ProgressLine {
+  return line(campaignId, null, `⏸ Chiến dịch "${campaignName}" đã được tạm dừng.`, 'warning')
+}
+
 /** Tài khoản bị đăng xuất / tạm dừng trong lượt: Desktop stopCampaignForAccountCondition, VPS completePauseAtBoundary. */
 export function accountStopProgress(campaignId: number, campaignName: string, runtime: 'desktop' | 'fly', reason: 'logged_out' | 'paused',
   accountStatus?: string | null): ProgressLine {

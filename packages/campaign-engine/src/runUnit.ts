@@ -18,8 +18,8 @@ import { callUntilAvailable, DEFAULT_RETRY, OutcomeReporter, type OutageHandler,
 import { paceDelayMs, type PaceSettings } from './pacing.js'
 import {
   accountStopProgress, campaignNoteProgress, cooldownPauseProgress, campaignPausedProgress, campaignWaitProgress, configIssueProgress, dailyBoundaryProgress,
-  finishProgress, formatVietnamDateTime, gateSkipProgress, outageProgress, outcomeProgress, paceProgress, recoveredProgress, shuffleProgress,
-  targetDoneProgress, targetStartProgress, unitStartProgress
+  finishProgress, formatVietnamDateTime, gateSkipProgress, outageProgress, outcomeProgress, paceProgress, policyPausedProgress, recoveredProgress,
+  shuffleProgress, targetDoneProgress, targetStartProgress, unitStartProgress
 } from './progress.js'
 import type { ConfigIssue } from './validation.js'
 
@@ -476,6 +476,11 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
 
   /** Data có thao tác gửi lỗi mà đã giao một phần / không rõ đã tới: Desktop đóng data không in "✅ Hoàn thành" (CS:4732-4741). */
   const uncertainTargets = new Set<number>()
+  /**
+   * DB đã tạm dừng chiến dịch ở một lần báo trong data đang chạy. Lần báo đó có thể là một bước giữa chừng (gửi thường: bước gửi lỗi
+   * CFG01 tạm dừng chiến dịch, data chỉ chốt ở lần báo cuối, lúc đó hiệu ứng là 'none'), nên ghi lại rồi in một lần ở afterTarget.
+   */
+  let pausedByPolicy = false
   const afterTarget = (claim: Claimed, res: ReportSuccess): TargetEnd => {
     // Như Desktop: data chạy xong (kể cả thao tác lỗi) in "✅ Hoàn thành"; về hàng đợi, tạm dừng, hay đóng vì không gửi lại
     // được (giao một phần, không rõ kết quả) thì không.
@@ -483,6 +488,11 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       deps.events.progress(targetDoneProgress(cfg.campaignId, claim.target.id, labelOf(claim.target)))
     }
     if (res.campaign.note) deps.events.progress(campaignNoteProgress(cfg.campaignId, res.campaign.note))
+    // Dòng lý do không nói chiến dịch đã dừng: chính sách tạm dừng thì in thêm dòng riêng kèm tên (anh chốt 18/11/2026).
+    if (pausedByPolicy || res.campaign.effect === 'pause') {
+      pausedByPolicy = false
+      deps.events.progress(policyPausedProgress(cfg.campaignId, cfg.campaignName))
+    }
     const paceMs = res.next === 'next_target' && res.target.morePending ? paceDelayMs(res.pace, cfg.pacing) : 0
     deps.events.trace({ type: 'target_done', targetRunId: claim.targetRunId, inputDataId: claim.target.id, status: res.target.status,
       next: res.next, safety: res.safety, streak: res.streak ?? null, paceMs })
@@ -510,10 +520,12 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
         { actionName: actionNameOf(decision.actionCode), targetLabel: labelOf(claim.target) })
       if (progress) deps.events.progress(progress)
     }
+    if (res.campaign?.effect === 'pause') pausedByPolicy = true
     return res
   }
 
   const runTarget = async (claim: Claimed): Promise<TargetEnd> => {
+    pausedByPolicy = false
     try {
       return await runTargetSteps(claim)
     } finally {
@@ -646,7 +658,8 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     if (res.next === 'ownership_lost') { ownershipLost = true; return { stop: true, reason: 'ownership_lost' } }
     return null
   }
-  const batchApi = (claim: BatchClaimed, items: BatchItem[]): BatchApi => ({
+  /** onPaused: DB vừa tạm dừng chiến dịch trong lô (chính sách của một data, hoặc "Toàn bộ N target … đều thất bại"). */
+  const batchApi = (claim: BatchClaimed, items: BatchItem[], onPaused?: () => void): BatchApi => ({
     leaseToken: claim.leaseToken,
     items,
     gateSettings: claim.gates ?? {},
@@ -666,7 +679,9 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     reportOne: async (item, step, raw) => {
       const claimed = claimOf.get(item.targetRunId)!
       const res = await send(claimed, [toReport(claimed, step, raw)], true)
-      return stopFrom(res, item.targetRunId) ?? (res as ReportSuccess)
+      const out = stopFrom(res, item.targetRunId) ?? (res as ReportSuccess)
+      if (!('stop' in out) && out.campaign?.effect === 'pause') onPaused?.()
+      return out
     },
     reportBatch: async (entries, batchSize, options = {}) => {
       const items = entries.map(entry => {
@@ -681,6 +696,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       const res = await reporter.reportBatch(claim.leaseToken, items, batchSize, options.alreadyStopped === true, unit.signal)
       if (!res.ok) return { stop: true, reason: 'report_rejected', detail: { ...res } }
       if (res.next === 'ownership_lost') { ownershipLost = true; return { stop: true, reason: 'ownership_lost' } }
+      if (res.summary?.paused || res.items.some(item => item.response.campaign?.effect === 'pause')) onPaused?.()
       return res
     },
     progress: (text, level = 'info', inputDataId = null) =>
@@ -708,11 +724,16 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
             if ('stop' in res) return res
           }
           if (first.campaign.note) deps.events.progress(campaignNoteProgress(cfg.campaignId, first.campaign.note))
+          if (first.campaign.effect === 'pause') deps.events.progress(policyPausedProgress(cfg.campaignId, cfg.campaignName))
           return { stop: true, reason: 'config_invalid', detail: { issue } }
         }
       }
       targets += items.length
-      return await batch.run(batchApi(claim, items))
+      // Dòng tạm dừng in sau khi lô xong, tức sau các dòng lý do của lô ("⚠️ …", "⏸ Kết thúc batch: …").
+      let paused = false
+      const end = await batch.run(batchApi(claim, items, () => { paused = true }))
+      if (paused) deps.events.progress(policyPausedProgress(cfg.campaignId, cfg.campaignName))
+      return end
     } finally {
       const onTargetEnd = cfg.onTargetEnd
       if (onTargetEnd) {
@@ -963,6 +984,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
   }
 
   const runWorkflowTargetWithCleanup = async (claim: Claimed, workflow: WorkflowUnitConfig): Promise<TargetEnd> => {
+    pausedByPolicy = false
     try {
       return await runWorkflowTarget(claim, workflow)
     } finally {
