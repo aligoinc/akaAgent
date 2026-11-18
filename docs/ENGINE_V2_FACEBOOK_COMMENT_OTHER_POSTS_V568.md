@@ -1,12 +1,29 @@
 # V568: engine v2 Facebook không comment 2 lần vào một bài khi đăng nhóm (18/11/2026)
 
 **Tình trạng:**
-- **V568 đã apply akachat lúc 12:17:31 VN 18/11/2026** theo yêu cầu ("apply rồi create pr"): sổ `20261118051731`, không apply lại, md5 sổ = md5 file = `b2a3b61c…`.
+- **ĐÃ GỠ lúc 12:31:08 VN 18/11/2026** theo yêu cầu ("Gỡ V568 ngay"). Block 2851 và md5 đã duyệt của bước 6 đã về bản V563 (`06889369…`), 0 lỗi 5xx. [Biên nhận gỡ](../migrations/snapshots/engine-facebook-v568/rollback-receipt.json). Lý do ở mục "Vì sao gỡ".
+- Dòng sổ `20261118051731` của V568 vẫn còn; không apply lại V568.
+- **V568 đã apply akachat lúc 12:17:31 VN 18/11/2026** theo yêu cầu ("apply rồi create pr"): sổ `20261118051731`, md5 sổ = md5 file = `b2a3b61c…`.
   - Chỉ dữ liệu, 0 lỗi 5xx.
   - [Biên nhận](../migrations/snapshots/engine-facebook-v568/apply-receipt.json).
 - Code **đã merge `dev_3` qua [PR #697](https://github.com/aligoinc/akaAgent/pull/697) ngày 18/11 theo yêu cầu ("merge đi")**. Không cần build Desktop: chỉ đổi dữ liệu DB (code block), Desktop 9.9.0 đọc block mỗi lượt.
 - Anh chốt 18/11: "sửa luôn đi", sau khi xác nhận đây là lỗi logic.
 - Chỉ sửa bản engine của block comment (block 2851); bộ cũ (block 34) không đổi.
+
+## Vì sao gỡ (18/11/2026, kiểm trên trang Facebook thật)
+
+- **Cách xem:** ở Cốc Cốc, tài khoản thử, mở trang "Nhóm private 1" và đọc DOM bằng chính cách block comment đọc. Chỉ đọc, không bấm, không gửi gì.
+- **Trên trang có 2 bài (Flyby, Lee Danh), nhưng ô bình luận của cả hai đều ra cùng một mã bài.**
+  - Link của bài trong feed chưa nạp (đường dẫn chưa có `/posts/<mã>`), nên cả trang chỉ có đúng 1 mã đọc được: link một comment nằm trong bài Lee Danh.
+  - Hàm `postIdOf` của block leo lên các khung cha cho tới khi gặp khung có đúng một mã. Ô của bài Flyby leo tới tận khung feed, gặp mã đó và nhận luôn là mã của mình.
+- **Hệ quả với V568:**
+  - V568 bỏ mọi ô có mã của bài vừa đăng, gộp các ô cùng mã thành một bài.
+  - Trên trang thật, nhiều bài bị gán cùng một mã, có khi là mã của chính bài vừa đăng (khi feed không có mã nào khác).
+  - Kết quả: bài bị gộp, hoặc bị coi là bài vừa đăng, nên "Không comment vào post của mình" / "Comment tất cả" chỉ comment được 1 bài rồi bỏ qua, có khi không comment bài khác nào.
+- **V563 thì không bị:** cũng dùng mã này nhưng khi không phân biệt được thì bấm ô thứ N, nên vẫn comment đủ (kèm lỗi comment trùng ở mục dưới).
+- **Vì sao bài kiểm không bắt được:** giả lập và `v568-smoke` dùng trang giả mà bài nào cũng có link `/posts/<mã>` đầy đủ.
+- **Thiệt hại:** trong 14 phút V568 chạy (12:17–12:31 VN) có 57 lượt đăng nhóm bằng engine, chỉ 1 lượt có comment (bài của mình, comment đúng). Không lượt nào bị bỏ qua comment bài khác.
+- **Làm lại:** cần cách nhận khung bài không dựa vào link bài (link trong feed chưa nạp), và trang giả của bài kiểm phải giống trang thật (bài không có link, chỉ vài bài có link comment).
 
 ## Lỗi
 
@@ -92,7 +109,29 @@
   - Kiểm sổ ngay trước khi apply (12:15 VN): tới V567, không nhánh nào giữ V568.
 - **Gỡ:** `migrations/rollback_v568_engine_facebook_comment_other_posts.sql` trả code + md5 đã duyệt về V563, chỉ chạy khi block đang đúng bản V568.
 
-## Chưa rõ (không sửa ở đây)
+## Kiểm hộp thoại trên Facebook thật (18/11/2026, sau khi gỡ V568)
+
+- **Cách làm:** ở Cốc Cốc, tài khoản thử, trang "Nhóm private 1". Bấm ô bình luận đúng cách app bấm (`pageController.click`: pointer/mouse event rồi `click()`). Bấm bài A, chờ 3,5 giây, bấm bài B khi hộp thoại A còn mở, chờ 3,5 giây. Không gõ, không gửi gì.
+- **Facebook không giữ hộp thoại cũ.**
+  - Bấm bài B thì Facebook thay nội dung hộp thoại thành bài B: tiêu đề đổi từ "Bài viết của Flyby…" sang "Bài viết của Danh", URL sang `/permalink/<mã bài B>/`.
+  - Chỉ còn một ô nhập ("Bình luận dưới tên …"), thuộc bài B. Hộp thoại gồm 2 phần tử `role=dialog` lồng nhau.
+  - Giả định "gõ vào hộp thoại cũ" (ca A, A, A của giả lập) **không xảy ra** trong cách bấm này.
+- **Nguyên nhân thật của comment trùng thấy được trên trang này:**
+  - Trong hộp thoại bài có nút "Bình luận về bài viết của …" khớp element `fb_comment_box_at_n`. Mở hộp thoại xong, danh sách ô có thêm một ô ở cuối, thuộc bài vừa mở.
+  - Feed chỉ nạp 1 bài lúc mở trang, phải cuộn mới nạp thêm. Vị trí thứ N lớn hơn số bài đã nạp thì ô thứ N là nút trong hộp thoại, tức bài vừa comment, nên comment lại đúng bài đó.
+  - Bộ cũ và V563 đều bấm theo vị trí nên đều bị. Đây có lẽ là phần lớn trong 67 lượt / 7 ngày có comment 2–3 trỏ cùng bài.
+- **Kiểm lại lần 2 (12:55 VN, anh hỏi có phải "link không đổi nhưng bài thực sự đổi"):**
+  - **Mã bài gán nhầm là do cách tìm mã, không do link cũ còn sót.** Mở trang mới, chưa bấm gì: khung bài Flyby không có link nào đọc ra mã, khung bài Lee Danh có link (`…083421`), nhưng `postIdOf` vẫn gán `…083421` cho ô của Flyby. V563 vẫn chạy đúng vì chỉ dùng mã để hỏi "ô ở vị trí này có phải bài mình không", không phải thì bấm ô thứ N; V568 dùng mã để gộp / loại bài khác nên hỏng.
+  - **Đúng là "bài ở vị trí N đổi":** mở hộp thoại bài A xong, Facebook vẽ lại danh sách bài phía sau. Ô bài Flyby biến khỏi danh sách, thêm một bài Lee Danh khác. Danh sách ô đổi từ [Flyby, Lee Danh (3)] sang [Lee Danh (3), Lee Danh (1), Lee Danh]. Lượt comment sau bấm "ô thứ N" có thể ra bài khác với lúc đầu, nên có thể bỏ sót bài hoặc trúng lại bài vừa comment (V563 / bộ cũ).
+  - **Link comment đổi đúng theo bài:** bấm bài B khi hộp thoại A đang mở thì hộp thoại sang bài B, link comment app đọc ra cũng sang bài B (`…083421` → `…400840`).
+  - Link comment app ghi là comment **đầu tiên** trong hộp thoại (bài `…083421` trả comment thử của ngày 17/11), không chắc là comment vừa gửi.
+- **Hướng sửa ban đầu (đã thay bằng V572):** chọn trước danh sách bài một lần trước khi mở hộp thoại nào, thiếu ô thì cuộn, thử comment thật trước khi apply, trang giả phải giống trang thật.
+- **Bản sửa đã làm: [V572](ENGINE_V2_FACEBOOK_COMMENT_DIALOG_POST_V572.md)** (anh: "Làm bản sửa"; **đã apply akachat 13:53:56 VN 18/11**; lúc làm là V570, đổi số vì V570 đã thuộc `aka_assistant`).
+  - Bấm ô thì link trang đổi ngay sang `/permalink/<mã bài>/`, nên V572 nhận bài theo mã đó, không theo vị trí hay link trong khung.
+  - Dò thêm trên trang thật thì thấy: hộp thoại đổi bài sau một lúc, có khi giữ nguyên ô nhập; trang nền khoá cuộn khi hộp thoại mở; bấm khi trang vừa tải thì Facebook chuyển hẳn sang trang riêng của bài, phía sau có bài ngoài nhóm.
+  - Đã thử comment thật ở "Nhóm private 1".
+
+## Chưa rõ trước khi kiểm (đã trả lời ở mục trên)
 
 - Bộ cũ, 7 ngày tới 18/11: 67 lượt có link comment thứ 2 / thứ 3 trỏ cùng bài với comment 1 (57 lượt trùng cả `comment_id`).
 - Có thể chỉ là lấy nhầm link: block đọc link comment ở hộp thoại đầu tiên trong trang, mà hộp thoại của lượt trước có thể còn mở.

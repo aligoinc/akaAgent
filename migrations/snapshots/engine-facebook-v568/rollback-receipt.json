@@ -1,0 +1,36 @@
+{
+  "rollback": "migrations/rollback_v568_engine_facebook_comment_other_posts.sql",
+  "rollbackFileMd5": "81bb5568adf00ede33bafbfeb838eab9",
+  "ranAtUtc": "2026-11-18T05:31:02Z",
+  "committedAtUtc": "2026-11-18T05:31:08Z",
+  "ranAtVn": "2026-11-18 12:31:08",
+  "approvedBy": "anh (\"Gỡ V568 ngay\", 18/11)",
+  "method": "supabase db query --linked -f <bản gỡ> (một giao dịch, guard: block 2851 phải đúng bản V568 d418b515…). Không ghi dòng sổ migration (dòng 20261118051731 của V568 vẫn còn, đọc biên nhận này để biết đã gỡ).",
+  "why": "Kiểm trên trang Facebook thật 18/11 (Cốc Cốc, tài khoản thử, \"Nhóm private 1\", chỉ đọc): link bài trong feed chưa nạp nên cả trang chỉ có 1 mã bài đọc được (từ link một comment trong bài khác); hàm tìm mã bài của block (postIdOf, leo lên khung cha tới khi gặp đúng một mã) gán mã đó cho ô bình luận của mọi bài. V568 dựa vào mã bài để bỏ bài vừa đăng và gộp các ô cùng bài, nên trên trang thật có thể gộp nhiều bài làm một hoặc coi bài người khác là bài vừa đăng, rồi bỏ qua comment bài khác. V563 cũng dùng mã này nhưng khi không phân biệt được thì bấm ô thứ N, nên vẫn comment. Bộ giả lập / bài kiểm của V568 dùng trang giả mà bài nào cũng có link đầy đủ nên không bắt được.",
+  "preRollback": {
+    "readAtUtc": "2026-11-18T05:30:57Z",
+    "block2851Md5": "d418b5159f1f5bf741877f3f6f650bf6",
+    "step6ReviewedMd5": "d418b5159f1f5bf741877f3f6f650bf6",
+    "block34Md5": "30126bae87ff755164c80dbffda9d263"
+  },
+  "postRollback": {
+    "readAtUtc": "2026-11-18T05:31:18Z",
+    "block2851Md5": "06889369d1c9f77ef62c846fa8e27e82",
+    "block2851UpdatedAtUtc": "2026-11-18T05:31:08.224082Z",
+    "step6": { "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedCodeMd5": "06889369d1c9f77ef62c846fa8e27e82" },
+    "block34Md5Unchanged": "30126bae87ff755164c80dbffda9d263",
+    "otherEngineBlocksUnchanged": { "2848": "eec629d6f10f6d6dcdf0ccd14a0cd1a9", "2873": "cc85473ba26554663972e4422fc62a41",
+      "2874": "f7c07500e06511bee20f1c409c185211", "2875": "645d1a88189ac8dc6989f9058756eabe", "2909": "499445e4406d2095c951b5c1c9aef03d" },
+    "rest30s": [
+      { "fromUtc": "05:30:00", "requests": 20126, "p50Ms": 52, "errors5xx": 0 },
+      { "fromUtc": "05:30:30", "requests": 19301, "p50Ms": 52, "errors5xx": 0 },
+      { "fromUtc": "05:31:00", "requests": 7387, "p50Ms": 51, "errors5xx": 0 }
+    ]
+  },
+  "impactWhileApplied": {
+    "windowUtc": "2026-11-18T05:17:31Z – 2026-11-18T05:31:08Z",
+    "engineGroupPostRuns": 57,
+    "commentSteps": 1,
+    "detail": "1 lượt comment \"bài của mình\" (vị trí 1, comment thành công); không lượt nào comment bài khác nên không lượt nào bị bỏ qua comment."
+  }
+}
