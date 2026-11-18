@@ -1,0 +1,62 @@
+{
+  "migration": "migrations/migration_v572_engine_facebook_comment_dialog_post.sql",
+  "rollback": "migrations/rollback_v572_engine_facebook_comment_dialog_post.sql",
+  "ledger": {
+    "version": "20261118065344",
+    "name": "migration_v572_engine_facebook_comment_dialog_post",
+    "statementsMd5": "dd09d472e784126a7e2b8125d5b18fd5",
+    "createdBy": null
+  },
+  "fileMd5": "dd09d472e784126a7e2b8125d5b18fd5",
+  "rollbackFileMd5": "a8a9bb218587eb3a20dff89fd3dba5de",
+  "appliedAtUtc": "2026-11-18T06:53:56Z",
+  "appliedAtVn": "2026-11-18 13:53:56",
+  "approvedBy": "anh (\"Làm bản sửa\", rồi \"Apply rồi tạo PR\", 18/11)",
+  "numbering": "Lúc làm lấy V570. Trước apply sổ đã có migration_v569_aka_assistant_core_guard (13:07 VN), migration_v570_aka_assistant_data_prompt (13:10 VN), migration_v571_engine_target_check_p1/p2 (13:42 VN) nên đổi sang V572. Kiểm sổ ngay trước apply (06:53:34 UTC): không có migration_v572_%, không nhánh nào (akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard) giữ V572. Code block không ghi số migration nên đổi số không đổi md5 code.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Chỉ dữ liệu (UPDATE auto_blocks 2851 + auto_engine_block_steps 6), không DDL, không nạp lại schema PostgREST.",
+  "blockCode": {
+    "oldMd5": "06889369d1c9f77ef62c846fa8e27e82",
+    "newMd5": "16e51c5de52e79d246e87058a65e63eb",
+    "realTestedMd5": "2a884e5e83b169de95b28dbf81e5514b",
+    "note": "Bản thử comment thật trên Facebook (2a884e5e) chỉ khác bản apply ở dòng chú thích (bỏ số migration khi đổi V570 → V572); bỏ các dòng // thì hai bản trùng md5 efc716789633c64ec3ef1773c8086203."
+  },
+  "preApply": {
+    "readAtUtc": "2026-11-18T06:53:34Z",
+    "ledgerTail": ["migration_v569_aka_assistant_core_guard", "type19_group_invite_respect_unique_guards", "migration_v570_aka_assistant_data_prompt",
+      "migration_v571_engine_target_check_p1", "migration_v571_engine_target_check_p2", "enable_message_gom_ai_evaluate_trigger"],
+    "v572InLedger": 0,
+    "block2851Md5": "06889369d1c9f77ef62c846fa8e27e82",
+    "block2851UpdatedAtUtc": "2026-11-18T05:31:08.224082Z",
+    "block34Md5": "30126bae87ff755164c80dbffda9d263",
+    "step6": { "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedCodeMd5": "06889369d1c9f77ef62c846fa8e27e82" },
+    "elementsMd5": { "fb_comment_box_at_n": "b1f98dcc28a8e35bedc1b5fef2b9fe0a", "fb_comment_dialog_textbox": "d3252a7c672a235625d8c1f55d9d0e71",
+      "fb_comment_permalink": "f34206bdc019ef2af7c860b132a44efc", "GroupPostFrequencyLimitError": "382348ec7df318f0305b9740997faa5d" },
+    "elementsMatchFixture": true
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T06:54:09Z",
+    "block2851Md5": "16e51c5de52e79d246e87058a65e63eb",
+    "block2851UpdatedAtUtc": "2026-11-18T06:53:56.94465Z",
+    "step6": { "commitLevel": 2, "sendOps": ["press:Enter"], "reviewedCodeMd5": "16e51c5de52e79d246e87058a65e63eb" },
+    "block34Md5Unchanged": "30126bae87ff755164c80dbffda9d263",
+    "otherEngineBlocksUnchanged": { "2848": "eec629d6f10f6d6dcdf0ccd14a0cd1a9", "2873": "cc85473ba26554663972e4422fc62a41",
+      "2874": "f7c07500e06511bee20f1c409c185211", "2875": "645d1a88189ac8dc6989f9058756eabe", "2909": "499445e4406d2095c951b5c1c9aef03d" },
+    "elementsUnchanged": true,
+    "rest30s": [
+      { "fromUtc": "06:52:30", "requests": 20873, "p50Ms": 71, "errors5xx": 0 },
+      { "fromUtc": "06:53:00", "requests": 24828, "p50Ms": 87, "errors5xx": 0 },
+      { "fromUtc": "06:53:30", "requests": 20935, "p50Ms": 51, "errors5xx": 0 },
+      { "fromUtc": "06:54:00", "requests": 9233, "p50Ms": 51, "errors5xx": 0, "note": "log mới tới ~06:54:15 lúc đọc" }
+    ]
+  },
+  "tests": {
+    "v572Smoke": "CHROMIUM_PATH=<Chrome> node scripts/engine-v2-facebook/v572-smoke.cjs: 17/17 (trang giả fb-group-fake.cjs làm theo Facebook thật; 11 tình huống đăng nhóm: V563 comment trùng 10, nhầm bài 1; V572 0)",
+    "regression": "v563-smoke 16/16, v564-smoke 12/12, desktop-fb-smoke 28/28, core-smoke 11/11 (chạy sau apply, cùng worktree)",
+    "realFacebook": "18/11, trình duyệt thử, tài khoản thử \"Quang\", \"Nhóm private 1\": code block chạy trên trang thật (page.* chép pageController.ts), 10 comment thật qua 5 lượt (R1, R2, R2b, R3, R5; R5 bằng bản 2a884e5e), mỗi lượt mỗi bài đúng 1 comment, bài nhận comment khớp commentPostId; thử khô 8 comment liền (8 bài khác nhau, có đóng hộp thoại + cuộn) và lượt bỏ qua đăng vì nhóm đã biết cần duyệt."
+  },
+  "notInScope": [
+    "Bộ cũ (block 34) không đổi: máy dưới 9.9.0 (bộ cũ) vẫn comment theo ô thứ N như cũ, kể cả trường hợp trang vừa tải chuyển hẳn sang trang riêng của bài (có thể comment bài ngoài nhóm).",
+    "Desktop đọc code block mỗi lượt; danh mục bước (md5 đã duyệt) ở lần nạp danh mục kế tiếp, trong lúc chưa nạp lại bước comment chạy ở mức cam kết 1 (stepCatalog.ts).",
+    "Chưa chạy qua Desktop thật (Electron, cửa sổ chạy ngầm); chưa thử comment bằng Page, giao diện tiếng Anh, bài vừa đăng thật nằm ở khung phía trên feed."
+  ]
+}

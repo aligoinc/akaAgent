@@ -1,0 +1,37 @@
+{
+  "readAt": "2026-11-18T06:01:03Z",
+  "note": "Đọc chỉ đọc production 18/11/2026 sau khi gỡ V568 (12:31 VN). Code block 2851 = bản V563 (scripts/build-v563-sql.cjs COMMENT.newCode), md5 trùng.",
+  "block": {
+    "id": 2851,
+    "name": "[engine] fb_comment_at_position",
+    "md5": "06889369d1c9f77ef62c846fa8e27e82",
+    "updatedAt": "2026-11-18T05:31:08.224082+00:00"
+  },
+  "source": {
+    "id": 34,
+    "name": "fb_comment_at_position",
+    "md5": "30126bae87ff755164c80dbffda9d263"
+  },
+  "copy": {
+    "engineBlockId": 2851,
+    "sourceBlockId": 34
+  },
+  "steps": [
+    {
+      "id": 6,
+      "blockId": 2851,
+      "stepKind": "delivery",
+      "actionCode": "fb_comment",
+      "commitLevel": 2,
+      "sendOps": ["press:Enter"],
+      "reviewedMd5": "06889369d1c9f77ef62c846fa8e27e82"
+    }
+  ],
+  "workflowsUsing": [316, 321],
+  "elements": {
+    "fb_comment_box_at_n": "(//div[@aria-label='Viết bình luận...' or @aria-label='Write a comment...' or @aria-label='Write a comment' or @aria-label='Viết bình luận' or contains(@aria-label,'Comment') or contains(@aria-label,'Bình luận về')]|//*[@role='button' and .='Bình luận'])[${n}]",
+    "fb_comment_dialog_textbox": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+    "fb_comment_permalink": "(//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')])[1]//*[@role='article' and .//*[@class='xt0psk2']]//a[contains(@href,'comment_id=') or contains(@href,'reply_comment_id=')]",
+    "GroupPostFrequencyLimitError": "//*[contains(.,'giới hạn tần suất bạn đăng bài')]"
+  }
+}
