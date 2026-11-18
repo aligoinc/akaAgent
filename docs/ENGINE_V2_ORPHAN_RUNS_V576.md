@@ -80,6 +80,23 @@ Chi tiết từng điều kiện:
   --dbchaos 0.05`: 8 hạt giống, 461 cú gửi, có mất câu trả lời claim / report / mark và chết tiến trình; 0 vi phạm bất biến, số cú gửi giống hệt
   khi không có V576.
 
+## Chạy thử trên production (18/11/2026 20:00 VN, giao dịch huỷ)
+
+Anh duyệt "Chạy thử rồi merge". 20:00:23–20:00:25 VN: nguyên văn migration (md5 file `fdfc400d…`, bỏ dòng `COMMIT` cuối) trong một giao dịch,
+thêm một lần gọi `close_stale_v1(200)` bản mới, rồi `ROLLBACK`. Không ghi sổ migration.
+
+- Preflight qua: ba hàm ghim vẫn đúng bản đọc chiều 18/11, sổ tới V575. Postflight qua: md5 bốn hàm tạo trên production khớp bản sinh, quyền gọi
+  đúng.
+- `close_stale_v1` bản mới mất 170 ms. Đây là lần gọi đầu trong phiên mới, ngay sau khi thay hàm; CLI gửi cả file một lần (hai câu liền nhau cách
+  0,1 ms) nên đây là thời gian trên máy chủ. Riêng câu tìm lượt mồ côi đo bằng EXPLAIN ANALYZE chỉ đọc: lập kế hoạch 2,5 ms, chạy 7,2 ms, 1.807
+  buffer (toàn bộ trong bộ đệm), 4 ứng viên. Bản cũ trung bình 10,6 ms mỗi lần (pg_stat_statements, 10.233 lần từ 11/11).
+- Kết quả: 1 lượt mồ côi (B), 0 lượt chốt theo kết quả (D1), 0 lượt hết hạn khác. Lượt mồ côi là 197975: Facebook, Desktop, nhân viên 462 (cùng
+  máy Windows với lượt 179149), mở từ 19:46 VN, chưa ghi dấu, chưa có kết quả; cùng lease đã chốt 5 lượt sau, lượt đầu bắt đầu sau 7,7 giây.
+  Bản mới trả data về hàng đợi (SYS01) ngay; bản cũ chờ lease hết hạn đủ 10 phút.
+- Hậu kiểm chỉ đọc: hai hàm mới không còn; `close_stale_v1`, hàm reset Desktop, `report_v1` đúng md5 cũ; sổ không có V576; không còn sự kiện nào
+  của lần chạy thử; lượt 197975 vẫn mở như trước. PostgREST không nạp lại schema (log PostgREST: lần nạp gần nhất 17:25 VN lúc apply V574). Phút
+  20:00 VN: 0 lỗi 5xx, p50 46–50 ms, p99 119–143 ms trên `/rest/v1`.
+
 ## Apply / gỡ
 
 - Tạo / thay hàm nên PostgREST nạp lại schema: apply ngoài giờ cao điểm. Không đổi bảng, không đổi dữ liệu lúc apply.
