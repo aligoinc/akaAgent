@@ -58,6 +58,30 @@ for build/test status. Chat runtime and worker were deployed on 04/11/2026 at
 Deployment health, account readiness and backlog observations are separate in
 the receipt; attaching accounts does not establish successful Zalo login.
 
+### Tag Zalo đã xoá ở lớp kiểm của DB — V573 (đã apply akachat 14:17:54 VN 18/11/2026)
+
+Bản sửa 04/11 ở trên chỉ phủ bước so tag lúc gửi. Trước bước đó, DB còn kiểm nhóm loại trừ bằng
+`aka_agent_internal_validate_send_exclusion_rules`: mỗi giá trị phải có trong
+`aka_agent_internal_send_exclusion_options`, mà danh sách này chỉ lấy tag Zalo chưa xoá
+(`auto_account_contacts` loại `zalo_tag`). App đọc lại danh sách tag (`upsertContacts` với `markMissingDeleted`)
+là tag khách đã xoá trong Zalo bị đánh `is_delete`, rồi hàm kiểm báo `send_exclusion_option_unavailable` ở bốn chỗ:
+đầu lượt chạy của bộ cũ (`aka_agent_campaign_send_exclusion_runtime` `snapshot`, chiến dịch tạm dừng
+"Không thể tải cấu hình loại trừ…"), đầu lượt của engine v2 (`aka_agent_engine_send_exclusion_v1`, CFG18), lưu chiến dịch
+(trigger `auto_validate_campaign_send_exclusion`, Web báo mã tham chiếu ngẫu nhiên) và lưu nhóm loại trừ. Ca 04/11 (nhóm 47)
+và ca 18/11 (nhóm 46, chiến dịch 48267) đều bị chặn ở lớp này.
+
+[V573](../migrations/migration_v573_send_exclusion_deleted_zalo_tags.sql) chỉ đổi một điều kiện trong hàm kiểm: giá trị
+nguồn `zalo_labels` không còn trong danh sách nhưng là chuỗi khớp `uid` của một dòng `zalo_tag` (kể cả đã xoá) của chính
+tài khoản / nhân viên / tổ chức thì hợp lệ; lúc chạy, bộ lọc của Desktop / App Server / Fly đã bỏ qua tag đó. Tag chưa từng
+có, sai kiểu, tag akaBiz và các nguồn khác giữ như cũ. Không đổi dữ liệu, bảng, quyền; không phát hành app.
+Giới hạn: tag chỉ có ở `chat_zalo_account_tag` (bảng này xoá hẳn dòng) mà chưa từng có dòng `zalo_tag` thì vẫn bị chặn
+(18/11: không nhóm nào rơi vào ca này). Form vẫn hiện tag đã xoá thành chip đỏ để khách tự dọn.
+
+Sinh bằng `scripts/build-v573-sql.cjs` từ thân production đọc 18/11 (`scripts/fixtures/send-exclusion-v573/live-20261118.json`,
+md5 `6a3fdb6d…` → `481ee1d1…`); kiểm `node scripts/send-exclusion-v573-smoke.cjs` (PG17 cục bộ, 13 nhóm). Đối chiếu chỉ đọc
+trên production 18/11: 80 nhóm loại trừ, 2 nhóm bị chặn trước V573, 0 nhóm sau. `CREATE OR REPLACE FUNCTION` làm PostgREST
+nạp lại schema (lần apply: 6,6 s, 0 lỗi 503, 1 lỗi 500). Không apply lại; [biên nhận](../migrations/snapshots/send-exclusion-deleted-zalo-tags-v573/apply-receipt.json). Gỡ: [rollback](../migrations/rollback_v573_send_exclusion_deleted_zalo_tags.sql).
+
 Desktop/legacy Server defer a phone exclusion-gate failure until the successful lookup milestone/quota has been recorded. The workflow receives no target, so sending and auxiliary actions stop. The scheduler bypasses generic input/error-policy writes and pauses the campaign through existing token-checked failure cleanup. A pause committed before a lost response stays paused; an input still running follows existing cleanup's terminal uncertainty handling and is not automatically requeued. Lifecycle shutdown/handoff guards retain precedence.
 
 Group matches now use “Thỏa điều kiện loại trừ của nhóm ‘gđ bb’.” in the input note and skip log. For phone campaigns, the confirmed reason is carried in the per-input context because the workflow receives a separate input object; the deferred log runs after the lookup detail/quota and never infers opt-out from a stale or missing note. A pause CAS that changes no row emits no skip log. The Chat worker wording update was deployed on 2026-09-29 (Vietnam time), without restarting the API or Zalo runtime; see the [deployment audit](../../akaAgentChatApi/docs/DEPLOY_SEND_EXCLUSIONS_20260929.md). The Desktop/legacy Zalo Server logging correction still needs release. Historical logs are unchanged.

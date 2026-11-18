@@ -1,0 +1,56 @@
+{
+  "migration": "migrations/migration_v573_send_exclusion_deleted_zalo_tags.sql",
+  "rollback": "migrations/rollback_v573_send_exclusion_deleted_zalo_tags.sql",
+  "generator": "scripts/build-v573-sql.cjs (thân production đọc 18/11/2026: scripts/fixtures/send-exclusion-v573/live-20261118.json)",
+  "ledger": {
+    "version": "20261118071750",
+    "name": "migration_v573_send_exclusion_deleted_zalo_tags",
+    "statementsMd5": "cc5001ab2439cdb2bb8800a5f0cf731d",
+    "createdBy": null
+  },
+  "fileMd5": "cc5001ab2439cdb2bb8800a5f0cf731d",
+  "rollbackMd5": "e55be0259994c5211611414cc75c1240",
+  "appliedAtUtc": "2026-11-18T07:17:54Z",
+  "appliedAtVn": "2026-11-18 14:17:54",
+  "approvedBy": "anh (\"Sửa ở đây\" rồi \"Apply ngay\", 18/11; đã báo trước là giờ cao điểm)",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT); DDL: CREATE OR REPLACE FUNCTION aka_agent_internal_validate_send_exclusion_rules",
+  "preApply": {
+    "readAtVn": "2026-11-18 14:17:32",
+    "ledgerMax": "migration_v572_engine_facebook_comment_dialog_post",
+    "v573InLedger": 0,
+    "v573OnAnyBranch": 0,
+    "validateRulesMd5": "6a3fdb6d9c0fdb7b8b510fd91623f2d0",
+    "exclusionGroups": 80,
+    "groupsBlockedBeforeV573": [46, 47],
+    "groupsBlockedAfterV573Simulated": [],
+    "optionUnavailableErrorsLast24h": "nhiều lượt, gần hết của chiến dịch 48267 (bộ cũ trên App Server) và Web lưu chiến dịch / nhóm; 9 lượt trong phút ngay trước apply (khách đang thử lưu)"
+  },
+  "postApply": {
+    "validateRulesMd5": "481ee1d14f27a88464cd8bd445a98e41",
+    "owner": "postgres",
+    "acl": "{postgres=X/postgres}",
+    "securityDefiner": true,
+    "config": ["search_path=pg_catalog, public"],
+    "group46RulesAndSelectionPass": true,
+    "group47RulesPass": true,
+    "optionUnavailableErrorsAfterApply": "0 tới lúc ghi biên nhận",
+    "postgrest": {
+      "reloadMessageUtc": "2026-11-18T07:17:54.15Z",
+      "poolReconnectedUtc": "2026-11-18T07:17:54.67Z",
+      "configReloadedUtc": "2026-11-18T07:17:58.34Z",
+      "schemaQueryMs": 6645.2,
+      "schemaLoadedUtc": "2026-11-18T07:18:05.00Z"
+    },
+    "rest10s": [
+      { "fromUtc": "07:17:40", "requests": 8167, "p50Ms": 51, "p99Ms": 245, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "07:17:50", "requests": 4639, "p50Ms": 71, "p99Ms": 4125, "errors5xx": 1, "errors503": 0 },
+      { "fromUtc": "07:18:00", "requests": 6966, "p50Ms": 277, "p99Ms": 1127, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "07:18:10", "requests": 8247, "p50Ms": 164, "p99Ms": 673, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "07:18:20", "requests": 2833, "p50Ms": 69, "p99Ms": 225, "errors5xx": 0, "errors503": 0 }
+    ],
+    "errors5xxNote": "1 lỗi 500: PATCH /messages của gateway chat cũ (anon, trần 3 giây) lúc 07:17:57 trong lúc nạp lại schema",
+    "campaign48267": "14:19:13 VN: 'đang chạy', ghi chú đã xoá, lượt chạy mới 14:18:51 VN, 3 dòng lịch sử hành động sau lúc apply (khách tự cho chạy lại; không ai sửa dữ liệu)"
+  },
+  "localTests": "node scripts/send-exclusion-v573-smoke.cjs (PG17, 13 nhóm đạt, chạy trước apply)",
+  "notApplied": "Không commit/PR lúc apply; không đổi dữ liệu nhóm loại trừ hay chiến dịch."
+}

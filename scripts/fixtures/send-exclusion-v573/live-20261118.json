@@ -1,0 +1,220 @@
+{
+ "capturedAt": "2026-11-18 (akachat, chỉ đọc)",
+ "note": "Thân 4 hàm loại trừ đang chạy + danh mục điều kiện; không có dữ liệu khách.",
+ "functions": {
+  "aka_agent_internal_send_exclusion_group": {
+   "md5": "734e372494451945ab65747d2034c9f4",
+   "owner": "postgres",
+   "acl": "{postgres=X/postgres}",
+   "def": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_send_exclusion_group(p_id bigint)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT jsonb_build_object('id',g.id,'requestId',g.create_request_id,'accountId',g.account_id,'name',g.name,'matchMode',g.match_mode,'revision',g.revision,\n 'rules',COALESCE((SELECT jsonb_agg(jsonb_build_object('fieldId',r.field_id,'operatorId',r.operator_id,'value',r.value,'isEnabled',r.is_enabled,'sortOrder',r.sort_order) ORDER BY r.sort_order,r.id) FROM public.auto_campaign_send_exclusion_rules r WHERE r.group_id=g.id),'[]'))\n FROM public.auto_campaign_send_exclusion_groups g WHERE g.id=p_id AND NOT g.is_delete;\n$function$\n"
+  },
+  "aka_agent_internal_send_exclusion_options": {
+   "md5": "38629c04d67ae120858bf6e6b4180c7a",
+   "owner": "postgres",
+   "acl": "{postgres=X/postgres}",
+   "def": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_send_exclusion_options(p_staff bigint, p_org bigint, p_account bigint)\n RETURNS jsonb\n LANGUAGE sql\n STABLE SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\n SELECT COALESCE(jsonb_agg(jsonb_build_object('fieldId',field_id,'code',key,'label',label,'value',val,'isActive',true,'sortOrder',0) ORDER BY field_id,label,key),'[]') FROM (SELECT DISTINCT ON (field_id,val) * FROM (\n SELECT f.id field_id,i.code key,i.name label,to_jsonb(i.code) val,0 priority FROM public.auto_filter_fields f\n JOIN public.category_type t ON t.namespace='common' AND t.code='zalo_friend_status'\n JOIN public.category_item i ON i.category_type_id=t.id AND i.is_active WHERE f.options_source='friend_status'\n UNION ALL SELECT f.id,t.id::text,t.name,to_jsonb(t.id::text),0 FROM public.auto_filter_fields f CROSS JOIN public.auto_contact_tags t\n WHERE f.options_source='akabiz_tags' AND t.staff_id=p_staff AND t.organization_id=p_org AND NOT t.is_delete AND (t.auto_account_id IS NULL OR t.auto_account_id=p_account)\n UNION ALL SELECT DISTINCT f.id,c.uid,c.name,to_jsonb(c.uid),1 FROM public.auto_filter_fields f CROSS JOIN public.auto_account_contacts c\n WHERE f.options_source='zalo_labels' AND c.account_id=p_account AND c.staff_id=p_staff AND c.organization_id=p_org AND c.contact_type='zalo_tag' AND NOT c.is_delete\n UNION ALL SELECT DISTINCT f.id,t.zalo_id,COALESCE(t.name,t.zalo_id),to_jsonb(t.zalo_id),0 FROM public.auto_filter_fields f\n CROSS JOIN public.chat_zalo_account_tag t JOIN public.chat_zalo_account_organization b ON b.chat_zalo_account_id=t.chat_zalo_account_id\n WHERE f.options_source='zalo_labels' AND b.auto_account_id=p_account AND b.organization_id=p_org AND b.is_active\n UNION ALL SELECT field_id,code,label,value,0 FROM public.auto_filter_field_options WHERE is_active\n ) candidates ORDER BY field_id,val,priority,label,key) options;\n$function$\n"
+  },
+  "aka_agent_internal_validate_send_exclusion_rules": {
+   "md5": "6a3fdb6d9c0fdb7b8b510fd91623f2d0",
+   "owner": "postgres",
+   "acl": "{postgres=X/postgres}",
+   "def": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_validate_send_exclusion_rules(p_rules jsonb, p_staff bigint, p_org bigint, p_account bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE r jsonb; f public.auto_filter_fields%ROWTYPE; m public.auto_filter_field_operators%ROWTYPE; vals jsonb; v jsonb; opts jsonb;\nBEGIN\n IF jsonb_typeof(p_rules) IS DISTINCT FROM 'array' OR jsonb_array_length(p_rules)=0 OR jsonb_array_length(p_rules)>100\n OR NOT EXISTS(SELECT 1 FROM jsonb_array_elements(p_rules) x WHERE x->>'isEnabled'='true') THEN RAISE EXCEPTION 'send_exclusion_rules_required'; END IF;\n IF EXISTS(SELECT 1 FROM jsonb_array_elements(p_rules) x GROUP BY x->>'fieldId' HAVING count(*)>1) THEN RAISE EXCEPTION 'send_exclusion_duplicate_field'; END IF;\n opts:=public.aka_agent_internal_send_exclusion_options(p_staff,p_org,p_account);\n FOR r IN SELECT * FROM jsonb_array_elements(p_rules) LOOP\n  SELECT * INTO f FROM public.auto_filter_fields WHERE id=(r->>'fieldId')::bigint AND is_active;\n  IF NOT FOUND THEN RAISE EXCEPTION 'send_exclusion_field_unavailable'; END IF;\n  SELECT m0.* INTO m FROM public.auto_filter_field_operators m0 JOIN public.auto_filter_operators o ON o.id=m0.operator_id AND o.is_active\n   WHERE m0.field_id=f.id AND m0.operator_id=(r->>'operatorId')::bigint;\n  IF NOT FOUND THEN RAISE EXCEPTION 'send_exclusion_operator_unavailable'; END IF;\n  IF NOT COALESCE((r->>'isEnabled')::boolean,false) THEN CONTINUE; END IF;\n  vals:=CASE WHEN jsonb_typeof(r->'value')='array' THEN r->'value' WHEN r->'value' IS NOT NULL AND r->'value'<>'null' THEN jsonb_build_array(r->'value') ELSE '[]' END;\n  IF jsonb_array_length(vals)<m.min_values OR jsonb_array_length(vals)>m.max_values THEN RAISE EXCEPTION 'send_exclusion_value_count'; END IF;\n  FOR v IN SELECT * FROM jsonb_array_elements(vals) LOOP\n   IF m.value_type='number' THEN\n    IF jsonb_typeof(v)<>'number' THEN RAISE EXCEPTION 'send_exclusion_number_required'; END IF;\n    IF (m.validation_config ? 'min' AND (v#>>'{}')::numeric<(m.validation_config->>'min')::numeric)\n    OR (m.validation_config ? 'max' AND (v#>>'{}')::numeric>(m.validation_config->>'max')::numeric)\n    OR (COALESCE((m.validation_config->>'integer')::boolean,false) AND trunc((v#>>'{}')::numeric)<>(v#>>'{}')::numeric) THEN RAISE EXCEPTION 'send_exclusion_number_range'; END IF;\n   ELSIF m.value_type='date' THEN\n    IF jsonb_typeof(v)<>'string' OR (v#>>'{}') !~ '^\\d{4}-\\d{2}-\\d{2}$' THEN RAISE EXCEPTION 'send_exclusion_date_required'; END IF;\n    PERFORM (v#>>'{}')::date;\n   ELSIF m.value_type='text' AND (jsonb_typeof(v)<>'string' OR length(btrim(v#>>'{}'))=0) THEN RAISE EXCEPTION 'send_exclusion_text_required';\n   ELSIF m.value_type='boolean' AND jsonb_typeof(v)<>'boolean' THEN RAISE EXCEPTION 'send_exclusion_boolean_required'; END IF;\n   IF f.options_source<>'none' AND NOT EXISTS(SELECT 1 FROM jsonb_array_elements(opts) o WHERE (o->>'fieldId')::bigint=f.id AND o->'value'=v) THEN RAISE EXCEPTION 'send_exclusion_option_unavailable'; END IF;\n  END LOOP;\n END LOOP;\nEND;\n$function$\n"
+  },
+  "aka_agent_internal_validate_send_exclusion_selection": {
+   "md5": "9d67e428e24d30d3ca3e67d830768a08",
+   "owner": "postgres",
+   "acl": "{postgres=X/postgres}",
+   "def": "CREATE OR REPLACE FUNCTION public.aka_agent_internal_validate_send_exclusion_selection(p_map jsonb, p_staff bigint, p_org bigint, p_account bigint)\n RETURNS void\n LANGUAGE plpgsql\n SECURITY DEFINER\n SET search_path TO 'pg_catalog', 'public'\nAS $function$\nDECLARE entry record; aid bigint; gid bigint; ids bigint[]; group_data jsonb;\nBEGIN\n IF p_map IS NULL THEN RETURN; END IF;\n IF jsonb_typeof(p_map)<>'object' OR NOT p_map ? p_account::text THEN RAISE EXCEPTION 'send_exclusion_account_configuration_missing'; END IF;\n FOR entry IN SELECT * FROM jsonb_each(p_map) LOOP\n  IF jsonb_typeof(entry.value) IS DISTINCT FROM 'object' OR NOT entry.value ? 'groupId'\n    OR (entry.value->'groupId'<>'null' AND jsonb_typeof(entry.value->'groupId')<>'number') THEN RAISE EXCEPTION 'send_exclusion_group_reference_invalid'; END IF;\n  aid:=entry.key::bigint;\n  IF NOT EXISTS(SELECT 1 FROM public.auto_accounts WHERE id=aid AND staff_id=p_staff AND organization_id=p_org AND flatform_type='zalo' AND NOT is_delete) THEN RAISE EXCEPTION 'send_exclusion_account_not_found'; END IF;\n  gid:=(entry.value->>'groupId')::bigint;\n  IF gid IS NOT NULL THEN\n   SELECT public.aka_agent_internal_send_exclusion_group(g.id) INTO group_data FROM public.auto_campaign_send_exclusion_groups g\n    WHERE g.id=gid AND g.staff_id=p_staff AND g.organization_id=p_org AND g.account_id=aid AND NOT g.is_delete;\n   IF group_data IS NULL THEN RAISE EXCEPTION 'send_exclusion_group_not_found'; END IF;\n   PERFORM public.aka_agent_internal_validate_send_exclusion_rules(group_data->'rules',p_staff,p_org,aid);\n  END IF;\n  IF jsonb_typeof(entry.value->'blocklistIds') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'send_exclusion_blocklists_invalid'; END IF;\n  IF EXISTS(SELECT 1 FROM jsonb_array_elements(entry.value->'blocklistIds') v WHERE jsonb_typeof(v)<>'number' OR (v#>>'{}')::numeric<=0 OR trunc((v#>>'{}')::numeric)<>(v#>>'{}')::numeric) THEN RAISE EXCEPTION 'send_exclusion_blocklists_invalid'; END IF;\n  SELECT ARRAY(SELECT DISTINCT value::bigint FROM jsonb_array_elements_text(entry.value->'blocklistIds')) INTO ids;\n  IF cardinality(ids)<>(SELECT count(*) FROM public.auto_account_contact_groups g WHERE g.id=ANY(ids) AND g.account_id=aid AND g.staff_id=p_staff AND g.organization_id=p_org AND NOT g.is_delete AND g.purpose='zalo_friend_blocklist' AND g.contact_type='person') THEN RAISE EXCEPTION 'send_exclusion_blocklist_not_found'; END IF;\n END LOOP;\nEND;\n$function$\n"
+  }
+ },
+ "catalog": {
+  "fields": [
+   {
+    "code": "zalo_friend_status",
+    "id": 1,
+    "is_active": true,
+    "options_source": "friend_status"
+   },
+   {
+    "code": "zalo_tag",
+    "id": 2,
+    "is_active": true,
+    "options_source": "zalo_labels"
+   },
+   {
+    "code": "akabiz_tag",
+    "id": 3,
+    "is_active": true,
+    "options_source": "akabiz_tags"
+   },
+   {
+    "code": "recent_delivery",
+    "id": 4,
+    "is_active": true,
+    "options_source": "none"
+   }
+  ],
+  "operators": [
+   {
+    "code": "equals",
+    "id": 1,
+    "is_active": true
+   },
+   {
+    "code": "not_equals",
+    "id": 2,
+    "is_active": true
+   },
+   {
+    "code": "contains",
+    "id": 3,
+    "is_active": true
+   },
+   {
+    "code": "not_contains",
+    "id": 4,
+    "is_active": true
+   },
+   {
+    "code": "within_days",
+    "id": 5,
+    "is_active": true
+   },
+   {
+    "code": "text_contains",
+    "id": 6,
+    "is_active": true
+   },
+   {
+    "code": "text_not_contains",
+    "id": 7,
+    "is_active": true
+   },
+   {
+    "code": "starts_with",
+    "id": 8,
+    "is_active": true
+   },
+   {
+    "code": "not_starts_with",
+    "id": 9,
+    "is_active": true
+   },
+   {
+    "code": "lt",
+    "id": 10,
+    "is_active": true
+   },
+   {
+    "code": "lte",
+    "id": 11,
+    "is_active": true
+   },
+   {
+    "code": "gt",
+    "id": 12,
+    "is_active": true
+   },
+   {
+    "code": "gte",
+    "id": 13,
+    "is_active": true
+   }
+  ],
+  "fieldOperators": [
+   {
+    "field_id": 1,
+    "max_values": 1,
+    "min_values": 1,
+    "operator_id": 1,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 1,
+    "max_values": 1,
+    "min_values": 1,
+    "operator_id": 2,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 2,
+    "max_values": 100,
+    "min_values": 1,
+    "operator_id": 3,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 3,
+    "max_values": 100,
+    "min_values": 1,
+    "operator_id": 3,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 2,
+    "max_values": 100,
+    "min_values": 1,
+    "operator_id": 4,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 3,
+    "max_values": 100,
+    "min_values": 1,
+    "operator_id": 4,
+    "validation_config": {},
+    "value_type": "enum"
+   },
+   {
+    "field_id": 4,
+    "max_values": 1,
+    "min_values": 1,
+    "operator_id": 5,
+    "validation_config": {
+     "integer": true,
+     "max": 3650,
+     "min": 1
+    },
+    "value_type": "number"
+   }
+  ],
+  "fieldOptions": [],
+  "friendStatus": [
+   {
+    "code": "friend",
+    "is_active": true,
+    "name": "Bạn bè"
+   },
+   {
+    "code": "not_friend",
+    "is_active": false,
+    "name": "Chưa là bạn"
+   },
+   {
+    "code": "request_received",
+    "is_active": true,
+    "name": "Nhận kết bạn"
+   },
+   {
+    "code": "request_sent",
+    "is_active": true,
+    "name": "Gửi lời mời kết bạn"
+   },
+   {
+    "code": "stranger",
+    "is_active": true,
+    "name": "Người lạ"
+   },
+   {
+    "code": "unknown",
+    "is_active": false,
+    "name": "Chưa xác định"
+   }
+  ]
+ }
+}
