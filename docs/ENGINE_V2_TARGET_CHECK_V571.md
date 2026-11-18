@@ -1,8 +1,8 @@
-# V569: engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo
+# V571: engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo
 
-Anh chốt 18/11/2026 (thiết kế mở rộng duyệt cùng ngày). Code đã merge `dev_3` qua [#699](https://github.com/aligoinc/akaAgent/pull/699) ngày 18/11 theo yêu cầu ("Mở PR, merge ngay"); chưa apply production (hẹn 22:07 VN 18/11 theo yêu cầu "Apply tối nay", `mode: off`). Đổi số từ V565 trưa 18/11: sổ production đã có `migration_v565_aka_assistant` (11:48 VN, phiên khác) cùng V566–V568; kiểm lại sổ ngay trước khi apply. Sinh bằng `scripts/build-v569-sql.cjs` (không sửa tay các
-file migration): [p1](../migrations/migration_v569_engine_target_check_p1.sql), [p2](../migrations/migration_v569_engine_target_check_p2.sql),
-gỡ [p2](../migrations/rollback_v569_engine_target_check_p2.sql) rồi [p1](../migrations/rollback_v569_engine_target_check_p1.sql).
+Anh chốt 18/11/2026 (thiết kế mở rộng duyệt cùng ngày). **Đã apply production 13:42:37 (p1) / 13:42:56 (p2) VN 18/11** theo yêu cầu ("Apply tối nay", rồi "apply luôn bây giờ được không"), `mode: off`, không apply lại; md5 sổ = file; [biên nhận](../migrations/snapshots/engine-target-check-v571/apply-receipt.json). Code mang số cũ V569 đã merge `dev_3` qua [#699](https://github.com/aligoinc/akaAgent/pull/699) ngày 18/11 theo yêu cầu ("Mở PR, merge ngay"); đổi số V571 + biên nhận ở [#700](https://github.com/aligoinc/akaAgent/pull/700). Đổi số hai lần trưa 18/11 (V565 → V569 → V571): phiên khác apply `migration_v565_aka_assistant` (11:48 VN), rồi `migration_v569_aka_assistant_core_guard` (13:07 VN) và `migration_v570_aka_assistant_data_prompt` (13:10 VN); bản V569 đã merge `dev_3` qua #699 (13:31 VN) trước khi biết số bị lấy, PR sau đổi tên file. Kiểm lại sổ ngay trước khi apply. Sinh bằng `scripts/build-v571-sql.cjs` (không sửa tay các
+file migration): [p1](../migrations/migration_v571_engine_target_check_p1.sql), [p2](../migrations/migration_v571_engine_target_check_p2.sql),
+gỡ [p2](../migrations/rollback_v571_engine_target_check_p2.sql) rồi [p1](../migrations/rollback_v571_engine_target_check_p1.sql).
 
 ## Làm gì
 
@@ -126,11 +126,11 @@ lại. Mã ngoài danh sách theo dõi (mã mới hoàn toàn, thao tác khác) 
 
 ## Triển khai
 
-1. Kiểm sổ migration production ngay trước khi apply (V569 phải còn trống; số V5xx dùng chung mọi repo).
+1. Kiểm sổ migration production ngay trước khi apply (V571 phải còn trống; số V5xx dùng chung mọi repo).
 2. Apply p1 rồi p2 ngoài giờ cao điểm (DDL làm PostgREST nạp lại schema; p1 sửa bảng danh mục engine đọc mỗi lần báo kết quả, giao dịch vài
    mili giây). p2 ~129 KB: nếu MCP `apply_migration` không gửi nổi thì dùng `supabase db query --linked -f` với dòng sổ chèn trong cùng giao
    dịch (`node scripts/make-migration-ledger-apply.cjs`). Lúc apply mode = off: claim / report trả đúng như trước (bộ kịch bản Zalo 708 lượt /
-   5.250 lần gửi trùng từng số với khi chưa có V569).
+   5.250 lần gửi trùng từng số với khi chưa có V571).
 3. Nạp lần đầu: đo 18/11 (chỉ đọc, 2.000 id cũ, giờ cao điểm) ~1 ms mỗi id đọc nguội. ~15,4 triệu id ≈ 4 giờ DB; với ngân sách mặc định
    (40 giây / phút ban đêm, 3 giây / phút 8–18h khi còn tồn) xong trong khoảng một đêm. Muốn nhanh hơn ban đêm thì tăng `ingestBudgetMs`
    (tối đa 90 giây, job bị nền tảng cắt ở 120 giây).
@@ -159,19 +159,19 @@ SELECT action_code, error_code, count(*) FROM public.auto_campaign_details
 
 ## Gỡ
 
-`rollback_v569_engine_target_check_p2.sql` (trả claim về bản V564, report về bản V558, bỏ job, thiết lập, hàm, hai bảng) rồi
-`rollback_v569_engine_target_check_p1.sql` (bỏ hai cột). Gỡ p1 trước p2 bị chặn. Dòng lịch sử đã ghi giữ nguyên.
+`rollback_v571_engine_target_check_p2.sql` (trả claim về bản V564, report về bản V558, bỏ job, thiết lập, hàm, hai bảng) rồi
+`rollback_v571_engine_target_check_p1.sql` (bỏ hai cột). Gỡ p1 trước p2 bị chặn. Dòng lịch sử đã ghi giữ nguyên.
 
 ## Kiểm thử
 
-- `node scripts/engine-v2-target-check-v569-smoke.cjs` (PG17 cục bộ, module `pg` ở `../akaAgentChatApi` hoặc `CHAT_REPO`; `V569_DUMP=1` in dòng
+- `node scripts/engine-v2-target-check-v571-smoke.cjs` (PG17 cục bộ, module `pg` ở `../akaAgentChatApi` hoặc `CHAT_REPO`; `V571_DUMP=1` in dòng
   tiến trình): 23 nhóm. Gồm apply / gỡ / chạy lại / quyền; mã theo dõi; nạp lịch sử theo SĐT và global id (thành công lại, bạn bè không tính,
   quá hạn, dòng do việc kiểm ghi, SĐT khác định dạng, mã chỉ theo dõi, mốc 3 phút, chia phần không đổi sổ và số đo, giới hạn ban ngày, giữ ≥ 365
   ngày); từng quyết định của claim (theo SĐT, theo UID, bạn bè, không có global id, học chéo, bật mã có hiệu lực ngay, mọi bước gửi đã biết hỏng);
   report so với kết quả Zalo thật cùng mã và tách nhiều dòng; hai lượt lõi thật với cổng Zalo giả (theo SĐT và theo UID).
-- Bộ kịch bản Zalo trên DB có V569 (mode off):
+- Bộ kịch bản Zalo trên DB có V571 (mode off):
   `CHAT_REPO=… SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 SCENARIO_TARGET_CHECK=1 node scripts/engine-v2-scenarios/run.cjs --rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`
-  trùng từng số với lần chạy không có V569 (708 lượt, 5.250 lần gửi, 0 vi phạm mới; chỉ khác phần theo giờ chạy).
+  trùng từng số với lần chạy không có V571 (708 lượt, 5.250 lần gửi, 0 vi phạm mới; chỉ khác phần theo giờ chạy).
 
 ## Giới hạn đã biết
 
@@ -183,4 +183,4 @@ SELECT action_code, error_code, count(*) FROM public.auto_campaign_details
 - Đã bỏ qua thì không còn lần gọi Zalo để biết người nhận đổi cài đặt: lần hỏng chỉ hết hiệu lực khi có thành công ở nơi khác, hoặc quá số ngày.
 - Data theo UID chưa có global id trong `zalo_users` (đo 18/11: 10/320 data thành viên nhóm đang chờ) thì không kiểm.
 - Chưa áp: nhắn tin vào nhóm, thêm thành viên vào nhóm, gửi dạng chia sẻ, chiến dịch nhắn bạn bè / sinh nhật.
-- Thân claim / report từ nay là bản V569: migration sau sửa hai hàm này phải dựng trên thân V569 (md5 ở đầu file p2).
+- Thân claim / report từ nay là bản V571: migration sau sửa hai hàm này phải dựng trên thân V571 (md5 ở đầu file p2).

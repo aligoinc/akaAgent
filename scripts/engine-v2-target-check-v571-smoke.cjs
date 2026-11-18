@@ -1,6 +1,6 @@
-// V569 (engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo) trên PostgreSQL 17 cục bộ dùng một lần, không chạm DB thật, không gọi Zalo:
-//   node scripts/engine-v2-target-check-v569-smoke.cjs        (module pg tìm ở ../akaAgentChatApi, hoặc CHAT_REPO=<thư mục có pg>;
-//   V569_DUMP=1 in các dòng tiến trình của các lượt chạy lõi thật)
+// V571 (engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo) trên PostgreSQL 17 cục bộ dùng một lần, không chạm DB thật, không gọi Zalo:
+//   node scripts/engine-v2-target-check-v571-smoke.cjs        (module pg tìm ở ../akaAgentChatApi, hoặc CHAT_REPO=<thư mục có pg>;
+//   V571_DUMP=1 in các dòng tiến trình của các lượt chạy lõi thật)
 // DB engine như production 18/11/2026 (V495 → V532, V556–V558, V564; normalize_phone thân production; zalo_users tối thiểu), rồi:
 //   1. apply / gỡ / chặn chạy lại / quyền;
 //   2. nạp lịch sử: khoá SĐT và global id, thành công lại (bạn bè không tính), quá hạn, dòng do việc kiểm ghi, SĐT khác định dạng, mã chỉ
@@ -22,9 +22,9 @@ const { ROOT, startCluster } = require('./fixtures/campaign-outcome-engine/pg-fi
 const { buildFacebookFixture, applyFacebookMigrations } = require('./engine-v2-facebook/fixture.cjs')
 const W = require('./engine-v2-scenarios/world.cjs')
 const { makePort } = require('./engine-v2-scenarios/port.cjs')
-const V = require('./build-v569-sql.cjs')
+const V = require('./build-v571-sql.cjs')
 
-const PORT = Number(process.env.V569_TEST_PORT || 55565)
+const PORT = Number(process.env.V571_TEST_PORT || 55565)
 const md5 = text => crypto.createHash('md5').update(text, 'utf8').digest('hex')
 /** normalize_phone(text) của production (md5 pg_get_functiondef đọc chỉ đọc 18/11/2026 = bản chụp V431). */
 const NORMALIZE_PHONE_MD5 = 'f6ccb574895043480e6523193f7be007'
@@ -55,7 +55,7 @@ async function check(name, fn) {
 async function loadEngine() {
   const cache = path.join(ROOT, 'node_modules', '.cache')
   fs.mkdirSync(cache, { recursive: true })
-  const out = fs.mkdtempSync(path.join(cache, 'aka-engine-v569-'))
+  const out = fs.mkdtempSync(path.join(cache, 'aka-engine-v571-'))
   const tsc = require.resolve('typescript/bin/tsc', { paths: [ROOT] })
   const r = spawnSync(process.execPath, [tsc, '-p', path.join(ROOT, 'packages/campaign-engine/tsconfig.json'), '--outDir', out], { encoding: 'utf8' })
   if (r.status !== 0) throw new Error('tsc: ' + (r.stdout || r.stderr))
@@ -83,7 +83,7 @@ async function main() {
     r1: fs.readFileSync(path.join(ROOT, `migrations/${V.ROLLBACK_P1}.sql`), 'utf8'),
     r2: fs.readFileSync(path.join(ROOT, `migrations/${V.ROLLBACK_P2}.sql`), 'utf8')
   }
-  assert.equal(md5(files.p1), md5(V.migrationP1), 'p1 khác bản bộ sinh tạo: chạy lại node scripts/build-v569-sql.cjs')
+  assert.equal(md5(files.p1), md5(V.migrationP1), 'p1 khác bản bộ sinh tạo: chạy lại node scripts/build-v571-sql.cjs')
   assert.equal(md5(files.p2), md5(V.migrationP2), 'p2 khác bản bộ sinh tạo')
   assert.equal(md5(files.r1), md5(V.rollbackP1), 'bản gỡ p1 khác bản bộ sinh tạo')
   assert.equal(md5(files.r2), md5(V.rollbackP2), 'bản gỡ p2 khác bản bộ sinh tạo')
@@ -94,7 +94,7 @@ async function main() {
   const E = await loadEngine()
   const phoneType = E.zaloCampaignType('zalo_message_phone')
   const memberType = E.zaloCampaignType('zalo_message_group_member')
-  const cluster = startCluster({ port: PORT, label: 'aka-v569-', timeoutMs: 900_000 })
+  const cluster = startCluster({ port: PORT, label: 'aka-v571-', timeoutMs: 900_000 })
   const db = await cluster.connect()
   try {
     await buildFacebookFixture(db)
@@ -129,11 +129,11 @@ async function main() {
           { error_code: Z216, action_code: LOOKUP, e: true, d: 365 }])
       // Ràng buộc: chỉ dòng (mã × thao tác) không giới hạn loại chiến dịch / nơi chạy; có cờ thì phải có số ngày.
       await assert.rejects(db.query(`UPDATE public.auto_outcome_policies SET target_check_days = NULL WHERE error_code = $1 AND action_code = $2`, [Z216, LOOKUP]),
-        /auto_outcome_policies_target_check_v569/)
+        /auto_outcome_policies_target_check_v571/)
       const wide = await val(`SELECT min(id) FROM public.auto_outcome_policies WHERE action_code IS NULL AND error_code IS NOT NULL`)
       assert.ok(wide, 'cần một dòng chính sách không gắn thao tác')
       await assert.rejects(db.query(`UPDATE public.auto_outcome_policies SET target_check_enabled = true, target_check_days = 30 WHERE id = $1`, [wide]),
-        /auto_outcome_policies_target_check_v569/)
+        /auto_outcome_policies_target_check_v571/)
       await assert.rejects(db.query(files.p2), /zalo_users/)
       await db.query('ROLLBACK')
       await db.query(ZALO_USERS_STUB)
@@ -368,7 +368,7 @@ async function main() {
 
     // ---- 3. Claim ------------------------------------------------------------------------------------------------------------------
     const claimOf = async (entry, extraCtx = {}) => rpc(`SELECT public.aka_agent_engine_claim_target_v1($1::jsonb) AS r`, [JSON.stringify({
-      runnerId: `desktop:v569:${entry.account}`, runtimeTarget: 'desktop', staffId: entry.staff, accountId: entry.account, campaignId: entry.campaign,
+      runnerId: `desktop:v571:${entry.account}`, runtimeTarget: 'desktop', staffId: entry.staff, accountId: entry.account, campaignId: entry.campaign,
       ...entry.type.claimPlan(entry.cfg), ...extraCtx })])
     // Mã bỏ bước tìm SĐT vì mọi bước gửi đã biết hỏng là JSON {thao tác: mã}: so theo nội dung (khoá sắp xếp), không theo cách viết.
     const sortedJson = obj => JSON.stringify(Object.fromEntries(Object.entries(obj).sort(([a], [b]) => a < b ? -1 : 1)))
@@ -596,7 +596,7 @@ async function main() {
       const type = entry.type
       const afterReport = type.afterReport?.(entry.cfg, port, { targetLabel: type.targetLabel }) ?? null
       const result = await E.runUnit({ data, journal: new E.MemoryJournal(), clock, events: { progress: l => lines.push(l), trace: () => {} } }, {
-        runnerId: `desktop:v569:${entry.account}`, runtimeTarget: 'desktop', staffId: entry.staff, accountId: entry.account, campaignId: entry.campaign,
+        runnerId: `desktop:v571:${entry.account}`, runtimeTarget: 'desktop', staffId: entry.staff, accountId: entry.account, campaignId: entry.campaign,
         actionId: entry.cfg.actionId, campaignName: 'Kiểm người nhận', accountName: 'Zalo', campaignNote: null, targetLabel: type.targetLabel,
         actionName: code => type.actionNames[code] ?? code, ...type.claimPlan(entry.cfg),
         buildSteps: () => type.buildSteps(entry.cfg, port, { account: { id: entry.account, name: 'Zalo' }, mediaStepTimeoutMs: 4000, textStepTimeoutMs: 2500,
@@ -607,7 +607,7 @@ async function main() {
         formatTime: iso => new Date(iso).toISOString(), pacing: { fullSeconds: 7 }, stepTimeoutMs: 2500, heartbeatMs: HEARTBEAT_MS,
         retry: { callTimeoutMs: 8000, backoffMs: [5, 10, 20] }, drainTimeoutMs: 2000
       }, new AbortController().signal)
-      if (process.env.V569_DUMP === '1') for (const l of lines) console.log(`  [${l.inputDataId ?? '-'}] ${l.text}`)
+      if (process.env.V571_DUMP === '1') for (const l of lines) console.log(`  [${l.inputDataId ?? '-'}] ${l.text}`)
       return { result, lines, log }
     }
     const pacedAfter = lines => {

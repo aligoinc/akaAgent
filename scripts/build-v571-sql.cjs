@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// V569: engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (anh chốt 18/11/2026, thiết kế mở rộng duyệt cùng ngày).
+// V571: engine v2 kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (anh chốt 18/11/2026, thiết kế mở rộng duyệt cùng ngày).
 //
 // Người nhận (SĐT và / hoặc global id Zalo) mà lịch sử của mọi tổ chức đã ghi là hỏng với một thao tác (mã bật target_check ở
 // auto_outcome_policies, trong target_check_days ngày, chưa thành công lại) thì bước đó không gọi Zalo: claim trả quyết định skip
@@ -16,14 +16,14 @@
 // Kiểm từng data lúc nhận, không theo lô (anh hỏi 18/11): sổ đã gộp sẵn lịch sử theo người nhận nên mỗi lần kiểm là một lần đọc khoá
 // chính; gom lô không rẻ hơn, phải lưu kết quả lô tới lúc chạy tới data (bảng / cột mới), kết quả lô cũ đi trong lúc chờ, và cỡ lô theo
 // hạn mức từng thao tác đổi liên tục. Tra thẳng lịch sử theo lô thì quá chậm (đo 12/11: lô 500 SĐT 43,9 giây). Chi tiết:
-// docs/ENGINE_V2_TARGET_CHECK_V569.md mục "Vì sao không kiểm theo lô".
+// docs/ENGINE_V2_TARGET_CHECK_V571.md mục "Vì sao không kiểm theo lô".
 //
 // Dữ liệu: private.auto_engine_receiver_results (khoá người nhận md5('p:'||SĐT chuẩn hoá) / md5('g:'||global id) × thao tác × mã: lần hỏng
 // gần nhất, lần thành công gần nhất), nạp nền từ auto_campaign_details (pg_cron mỗi phút) cho mọi mã "thuộc về người nhận" của Tìm SĐT /
 // Nhắn tin người lạ / Kết bạn (bật mã mới sau này có hiệu lực ngay), kèm số đo bỏ đúng / nhầm. Bật / tắt: engine.target_check.
 //
 // Hai phần: p1 chỉ thêm hai cột vào auto_outcome_policies và bật 3 dòng (giao dịch riêng, vài mili giây); p2 tạo bảng / hàm / thiết lập /
-// job và thay thân claim_target_v1 (bản V564) + report_v1 (bản V558). Chạy: node scripts/build-v569-sql.cjs. Không sửa tay file sinh ra.
+// job và thay thân claim_target_v1 (bản V564) + report_v1 (bản V558). Chạy: node scripts/build-v571-sql.cjs. Không sửa tay file sinh ra.
 'use strict'
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -34,10 +34,10 @@ const md5 = text => crypto.createHash('md5').update(text, 'utf8').digest('hex')
 const v558 = require('./build-v558-sql.cjs')
 const v564 = require('./build-v564-sql.cjs')
 
-const NAME_P1 = 'migration_v569_engine_target_check_p1'
-const NAME_P2 = 'migration_v569_engine_target_check_p2'
-const ROLLBACK_P1 = 'rollback_v569_engine_target_check_p1'
-const ROLLBACK_P2 = 'rollback_v569_engine_target_check_p2'
+const NAME_P1 = 'migration_v571_engine_target_check_p1'
+const NAME_P2 = 'migration_v571_engine_target_check_p2'
+const ROLLBACK_P1 = 'rollback_v571_engine_target_check_p1'
+const ROLLBACK_P2 = 'rollback_v571_engine_target_check_p2'
 const CLAIM_SIG = 'public.aka_agent_engine_claim_target_v1(jsonb)'
 const REPORT_SIG = 'public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'
 const SETTING_KEY = 'engine.target_check'
@@ -92,7 +92,7 @@ if (md5(liveReport) !== LIVE.report) throw new Error(`Thân report của V558 kh
 let c = liveClaim
 c = patch(c, `  v_shuffle_count integer;
 `, `  v_shuffle_count integer;
-  -- V569: kiểm người nhận trên toàn hệ thống (engine.target_check).
+  -- V571: kiểm người nhận trên toàn hệ thống (engine.target_check).
   v_tc jsonb;                       -- {thao tác: mã} người nhận đã biết hỏng (mã đang bật, còn hiệu lực)
   v_tc_global text;                 -- global id của người nhận (zalo_users theo tài khoản + UID)
   v_tc_friend boolean := false;     -- tài khoản gửi đã là bạn bè (zalo_users.is_fr)
@@ -101,7 +101,7 @@ c = patch(c, `  v_shuffle_count integer;
 
 c = patch(c, `  v_target_key := public.aka_agent_engine_target_key(t.phone, t.uid, t.email);
 `, `  v_target_key := public.aka_agent_engine_target_key(t.phone, t.uid, t.email);
-  -- V569: chiến dịch nhắn người lạ (theo SĐT / theo UID), không kiêm SMS, tổ chức bật engine.target_check: tra sổ theo SĐT và global id
+  -- V571: chiến dịch nhắn người lạ (theo SĐT / theo UID), không kiêm SMS, tổ chức bật engine.target_check: tra sổ theo SĐT và global id
   -- (UID gắn theo tài khoản nên lấy global id ở zalo_users). Bước tương ứng nhận quyết định skip ở vòng dưới. Kiểm lỗi thì coi như chưa
   -- biết (chạy như thường).
   IF NOT v_slot_mode AND c.action_id IN (${sqlList(CAMPAIGN_TYPES)})
@@ -136,7 +136,7 @@ c = patch(c, `  v_target_key := public.aka_agent_engine_target_key(t.phone, t.ui
 `, 1, 'claim: kiểm người nhận')
 
 c = patch(c, `    -- Thao tác không bắt buộc chỉ được bỏ qua với các cổng khai trong skippableGates (không khai = mọi cổng),
-`, `    -- V569: người nhận đã biết hỏng: bước tìm SĐT bỏ qua kể cả khi đang khoá / hết lượt (không gọi Zalo, không tính lượt); bước gửi chỉ bỏ
+`, `    -- V571: người nhận đã biết hỏng: bước tìm SĐT bỏ qua kể cả khi đang khoá / hết lượt (không gọi Zalo, không tính lượt); bước gửi chỉ bỏ
     -- qua khi đang được phép (đang chờ thì vẫn chờ như thường) và khi bước tìm SĐT không bị bỏ.
     IF v_tc IS NOT NULL THEN
       IF v_code = 'zalo_find_phone_user' THEN
@@ -159,12 +159,12 @@ const NEW_CLAIM = c
 let r = liveReport
 r = patch(r, `  v_detail_id bigint;
 `, `  v_detail_id bigint;
-  -- V569: bước bỏ qua vì người nhận đã biết hỏng (gate target_check): mã lỗi đã biết.
+  -- V571: bước bỏ qua vì người nhận đã biết hỏng (gate target_check): mã lỗi đã biết.
   v_tc_code text;
 `, 1, 'report: khai báo')
 
 r = patch(r, `  IF (SELECT count(DISTINCT btrim(x.value->>'resultKey')) FROM jsonb_array_elements(p_outcomes) x) <> jsonb_array_length(p_outcomes) THEN
-`, `  -- V569: bước tìm SĐT bỏ qua vì mọi bước gửi đã biết hỏng (rememberedErrorCode là JSON {thao tác gửi: mã}): tách thành một kết quả cho mỗi
+`, `  -- V571: bước tìm SĐT bỏ qua vì mọi bước gửi đã biết hỏng (rememberedErrorCode là JSON {thao tác gửi: mã}): tách thành một kết quả cho mỗi
   -- bước gửi (resultKey đầu giữ nguyên, kết quả sau thêm ':<thao tác>'), như khi các bước đó chạy và Zalo trả lỗi. Gọi lại thì tách y hệt.
   IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_outcomes) x WHERE x.value->>'statusCode' = 'campaign_detail_skipped'
               AND x.value->'data'->>'gate' = 'target_check' AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{') THEN
@@ -198,7 +198,7 @@ r = patch(r, `  IF (SELECT count(DISTINCT btrim(x.value->>'resultKey')) FROM jso
 
 r = patch(r, `      v_error_code := NULL; v_status_id := NULL; v_rule_id := NULL; v_matched_by := NULL; v_catch_all := NULL; v_err := NULL; v_detail_id := NULL;
 `, `      v_error_code := NULL; v_status_id := NULL; v_rule_id := NULL; v_matched_by := NULL; v_catch_all := NULL; v_err := NULL; v_detail_id := NULL;
-      -- V569: bước bỏ qua vì người nhận đã biết hỏng: ghi như kết quả lỗi thật của mã đã biết (cùng chính sách, trạng thái, câu lịch sử,
+      -- V571: bước bỏ qua vì người nhận đã biết hỏng: ghi như kết quả lỗi thật của mã đã biết (cùng chính sách, trạng thái, câu lịch sử,
       -- data đi đâu); hiệu ứng phụ bỏ ở dưới.
       v_tc_code := NULL;
       IF v_ok AND o->>'statusCode' = 'campaign_detail_skipped' AND o->'data'->>'gate' = 'target_check'
@@ -214,7 +214,7 @@ r = patch(r, `      v_error_code := NULL; v_status_id := NULL; v_rule_id := NULL
 r = patch(r, `      SELECT * INTO v_sem FROM public.aka_agent_status_semantics((v_policy->>'detail_status_id')::bigint);
 
       -- Trạng thái giao: chỉ thao tác loại delivery mới có thể "đã giao".
-`, `      -- V569: kết quả thay cho bước bỏ qua vì người nhận đã biết hỏng: không tính lượt, không đổi chuỗi data lỗi, không nghỉ giữa data, không
+`, `      -- V571: kết quả thay cho bước bỏ qua vì người nhận đã biết hỏng: không tính lượt, không đổi chuỗi data lỗi, không nghỉ giữa data, không
       -- khoá thao tác, không đổi chiến dịch / tài khoản / đăng nhập, lượt chạy tiếp; trạng thái, câu lịch sử, data đi đâu theo chính sách của mã.
       IF v_tc_code IS NOT NULL THEN
         v_policy := v_policy || jsonb_build_object('quota_effect', 'no_count', 'target_streak_effect', 'ignore', 'pace_mode', 'none',
@@ -228,7 +228,7 @@ r = patch(r, `      SELECT * INTO v_sem FROM public.aka_agent_status_semantics((
 
 r = patch(r, `            jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery, 'signal', v_signal - 'trace', 'evidence', v_evidence)
               || coalesce(o->'data', '{}'::jsonb),
-`, `            -- V569: dòng thay cho bước bỏ qua không ghi tín hiệu / dữ liệu của cổng (không có gì nhắc tới việc kiểm).
+`, `            -- V571: dòng thay cho bước bỏ qua không ghi tín hiệu / dữ liệu của cổng (không có gì nhắc tới việc kiểm).
             CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery)
                  ELSE jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery, 'signal', v_signal - 'trace', 'evidence', v_evidence)
                         || coalesce(o->'data', '{}'::jsonb) END,
@@ -236,7 +236,7 @@ r = patch(r, `            jsonb_build_object('engine', 'v2', 'phase', v_phase, '
 
 r = patch(r, `                'policyIds', v_policy->'policy_ids', 'revisions', v_policy->'revisions', 'targetRunId', r.id)),
 `, `                'policyIds', v_policy->'policy_ids', 'revisions', v_policy->'revisions', 'targetRunId', r.id)
-                -- V569: dấu nội bộ để việc nạp lịch sử bỏ qua dòng này (không phải kết quả Zalo thật).
+                -- V571: dấu nội bộ để việc nạp lịch sử bỏ qua dòng này (không phải kết quả Zalo thật).
                 || CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('targetCheck', true) ELSE '{}'::jsonb END),
 `, 1, 'report: dấu nội bộ')
 const NEW_REPORT = r
@@ -258,7 +258,7 @@ CREATE TABLE private.auto_engine_receiver_results (
   PRIMARY KEY (receiver_key, action_code, error_code)
 ) WITH (fillfactor = 90);
 COMMENT ON TABLE private.auto_engine_receiver_results IS
-  'V569: kết quả theo người nhận trên toàn hệ thống. receiver_key = md5(''p:''||normalize_phone(SĐT))::uuid hoặc md5(''g:''||global id)::uuid (một kết quả có cả hai thì ghi cả hai). Theo dõi mọi mã "thuộc về người nhận" của Tìm SĐT / Nhắn tin người lạ / Kết bạn (aka_agent_engine_target_check_tracked), bật bỏ qua theo cột target_check của auto_outcome_policies. bad_zalo_code = mã Zalo gốc nếu có; ok_at = lần thành công gần nhất của cùng thao tác (trừ khi tài khoản gửi đã là bạn bè). Nạp nền: aka_agent_engine_receiver_results_ingest; claim_target_v1 đọc qua aka_agent_engine_target_check_probe.';
+  'V571: kết quả theo người nhận trên toàn hệ thống. receiver_key = md5(''p:''||normalize_phone(SĐT))::uuid hoặc md5(''g:''||global id)::uuid (một kết quả có cả hai thì ghi cả hai). Theo dõi mọi mã "thuộc về người nhận" của Tìm SĐT / Nhắn tin người lạ / Kết bạn (aka_agent_engine_target_check_tracked), bật bỏ qua theo cột target_check của auto_outcome_policies. bad_zalo_code = mã Zalo gốc nếu có; ok_at = lần thành công gần nhất của cùng thao tác (trừ khi tài khoản gửi đã là bạn bè). Nạp nền: aka_agent_engine_receiver_results_ingest; claim_target_v1 đọc qua aka_agent_engine_target_check_probe.';
 ALTER TABLE private.auto_engine_receiver_results ENABLE ROW LEVEL SECURITY;
 
 CREATE TABLE private.auto_engine_receiver_results_state (
@@ -271,7 +271,7 @@ CREATE TABLE private.auto_engine_receiver_results_state (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 COMMENT ON TABLE private.auto_engine_receiver_results_state IS
-  'V569: mốc nạp (id auto_campaign_details đã nạp tới) và số đo cộng dồn. "<thao tác>|all|<mã lỗi|ok|other>" = mọi kết quả đã nạp; "<thao tác>|pred|<mã hỏng trước>/<mã Zalo>|<phone|global>|<d007|d030|d090|d365|d999>|<same|bad|ok|other>" = kết quả mà lúc đó người nhận đã có lần hỏng còn hiệu lực (khoá, tuổi lần hỏng), tức kết quả lẽ ra bị bỏ qua nếu mã đó bật: same = hỏng lại đúng mã (bỏ đúng), ok = Zalo lại thành công (bỏ nhầm). Số đo chỉ đúng ở lần nạp đầu (nạp lại thì xoá cả bảng kết quả lẫn stats).';
+  'V571: mốc nạp (id auto_campaign_details đã nạp tới) và số đo cộng dồn. "<thao tác>|all|<mã lỗi|ok|other>" = mọi kết quả đã nạp; "<thao tác>|pred|<mã hỏng trước>/<mã Zalo>|<phone|global>|<d007|d030|d090|d365|d999>|<same|bad|ok|other>" = kết quả mà lúc đó người nhận đã có lần hỏng còn hiệu lực (khoá, tuổi lần hỏng), tức kết quả lẽ ra bị bỏ qua nếu mã đó bật: same = hỏng lại đúng mã (bỏ đúng), ok = Zalo lại thành công (bỏ nhầm). Số đo chỉ đúng ở lần nạp đầu (nạp lại thì xoá cả bảng kết quả lẫn stats).';
 ALTER TABLE private.auto_engine_receiver_results_state ENABLE ROW LEVEL SECURITY;
 INSERT INTO private.auto_engine_receiver_results_state (id) VALUES (1);
 
@@ -290,7 +290,7 @@ BEGIN
   v := v_raw::jsonb;
   RETURN CASE WHEN jsonb_typeof(v) = 'object' THEN v ELSE '{}'::jsonb END;
 END $function$;
-COMMENT ON FUNCTION ${FUNCS.config} IS 'V569: thiết lập ${SETTING_KEY} (thiếu dòng / sai định dạng = {}).';
+COMMENT ON FUNCTION ${FUNCS.config} IS 'V571: thiết lập ${SETTING_KEY} (thiếu dòng / sai định dạng = {}).';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_on(p_organization_id bigint)
 RETURNS boolean
@@ -312,7 +312,7 @@ BEGIN
 EXCEPTION WHEN OTHERS THEN
   RETURN false;
 END $function$;
-COMMENT ON FUNCTION ${FUNCS.on} IS 'V569: tổ chức có bật kiểm người nhận trên toàn hệ thống không (${SETTING_KEY}: mode off | orgs (organizationIds) | all; thiếu / sai = không).';
+COMMENT ON FUNCTION ${FUNCS.on} IS 'V571: tổ chức có bật kiểm người nhận trên toàn hệ thống không (${SETTING_KEY}: mode off | orgs (organizationIds) | all; thiếu / sai = không).';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_rules()
 RETURNS TABLE(action_code text, error_code text, enabled boolean, days integer)
@@ -326,7 +326,7 @@ AS $function$
      AND p.action_code IS NOT NULL AND p.error_code IS NOT NULL
    GROUP BY p.action_code, p.error_code
 $function$;
-COMMENT ON FUNCTION ${FUNCS.rules} IS 'V569: các cặp (thao tác, mã) có target_check ở auto_outcome_policies: enabled = true thì claim bỏ qua bước; false = chỉ theo dõi. days = số ngày xét.';
+COMMENT ON FUNCTION ${FUNCS.rules} IS 'V571: các cặp (thao tác, mã) có target_check ở auto_outcome_policies: enabled = true thì claim bỏ qua bước; false = chỉ theo dõi. days = số ngày xét.';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_tracked()
 RETURNS TABLE(action_code text, error_code text)
@@ -342,7 +342,7 @@ AS $function$
   UNION
   SELECT rl.action_code, rl.error_code FROM private.aka_agent_engine_target_check_rules() rl
 $function$;
-COMMENT ON FUNCTION ${FUNCS.tracked} IS 'V569: các cặp (thao tác, mã) được nạp vào sổ: mã Zalo "thuộc về người nhận" (auto_error target_permanent, trừ ${TRACK_EXCLUDE.join(', ')}) của ${TRACK_ACTIONS.join(' / ')}, cộng mọi cặp có target_check ở bảng chính sách. Bật bỏ qua một mã đã theo dõi có hiệu lực ngay, không phải nạp lại.';
+COMMENT ON FUNCTION ${FUNCS.tracked} IS 'V571: các cặp (thao tác, mã) được nạp vào sổ: mã Zalo "thuộc về người nhận" (auto_error target_permanent, trừ ${TRACK_EXCLUDE.join(', ')}) của ${TRACK_ACTIONS.join(' / ')}, cộng mọi cặp có target_check ở bảng chính sách. Bật bỏ qua một mã đã theo dõi có hiệu lực ngay, không phải nạp lại.';
 
 CREATE FUNCTION private.aka_agent_engine_receiver_key(p_kind text, p_value text)
 RETURNS uuid
@@ -356,7 +356,7 @@ AS $function$
     WHEN p_kind = 'global' THEN (SELECT CASE WHEN g IS NULL OR g = '' THEN NULL ELSE md5('g:' || g)::uuid END FROM (SELECT btrim(p_value) AS g) s)
   END
 $function$;
-COMMENT ON FUNCTION ${FUNCS.key} IS 'V569: khoá người nhận: phone = md5(''p:''||normalize_phone(SĐT))::uuid (SĐT không có chữ số = NULL); global = md5(''g:''||global id)::uuid.';
+COMMENT ON FUNCTION ${FUNCS.key} IS 'V571: khoá người nhận: phone = md5(''p:''||normalize_phone(SĐT))::uuid (SĐT không có chữ số = NULL); global = md5(''g:''||global id)::uuid.';
 
 CREATE FUNCTION private.aka_agent_engine_target_check_probe(p_phone text, p_global_id text)
 RETURNS TABLE(action_code text, error_code text, key_kind text, zalo_code text, bad_at timestamptz)
@@ -380,7 +380,7 @@ AS $function$
      AND (o.ok_at IS NULL OR o.ok_at < w.bad_at)
    ORDER BY w.action_code, w.bad_at DESC
 $function$;
-COMMENT ON FUNCTION ${FUNCS.probe} IS 'V569: các thao tác mà người nhận (SĐT, global id) đã biết hỏng: mã đang bật target_check, trong số ngày xét, chưa thành công lại (qua mọi khoá); mỗi thao tác lần hỏng gần nhất.';
+COMMENT ON FUNCTION ${FUNCS.probe} IS 'V571: các thao tác mà người nhận (SĐT, global id) đã biết hỏng: mã đang bật target_check, trong số ngày xét, chưa thành công lại (qua mọi khoá); mỗi thao tác lần hỏng gần nhất.';
 
 CREATE FUNCTION private.aka_agent_engine_receiver_results_ingest(p_budget_ms integer DEFAULT NULL, p_chunk integer DEFAULT NULL)
 RETURNS jsonb
@@ -572,11 +572,11 @@ BEGIN
     'chunks', v_chunks, 'rows', v_rows, 'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted, 'caughtUp', v_from >= v_cap);
 END $function$;
 COMMENT ON FUNCTION ${FUNCS.ingest} IS
-  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron ${JOB} gọi mỗi phút với ngân sách ${SETTING_KEY}.ingestBudgetMs (mặc định 40 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
+  'V571: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron ${JOB} gọi mỗi phút với ngân sách ${SETTING_KEY}.ingestBudgetMs (mặc định 40 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
   ('${SETTING_KEY}', '${SETTING_VALUE}',
-   'Kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (V569), chỉ engine v2: "Nhắn tin theo SĐT" và nhắn người lạ theo UID (thành viên nhóm, group thời gian thực, đề xuất Zalo, khách hàng cũ), không kiêm SMS. JSON: mode off | orgs (chỉ organizationIds) | all; thiếu dòng / sai định dạng = off. Mã nào bỏ qua: cột target_check_enabled / target_check_days của auto_outcome_policies. ingest = false: job ngừng nạp lịch sử (claim vẫn đọc sổ đã nạp nếu mode bật). ingestBudgetMs / ingestChunk: ngân sách mỗi phút và số id mỗi phần nạp; backfillDayBudgetMs / backfillDayHours [giờ bắt đầu, giờ kết thúc) VN / backfillThresholdIds: ngân sách ban ngày khi còn tồn nhiều (nạp lần đầu). Claim đọc lại mỗi lần nhận data nên đổi có hiệu lực ngay.',
+   'Kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (V571), chỉ engine v2: "Nhắn tin theo SĐT" và nhắn người lạ theo UID (thành viên nhóm, group thời gian thực, đề xuất Zalo, khách hàng cũ), không kiêm SMS. JSON: mode off | orgs (chỉ organizationIds) | all; thiếu dòng / sai định dạng = off. Mã nào bỏ qua: cột target_check_enabled / target_check_days của auto_outcome_policies. ingest = false: job ngừng nạp lịch sử (claim vẫn đọc sổ đã nạp nếu mode bật). ingestBudgetMs / ingestChunk: ngân sách mỗi phút và số id mỗi phần nạp; backfillDayBudgetMs / backfillDayHours [giờ bắt đầu, giờ kết thúc) VN / backfillThresholdIds: ngân sách ban ngày khi còn tồn nhiều (nạp lần đầu). Claim đọc lại mỗi lần nhận data nên đổi có hiệu lực ngay.',
    false, true);
 
 DO $grants$
@@ -602,7 +602,7 @@ END $grants$;`
 
 // ---- p1 -----------------------------------------------------------------------------------------------------------------------
 const RULE_TUPLES = RULES.map(([e, a]) => `('${e}', '${a}')`).join(', ')
-const migrationP1 = `-- V569 phần 1: cột kiểm người nhận trên toàn hệ thống ở auto_outcome_policies. SINH TỪ scripts/build-v569-sql.cjs, không sửa tay.
+const migrationP1 = `-- V571 phần 1: cột kiểm người nhận trên toàn hệ thống ở auto_outcome_policies. SINH TỪ scripts/build-v571-sql.cjs, không sửa tay.
 -- Thêm target_check_enabled (NULL = không kiểm; false = chỉ theo dõi, xem số đo; true = engine bỏ qua bước khi người nhận đã biết hỏng) và
 -- target_check_days (số ngày xét, 1–3650), rồi bật 3 dòng anh duyệt 18/11/2026 (365 ngày):
 --   ${RULES.map(([e, a]) => `${a} × ${e}`).join('\n--   ')}
@@ -616,31 +616,31 @@ DO $pre$
 DECLARE v_n integer;
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v569_%') THEN
-      RAISE EXCEPTION 'V569 đã có trong sổ migration, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v571_%') THEN
+      RAISE EXCEPTION 'V571 đã có trong sổ migration, không chạy lại';
     END IF;
   END IF;
   IF EXISTS (SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = 'public.auto_outcome_policies'::regclass
               AND attname IN ('target_check_enabled', 'target_check_days') AND NOT attisdropped) THEN
-    RAISE EXCEPTION 'V569 p1: cột target_check đã có';
+    RAISE EXCEPTION 'V571 p1: cột target_check đã có';
   END IF;
   SELECT count(*) INTO v_n FROM public.auto_outcome_policies p
    WHERE p.is_active AND NOT p.is_delete AND p.status_id IS NULL AND p.campaign_action_id IS NULL AND p.runtime_target IS NULL
      AND (p.error_code, p.action_code) IN (${RULE_TUPLES});
-  IF v_n <> ${RULES.length} THEN RAISE EXCEPTION 'V569 p1: cần đúng ${RULES.length} dòng chính sách (mã × thao tác), thấy %', v_n; END IF;
+  IF v_n <> ${RULES.length} THEN RAISE EXCEPTION 'V571 p1: cần đúng ${RULES.length} dòng chính sách (mã × thao tác), thấy %', v_n; END IF;
 END $pre$;
 
 ALTER TABLE public.auto_outcome_policies
   ADD COLUMN target_check_enabled boolean,
   ADD COLUMN target_check_days integer,
-  ADD CONSTRAINT auto_outcome_policies_target_check_v569 CHECK (
+  ADD CONSTRAINT auto_outcome_policies_target_check_v571 CHECK (
     (target_check_enabled IS NULL AND target_check_days IS NULL)
     OR (target_check_enabled IS NOT NULL AND target_check_days IS NOT NULL AND target_check_days BETWEEN 1 AND 3650
         AND error_code IS NOT NULL AND action_code IS NOT NULL AND status_id IS NULL AND campaign_action_id IS NULL AND runtime_target IS NULL));
 COMMENT ON COLUMN public.auto_outcome_policies.target_check_enabled IS
-  'V569: kiểm người nhận trên toàn hệ thống cho (error_code × action_code) của dòng này. NULL = không kiểm; false = chỉ theo dõi (xem số đo); true = engine v2 bỏ qua bước khi người nhận (SĐT / global id) đã hỏng với mã này trong target_check_days ngày và chưa thành công lại. Mã Zalo "thuộc về người nhận" của Tìm SĐT / Nhắn tin người lạ / Kết bạn đã được theo dõi sẵn nên bật có hiệu lực ngay. Bật cả hệ thống: auto_system_settings engine.target_check.';
+  'V571: kiểm người nhận trên toàn hệ thống cho (error_code × action_code) của dòng này. NULL = không kiểm; false = chỉ theo dõi (xem số đo); true = engine v2 bỏ qua bước khi người nhận (SĐT / global id) đã hỏng với mã này trong target_check_days ngày và chưa thành công lại. Mã Zalo "thuộc về người nhận" của Tìm SĐT / Nhắn tin người lạ / Kết bạn đã được theo dõi sẵn nên bật có hiệu lực ngay. Bật cả hệ thống: auto_system_settings engine.target_check.';
 COMMENT ON COLUMN public.auto_outcome_policies.target_check_days IS
-  'V569: số ngày xét lần hỏng của người nhận (1–3650); bắt buộc khi target_check_enabled khác NULL.';
+  'V571: số ngày xét lần hỏng của người nhận (1–3650); bắt buộc khi target_check_enabled khác NULL.';
 
 DO $set$
 DECLARE v_n integer;
@@ -649,13 +649,13 @@ BEGIN
    WHERE p.is_active AND NOT p.is_delete AND p.status_id IS NULL AND p.campaign_action_id IS NULL AND p.runtime_target IS NULL
      AND (p.error_code, p.action_code) IN (${RULE_TUPLES});
   GET DIAGNOSTICS v_n = ROW_COUNT;
-  IF v_n <> ${RULES.length} THEN RAISE EXCEPTION 'V569 p1: bật được % dòng, cần ${RULES.length}', v_n; END IF;
+  IF v_n <> ${RULES.length} THEN RAISE EXCEPTION 'V571 p1: bật được % dòng, cần ${RULES.length}', v_n; END IF;
 END $set$;
 
 COMMIT;
 `
 
-const rollbackP1 = `-- Gỡ V569 phần 1: bỏ hai cột target_check của auto_outcome_policies. SINH TỪ scripts/build-v569-sql.cjs.
+const rollbackP1 = `-- Gỡ V571 phần 1: bỏ hai cột target_check của auto_outcome_policies. SINH TỪ scripts/build-v571-sql.cjs.
 -- Gỡ phần 2 trước (${ROLLBACK_P2}.sql): claim / report / hàm nạp đọc hai cột này.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -663,11 +663,11 @@ SET LOCAL statement_timeout = '30s';
 
 DO $pre$
 BEGIN
-  IF to_regprocedure('${FUNCS.rules}') IS NOT NULL THEN RAISE EXCEPTION 'Gỡ V569 p1: gỡ phần 2 trước (${ROLLBACK_P2}.sql)'; END IF;
+  IF to_regprocedure('${FUNCS.rules}') IS NOT NULL THEN RAISE EXCEPTION 'Gỡ V571 p1: gỡ phần 2 trước (${ROLLBACK_P2}.sql)'; END IF;
 END $pre$;
 
 ALTER TABLE public.auto_outcome_policies
-  DROP CONSTRAINT IF EXISTS auto_outcome_policies_target_check_v569,
+  DROP CONSTRAINT IF EXISTS auto_outcome_policies_target_check_v571,
   DROP COLUMN IF EXISTS target_check_enabled,
   DROP COLUMN IF EXISTS target_check_days;
 
@@ -681,15 +681,15 @@ const capture = (label, expect, done, msgDone, msgDrift) => `  v_oid := to_regpr
   IF v_md5 = '${done}' THEN RAISE EXCEPTION '${msgDone}'; END IF;
   IF v_md5 IS DISTINCT FROM '${expect}' THEN RAISE EXCEPTION '${msgDrift} (${label}: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v569_acl_${label}', v_acl, true);`
+  PERFORM set_config('aka.v571_acl_${label}', v_acl, true);`
 const verify = (label, expect, what) => `  v_oid := '${label === 'claim' ? CLAIM_SIG : REPORT_SIG}'::regprocedure;
   IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '${expect}' THEN
     RAISE EXCEPTION '${what} postflight: định nghĩa ${label} %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v569_acl_${label}', true) THEN RAISE EXCEPTION '${what} postflight: quyền / chủ sở hữu ${label} bị đổi'; END IF;`
+  IF v_acl IS DISTINCT FROM current_setting('aka.v571_acl_${label}', true) THEN RAISE EXCEPTION '${what} postflight: quyền / chủ sở hữu ${label} bị đổi'; END IF;`
 
-const migrationP2 = `-- V569 phần 2: kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (engine v2). SINH TỪ scripts/build-v569-sql.cjs, không sửa tay.
+const migrationP2 = `-- V571 phần 2: kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (engine v2). SINH TỪ scripts/build-v571-sql.cjs, không sửa tay.
 -- Cần phần 1. Tạo private.auto_engine_receiver_results (+ _state), ${Object.keys(FUNCS).length} hàm private, thiết lập ${SETTING_KEY} (mode off: chưa bỏ
 -- qua gì), job pg_cron ${JOB} (mỗi phút, nạp lịch sử tối đa 40 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
 -- aka_agent_engine_report_v1 (bản V558), giữ chữ ký / chủ sở hữu / quyền. Khi mode off, claim và report trả đúng như trước (chỉ thêm một lần
@@ -702,31 +702,31 @@ SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
-DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'V569 p2';
+DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'V571 p2';
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
     IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = '${NAME_P2}') THEN
-      RAISE EXCEPTION 'V569 p2 đã có trong sổ migration, không chạy lại';
+      RAISE EXCEPTION 'V571 p2 đã có trong sổ migration, không chạy lại';
     END IF;
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute WHERE attrelid = 'public.auto_outcome_policies'::regclass
                   AND attname = 'target_check_enabled' AND NOT attisdropped) THEN
-    RAISE EXCEPTION 'V569 p2: cần p1 (${NAME_P1}.sql) trước';
+    RAISE EXCEPTION 'V571 p2: cần p1 (${NAME_P1}.sql) trước';
   END IF;
   IF to_regclass('private.auto_engine_receiver_results') IS NOT NULL OR to_regprocedure('${FUNCS.ingest}') IS NOT NULL THEN
-    RAISE EXCEPTION 'V569 p2: bảng / hàm kiểm người nhận đã có';
+    RAISE EXCEPTION 'V571 p2: bảng / hàm kiểm người nhận đã có';
   END IF;
-  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'V569 p2: thiếu public.normalize_phone(text)'; END IF;
+  IF to_regprocedure('public.normalize_phone(text)') IS NULL THEN RAISE EXCEPTION 'V571 p2: thiếu public.normalize_phone(text)'; END IF;
   IF (SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = to_regclass('public.zalo_users')
        AND attname IN ('account_id', 'zalo_uid', 'global_id', 'is_fr') AND NOT attisdropped) <> 4 THEN
-    RAISE EXCEPTION 'V569 p2: thiếu public.zalo_users(account_id, zalo_uid, global_id, is_fr)';
+    RAISE EXCEPTION 'V571 p2: thiếu public.zalo_users(account_id, zalo_uid, global_id, is_fr)';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = '${SETTING_KEY}') THEN RAISE EXCEPTION 'V569 p2: thiết lập ${SETTING_KEY} đã có'; END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = '${SETTING_KEY}') THEN RAISE EXCEPTION 'V571 p2: thiết lập ${SETTING_KEY} đã có'; END IF;
   IF to_regclass('cron.job') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = '${JOB}') THEN RAISE EXCEPTION 'V569 p2: job ${JOB} đã có'; END IF;
+    IF EXISTS (SELECT 1 FROM cron.job WHERE jobname = '${JOB}') THEN RAISE EXCEPTION 'V571 p2: job ${JOB} đã có'; END IF;
   END IF;
-${capture('claim', LIVE.claim, NEW.claim, 'V569 đã chạy (claim)', 'V569: định nghĩa claim khác bản production 18/11 (V564), dừng để đối chiếu bản live')}
-${capture('report', LIVE.report, NEW.report, 'V569 đã chạy (report)', 'V569: định nghĩa report khác bản production 18/11 (V558), dừng để đối chiếu bản live')}
+${capture('claim', LIVE.claim, NEW.claim, 'V571 đã chạy (claim)', 'V571: định nghĩa claim khác bản production 18/11 (V564), dừng để đối chiếu bản live')}
+${capture('report', LIVE.report, NEW.report, 'V571 đã chạy (report)', 'V571: định nghĩa report khác bản production 18/11 (V558), dừng để đối chiếu bản live')}
 END $pre$;
 
 ${OBJECTS}
@@ -745,46 +745,46 @@ END $cron$;
 DO $post$
 DECLARE v_oid oid; v_acl text; v_role text; v_obj text;
 BEGIN
-${verify('claim', NEW.claim, 'V569')}
-${verify('report', NEW.report, 'V569')}
+${verify('claim', NEW.claim, 'V571')}
+${verify('report', NEW.report, 'V571')}
   FOREACH v_obj IN ARRAY ARRAY[${sqlList(TABLES)}] LOOP
-    IF NOT (SELECT c.relrowsecurity FROM pg_catalog.pg_class c WHERE c.oid = v_obj::regclass) THEN RAISE EXCEPTION 'V569 postflight: % chưa bật RLS', v_obj; END IF;
+    IF NOT (SELECT c.relrowsecurity FROM pg_catalog.pg_class c WHERE c.oid = v_obj::regclass) THEN RAISE EXCEPTION 'V571 postflight: % chưa bật RLS', v_obj; END IF;
   END LOOP;
   FOREACH v_role IN ARRAY ARRAY[${sqlList(ROLES)}] LOOP
     IF EXISTS (SELECT 1 FROM pg_catalog.pg_roles WHERE rolname = v_role) THEN
       FOREACH v_obj IN ARRAY ARRAY[${sqlList(TABLES)}] LOOP
         IF has_table_privilege(v_role, v_obj, 'SELECT') OR has_table_privilege(v_role, v_obj, 'INSERT') OR has_table_privilege(v_role, v_obj, 'UPDATE')
-           OR has_table_privilege(v_role, v_obj, 'DELETE') THEN RAISE EXCEPTION 'V569 postflight: % có quyền trên %', v_role, v_obj; END IF;
+           OR has_table_privilege(v_role, v_obj, 'DELETE') THEN RAISE EXCEPTION 'V571 postflight: % có quyền trên %', v_role, v_obj; END IF;
       END LOOP;
       FOREACH v_obj IN ARRAY ARRAY[${sqlList(Object.values(FUNCS))}] LOOP
-        IF has_function_privilege(v_role, v_obj, 'EXECUTE') THEN RAISE EXCEPTION 'V569 postflight: % chạy được %', v_role, v_obj; END IF;
+        IF has_function_privilege(v_role, v_obj, 'EXECUTE') THEN RAISE EXCEPTION 'V571 postflight: % chạy được %', v_role, v_obj; END IF;
       END LOOP;
     END IF;
   END LOOP;
-  IF private.aka_agent_engine_target_check_on(1) THEN RAISE EXCEPTION 'V569 postflight: thiết lập phải ở mode off'; END IF;
+  IF private.aka_agent_engine_target_check_on(1) THEN RAISE EXCEPTION 'V571 postflight: thiết lập phải ở mode off'; END IF;
   IF (SELECT count(*) FROM private.aka_agent_engine_target_check_rules() WHERE enabled) <> ${RULES.length} THEN
-    RAISE EXCEPTION 'V569 postflight: cần ${RULES.length} cặp mã đang bật';
+    RAISE EXCEPTION 'V571 postflight: cần ${RULES.length} cặp mã đang bật';
   END IF;
   IF to_regclass('cron.job') IS NOT NULL THEN
-    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = '${JOB}') THEN RAISE EXCEPTION 'V569 postflight: chưa có job ${JOB}'; END IF;
+    IF NOT EXISTS (SELECT 1 FROM cron.job WHERE jobname = '${JOB}') THEN RAISE EXCEPTION 'V571 postflight: chưa có job ${JOB}'; END IF;
   END IF;
 END $post$;
 
 COMMIT;
 `
 
-const rollbackP2 = `-- Gỡ V569 phần 2: trả claim_target_v1 về bản V564 và report_v1 về bản V558, bỏ job, thiết lập, hàm và bảng kiểm người nhận (mất sổ đã nạp).
--- SINH TỪ scripts/build-v569-sql.cjs. Data đang chạy không bị ảnh hưởng (lõi chỉ thấy quyết định skip khi mode bật). Sau đó có thể gỡ
+const rollbackP2 = `-- Gỡ V571 phần 2: trả claim_target_v1 về bản V564 và report_v1 về bản V558, bỏ job, thiết lập, hàm và bảng kiểm người nhận (mất sổ đã nạp).
+-- SINH TỪ scripts/build-v571-sql.cjs. Data đang chạy không bị ảnh hưởng (lõi chỉ thấy quyết định skip khi mode bật). Sau đó có thể gỡ
 -- phần 1 (${ROLLBACK_P1}.sql).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
-DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'Gỡ V569 p2';
+DECLARE v_oid oid; v_md5 text; v_acl text; v_label text := 'Gỡ V571 p2';
 BEGIN
-${capture('claim', NEW.claim, LIVE.claim, 'Gỡ V569: claim đã là bản trước V569', 'Gỡ V569: định nghĩa claim không phải bản V569')}
-${capture('report', NEW.report, LIVE.report, 'Gỡ V569: report đã là bản trước V569', 'Gỡ V569: định nghĩa report không phải bản V569')}
+${capture('claim', NEW.claim, LIVE.claim, 'Gỡ V571: claim đã là bản trước V571', 'Gỡ V571: định nghĩa claim không phải bản V571')}
+${capture('report', NEW.report, LIVE.report, 'Gỡ V571: report đã là bản trước V571', 'Gỡ V571: định nghĩa report không phải bản V571')}
 END $pre$;
 
 ${liveClaim};
@@ -812,8 +812,8 @@ DROP TABLE private.auto_engine_receiver_results;
 DO $post$
 DECLARE v_oid oid; v_acl text;
 BEGIN
-${verify('claim', LIVE.claim, 'Gỡ V569')}
-${verify('report', LIVE.report, 'Gỡ V569')}
+${verify('claim', LIVE.claim, 'Gỡ V571')}
+${verify('report', LIVE.report, 'Gỡ V571')}
 END $post$;
 
 COMMIT;
