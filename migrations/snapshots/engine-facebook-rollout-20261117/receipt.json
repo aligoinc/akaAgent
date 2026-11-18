@@ -1,0 +1,26 @@
+{
+  "setting": "auto_system_settings.engine.facebook (id 124)",
+  "changedAtUtc": "2026-11-17T14:52:10Z",
+  "changedAtVn": "2026-11-17 21:52:10",
+  "approvedBy": "anh (\"bật cho khoảng 10 tổ chức sẽ chạy chiến dịch fb sáng mai xem\", rồi \"Bật 10 tổ chức này\" với danh sách đề xuất)",
+  "before": "{\"mode\":\"orgs\",\"organizationIds\":[1]}",
+  "after": "{\"mode\":\"orgs\",\"organizationIds\":[1,124,265,382,444,638,701,1419,1421,1661,2036]}",
+  "method": "UPDATE có kiểm giá trị cũ (đúng 1 dòng), trong cùng giao dịch kiểm aka_agent_engine_facebook_org_enabled: 11 tổ chức trong danh sách = true, 328 và 2 = false; đọc lại sau COMMIT khớp. Trigger của bảng không làm gì với khoá này (chỉ role aka_agent_desktop, khoá zalo.campaign_engagement.enabled, web.auth.max_devices_per_staff).",
+  "selection": {
+    "criteria": "Có chiến dịch Facebook chờ xử lý / đang chạy, chạy trong 2 ngày qua và đến hạn trước 12:00 VN 18/11; máy Desktop mở trong 24 giờ; chỉ loại chiến dịch đã thử thật (không Up tin tự sinh, đăng nhóm kèm chia sẻ, newsfeed có like, tìm data bằng search, inbox Page, Page ngoài đăng nhóm); bỏ tổ chức lớn nhất (328) và tổ chức còn ở bản 9.1–9.5.",
+    "orgs": {
+      "701": "32 đăng nhóm kiêm comment, 7 tài khoản",
+      "265": "26 đăng nhóm bật bỏ qua nhóm cần duyệt, 1 tài khoản",
+      "382": "18 đăng nhóm, 2 tài khoản",
+      "444": "9 đăng trang cá nhân, 1 tài khoản",
+      "2036": "4 tham gia nhóm, 4 tài khoản",
+      "1661": "3 nhắn tin theo UID, 3 tài khoản",
+      "638": "đăng nhóm + comment seeding, 1 tài khoản",
+      "1421": "2 comment seeding (tổ chức hỗ trợ nội bộ)",
+      "124": "4 đăng nhóm, 4 tài khoản",
+      "1419": "5 đăng nhóm bằng Page kiêm comment, 5 tài khoản (comment dưới tên Page chưa thử thật)"
+    }
+  },
+  "effect": "Chỉ có tác dụng khi nhân viên của tổ chức chạy Desktop ≥ 9.9.0 và đăng nhập lại (Desktop đọc thiết lập lúc đăng nhập; claim kiểm mỗi lượt). Lúc bật feed trả 9.8.0 (build trước #690, không có engine Facebook); 9.9.0 đã build 17/11, chưa phát hành.",
+  "rollback": "UPDATE public.auto_system_settings SET value = '{\"mode\":\"orgs\",\"organizationIds\":[1]}' WHERE key = 'engine.facebook'; tắt hết: {\"mode\":\"off\",\"organizationIds\":[]} (có hiệu lực ở lần nhận lượt kế tiếp)"
+}
