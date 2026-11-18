@@ -1,0 +1,221 @@
+{
+  "migrations": [
+    "migrations/migration_v571_engine_target_check_p1.sql",
+    "migrations/migration_v571_engine_target_check_p2.sql"
+  ],
+  "rollbacks": [
+    "migrations/rollback_v571_engine_target_check_p2.sql (gỡ trước)",
+    "migrations/rollback_v571_engine_target_check_p1.sql"
+  ],
+  "ledger": [
+    {
+      "version": "20261118064237",
+      "name": "migration_v571_engine_target_check_p1",
+      "statementsMd5": "95266d3c5ca0d24ac5e56d5e3fd5dbc2",
+      "createdBy": null
+    },
+    {
+      "version": "20261118064256",
+      "name": "migration_v571_engine_target_check_p2",
+      "statementsMd5": "ee7ad33b600bfedd19259964b6328544",
+      "createdBy": null
+    }
+  ],
+  "fileMd5": {
+    "p1": "95266d3c5ca0d24ac5e56d5e3fd5dbc2",
+    "p2": "ee7ad33b600bfedd19259964b6328544",
+    "rollbackP1": "0394dbf34913b89221e80a23e15a1baa",
+    "rollbackP2": "80a2fd5970416cae6871480e5bd37dff"
+  },
+  "appliedAtUtc": {
+    "p1": "2026-11-18T06:42:37Z",
+    "p2": "2026-11-18T06:42:56Z"
+  },
+  "appliedAtVn": {
+    "p1": "2026-11-18 13:42:37",
+    "p2": "2026-11-18 13:42:56"
+  },
+  "approvedBy": "anh (\"Apply tối nay\" 18/11 trưa, rồi \"apply luôn bây giờ được không\" lúc 13:3x VN 18/11)",
+  "renumber": "Đổi số hai lần 18/11: V565 (migration_v565_aka_assistant apply 11:48 VN) → V569 (đã merge dev_3 qua #699 lúc 13:31 VN) → V571, vì sổ đã có migration_v569_aka_assistant_core_guard (20261118060759, 13:07 VN) và migration_v570_aka_assistant_data_prompt (20261118061015, 13:10 VN) của phiên khác. Chỉ đổi số và md5 thân hàm (chú thích có số); bộ kiểm 23/23 trước khi apply.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked -f (mỗi phần một giao dịch, dòng sổ chèn trước COMMIT); p1: ALTER TABLE auto_outcome_policies (2 cột + CHECK) + 3 dòng chính sách; p2: 2 bảng private, 7 hàm, CREATE OR REPLACE claim_target_v1 / report_v1, thiết lập engine.target_check, job pg_cron.",
+  "preApply": {
+    "readAtUtc": "2026-11-18T06:42:23Z",
+    "ledgerMax": "migration_v570_aka_assistant_data_prompt",
+    "v571InLedger": 0,
+    "claimMd5": "03d72830d664682c1f51dc3dd9944eda",
+    "reportMd5": "bb8bc00f9d2a8c51a00dcb525fa2e4ab",
+    "normalizePhoneMd5": "f6ccb574895043480e6523193f7be007",
+    "zaloUsersColumns": [
+      "account_id",
+      "global_id",
+      "is_fr",
+      "zalo_uid"
+    ],
+    "engineTargetCheckSetting": "không có",
+    "cronJob": "không có",
+    "auto_outcome_policies": {
+      "rows": 363,
+      "targetCheckColumns": 0
+    },
+    "activeClientBackends": 5,
+    "oldestActiveXactSeconds": 0,
+    "restPerMinuteUtc": [
+      {
+        "min": "06:38",
+        "requests": 46743,
+        "p50Ms": 49,
+        "p99Ms": 359,
+        "errors5xx": 0
+      },
+      {
+        "min": "06:39",
+        "requests": 44391,
+        "p50Ms": 69,
+        "p99Ms": 2157,
+        "errors5xx": 0
+      },
+      {
+        "min": "06:40",
+        "requests": 46851,
+        "p50Ms": 52,
+        "p99Ms": 465,
+        "errors5xx": 0
+      },
+      {
+        "min": "06:41",
+        "requests": 49146,
+        "p50Ms": 49,
+        "p99Ms": 237,
+        "errors5xx": 0
+      }
+    ]
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T06:43:19Z",
+    "p1": {
+      "targetCheckColumns": 2,
+      "constraint": "auto_outcome_policies_target_check_v571",
+      "enabledPolicyIds": [
+        155,
+        157,
+        160
+      ],
+      "days": 365
+    },
+    "claimMd5": "1ea2f16387985542b48dfbda6965c790",
+    "reportMd5": "09fe52a53d9f419207506f1033bdb800",
+    "setting": "{\"mode\":\"off\",\"organizationIds\":[],\"ingest\":true,\"ingestBudgetMs\":40000,\"ingestChunk\":5000,\"backfillDayBudgetMs\":3000,\"backfillDayHours\":[8,18],\"backfillThresholdIds\":50000}",
+    "cronJob": {
+      "jobid": 119,
+      "jobname": "aka-agent-engine-receiver-results",
+      "schedule": "* * * * *",
+      "active": true,
+      "command": "SELECT private.aka_agent_engine_receiver_results_ingest()"
+    },
+    "rls": {
+      "auto_engine_receiver_results": true,
+      "auto_engine_receiver_results_state": true
+    },
+    "aclAndPrivileges": "p2 postflight (đã COMMIT) kiểm ACL claim / report không đổi, không vai trò ứng dụng nào có quyền với 2 bảng và 7 hàm mới",
+    "postgrest": {
+      "p1": {
+        "reloadMessageUtc": "2026-11-18T06:42:39.66Z",
+        "schemaQueriedMs": 4363
+      },
+      "p2": {
+        "reloadMessageUtc": "2026-11-18T06:43:02.27Z",
+        "schemaQueriedMs": 4983
+      },
+      "errors": "không có PGRST002 / PGRST003"
+    },
+    "rest10sUtc": [
+      {
+        "from": "06:42:20",
+        "requests": 7719,
+        "p50Ms": 48,
+        "p99Ms": 165,
+        "errors5xx": 0,
+        "errors503": 0
+      },
+      {
+        "from": "06:42:30",
+        "requests": 7332,
+        "p50Ms": 48,
+        "p99Ms": 2505,
+        "errors5xx": 0,
+        "errors503": 0
+      },
+      {
+        "from": "06:42:40",
+        "requests": 6905,
+        "p50Ms": 151,
+        "p99Ms": 1850,
+        "errors5xx": 0,
+        "errors503": 0
+      },
+      {
+        "from": "06:42:50",
+        "requests": 7635,
+        "p50Ms": 59,
+        "p99Ms": 271,
+        "errors5xx": 0,
+        "errors503": 0
+      },
+      {
+        "from": "06:43:00",
+        "requests": 6886,
+        "p50Ms": 220,
+        "p99Ms": 1288,
+        "errors5xx": 1,
+        "errors503": 0
+      },
+      {
+        "from": "06:43:10",
+        "requests": 8038,
+        "p50Ms": 168,
+        "p99Ms": 468,
+        "errors5xx": 0,
+        "errors503": 0
+      }
+    ],
+    "errorDuringReload": "1 lần POST rpc/aka_agent_device_presence_v2 trả 500 lúc 06:43:07Z sau 3.503 ms (heartbeat Desktop chạm trần 3 giây của aka_agent_desktop trong lúc PostgREST nạp lại schema); heartbeat tự gửi lại sau 30 giây."
+  },
+  "ingest": {
+    "maxDetailIdAtApply": 15539751,
+    "firstRuns": [
+      {
+        "startUtc": "06:44:00",
+        "ms": 3346,
+        "status": "succeeded",
+        "throttled": true,
+        "budgetMs": 3000,
+        "fromId": 0,
+        "toId": 305000,
+        "chunks": 61,
+        "rows": 6345,
+        "badUpserts": 385,
+        "okUpdates": 0,
+        "deleted": 0
+      },
+      {
+        "startUtc": "06:45:00",
+        "ms": 3281,
+        "status": "succeeded",
+        "throttled": true,
+        "budgetMs": 3000,
+        "fromId": 305000,
+        "toId": 325000,
+        "chunks": 4,
+        "rows": 5493,
+        "badUpserts": 771,
+        "okUpdates": 0,
+        "deleted": 0
+      }
+    ],
+    "note": "Ban ngày (8–18h VN) còn tồn trên 50.000 id nên mỗi phút chỉ chạy 3 giây; từ 18:00 VN chạy 40 giây mỗi phút. Lượt 2 đi 20.000 id trong 3,3 giây (~0,16 ms mỗi id, đoạn id cũ); tốc độ đổi theo mật độ dữ liệu."
+  },
+  "notInScope": [
+    "mode off: claim / report trả đúng như trước, khách không thấy gì khác. Bật cho tổ chức là quyết định riêng sau khi xem số đo (_state.stats).",
+    "Không đổi code app: lõi Desktop 9.6.0 trở lên và lõi Fly đã xử lý skip; không cần build Desktop hay deploy ChatApi."
+  ]
+}
