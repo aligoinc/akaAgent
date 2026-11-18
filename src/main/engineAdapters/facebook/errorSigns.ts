@@ -104,6 +104,17 @@ export function pickFacebookErrorSign(signs: readonly FacebookErrorSign[], ctx: 
   return matchPageSign(signs, ctx, input.pageTexts) ?? matchMessageSign(signs, ctx, input.messages)
 }
 
+/** Mã lỗi "không thấy ô bình luận" (FB41): câu block chứa lỗi của hàm chờ phần tử kèm XPath. */
+export const COMMENT_BOX_NOT_FOUND_ERROR_CODE = 'err_fb_comment_box_not_found'
+
+/**
+ * Câu cho khách của mã vừa nhận ra qua dấu hiệu (anh duyệt 18/11/2026): bỏ phần kỹ thuật của câu block. FB41: "Không comment được bài
+ * thứ 2: waitForSelector timeout: (//div[…])" → "Không comment được bài thứ 2: không thấy ô bình luận". Mã khác giữ nguyên câu.
+ */
+export function rewriteFacebookSignMessage(code: string, message: string): string {
+  return code === COMMENT_BOX_NOT_FOUND_ERROR_CODE ? message.replace(/waitForSelector timeout:[\s\S]*$/i, 'không thấy ô bình luận') : message
+}
+
 /** Có dấu hiệu `page` dùng được cho kết quả này không (thao tác, mã đang có; chưa biết pha): chỉ đọc chữ trên trang khi cần. */
 export function hasPageSigns(signs: readonly FacebookErrorSign[], actionCode: string, currentErrorCode: string | null): boolean {
   return signs.some(sign => sign.source === 'page' && (sign.actions.length === 0 || sign.actions.includes(actionCode))

@@ -119,13 +119,14 @@ export function mediaFenceError(error: unknown): ZaloPortError | null {
 }
 
 /**
- * Không dùng được tệp media (không tải được, đường dẫn mất, Zalo Server chỉ có tệp trên máy…): chưa gửi gì. Luật DB đổi ra
- * CFG01 (tạm dừng chiến dịch một lần, data về hàng đợi) trên cả hai nơi chạy, câu giữ nguyên câu của Desktop/Fly.
+ * Không dùng được tệp media (không tải được, đường dẫn mất, Zalo Server chỉ có tệp trên máy…): chưa gửi gì. Mã CFG01 (tạm dừng chiến dịch
+ * một lần, data về hàng đợi) trên cả hai nơi chạy, câu giữ nguyên câu của Desktop/Fly. Nơi chạy biết tệp chỉ có trên máy mà không còn thì
+ * truyền mã CFG20 (err_media_local_file_missing, V575, cùng cách xử lý); mặc định CFG01.
  */
-export function mediaUnavailableError(message: string): ZaloPortError {
+export function mediaUnavailableError(message: string, errorCode = 'err_media_file_missing'): ZaloPortError {
   return new ZaloPortError(message, {
     code: 'media_unavailable',
-    signal: { kind: 'engine', code: 'media_unavailable', errorCode: 'err_media_file_missing', message },
+    signal: { kind: 'engine', code: 'media_unavailable', errorCode, message },
     phase: 'before_send'
   })
 }

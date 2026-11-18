@@ -244,7 +244,7 @@ async function main() {
       '✅ Hoàn thành "0922000001"',
       '⏳ Nghỉ 1s trước khi xử lý mục tiếp theo...',
       '▶️ Xử lý "0922000002" trong chiến dịch "Desktop SĐT"',
-      'Tìm SĐT: Không tồn tại (Z216)',
+      '❌ Tìm SĐT "0922000002": Không tồn tại (Z216)',
       '✅ Hoàn thành "0922000002"',
       '✅ Hoàn thành chiến dịch "Desktop SĐT"'])
     assert.deepEqual(r1.contacts, ['uid-0922000001'])
@@ -290,7 +290,7 @@ async function main() {
     const d5 = await details(f2.ids['0922000005'])
     // V500 (Q3 đã duyệt): lỗi mạng khi đang gửi là không rõ đã tới (UNK01), không gửi lại.
     assert.deepEqual([d5[1].status, d5[1].error_code], ['thất bại', 'err_engine_unknown_delivery'])
-    assert.ok(r2.lines.includes('Nhắn tin người lạ: Không xác nhận được tin đã tới; không gửi lại để tránh trùng (UNK01)'), r2.lines.join('\n'))
+    assert.ok(r2.lines.includes('⚠️ Nhắn tin người lạ "0922000005": Không xác nhận được tin đã tới; không gửi lại để tránh trùng (UNK01)'), r2.lines.join('\n'))
     pass('Desktop: lỗi zca-js đổi thành tín hiệu như Desktop đọc mã (122, 221 → thử reqSrc 40, lỗi mạng khi gửi → không rõ kết quả UNK01)')
 
     // D2b: lỗi của bước chuẩn bị trước khi gọi Zalo (zaloRuntimeService gắn dấu: ensureApi đọc tài khoản / phiên từ DB, đăng nhập lại bằng
@@ -306,7 +306,7 @@ async function main() {
     const o2b = (await db.query(`SELECT phase, error_code, delivery_state FROM public.auto_engine_outcomes
       WHERE input_data_id = $1 AND action_code = 'zalo_message_stranger'`, [f2b.ids['0922000010']])).rows
     assert.deepEqual(o2b.map(o => [o.phase, o.error_code, o.delivery_state]), [['before_send', 'err_network_offline', 'not_delivered']])
-    assert.ok(r2b.lines.some(l => /Nhắn tin người lạ: .*\(NET01\)$/u.test(l)), r2b.lines.join('\n'))
+    assert.ok(r2b.lines.some(l => /^⚠️ Nhắn tin người lạ "0922000010": .*\(NET01\)$/u.test(l)), r2b.lines.join('\n'))
     assert.ok(!r2b.lines.some(l => /UNK01/.test(l)))
     // Tra số: Zalo từ chối lúc đăng nhập lại bằng phiên (ZaloApiError có dấu) không phải câu trả lời của lệnh tra số. Lỗi không mã nên
     // thử reqSrc 40 như Desktop (searchZaloPhone); cả hai lần đều hỏng thì data về hàng đợi, không ghi "thất bại", không nhắn.
@@ -320,7 +320,7 @@ async function main() {
     const o2c = (await db.query(`SELECT action_code, phase, error_code FROM public.auto_engine_outcomes WHERE input_data_id = $1`,
       [f2c.ids['0922000011']])).rows
     assert.deepEqual(o2c.map(o => [o.action_code, o.phase, o.error_code]), [['zalo_find_phone_user', 'before_send', 'err_network_offline']])
-    assert.ok(r2c.lines.some(l => /Tìm SĐT: .*\(NET01\)$/u.test(l)), r2c.lines.join('\n'))
+    assert.ok(r2c.lines.some(l => /^⚠️ Tìm SĐT "0922000011": .*\(NET01\)$/u.test(l)), r2c.lines.join('\n'))
     pass('Desktop: lỗi trước khi gọi Zalo (đọc tài khoản / phiên từ DB, đăng nhập lại bằng phiên) là "chưa gửi": data về hàng đợi (NET01), không đóng UNK01')
 
     // D2c: lớp bọc media (CampaignMediaExecution) đánh dấu lỗi mạng ở bước tải tệp lên khi chưa có yêu cầu gửi nào tới Zalo
@@ -339,7 +339,7 @@ async function main() {
     const o2d = (await db.query(`SELECT phase, error_code, delivery_state, signal->>'code' AS code FROM public.auto_engine_outcomes
       WHERE input_data_id = $1 AND action_code = 'zalo_message_stranger'`, [f2d.ids['0922000012']])).rows
     assert.deepEqual(o2d.map(o => [o.phase, o.error_code, o.delivery_state, o.code]), [['before_send', 'err_network_offline', 'not_delivered', 'ECONNRESET']])
-    assert.ok(r2d.lines.some(l => /Nhắn tin người lạ: .*\(NET01\)$/u.test(l)), r2d.lines.join('\n'))
+    assert.ok(r2d.lines.some(l => /^⚠️ Nhắn tin người lạ "0922000012": .*\(NET01\)$/u.test(l)), r2d.lines.join('\n'))
     assert.ok(!r2d.lines.some(l => /UNK01/.test(l)))
     pass('Desktop: lỗi mạng ở bước tải tệp lên trước mọi yêu cầu gửi (lớp bọc media đánh dấu) là "chưa gửi": NET01, data về hàng đợi, không UNK01')
 
