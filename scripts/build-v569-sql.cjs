@@ -41,7 +41,7 @@ const ROLLBACK_P2 = 'rollback_v569_engine_target_check_p2'
 const CLAIM_SIG = 'public.aka_agent_engine_claim_target_v1(jsonb)'
 const REPORT_SIG = 'public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'
 const SETTING_KEY = 'engine.target_check'
-const SETTING_VALUE = '{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":20000,"ingestChunk":5000,"backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}'
+const SETTING_VALUE = '{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":40000,"ingestChunk":5000,"backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}'
 const JOB = 'aka-agent-engine-receiver-results'
 /** md5 pg_get_functiondef trên production, đọc chỉ đọc 18/11/2026: claim = bản V564 sinh ra (03d72830…), report = bản V558 sinh ra (bb8bc00f…). */
 const LIVE = { claim: v564.NEW_MD5, report: v558.NEW_MD5.report }
@@ -419,7 +419,7 @@ BEGIN
     RETURN jsonb_build_object('status', 'busy');
   END IF;
   v_budget := greatest(500, least(90000, coalesce(p_budget_ms,
-    CASE WHEN jsonb_typeof(v_cfg->'ingestBudgetMs') = 'number' THEN (v_cfg->>'ingestBudgetMs')::numeric::integer END, 20000)));
+    CASE WHEN jsonb_typeof(v_cfg->'ingestBudgetMs') = 'number' THEN (v_cfg->>'ingestBudgetMs')::numeric::integer END, 40000)));
   v_chunk := greatest(100, least(200000, coalesce(p_chunk,
     CASE WHEN jsonb_typeof(v_cfg->'ingestChunk') = 'number' THEN (v_cfg->>'ingestChunk')::numeric::integer END, 5000)));
   -- Giữ ít nhất 365 ngày (giảm số ngày xét rồi tăng lại không mất dữ liệu).
@@ -572,7 +572,7 @@ BEGIN
     'chunks', v_chunks, 'rows', v_rows, 'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted, 'caughtUp', v_from >= v_cap);
 END $function$;
 COMMENT ON FUNCTION ${FUNCS.ingest} IS
-  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron ${JOB} gọi mỗi phút với ngân sách ${SETTING_KEY}.ingestBudgetMs (mặc định 20 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
+  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron ${JOB} gọi mỗi phút với ngân sách ${SETTING_KEY}.ingestBudgetMs (mặc định 40 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
   ('${SETTING_KEY}', '${SETTING_VALUE}',
@@ -691,12 +691,12 @@ const verify = (label, expect, what) => `  v_oid := '${label === 'claim' ? CLAIM
 
 const migrationP2 = `-- V569 phần 2: kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (engine v2). SINH TỪ scripts/build-v569-sql.cjs, không sửa tay.
 -- Cần phần 1. Tạo private.auto_engine_receiver_results (+ _state), ${Object.keys(FUNCS).length} hàm private, thiết lập ${SETTING_KEY} (mode off: chưa bỏ
--- qua gì), job pg_cron ${JOB} (mỗi phút, nạp lịch sử 20 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
+-- qua gì), job pg_cron ${JOB} (mỗi phút, nạp lịch sử tối đa 40 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
 -- aka_agent_engine_report_v1 (bản V558), giữ chữ ký / chủ sở hữu / quyền. Khi mode off, claim và report trả đúng như trước (chỉ thêm một lần
 -- đọc thiết lập mỗi lần nhận data của chiến dịch nhắn người lạ).
 -- Nguồn = pg_get_functiondef production 18/11/2026: claim ${LIVE.claim}, report ${LIVE.report}. Bản mới: claim ${NEW.claim}, report ${NEW.report}.
 -- DDL làm PostgREST nạp lại schema: apply ngoài giờ cao điểm. Lần nạp đầu đọc cả auto_campaign_details (~15 triệu dòng), xong trong khoảng
--- một đêm (20 giây / phút, ban ngày 3 giây / phút). Gỡ: ${ROLLBACK_P2}.sql rồi ${ROLLBACK_P1}.sql.
+-- một đêm (40 giây / phút, ban ngày 3 giây / phút). Gỡ: ${ROLLBACK_P2}.sql rồi ${ROLLBACK_P1}.sql.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';

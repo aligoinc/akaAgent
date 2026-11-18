@@ -353,7 +353,7 @@ async function main() {
       await setMode({ ...JSON.parse(V.SETTING_VALUE), backfillDayHours: [0, 0] })
       const night = await val(`SELECT private.aka_agent_engine_receiver_results_ingest()`)
       assert.equal(night.throttled, false)
-      assert.equal(night.budgetMs, 20000)
+      assert.equal(night.budgetMs, 40000)
       assert.equal((await ingest(1500)).throttled, false)
       await setMode(JSON.parse(V.SETTING_VALUE))
     })

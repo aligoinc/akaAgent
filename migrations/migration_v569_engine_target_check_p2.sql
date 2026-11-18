@@ -1,11 +1,11 @@
 -- V569 phần 2: kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (engine v2). SINH TỪ scripts/build-v569-sql.cjs, không sửa tay.
 -- Cần phần 1. Tạo private.auto_engine_receiver_results (+ _state), 7 hàm private, thiết lập engine.target_check (mode off: chưa bỏ
--- qua gì), job pg_cron aka-agent-engine-receiver-results (mỗi phút, nạp lịch sử 20 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
+-- qua gì), job pg_cron aka-agent-engine-receiver-results (mỗi phút, nạp lịch sử tối đa 40 giây), rồi thay thân aka_agent_engine_claim_target_v1 (bản V564) và
 -- aka_agent_engine_report_v1 (bản V558), giữ chữ ký / chủ sở hữu / quyền. Khi mode off, claim và report trả đúng như trước (chỉ thêm một lần
 -- đọc thiết lập mỗi lần nhận data của chiến dịch nhắn người lạ).
 -- Nguồn = pg_get_functiondef production 18/11/2026: claim 03d72830d664682c1f51dc3dd9944eda, report bb8bc00f9d2a8c51a00dcb525fa2e4ab. Bản mới: claim 62f44b6736a72569a541a40876676395, report e62c020cac3df969b5c3e8a5d03f4e35.
 -- DDL làm PostgREST nạp lại schema: apply ngoài giờ cao điểm. Lần nạp đầu đọc cả auto_campaign_details (~15 triệu dòng), xong trong khoảng
--- một đêm (20 giây / phút, ban ngày 3 giây / phút). Gỡ: rollback_v569_engine_target_check_p2.sql rồi rollback_v569_engine_target_check_p1.sql.
+-- một đêm (40 giây / phút, ban ngày 3 giây / phút). Gỡ: rollback_v569_engine_target_check_p2.sql rồi rollback_v569_engine_target_check_p1.sql.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
@@ -225,7 +225,7 @@ BEGIN
     RETURN jsonb_build_object('status', 'busy');
   END IF;
   v_budget := greatest(500, least(90000, coalesce(p_budget_ms,
-    CASE WHEN jsonb_typeof(v_cfg->'ingestBudgetMs') = 'number' THEN (v_cfg->>'ingestBudgetMs')::numeric::integer END, 20000)));
+    CASE WHEN jsonb_typeof(v_cfg->'ingestBudgetMs') = 'number' THEN (v_cfg->>'ingestBudgetMs')::numeric::integer END, 40000)));
   v_chunk := greatest(100, least(200000, coalesce(p_chunk,
     CASE WHEN jsonb_typeof(v_cfg->'ingestChunk') = 'number' THEN (v_cfg->>'ingestChunk')::numeric::integer END, 5000)));
   -- Giữ ít nhất 365 ngày (giảm số ngày xét rồi tăng lại không mất dữ liệu).
@@ -378,10 +378,10 @@ BEGIN
     'chunks', v_chunks, 'rows', v_rows, 'badUpserts', v_bad, 'okUpdates', v_ok, 'deleted', v_deleted, 'caughtUp', v_from >= v_cap);
 END $function$;
 COMMENT ON FUNCTION private.aka_agent_engine_receiver_results_ingest(integer,integer) IS
-  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron aka-agent-engine-receiver-results gọi mỗi phút với ngân sách engine.target_check.ingestBudgetMs (mặc định 20 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
+  'V569: nạp auto_campaign_details (theo id, từ mốc ở auto_engine_receiver_results_state) vào auto_engine_receiver_results và số đo. pg_cron aka-agent-engine-receiver-results gọi mỗi phút với ngân sách engine.target_check.ingestBudgetMs (mặc định 40 giây, ingestChunk id mỗi phần, mặc định 5.000); còn tồn hơn backfillThresholdIds id (nạp lần đầu) trong backfillDayHours giờ VN (mặc định 8–18h) thì chỉ backfillDayBudgetMs (mặc định 3 giây). Gọi tay với p_budget_ms để nạp bù (không giới hạn theo giờ).';
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active) VALUES
-  ('engine.target_check', '{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":20000,"ingestChunk":5000,"backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}',
+  ('engine.target_check', '{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":40000,"ingestChunk":5000,"backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}',
    'Kiểm người nhận trên toàn hệ thống trước khi gọi Zalo (V569), chỉ engine v2: "Nhắn tin theo SĐT" và nhắn người lạ theo UID (thành viên nhóm, group thời gian thực, đề xuất Zalo, khách hàng cũ), không kiêm SMS. JSON: mode off | orgs (chỉ organizationIds) | all; thiếu dòng / sai định dạng = off. Mã nào bỏ qua: cột target_check_enabled / target_check_days của auto_outcome_policies. ingest = false: job ngừng nạp lịch sử (claim vẫn đọc sổ đã nạp nếu mode bật). ingestBudgetMs / ingestChunk: ngân sách mỗi phút và số id mỗi phần nạp; backfillDayBudgetMs / backfillDayHours [giờ bắt đầu, giờ kết thúc) VN / backfillThresholdIds: ngân sách ban ngày khi còn tồn nhiều (nạp lần đầu). Claim đọc lại mỗi lần nhận data nên đổi có hiệu lực ngay.',
    false, true);
 

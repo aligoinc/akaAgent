@@ -109,7 +109,7 @@ Số đo (`stats`, cộng dồn, chỉ đúng ở lần nạp đầu):
 `auto_system_settings` `engine.target_check` (claim đọc lại mỗi lần nhận data, đổi là có hiệu lực ngay, không DDL):
 
 ```json
-{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":20000,"ingestChunk":5000,
+{"mode":"off","organizationIds":[],"ingest":true,"ingestBudgetMs":40000,"ingestChunk":5000,
  "backfillDayBudgetMs":3000,"backfillDayHours":[8,18],"backfillThresholdIds":50000}
 ```
 
@@ -132,7 +132,7 @@ lại. Mã ngoài danh sách theo dõi (mã mới hoàn toàn, thao tác khác) 
    dịch (`node scripts/make-migration-ledger-apply.cjs`). Lúc apply mode = off: claim / report trả đúng như trước (bộ kịch bản Zalo 708 lượt /
    5.250 lần gửi trùng từng số với khi chưa có V569).
 3. Nạp lần đầu: đo 18/11 (chỉ đọc, 2.000 id cũ, giờ cao điểm) ~1 ms mỗi id đọc nguội. ~15,4 triệu id ≈ 4 giờ DB; với ngân sách mặc định
-   (20 giây / phút ban đêm, 3 giây / phút 8–18h khi còn tồn) xong trong khoảng một đêm. Muốn nhanh hơn ban đêm thì tăng `ingestBudgetMs`
+   (40 giây / phút ban đêm, 3 giây / phút 8–18h khi còn tồn) xong trong khoảng một đêm. Muốn nhanh hơn ban đêm thì tăng `ingestBudgetMs`
    (tối đa 90 giây, job bị nền tảng cắt ở 120 giây).
 4. Xem số đo, báo anh tỉ lệ bỏ đúng / nhầm theo mã, mã Zalo gốc (212 riêng 216), khoá (SĐT / global id), tuổi lần hỏng.
 5. Anh duyệt thì bật `orgs` cho vài tổ chức, theo dõi, rồi `all`.
