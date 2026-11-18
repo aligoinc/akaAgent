@@ -1,6 +1,6 @@
 # Phương án: Claude Code tự kiểm lỗi chạy chiến dịch Facebook qua hàng việc `ai_*`
 
-Ngày lập: 18/11/2026. Bản 6 (đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); đã viết migration đợt 1, **chưa apply**). Chưa đổi database, chưa dựng phiên cloud. Các câu còn mở ở mục 10.
+Ngày lập: 18/11/2026. Bản 7 (đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); đã viết migration đợt 1 và chạy thử trên production trong một giao dịch rồi huỷ, **chưa apply**). Chưa đổi database, chưa dựng phiên cloud. Các câu còn mở ở mục 10.
 
 ### Anh đã chốt (18/11/2026)
 
@@ -99,7 +99,7 @@ Số đo trên production (chỉ đọc, 18/11): ba câu đọc chính của m�
 
 Hàm không đọc `auto_campaign_details` hay `auto_run_steps`. `statement_timeout` 20 giây, `lock_timeout` 2 giây, có khoá chống hai lượt chạy chồng.
 
-Kiểm cục bộ (PostgreSQL 17, không chạm database thật): `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-facebook/error-watch-smoke.cjs`, 17 nhóm đạt. Bài kiểm dùng bản giả của nền Hỏi đáp AI (bảng `ai_*` và `aka_agent_ai_chat_insert` viết lại theo thân hàm production), nên **chưa chứng minh được hàm chạy đúng với hàm gửi câu thật**; việc đó làm ở bước chạy thử trong giao dịch tự huỷ trên production (mục 9).
+Kiểm cục bộ (PostgreSQL 17, không chạm database thật): `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-facebook/error-watch-smoke.cjs`, 17 nhóm đạt. Bài kiểm dùng bản giả của nền Hỏi đáp AI (bảng `ai_*` và `aka_agent_ai_chat_insert` viết lại theo thân hàm production); phần chạy với hàm thật ở mục 5.5.
 
 ### 5.2 Loại ca nào thành việc (anh chốt 18/11: cả 5 loại)
 
@@ -126,6 +126,28 @@ Các mã đã có kết luận (FB40, FB02, FB11, FB22, FB23, FB14…) nằm tro
 - `question`: một đoạn chữ ngắn: loại ca, mã lỗi, thao tác, số lượt / chiến dịch / tài khoản / tổ chức trong khoảng nào, câu lỗi mẫu.
 - `intake` (≤ 16 KB): `khoa`, `loai`, tối đa 5 mã lượt data mẫu, mã chiến dịch, mã yêu cầu ảnh nếu có, số liệu so với 7 ngày.
 - Người hỏi: một nhân viên akaBiz ở tổ chức 1 (câu Q-D). `source = 'api'`.
+
+### 5.5 Chạy thử trên production trong một giao dịch rồi huỷ (18/11, 16:43:24–16:43:28 VN)
+
+Anh đồng ý chạy thử ("ok chạy thử đi"). Cả migration cùng các bước dưới đây chạy trong một giao dịch kết thúc bằng `ROLLBACK`; tệp không có lệnh `COMMIT` nào. Lúc chạy có 3 phiên đang hoạt động, không phiên nào chờ khoá.
+
+| Bước | Kết quả |
+|---|---|
+| Apply migration (kiểm trước, tạo bảng / hàm / job / thiết lập / agent, kiểm sau) | Đạt. Job `aka-agent-engine-error-watch` có lịch `*/2 * * * *` |
+| Bật `enabled`, cho đọc 6 giờ gần nhất | 843 kết quả lỗi → 22 ca: 12 ca mã chưa có kết luận, 6 ca chưa phân loại, 4 ca lượt bị bỏ dở; 6 lượt dừng chiến dịch được cộng vào ca. Lượt đọc bù 6 giờ này mất 1,9 giây |
+| Bật agent và `enqueue`, gọi `aka_agent_ai_chat_insert` **thật** | Chèn đúng một câu cho ca đứng đầu (mở trang nhóm bị `ERR_NETWORK_IO_SUSPENDED`, 18 lượt, 4 lần dừng chiến dịch). Câu ở làn `claude_code`, hạn 60 phút, hội thoại đứng tên nhân viên 4 của tổ chức 1, nguồn `api`, `intake` đủ trường. Lượt tick này mất 28 mili giây |
+| Tick lần nữa khi câu còn chờ | Không chèn thêm ca mới |
+| `aka_agent_ai_chat_worker('list')` **thật** với mã agent mới | Thấy đúng 1 câu |
+| `list` với hai mã của bộ Hỏi đáp (`hoi-dap-chien-dich`, `hoi-dap-chien-dich-desktop`) | Không thấy câu này |
+| `claim` theo mã câu | Nhận được; gói việc có `rules`, `outputSchema`, `intake`, `history` |
+| `answer` với `answerJson` theo khuôn | `hoàn thành`. Gọi `answer` lần hai bị từ chối (`not_claimed`) |
+| Tick sau khi có báo cáo | Ca đầu sang `reported`, ca kế (form đăng bài không đóng, 15 lượt) được chèn |
+
+Hậu kiểm sau khi huỷ (chỉ đọc): không còn bảng, hàm, thiết lập, agent, nhóm agent, job hay dòng sổ migration nào; không còn câu hay hội thoại nào của lần thử; nhân viên 4 không có câu chờ; không có yêu cầu ảnh nào. PostgREST không nạp lại schema; REST phút đó 0 lỗi 5xx, p50 48 mili giây như các phút trước.
+
+Điều còn lại sau lần thử: các bộ đếm mã tự tăng (`ai_project`, `ai_message`, `ai_message_thread`, `auto_system_settings`, mã job pg_cron) đã nhảy vài số; không ảnh hưởng gì.
+
+Lần thử này chưa phủ: xin ảnh (`imageRequests`), đường `/fire`, mã lỗi tăng bất thường (chưa đủ 3 ngày dữ liệu), và job pg_cron tự chạy theo lịch.
 
 ## 6. Ảnh lỗi từ máy khách (anh chốt điểm 5)
 
@@ -235,7 +257,7 @@ Từ đó em đề xuất cho câu Q-F:
 | Đợt | Nội dung | Chạm production |
 |---|---|---|
 | 0 | **Đã làm 18/11** ([kết quả](FB_ERROR_WATCH_DOT0_20261118.md)): câu phát hiện ca lỗi [error-watch-dryrun.sql](../scripts/engine-v2-facebook/error-watch-dryrun.sql) chạy chỉ đọc; tệp công việc [FB_ERROR_WATCH_TASK.md](FB_ERROR_WATCH_TASK.md); kiểm tay 3 ca thật và viết 3 báo cáo mẫu. Đường đánh thức tác vụ cloud: xem mục 7.5 | Không |
-| 1 | Migration đã viết (mục 5.1). Thứ tự làm: (a) chọn số thật, chạy thử cả migration trong một giao dịch tự huỷ trên production; (b) apply ngoài giờ cao điểm, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`, xem sổ ca 1–2 ngày; (d) anh sửa câu lệnh phiên Hỏi đáp để bỏ qua agent mới, rồi bật agent; (e) dựng tác vụ cloud riêng; bật job với trần thấp (10 việc mỗi ngày), chưa xin ảnh, chưa thông báo | 1 migration, 2 dòng dữ liệu, 1 job |
+| 1 | Migration đã viết (mục 5.1) và đã chạy thử trong một giao dịch rồi huỷ (mục 5.5). Thứ tự làm tiếp: (a) chọn số thật ngay trước khi apply; (b) apply ngoài giờ cao điểm, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`, xem sổ ca 1–2 ngày; (d) anh sửa câu lệnh phiên Hỏi đáp để bỏ qua agent mới, rồi bật agent; (e) dựng tác vụ cloud riêng; bật job với trần thấp (10 việc mỗi ngày), chưa xin ảnh, chưa thông báo | 1 migration, 2 dòng dữ liệu, 1 job |
 | 2 | Bật xin ảnh tự động và thông báo app Claude; nâng trần việc lên 30 mỗi ngày | Thiết lập |
 | 3 | Tuỳ kết quả: mở sang engine Zalo (`auto_outcome_unmatched` Zalo đang có 316 mẫu, 1.362 lượt) | Thiết lập |
 
@@ -252,8 +274,7 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 
 ## 11. Chưa kiểm
 
-- Chưa gọi thử `aka_agent_ai_chat_insert` thật cho một agent `requires_campaign = false`, `audience = 'admin_akabiz'`; bài kiểm cục bộ dùng bản giả viết theo thân hàm production đọc 18/11.
-- Migration chưa chạy lần nào trên production, kể cả chạy thử trong giao dịch tự huỷ.
+- Migration mới chạy thử trong một giao dịch rồi huỷ (mục 5.5), chưa apply thật. Chưa thử trên production: xin ảnh, job pg_cron tự chạy, mã lỗi tăng bất thường.
 - Chưa biết phiên cloud có công cụ gửi thông báo app Claude không (mục 7.3).
 - Chưa thử đọc ảnh 2 MB dạng base64 qua connector Supabase trong phiên cloud.
 - Chưa đo thời gian kiểm một ca trên phiên cloud. Ba ca kiểm tay ở đợt 0 mỗi ca cần 5–10 lượt đọc database và vài tệp code, khớp ước lượng 5–15 phút.
