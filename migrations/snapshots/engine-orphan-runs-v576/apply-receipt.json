@@ -1,0 +1,101 @@
+{
+  "migration": "migrations/migration_v576_engine_orphan_runs.sql",
+  "rollback": "migrations/rollback_v576_engine_orphan_runs.sql",
+  "ledger": {
+    "version": "20261118130615",
+    "name": "migration_v576_engine_orphan_runs",
+    "statementsMd5": "fdfc400d15bb6629a60919d3973262d0",
+    "createdBy": null
+  },
+  "fileMd5": "fdfc400d15bb6629a60919d3973262d0",
+  "rollbackFileMd5": "e5f5f95a9a4df2e5a6b45ddecf268641",
+  "appliedAtUtc": "2026-11-18T13:06:15Z..13:06:17Z",
+  "appliedAtVn": "2026-11-18 20:06",
+  "approvedBy": "anh (\"Apply ngay\", 18/11, sau khi chạy thử production trong giao dịch huỷ và merge #713 theo \"Chạy thử rồi merge\")",
+  "numbering": "576 là số tạm lúc viết. Kiểm sổ ngay trước apply (~13:06:05 UTC): số lớn nhất là migration_v575_engine_specific_codes_wait_note; dòng mới nhất theo version là migration_v531_post_bump_content_rotation_desktop (10:32:15 UTC, phiên khác); không có migration_v576_%. Sau git fetch --all, không nhánh nào ở akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard có file v576 / v577 ngoài nhánh này. Giữ số 576. Version trong sổ là giờ dựng tệp apply.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Chỉ tạo / thay hàm (không đổi bảng, không đổi dữ liệu lúc apply) nên PostgREST nạp lại schema.",
+  "trial": {
+    "atUtc": "2026-11-18T13:00:23Z..13:00:25Z",
+    "approvedBy": "anh (\"Chạy thử rồi merge\")",
+    "what": "nguyên văn migration, bỏ COMMIT cuối, thêm một lần aka_agent_engine_close_stale_v1(200) bản mới, rồi ROLLBACK",
+    "preflight": "qua (ba hàm ghim đúng bản đọc 18/11)",
+    "postflight": "qua (md5 bốn hàm tạo trên production khớp bản sinh, quyền gọi đúng)",
+    "closeStale": { "orphanTargets": 1, "finalizedTargets": 0, "closedTargets": 0, "releasedLeases": 0, "ms": 170 },
+    "orphanFound": "lượt 197975 (Facebook, Desktop, nhân viên 462: cùng máy Windows với lượt 179149; mở từ 12:46:35 UTC, chưa ghi dấu, chưa có kết quả; cùng lease đã chốt 5 lượt sau, lượt đầu sau 7,7 giây)",
+    "orphanSearchExplain": "lập kế hoạch 2,5 ms, chạy 7,2 ms, 1.807 buffer trong bộ đệm, 4 ứng viên (EXPLAIN ANALYZE chỉ đọc)",
+    "postCheck": "hai hàm mới không còn, ba hàm cũ đúng md5 cũ, sổ không có V576, không còn sự kiện nào của lần chạy thử, lượt 197975 vẫn mở; PostgREST không nạp lại schema; phút đó 0 lỗi 5xx",
+    "cliStatementGapMs": 0.1
+  },
+  "preApply": {
+    "readAtUtc": "2026-11-18T13:06:05Z",
+    "activeBackends": 3,
+    "v576InLedger": false,
+    "maxMigrationNumber": 575,
+    "pins": {
+      "public.aka_agent_engine_close_stale_v1(integer)": "1208cfa12d71eda90df525f1a8727bef",
+      "public.reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)": "6803509057e6ec91b349c9543757f3d3",
+      "public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": "09fe52a53d9f419207506f1033bdb800"
+    },
+    "pinsOk": true
+  },
+  "postApply": {
+    "readAtUtc": "2026-11-18T13:06:33Z",
+    "functions": {
+      "public.aka_agent_engine_close_run_v1(bigint,text)": {
+        "md5": "72b8c9698e7176640b0e1911c8c5c49f",
+        "securityDefiner": true,
+        "owner": "postgres",
+        "acl": "postgres, service_role",
+        "config": ["search_path=\"\""]
+      },
+      "public.aka_agent_engine_close_desktop_runs_v1(bigint,boolean)": {
+        "md5": "b2c5fc9088ec3caff36e701bad4e78ec",
+        "securityDefiner": true,
+        "owner": "postgres",
+        "acl": "postgres, service_role, aka_agent_desktop",
+        "config": ["search_path=\"\""]
+      },
+      "public.aka_agent_engine_close_stale_v1(integer)": {
+        "md5": "8ed4775297c061bc35cbc6f0944dc905",
+        "securityDefiner": true,
+        "owner": "postgres",
+        "acl": "postgres, service_role (không đổi)",
+        "config": ["search_path=\"\""]
+      },
+      "public.reset_desktop_running_statuses_no_retry(bigint,boolean,boolean)": {
+        "md5": "24cb4850f4a91819ef8b37eeb3b7f8c5",
+        "securityDefiner": false,
+        "owner": "postgres",
+        "acl": "postgres, service_role, aka_agent_desktop (không đổi)",
+        "config": ["search_path=public"]
+      },
+      "public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)": {
+        "md5": "09fe52a53d9f419207506f1033bdb800",
+        "note": "không đổi"
+      }
+    },
+    "cronJob": "aka-agent-engine-close-stale, * * * * *, active, SELECT public.aka_agent_engine_close_stale_v1(200)"
+  },
+  "postgrest": {
+    "reloadMessageAtUtc": "2026-11-18T13:06:16.32Z",
+    "schemaCacheQueriedMs": 3485.8,
+    "schemaCacheLoadedAtUtc": "2026-11-18T13:06:20.40Z",
+    "functions": "861 → 863"
+  },
+  "edgeLogsRest": {
+    "13:06 UTC": { "requests": 20063, "e5xx": 0, "e503": 0, "over3s": 1, "p50Ms": 51, "p99Ms": 671 },
+    "13:05 UTC": { "requests": 19954, "e5xx": 0, "e503": 0, "over3s": 0, "p50Ms": 50, "p99Ms": 129 },
+    "13:07 UTC": { "requests": 12288, "e5xx": 0, "e503": 0, "over3s": 0, "p50Ms": 50, "p99Ms": 134, "note": "phút chưa nạp đủ log lúc đọc" },
+    "maxWaitMs": 5734
+  },
+  "postgresLogs": "13:05:30–13:08:30 UTC: 173 ERROR đều là permission denied của máy Desktop < 9.1 (nền quen thuộc), 0 statement timeout, 0 deadlock",
+  "firstCronRuns": [
+    { "startUtc": "2026-11-18T13:07:00.11Z", "ms": 19, "status": "succeeded" },
+    { "startUtc": "2026-11-18T13:08:00.11Z", "ms": 32, "status": "succeeded" }
+  ],
+  "cronBeforeApply": "13:04–13:06 UTC bản cũ 39 / 36 / 13 ms",
+  "notes": [
+    "Lượt 197975 (mồ côi tìm thấy lúc chạy thử) được job bản cũ đóng lúc 13:04:00 UTC (lease hết hạn đủ 10 phút), data về hàng đợi; máy nhân viên 462 nhận lại data ở lượt 198314 (13:04:16) và gửi thành công 13:04:52 UTC. Không mất, không trùng, trễ ~18 phút; với V576 (B) data về hàng đợi từ ~12:49 UTC.",
+    "Chưa có lượt nào được bản mới đóng trong hai phút đầu (events có data.via: 0)."
+  ]
+}

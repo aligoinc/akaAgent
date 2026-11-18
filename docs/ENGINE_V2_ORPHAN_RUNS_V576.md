@@ -1,7 +1,8 @@
 # V576: engine v2 đóng lượt data bị bỏ dở cho đúng (A, B, D1)
 
-Số V576 là số tạm: sổ production tới V575 lúc viết (18/11/2026 17:40 VN). Kiểm lại sổ và `git log --all` ngay trước khi apply; đổi số thì
-sửa `NUMBER` trong `scripts/build-v576-sql.cjs` rồi sinh lại (md5 thân hàm không đổi theo số).
+**Đã apply akachat 20:06:15 VN 18/11/2026** theo yêu cầu ("Apply ngay"; sổ `20261118130615 / migration_v576_engine_orphan_runs`, md5 sổ = file
+`fdfc400d…`; không apply lại; [biên nhận](../migrations/snapshots/engine-orphan-runs-v576/apply-receipt.json)). Code đã merge `dev_3` qua
+[#713](https://github.com/aligoinc/akaAgent/pull/713) cùng ngày. Sửa thân các hàm này sau này thì viết migration mới, kiểm md5 bản V576.
 
 Anh chốt 18/11/2026 "Làm A, B, D1" sau khi chẩn đoán hai lượt lạ lúc kiểm sức khoẻ engine Facebook. Chỉ đổi DB, không phát hành app.
 
@@ -98,6 +99,12 @@ thêm một lần gọi `close_stale_v1(200)` bản mới, rồi `ROLLBACK`. Kh�
   20:00 VN: 0 lỗi 5xx, p50 46–50 ms, p99 119–143 ms trên `/rest/v1`.
 
 ## Apply / gỡ
+
+- Đã apply 20:06:15–20:06:17 VN 18/11 bằng `scripts/make-migration-ledger-apply.cjs` + `supabase db query --linked` (dòng sổ trong cùng giao
+  dịch). Ngay trước apply: sổ tới V575, không có V576 ở sổ lẫn ở nhánh nào của bốn repo, ba hàm ghim đúng. Sau apply: md5 bốn hàm khớp bản
+  sinh, `report_v1` không đổi, quyền gọi đúng; PostgREST nạp lại schema 3,5 giây (20:06:16–20:06:20, số hàm 861 → 863), phút đó 20.063
+  request `/rest/v1`, 0 lỗi 5xx, chậm nhất 5,7 giây (chờ lúc nạp); Postgres không có hết giờ hay khoá chéo. Hai lượt job đầu tiên bản mới
+  (20:07, 20:08) thành công, 19 ms và 32 ms (bản cũ các phút trước 13–39 ms).
 
 - Tạo / thay hàm nên PostgREST nạp lại schema: apply ngoài giờ cao điểm. Không đổi bảng, không đổi dữ liệu lúc apply.
 - Preflight chặn khi sổ đã có V576, khi hai hàm mới đã có, khi `close_stale_v1` / hàm reset Desktop / `report_v1` khác md5 bản đọc 18/11
