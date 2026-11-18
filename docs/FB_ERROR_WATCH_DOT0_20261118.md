@@ -2,6 +2,8 @@
 
 Đợt 0 của [phương án](FB_ERROR_WATCH_CLAUDE_CODE_PLAN.md). Mọi số liệu đọc chỉ đọc trên production (akachat) chiều 18/11, không ghi gì. Dữ liệu engine Facebook mới có từ 16:45 VN 17/11 (tổ chức 1) và 10:44 VN 18/11 (mọi tổ chức), nên "7 ngày" ở đây thực tế là khoảng 23 giờ.
 
+Cập nhật 17:20 VN 18/11: sau khi viết tài liệu này, phiên khác đã apply `migration_v575_engine_specific_codes_wait_note` (17:08 VN). Theo [tài liệu của bản đó](ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md) (merge `dev_3` qua #709), nó cho ca 1 (lỗi mạng khi mở trang) mã NET01 và ca 2 (tệp media không còn trên máy) mã CFG20. Ca 3 (lỗi đọc block thành "Block không tìm thấy") chưa có bản sửa. Em chưa kiểm lại hai ca đầu trên dữ liệu sau V575.
+
 ## 1. Câu phát hiện ca lỗi
 
 Tệp [error-watch-dryrun.sql](../scripts/engine-v2-facebook/error-watch-dryrun.sql), chạy:
