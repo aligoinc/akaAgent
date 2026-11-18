@@ -205,11 +205,28 @@ Chỉ gửi khi ca là mới hoặc tăng bất thường, một thông báo m�
 - [error-watch-agent.cjs](../scripts/engine-v2-facebook/error-watch-agent.cjs): phiên cloud dùng để nhận việc (`next`), gia hạn (`progress`), kiểm và nộp báo cáo (`check`, `answer`), trả việc (`requeue`, `fail`). Không cần thư viện ngoài. Lệnh chỉ nhận câu của đúng agent này (nhận nhầm thì trả về hàng đợi), chỉ lấy con số từ đoạn chữ gửi kèm lúc đánh thức, và từ chối báo cáo sai khuôn hoặc có chuỗi giống số điện thoại, UID dài, khoá, token. Nhờ vậy tệp công việc ngắn đi và phiên không phải tự ghép lệnh gọi API. Kiểm: `node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs` (9 nhóm, máy chủ giả cục bộ); đã gọi thử `next` với API thật khi agent chưa tồn tại, trả "hết việc".
 - [error-watch-status.cjs](../scripts/engine-v2-facebook/error-watch-status.cjs): chỉ đọc, cho anh xem công tắc, lượt tick gần nhất, sổ ca theo trạng thái, ca đang chờ báo, các câu gần đây của agent và yêu cầu ảnh. Trước khi apply migration nó chỉ in "chưa apply"; phần còn lại chưa chạy được lần nào.
 
-### 7.4b Dựng phiên
+### 7.4b Tác vụ cloud (đã tạo 18/11 17:01 VN, đang TẮT)
 
-Phiên riêng (anh chốt 18/11), không dùng chung phiên Hỏi đáp. Trước khi bật agent mới phải sửa câu lệnh phiên Hỏi đáp: bỏ qua mã `kiem-loi-chien-dich-facebook` khi tự cập nhật danh sách agent.
+Anh đồng ý tạo sẵn ("Tạo sẵn, để tắt"). Tác vụ **Kiểm lỗi chiến dịch Facebook (engine v2)**, mã `trig_01QRNCgX959THHTS7mkdCS3K`, quản lý ở `https://claude.ai/code/routines/trig_01QRNCgX959THHTS7mkdCS3K`.
 
-Nếu dùng đường `/fire` (mục 7.5) thì mỗi việc là một phiên mới, không cần phiên giữ lâu dài. Nếu không dùng được thì chép cách dựng phiên Hỏi đáp AI: phiên cloud giữ lâu dài, câu lệnh tự hẹn lại sau 2 phút, script `/list` 120 giây. Câu lệnh của phiên ngắn, trỏ tới một tệp trong repo (`docs/FB_ERROR_WATCH_TASK.md`) để nội dung công việc có lịch sử git. Phiên cần connector Supabase (chỉ đọc) và quyền đọc repo akaAgent.
+| Mục | Giá trị | Ghi chú |
+|---|---|---|
+| Trạng thái | Tắt | Chưa chạy lượt nào |
+| Lịch | Mỗi giờ một lượt (phút 01) | Lưới đỡ; lịch của tác vụ cloud không được dày hơn một giờ. Đánh thức ngay khi có việc thì dùng đường `/fire` (mục 7.5) |
+| Mỗi lượt | Một phiên mới, làm một câu rồi kết thúc | Không giữ phiên lâu dài, không tự hẹn lại |
+| Repo | `aligoinc/akaAgent` | Nhánh mặc định trên GitHub là `dev_2` (cũ), nên câu lệnh bảo phiên chuyển sang `dev_3` trước. **PR #708 phải merge vào `dev_3` thì phiên mới có tệp công việc**; chưa có thì phiên dừng với một dòng báo |
+| Mô hình | Sonnet 5.5 | Mặc định của công cụ tạo tác vụ; đổi được trên trang quản lý |
+| Môi trường cloud | `full` | Tài khoản có hai môi trường (`full`, `Default`); em chọn `full` để phiên gọi được API và GitHub. Chưa thử `Default` |
+| Công cụ | Bash, Read, Write, Glob, Grep | Không có công cụ sửa tệp |
+| Connector | Chỉ Supabase, và chỉ công cụ `execute_sql` | Lúc tạo, máy chủ tự gắn cả ba connector của tài khoản (Supabase, Claude Docs, Claude Code Remote); em đã gỡ hai cái không cần và bỏ các công cụ Supabase khác (apply migration, deploy, tạo / dừng project…) |
+| Câu lệnh | Chuyển sang `dev_3`, đọc `docs/FB_ERROR_WATCH_TASK.md`, làm đúng một lượt, kèm các giới hạn cứng | Nội dung công việc nằm trong repo nên sửa không cần đụng tác vụ |
+
+Hai điều cần biết trước khi bật:
+
+- **`execute_sql` vẫn chạy được lệnh ghi.** Câu lệnh và tệp công việc cấm ghi, nhưng đó là lời dặn, không phải chặn kỹ thuật. Trong các phiên có người, connector Supabase hỏi xác nhận trước mỗi lệnh ghi và không ai bấm thì lệnh không chạy; em chưa kiểm được phiên cloud không người có được hỏi như vậy không. Cách chặn chắc là một connector Supabase ở chế độ chỉ đọc cho riêng tác vụ này.
+- **Thông báo qua app Claude chưa có đường.** Em đã gỡ connector Claude Code Remote vì nó cho phiên tạo và xoá tác vụ, quá rộng với một phiên đọc dữ liệu không tin cậy. Không có nó, em không biết phiên còn công cụ nào để gửi thông báo; câu lệnh bảo phiên bỏ qua bước thông báo nếu không có công cụ. Mỗi lượt vẫn là một phiên xem được trong danh sách phiên của anh.
+
+Khi dùng đường `/fire`: anh tạo mã trên trang quản lý của tác vụ (thêm trigger API → Generate token), tự lưu vào Vault bằng `select vault.create_secret('<mã vừa tạo>', 'AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN');` trong SQL Editor, rồi thêm `"fire": true, "fireRoutineId": "trig_01QRNCgX959THHTS7mkdCS3K"` vào thiết lập `engine.error_watch`. Mã không đi qua chat và không nằm trong repo.
 
 ### 7.5 Chi phí token (anh hỏi 18/11: cách nào đỡ tốn nhất)
 
@@ -280,7 +297,7 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 ## 11. Chưa kiểm
 
 - Migration mới chạy thử trong một giao dịch rồi huỷ (mục 5.5), chưa apply thật. Chưa thử trên production: xin ảnh, job pg_cron tự chạy, mã lỗi tăng bất thường.
-- Chưa biết phiên cloud có công cụ gửi thông báo app Claude không (mục 7.3).
+- Tác vụ cloud đã tạo nhưng chưa chạy lượt nào: chưa biết phiên có đọc được database qua connector, có gọi được API từ môi trường `full`, và có công cụ gửi thông báo app Claude không (mục 7.4b).
 - Chưa thử đọc ảnh 2 MB dạng base64 qua connector Supabase trong phiên cloud.
 - Chưa đo thời gian kiểm một ca trên phiên cloud. Ba ca kiểm tay ở đợt 0 mỗi ca cần 5–10 lượt đọc database và vài tệp code, khớp ước lượng 5–15 phút.
 - Câu phát hiện ca lỗi mới chạy trên 23 giờ dữ liệu; chưa xét được loại "mã lỗi tăng bất thường" vì chưa đủ 7 ngày làm mức nền.
