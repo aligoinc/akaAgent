@@ -71,6 +71,12 @@ trước (đọc `out/main/index.js` từ `app.asar` bản trước): nhiều c�
 sách", "đã được tạm dừng."), nên chọn tên hàm / khoá riêng của PR. `v572-smoke` chạy code block trong Chrome, có lúc lệch ở bản đối
 chứng V563 (thời điểm hộp thoại của trang giả): chạy lại trước khi kết luận.
 
+**Build lại cùng số bản (18/11/2026, 10.0.0 lần 2).** Bản đã build mà `dev_3` có code mới thì build lại cùng số: đổi tên
+`dist/build-<ver>/` thành `dist/build-<ver>-r1-<base>/` (không xoá) và chuyển bằng chứng lần 1 vào thư mục con `r1-<base>/` của thư mục
+work trước khi chạy lại, vì script ghi đè log cùng tên. Trước khi build lại, chép `out/main/index.js` và renderer từ `app.asar` của lần 1
+để kiểm dấu của PR mới vắng ở lần 1. Version đã merge vào `dev_3` thì nhánh build lại không có commit đổi version. Biên nhận giữ lần 1 ở
+mục riêng (receipt khoá `rebuild.replaces_round_1`).
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

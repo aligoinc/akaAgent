@@ -47,15 +47,17 @@ Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
 [Build akaAgent Desktop 10.0.0](../audits/akaagent-10.0.0-20261118/README.md):
-**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 21:39:31–21:43:07 VN, 18/11/2026. Chưa upload/phát hành/feed (lúc 21:46 VN
-feed cả ba nền tảng còn 9.9.0; anh tự phát hành). Không build App Server** (18/245 file trong gói Server đổi sau 9.9.0; chỉ #702 chạm
-đường Zalo Server: App Server vẫn báo câu cũ khi proxy từ chối lúc quét QR). Nguồn worktree `release-10.0.0`, nhánh
-`codex/release-10.0.0` `8cd8181a` (nền `origin/dev_3` `514d306c` sau PR #716, commit chỉ đổi version). Lên số chính 10: mọi chỗ so
-phiên bản (updater, ngưỡng hộp cập nhật, V511 `desktopMinVersion`) so theo số, đã kiểm trước khi build. Mới so với 9.9.0: dòng 🔀 của
-engine (#696), dòng ⏸ khi chính sách lỗi tạm dừng (#698), câu lỗi QR khi proxy từ chối (#702), không nhận việc mới khi máy vừa ngủ dậy
-(#707; `desktop.sleep_guard` lúc build chưa có dòng = Mac bật, Windows tắt), tiến trình và mã lỗi engine như bộ cũ (#709, V575), Up tin
-(#711, V531). Smoke `zalo-message-status-sync` hỏng sẵn như 9.7.0–9.9.0; phát lại Facebook bằng bản chép 18/11 còn đúng 2 khác đã ghi
-ở #709; `v572-smoke` lần đầu lệch do thời điểm của bản đối chứng V563, chạy lại hai lần đạt. Không DB/deploy service trong bước build.
+**Đã build lại lần 2 Windows x64, Mac ARM64, Mac Intel x64 lúc 23:22:11–23:25:27 VN, 18/11/2026, vì `dev_3` có code mới (#718). Chưa
+upload/phát hành/feed (lúc 23:29 VN feed cả ba nền tảng còn 9.9.0; anh tự phát hành). Không build App Server** (3/246 file trong gói
+Server đổi sau lần 1, #718 không đổi hành vi đường Zalo Server; từ 9.9.0 chỉ #702 chạm đường này: App Server vẫn báo câu cũ khi proxy từ
+chối lúc quét QR). Nguồn worktree `release-10.0.0`, nhánh `codex/release-10.0.0-r2` = `origin/dev_3` `fad8c14f` sau PR #718 (version đã
+10.0.0 từ #717, không commit đổi version). **Bộ cài lần 1 (nền `514d306c`, 21:39–21:43 VN, merge `dev_3` qua #717) đã bị thay, không
+phát hành**, giữ ở `dist/build-10.0.0-r1-514d306c/` của repo chính. Lên số chính 10: mọi chỗ so phiên bản (updater, ngưỡng hộp cập nhật,
+V511 `desktopMinVersion`) so theo số, đã kiểm. Mới so với 9.9.0: quản trị viên group khi tìm group bằng search (#718, V577/V578), dòng 🔀
+của engine (#696), dòng ⏸ khi chính sách lỗi tạm dừng (#698), câu lỗi QR khi proxy từ chối (#702), không nhận việc mới khi máy vừa ngủ
+dậy (#707; `desktop.sleep_guard` lúc build chưa có dòng = Mac bật, Windows tắt), tiến trình và mã lỗi engine như bộ cũ (#709, V575), Up
+tin (#711, V531). Lần 2: 60/62 bước kiểm đạt; smoke `zalo-message-status-sync` hỏng sẵn như 9.7.0–9.9.0; phát lại Facebook bằng bản chép
+18/11 còn đúng 2 khác đã ghi ở #709. Không DB/deploy service trong bước build.
 [Receipt](../audits/akaagent-10.0.0-20261118/build-receipt.json).
 
 [Build akaAgent Desktop 9.9.0](../audits/akaagent-9.9.0-20261117/README.md):
