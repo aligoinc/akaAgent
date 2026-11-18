@@ -18,8 +18,9 @@ if (!process.versions.electron) {
 
 const { build } = require('esbuild')
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly } = require('./fixture.cjs')
+const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly, applyV575 } = require('./fixture.cjs')
 const V563 = require('../build-v563-sql.cjs')
+const V575 = require('../build-v575-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 async function check(name, fn) {
@@ -326,6 +327,19 @@ const NEWSFEED_BLOCK = { id: 9650, name: 'fb_newsfeed_browse_test', code: `retur
 const newsfeedWorkflow = () => ({ id: NEWSFEED_WORKFLOW_ID, name: '[engine] Lướt newsfeed', defaultVariables: {}, edges: [],
   nodes: [{ id: 'browse', blockId: 9650, blockName: 'fb_newsfeed_browse_test', config: {} }] })
 
+// Nhắn UID "Lấy đề xuất bạn bè" (mục 3, anh chốt 18/11/2026): workflow của loại (bộ cũ) đọc đề xuất khi chiến dịch chưa có data, engine
+// thêm data rồi chạy workflow "[engine]" nhắn tin như bộ cũ (block fb_send_message trả ok như production).
+const SUGGEST_WORKFLOW_ID = 5007
+const UID_WORKFLOW_ID = 5006
+const SUGGEST_BLOCK = { id: 9651, name: 'fb_collect_suggested_friends_test', code: `
+if (vars.collectSuggestedFriendsOnly !== true || Number(vars.suggestedFriendsCount) !== 2) throw new Error('biến lấy đề xuất sai')
+return { suggestedProfiles: [{ uid: '100001', name: 'Bạn A' }, { uid: '100002', name: 'Bạn B' }, { uid: '100001', name: 'Trùng' }] }` }
+const SEND_BLOCK = { id: 9652, name: 'fb_send_message', code: `return { ok: true }` }
+const suggestWorkflow = () => ({ id: SUGGEST_WORKFLOW_ID, name: 'Nhắn tin UID', defaultVariables: {}, edges: [],
+  nodes: [{ id: 'collect', blockId: 9651, blockName: 'fb_collect_suggested_friends_test', config: {} }] })
+const uidWorkflow = () => ({ id: UID_WORKFLOW_ID, name: '[engine] Nhắn tin UID', defaultVariables: {}, edges: [],
+  nodes: [{ id: 'send', blockId: 9652, blockName: 'fb_send_message', config: {} }] })
+
 // Đăng trang cá nhân: loại không có dòng data, mỗi mốc lịch một lượt (V558 campaign_slot). Dòng lịch sử "Đăng bài" của bộ cũ lấy từ
 // bước fb_click_post_button thành công (posted: true).
 const TIMELINE_WORKFLOW_ID = 5002
@@ -362,7 +376,7 @@ async function main() {
     await db.query(`INSERT INTO public.org_organization_product (organization_id, product_id, package_type, expiration_date)
       VALUES ($1, 3, 'paid', now() + interval '30 days')`, [ORG])
     await db.query(`UPDATE public.auto_system_settings SET value = $1 WHERE key = 'engine.facebook'`, [JSON.stringify({ mode: 'orgs', organizationIds: [ORG] })])
-    for (const block of [...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK]) {
+    for (const block of [...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK, SUGGEST_BLOCK, SEND_BLOCK]) {
       await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, [block.id, block.name, block.code])
     }
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Đăng nhóm', '[]', '[]')`, [WORKFLOW_ID])
@@ -379,6 +393,10 @@ async function main() {
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_find_data_group', $1)`, [FIND_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Lướt newsfeed', '[]', '[]')`, [NEWSFEED_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_newsfeed_interaction', $1)`, [NEWSFEED_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Nhắn tin UID', '[]', '[]')`, [UID_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_message_uid', $1)`, [UID_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, step_kind, action_code, commit_level, send_ops)
+      VALUES (9652, 'delivery', 'fb_message_stranger', 1, '[]')`)
     // Cùng block nút Đăng, riêng workflow trang cá nhân: thao tác của mốc là fb_post_my_profile (dòng ghi đè theo workflow).
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, workflow_id, step_kind, action_code, commit_level, send_ops)
       VALUES (30, $1, 'delivery', 'fb_post_my_profile', 2, '["click:fb_post_button"]')`, [TIMELINE_WORKFLOW_ID])
@@ -388,16 +406,18 @@ async function main() {
       userData, client: fakeClient(db), runs: [], runSteps: [], elements: ELEMENTS,
       user: { staffId: STAFF, organizationId: ORG, facebookEngineV2: true, campaignEngineV2: false,
         entitlements: { facebookCore: true, facebookFanpage: false, email: false, zalo: false, sms: false } },
-      blocks: new Map([...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK].map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
+      blocks: new Map([...BLOCKS, ...ADJUST_BLOCKS, INVITE_BLOCK, FIND_BLOCK, NEWSFEED_BLOCK, SUGGEST_BLOCK, SEND_BLOCK]
+        .map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
       workflows: new Map([[WORKFLOW_ID, workflow()], [TIMELINE_WORKFLOW_ID, timelineWorkflow()], [INVITE_WORKFLOW_ID, inviteWorkflow()],
-        [FIND_WORKFLOW_ID, findWorkflow()], [NEWSFEED_WORKFLOW_ID, newsfeedWorkflow()]]),
+        [FIND_WORKFLOW_ID, findWorkflow()], [NEWSFEED_WORKFLOW_ID, newsfeedWorkflow()], [SUGGEST_WORKFLOW_ID, suggestWorkflow()],
+        [UID_WORKFLOW_ID, uidWorkflow()]]),
       runtimeSettings: null
     }
     const progress = []
     const mapCampaign = row => row && ({
       id: Number(row.id), name: row.name, actionId: row.action_id, accountId: Number(row.account_id), staffId: Number(row.staff_id),
       organizationId: Number(row.organization_id), status: row.status, note: row.note, content: row.content ?? 'Nội dung',
-      extraSettings: row.extra_settings || {}, images: [], isDelete: row.is_delete, updatedAt: row.updated_at, schedule: row.schedule,
+      extraSettings: row.extra_settings || {}, images: row.images || [], isDelete: row.is_delete, updatedAt: row.updated_at, schedule: row.schedule,
       dataTargetSourceMode: 'direct'
     })
     const facade = new Proxy({
@@ -1037,6 +1057,155 @@ async function main() {
       assert.match(text, /vết thao tác \(\d+.*\):/)
       assert.match(text, /ảnh lỗi trên máy khách: [0-9a-f-]{36}/)
       assert.match(text, /Kết quả FB theo mã:/)
+    })
+
+    // Tiến trình và mã lỗi như bộ cũ (anh chốt 18/11/2026, docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md): V575 trên DB thử, dấu hiệu mới nạp
+    // như Desktop đọc facebook.error_signs (bản thật nhớ 10 phút nên bài kiểm đặt thẳng).
+    await applyV575(db)
+    const v575Signs = JSON.parse(V575.SIGNS_AFTER_JSON).map(sign => ({ ...sign,
+      texts: sign.texts.map(text => text.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()) }))
+    const tomorrowVn = (await one(`SELECT to_char((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date + 1, 'DD/MM') AS d`)).d
+
+    await check('V575 mục 7a + 8: comment không thấy ô bình luận → FB41, câu không còn XPath, mỗi lỗi đúng một dòng "❌ … "<nhóm>"", tính lượt như FB42', async () => {
+      const blocks = globalThis.__fbTest.blocks
+      const original = blocks.get(34)
+      // Như block 2851 production: chờ ô bình luận không thấy thì trả commentFailed kèm câu lỗi của hàm chờ (có XPath).
+      blocks.set(34, { ...original, code: `
+const box = await helpers.element('fb_comment_box')
+try { await page.waitForSelector(box, { timeout: 100 }) } catch (cause) {
+  return { commented: false, commentFailed: true, position: vars.loopIndex + 1, error: String(cause.message) }
+}
+await page.click(box)
+await page.press('Enter')
+return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + (vars.loopIndex + 1) }` })
+      globalThis.__fbTest.runtimeSettings = { errorSigns: v575Signs }
+      try {
+        const entry = await makeCampaign()
+        await run(entry, { missing: [ELEMENTS.fb_comment_box] })
+        const rows = await details(entry.campaign.id)
+        assert.deepEqual(rows.map(r => [r.action_code, r.status]), [['fb_post_group', 'thành công'], ['fb_comment', 'thất bại'], ['fb_comment', 'thất bại']],
+          JSON.stringify(rows))
+        assert.deepEqual(rows.slice(1).map(r => r.log), ['Không comment được bài của mình: không thấy ô bình luận (FB41)',
+          'Không comment được bài thứ 2: không thấy ô bình luận (FB41)'])
+        const out = (await outcomes(entry.campaign.id)).filter(o => o.action_code === 'fb_comment')
+        assert.deepEqual(out.map(o => o.error_code), ['err_fb_comment_box_not_found', 'err_fb_comment_box_not_found'])
+        assert.ok(out.every(o => !String(o.signal.message).includes('waitForSelector')), JSON.stringify(out.map(o => o.signal)))
+        const failures = progress.filter(line => line.includes('Không comment được'))
+        assert.equal(failures.length, 2, progress.join('\n'))
+        assert.ok(failures.every(line => /^❌ .+ "Nhóm 1": Không comment được (bài của mình|bài thứ 2): không thấy ô bình luận \(FB41\)$/u.test(line)), failures.join('\n'))
+        assert.ok(!progress.some(line => /waitForSelector|\/\/div|⚠️ Không comment/.test(line)), progress.join('\n'))
+        assert.equal((await one(`SELECT count_action_in_day AS n FROM public.auto_account_action_status WHERE account_id = $1 AND action_code = 'fb_comment'`,
+          [entry.account.id])).n, 2, 'tính lượt như FB42 hôm nay')
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      } finally {
+        blocks.set(34, original)
+        globalThis.__fbTest.runtimeSettings = null
+      }
+    })
+
+    await check('V575 mục 7c: tệp chỉ có trên máy mà không còn → CFG20, không tải được → CFG01; dừng chiến dịch ngay, data giữ lại, không lịch sử', async () => {
+      const missingFile = path.join(userData, 'khong-co', 'anh.jpg')
+      const cases = [
+        [[{ name: 'anh.jpg', localPath: missingFile }], 'err_media_local_file_missing',
+          'Ảnh, video hoặc tệp của chiến dịch không còn trên máy (CFG20). Mở chiến dịch, chọn lại ảnh, video hoặc tệp rồi bấm Tiếp tục chiến dịch.'],
+        [[{ name: 'anh.jpg', localPath: missingFile, cloudUrl: 'http://127.0.0.1:9/anh.jpg' }], 'err_media_file_missing',
+          'Không tải được ảnh, video hoặc tệp của chiến dịch (CFG01). Mở chiến dịch, chọn lại ảnh, video hoặc tệp rồi bấm Tiếp tục chiến dịch.']
+      ]
+      for (const [images, code, note] of cases) {
+        const entry = await makeCampaign({ targets: 2 })
+        await db.query('UPDATE public.auto_campaigns SET images = $2 WHERE id = $1', [entry.campaign.id, JSON.stringify(images)])
+        const { page: fake } = await run({ ...entry, campaign: await facade.getCampaign(entry.campaign.id) })
+        assert.equal(fake.clicks.length, 0, 'không bấm gì')
+        assert.deepEqual((await outcomes(entry.campaign.id)).map(o => [o.error_code, o.phase]), [[code, 'before_send']])
+        assert.equal((await details(entry.campaign.id)).length, 0)
+        assert.deepEqual((await inputs(entry.campaign.id)).map(r => r.status), ['chờ xử lý', 'chờ xử lý'], 'data không bị đóng')
+        const campaign = await facade.getCampaign(entry.campaign.id)
+        assert.deepEqual([campaign.status, campaign.note], ['tạm dừng', note])
+        assert.ok(progress.some(line => line.startsWith('⚠️ ') && line.endsWith(`(${code === 'err_media_file_missing' ? 'CFG01' : 'CFG20'})`) && line.includes('"Nhóm 1"')),
+          progress.join('\n'))
+        assert.ok(progress.includes('⏸ Chiến dịch "Đăng nhóm Desktop" đã được tạm dừng.'), progress.join('\n'))
+      }
+    })
+
+    await check('mục 3: nhắn UID "Lấy đề xuất bạn bè": chiến dịch chưa có data thì engine lấy đề xuất như bộ cũ rồi nhắn; đã có data thì không lấy lại', async () => {
+      const original = { action: facade.getCampaignAction, batch: facade.createCampaignInputDataBatchWithRollback }
+      facade.getCampaignAction = async id => id === 'facebook_message_uid' ? { id, workflowId: SUGGEST_WORKFLOW_ID, limitCheckActionCodes: [] } : original.action(id)
+      const inserted = []
+      facade.createCampaignInputDataBatchWithRollback = async rows => {
+        for (const row of rows) {
+          inserted.push(row)
+          await db.query(`INSERT INTO public.auto_campaign_input_data (campaign_id, name, uid, status, note, is_delete) VALUES ($1, $2, $3, $4, $5, false)`,
+            [row.campaignId, row.name, row.uid, row.status, row.note])
+        }
+      }
+      try {
+        const entry = await makeCampaign({ targets: 0, actionId: 'facebook_message_uid', extra: { useSuggestedFriends: true, suggestedFriendsCount: 2 } })
+        assert.deepEqual(scheduler.engineRunner.support(entry.account, entry.campaign), { ok: true })
+        const { result } = await run(entry)
+        assert.equal(result.targets, 2, JSON.stringify(result))
+        assert.deepEqual(inserted.map(r => [r.uid, r.name]), [['100001', 'Bạn A'], ['100002', 'Bạn B']], 'đề xuất trùng UID bỏ như bộ cũ')
+        assert.ok(progress.includes('ℹ️ Bắt đầu lấy 2 đề xuất bạn bè từ Facebook'), progress.join('\n'))
+        assert.ok(progress.includes('✅ Đã thêm 2 đề xuất bạn bè vào chiến dịch "Đăng nhóm Desktop"'), progress.join('\n'))
+        const rows = (await db.query(`SELECT d.action_code, d.status, i.uid FROM public.auto_campaign_details d JOIN public.auto_campaign_input_data i
+          ON i.id = d.input_data_id WHERE d.campaign_id = $1 ORDER BY d.id`, [entry.campaign.id])).rows
+        assert.deepEqual(rows.map(r => [r.uid, r.action_code, r.status]), [['100001', 'fb_message_stranger', 'thành công'], ['100002', 'fb_message_stranger', 'thành công']])
+        assert.deepEqual((await inputs(entry.campaign.id)).map(r => r.status), ['hoàn thành', 'hoàn thành'])
+        // Chiến dịch đã có data (đã chạy hết): như bộ cũ không lấy đề xuất nữa.
+        await db.query(`UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = now() - interval '1 minute' WHERE id = $1`, [entry.campaign.id])
+        inserted.length = 0
+        await run({ ...entry, campaign: await facade.getCampaign(entry.campaign.id) })
+        assert.equal(inserted.length, 0)
+        assert.ok(!progress.some(line => line.includes('đề xuất bạn bè')), progress.join('\n'))
+      } finally {
+        Object.assign(facade, { getCampaignAction: original.action, createCampaignInputDataBatchWithRollback: original.batch })
+      }
+    })
+
+    await check('V575 mục 6 + 11: newsfeed hằng ngày cho chạy tiếp khi hết lượt mà like và comment đều hết lượt → hoàn thành như bộ cũ; không cho chạy tiếp → chờ, câu chỉ ghi ngày', async () => {
+      const original = { action: facade.getCampaignAction, limit: facade.getAccountRateLimitStatus, disabled: facade.getAccountActionDisabledStatus,
+        finalize: facade.finalizeCampaign }
+      // Như auto_campaign_actions.limit_check_action_codes của newsfeed (bộ cũ kiểm hạn mức like / comment).
+      facade.getCampaignAction = async id => id === 'facebook_newsfeed_interaction'
+        ? { id, limitCheckActionCodes: ['fb_like_post', 'fb_comment'] } : original.action(id)
+      facade.getAccountActionDisabledStatus = async () => ({ ok: true })
+      facade.getAccountRateLimitStatus = async (accountId, actionCode, actionName) => ({ ok: false, actionCode, actionName,
+        errorCode: 'error_limit_in_day', reason: 'Đạt giới hạn trong ngày', isDailyLimit: true, retryAfterMs: 3_600_000, currentCount: 2, limit: 2 })
+      facade.finalizeCampaign = async (id, note) => {
+        await db.query(`UPDATE public.auto_campaigns SET status = 'hoàn thành', note = $2 WHERE id = $1`, [id, note])
+        return { completed: true, reason: 'completed' }
+      }
+      try {
+        const extra = continueOnLimit => ({ enablePostLike: true, newsfeedLikeKind: 'random', newsfeedLikeLimit: 2, enableComment: true,
+          newsfeedCommentKind: 'random', newsfeedCommentLimit: 2, newsfeedTimeMinutes: 1, commentContent: 'Hay quá',
+          actionLimits: { continueWhenActionLimitReached: continueOnLimit } })
+        const limited = async entry => {
+          for (const code of ['fb_like_post', 'fb_comment']) {
+            await db.query(`INSERT INTO public.auto_account_action_status (account_id, action_code, count_action_in_day) VALUES ($1, $2, 9999)
+              ON CONFLICT (account_id, action_code) DO UPDATE SET count_action_in_day = 9999,
+                count_date = (timezone('Asia/Ho_Chi_Minh'::text, now()))::date`, [entry.account.id, code])
+          }
+        }
+        const done = await makeCampaign({ targets: 0, actionId: 'facebook_newsfeed_interaction', extra: extra(true) })
+        await limited(done)
+        const first = await run(done)
+        assert.equal(first.result.reason, 'wait', JSON.stringify(first.result))
+        assert.equal(await scheduler.completeEngineNewsfeedDailyWhenLimited(done.account, done.campaign, first.result), true)
+        const completed = await facade.getCampaign(done.campaign.id)
+        assert.equal(completed.status, 'hoàn thành')
+        assert.match(String(completed.note), /^.+: Đạt giới hạn trong ngày; .+: Đạt giới hạn trong ngày$/)
+        assert.ok(progress.includes(`✅ Hoàn thành chiến dịch "Đăng nhóm Desktop" (${completed.note})`), progress.join('\n'))
+
+        const waiting = await makeCampaign({ targets: 0, actionId: 'facebook_newsfeed_interaction', extra: extra(false) })
+        await limited(waiting)
+        const second = await run(waiting)
+        assert.equal(second.result.reason, 'wait', JSON.stringify(second.result))
+        assert.equal(await scheduler.completeEngineNewsfeedDailyWhenLimited(waiting.account, waiting.campaign, second.result), false)
+        const still = await facade.getCampaign(waiting.campaign.id)
+        assert.deepEqual([still.status, still.note], ['chờ xử lý', `⏳ Đạt giới hạn trong ngày, chạy tiếp vào ngày ${tomorrowVn} (LIM01)`])
+      } finally {
+        Object.assign(facade, { getCampaignAction: original.action, getAccountRateLimitStatus: original.limit,
+          getAccountActionDisabledStatus: original.disabled, finalizeCampaign: original.finalize })
+      }
     })
   } finally {
     await db.end().catch(() => {})

@@ -33,7 +33,7 @@ if (!process.versions.electron) {
 
 const { loadScheduler, fakeClient } = require('./desktop-harness.cjs')
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS } = require('./fixture.cjs')
+const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly, applyV575 } = require('./fixture.cjs')
 const { STEPS } = require('../build-v560-sql.cjs')
 
 const args = process.argv.slice(2)
@@ -282,7 +282,9 @@ async function main() {
   const mediaDir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-fb-replay-media-'))
   const unknownCalls = []
   const one = async (sql, params = []) => (await db.query(sql, params)).rows[0]
-  const report = { snapshot: path.basename(snapshotPath), startedAt: new Date().toISOString(), skipped, campaigns: [], matrix: {}, events: {}, problems: [] }
+  const report = { snapshot: path.basename(snapshotPath), startedAt: new Date().toISOString(), skipped, campaigns: [], matrix: {}, events: {}, problems: [],
+    progress: {} }
+  const formatLog = await loadLogFormat()
   const bump = (bucket, key, example) => {
     const entry = (bucket[key] ||= { n: 0, examples: [] })
     entry.n++
@@ -292,6 +294,9 @@ async function main() {
     await buildFacebookFixture(db)
     await applyFacebookMigrations(db)
     await applyFacebookMigrations(db, FACEBOOK_POLICY_MIGRATIONS)
+    // Như production 18/11: dấu hiệu FB11 của V563, rồi V575 (mã cụ thể, NET01, lỗi tệp theo nguyên nhân, câu chờ); --before-v575 để so trước.
+    await applyV563SignsOnly(db)
+    if (!args.includes('--before-v575')) await applyV575(db)
     // Thời gian nén: bỏ hạn mức ngày / khung giờ (đã kiểm riêng ở sql-smoke).
     await db.query(`CREATE OR REPLACE FUNCTION public.aka_agent_engine_action_limit(p_campaign_id bigint, p_account_id bigint, p_action_code text)
       RETURNS jsonb LANGUAGE sql STABLE AS $f$ SELECT NULL::jsonb $f$`)
@@ -526,6 +531,12 @@ async function main() {
       list.push(d)
       legacyDetails.set(Number(d.campaign_id), list)
     }
+    const legacyProgressByCampaign = new Map()
+    for (const line of snap.progressLines ?? []) {
+      const list = legacyProgressByCampaign.get(Number(line.campaign_id)) ?? []
+      list.push(line)
+      legacyProgressByCampaign.set(Number(line.campaign_id), list)
+    }
     const staffOrg = new Map(snap.staff.map(s => [Number(s.id), Number(s.organization_id)]))
     let campaignNo = 0
     for (const p of plans) {
@@ -706,6 +717,26 @@ async function main() {
           compareTarget(' (mốc)', run, null, legacyRows, mine)
         }
       }
+      // ---- Tiến trình (anh chốt 18/11/2026): loại dòng engine so với dòng bộ cũ đã lưu trong cửa sổ các lượt đã phát lại ----
+      const names = { accountName: String(p.account.name ?? ''), campaignName: String(p.campaign.name ?? '') }
+      const runWindows = p.runs.filter(run => current.done.has(run.id)).map(run => {
+        const start = Date.parse(run.created_at) - 5_000
+        const duration = Math.max(0, Date.parse(run.completed_at ?? run.started_at) - Date.parse(run.started_at))
+        return [start, Date.parse(run.created_at) + duration + 20_000]
+      })
+      const legacyProgress = (legacyProgressByCampaign.get(cid) ?? [])
+        .filter(l => runWindows.some(([a, b]) => { const t = Date.parse(l.created_at); return t >= a && t <= b }))
+        .map(l => storedMessage(l.log, names))
+      const engineProgress = (progressByCampaign.get(cid) ?? []).map(m => storedMessage(formatLog(m, names), names))
+      const bucket = (report.progress[type] ||= {})
+      for (const [side, list] of [['legacy', legacyProgress], ['engine', engineProgress]]) {
+        for (const message of list) {
+          const kind = progressKind(message)
+          const entry = (bucket[kind] ||= { legacy: 0, engine: 0, examples: { legacy: [], engine: [] } })
+          entry[side]++
+          if (entry.examples[side].length < 3) entry.examples[side].push(message.slice(0, 200))
+        }
+      }
       process.stdout.write(`\r${campaignNo}/${plans.length} chiến dịch`)
     }
     console.log()
@@ -728,6 +759,13 @@ async function main() {
     console.log(`\nDữ liệu khớp dòng lịch sử: ${same}, khác đã chốt: ${approved}, khác chưa giải thích: ${unexplained}`)
     console.log('\nSự kiện:')
     for (const [key, v] of Object.entries(report.events).sort((a, b) => b[1].n - a[1].n)) console.log(`${String(v.n).padStart(4)}  ${key}`)
+    console.log('\nTiến trình: loại dòng bộ cũ (trong cửa sổ các lượt đã phát lại) → engine; chỉ in loại có số khác nhau, (*) = dòng của cả lượt:')
+    for (const [type, kinds] of Object.entries(report.progress).sort()) {
+      const rows = Object.entries(kinds).filter(([, v]) => v.legacy !== v.engine).sort((a, b) => (b[1].legacy + b[1].engine) - (a[1].legacy + a[1].engine))
+      if (!rows.length) continue
+      console.log(`  ${type}`)
+      for (const [kind, v] of rows.slice(0, 40)) console.log(`    ${String(v.legacy).padStart(4)} → ${String(v.engine).padEnd(4)} ${UNIT_KINDS.test(kind) ? '(*) ' : ''}${kind}`)
+    }
     const problems = report.campaigns.filter(c => c.problems.length)
     if (problems.length) {
       console.log('\nVấn đề:')
@@ -743,6 +781,33 @@ async function main() {
     fs.rmSync(userData, { recursive: true, force: true })
     fs.rmSync(mediaDir, { recursive: true, force: true })
   }
+}
+
+/** formatCampaignLogMessage của app (dạng lưu ở auto_campaign_logs), dựng từ src/shared bằng esbuild. */
+async function loadLogFormat() {
+  const { build } = require('esbuild')
+  const outfile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'aka-log-format-')), 'campaignLogFormat.cjs')
+  await build({ entryPoints: [path.join(ROOT, 'src/shared/campaignLogFormat.ts')], outfile, bundle: true, platform: 'node', format: 'cjs', logLevel: 'error' })
+  return require(outfile).formatCampaignLogMessage
+}
+
+/** Bỏ giờ và tiền tố "<tài khoản> - <chiến dịch> - " của dòng đã lưu. */
+function storedMessage(line, { accountName, campaignName }) {
+  let text = String(line ?? '').replace(/^\d{1,2}:\d{2}:\d{2}\s+\d{1,2}\/\d{1,2}\/\d{4}\s+-\s*/, '')
+  for (const part of [accountName, campaignName]) if (part && text.startsWith(`${part} - `)) text = text.slice(part.length + 3)
+  return text
+}
+
+/** Dòng của cả lượt (bắt đầu, nghỉ, kết thúc / hẹn chiến dịch, tạm dừng): cửa sổ từng lượt của bộ cũ không chứa nên không so số. */
+const UNIT_KINDS = /^(🚀|⏳ Nghỉ|✅ Hoàn thành chiến dịch|⏳ Đã hoàn thành lượt|⏳ Đã chạy xong lượt|⏳ Hẹn chạy tiếp|⏸|⏹|🔀|ℹ️ Bắt đầu lấy|⚠️ Chưa thể chạy)/u
+
+/** Loại dòng: bỏ tên (trong ngoặc kép, sau " - "), số, link, mã ở cuối; giữ phần đầu câu sau dấu hai chấm. */
+function progressKind(message) {
+  let text = String(message).replace(/https?:\/\/\S+/g, '<link>').replace(/"[^"]*"|“[^”]*”/g, '"…"')
+  text = text.replace(/ - [^:]+?(:|$)/, ' - …$1').replace(/\d+/g, '#').replace(/\s*\([A-Z]{1,4}#\)\s*$/, '')
+  const cut = text.indexOf(': ')
+  if (cut > 0) text = `${text.slice(0, cut + 1)} ${text.slice(cut + 2).split(' ').slice(0, 5).join(' ')}`
+  return text.slice(0, 110)
 }
 
 /** Số data lệch bộ cũ mà chưa nằm trong quyết định đã chốt: khác 0 thì mã thoát 1. */

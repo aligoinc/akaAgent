@@ -1,0 +1,70 @@
+{
+  "migration": "migrations/migration_v575_engine_specific_codes_wait_note.sql",
+  "rollback": "migrations/rollback_v575_engine_specific_codes_wait_note.sql",
+  "generator": "scripts/build-v575-sql.cjs (danh mục production đọc 18/11/2026: scripts/fixtures/engine-v2-facebook/v575-catalog-20261118.json)",
+  "ledger": {
+    "version": "20261118100806",
+    "name": "migration_v575_engine_specific_codes_wait_note",
+    "statementsMd5": "80d0fc41d1e04a6411df7d54b0f4b19a",
+    "createdBy": null
+  },
+  "fileMd5": "80d0fc41d1e04a6411df7d54b0f4b19a",
+  "rollbackMd5": "360b8c6c10c21a74a3364eaedb7cdc68",
+  "appliedAtUtc": "2026-11-18T10:08:06Z",
+  "appliedAtVn": "2026-11-18 17:08:06",
+  "approvedBy": "anh (\"apply bây giờ luôn được ko?\", 18/11 sau khi xem kết quả kiểm thử)",
+  "renumbered": "Lúc làm là V574; đổi sang V575 ~17:05 VN 18/11 vì nhánh claude/fb-error-watch (PR #708) đã đẩy migration_v574_engine_error_watch.sql lúc 16:20 VN. Thân câu chờ và dấu hiệu sau apply không đổi khi đổi số.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT); DDL: CREATE OR REPLACE FUNCTION aka_agent_engine_wait_note; còn lại chỉ dữ liệu",
+  "preApply": {
+    "readAtVn": "2026-11-18 17:07:31",
+    "v575InLedger": 0,
+    "v575OnAnyBranch": "0 (akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard, kể cả tệp chưa commit ở các worktree)",
+    "fb46OrCfg20Exist": 0,
+    "baseCodesFb41Net01Lim01Fb42Sys99": 5,
+    "cfg01OldTextAndHelpNull": 1,
+    "cfg01PolicyRows": 1,
+    "errorSignsMd5": "7e25dd65faab148bcf55b93654852a16",
+    "waitNoteMd5": "a288740dc85596850d80d0f44d60f7c9",
+    "rowsWithSourceV575": 0,
+    "activeBackends": 2,
+    "waitingOnLock": 0,
+    "rest5min": { "p50Ms": 48, "p99Ms": "250–360", "errors5xx": 0 }
+  },
+  "postApply": {
+    "newCodes": [
+      { "code": "err_fb_page_inbox_message_box_not_found", "public": "FB46", "class": "ui_changed", "title": "Không thấy ô nhập tin nhắn trong hộp thư Page", "help": "Mở tab trình duyệt của tài khoản để kiểm tra." },
+      { "code": "err_media_local_file_missing", "public": "CFG20", "class": "content_config", "title": "Ảnh, video hoặc tệp của chiến dịch không còn trên máy", "help": "Mở chiến dịch, chọn lại ảnh, video hoặc tệp rồi bấm Tiếp tục chiến dịch." }
+    ],
+    "cfg01": { "title": "Không tải được ảnh, video hoặc tệp của chiến dịch", "help": "Mở chiến dịch, chọn lại ảnh, video hoặc tệp rồi bấm Tiếp tục chiến dịch.", "policyNote": "Không tải được ảnh, video hoặc tệp của chiến dịch (CFG01). Mở chiến dịch, chọn lại ảnh, video hoặc tệp rồi bấm Tiếp tục chiến dịch." },
+    "policiesSourceV575": 6,
+    "rulesSourceV575": 5,
+    "errorSignsMd5": "797af9742857b712e1144f5d230b2137",
+    "waitNoteMd5": "17e1824c9f1bdf6adddb432e0a60d484",
+    "waitNoteDay": "⏳ Đạt giới hạn trong ngày, chạy tiếp vào ngày 19/11 (LIM01)",
+    "waitNoteHour": "⏳ Đạt giới hạn trong giờ, chạy tiếp lúc 17:33 18/11 (LIM02)",
+    "policyLint": 0,
+    "inFilePostflight": "đạt (parity FB41/FB46/CFG20, Up tin giữ FB41 không tính lượt, NET01 Facebook, 11 ca phân loại, 3 câu chờ)",
+    "postgrest": {
+      "reloadMessageUtc": "2026-11-18T10:08:10.32Z",
+      "poolReconnectedUtc": "2026-11-18T10:08:10.58Z",
+      "configReloadedUtc": "2026-11-18T10:08:13.49Z",
+      "schemaQueryMs": 5172.7,
+      "schemaLoadedUtc": "2026-11-18T10:08:18.69Z"
+    },
+    "rest10s": [
+      { "fromUtc": "10:07:50", "requests": 5381, "p50Ms": 45, "maxMs": 520, "over1s": 0, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "10:08:00", "requests": 6505, "p50Ms": 50, "maxMs": 1003, "over1s": 1, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "10:08:10", "requests": 5057, "p50Ms": 145, "maxMs": 4838, "over1s": 704, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "10:08:20", "requests": 5998, "p50Ms": 51, "maxMs": 388, "over1s": 0, "errors5xx": 0, "errors503": 0 },
+      { "fromUtc": "10:08:30", "requests": 4293, "p50Ms": 51, "maxMs": 392, "over1s": 0, "errors5xx": 0, "errors503": 0 }
+    ],
+    "postgresErrors": "chỉ 'permission denied' của Desktop bản < 9.1.0 (anon), cùng mức phút trước apply; không có lock timeout / statement timeout"
+  },
+  "effect": {
+    "immediate": "FB46 / CFG20 / CFG01 câu mới / luật NET01 + lỗi tệp Facebook / câu chờ chỉ ghi ngày, với mọi bản app",
+    "desktopSigns": "Desktop đọc lại facebook.error_signs mỗi 10 phút (loadFacebookRuntimeSettings), nên FB41 / FB46 theo dấu hiệu có hiệu lực trên máy đang chạy trong vòng 10 phút",
+    "needsDesktopBuild": "định dạng dòng emoji + tên data, câu FB41 bỏ XPath, bỏ dòng ⚠️ trùng, các mục 1, 2, 3, 5, 6, CFG20 cho Zalo",
+    "needsChatApiSync": "định dạng dòng mới cho Zalo trên Fly"
+  },
+  "doNotReapply": true
+}

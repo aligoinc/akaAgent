@@ -365,7 +365,7 @@ async function main() {
       const i2 = await inputs(c2)
       assert.equal(i2[0].status, 'chờ xử lý', 'cổng send_exclusion closed (V504): data về hàng đợi')
       assert.equal(r2.result.reason, 'end_unit', JSON.stringify(r2.result))
-      assert.ok(r2.lines.includes('⚠️ Nhắn tin bạn bè: Chưa kiểm tra được điều kiện gửi, sẽ tự chạy lại (SYS08)'), r2.lines.join('\n'))
+      assert.ok(r2.lines.includes('⚠️ Nhắn tin bạn bè "Vy": Chưa kiểm tra được điều kiện gửi, sẽ tự chạy lại (SYS08)'), r2.lines.join('\n'))
     }
     pass('dữ kiện DB: gửi trong N ngày → loại trừ; DB lỗi khi kiểm → không gửi, data về hàng đợi, dừng lượt (SYS08)')
 

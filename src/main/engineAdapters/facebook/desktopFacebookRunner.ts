@@ -10,7 +10,8 @@
 import type { AutoAccount, Campaign } from '../../../shared/types'
 import {
   facebookCampaignV2Support, facebookClaimPlan, facebookResultName, facebookSlotMode, facebookTargetLabel, FACEBOOK_ACTION_NAMES,
-  type ConfigIssue, type FacebookCampaign, type ReportSuccess, type UnitResult, type V2Support, type WorkflowTargetApi, type WorkflowTargetEnd
+  type ConfigIssue, type FacebookCampaign, type PrepareTargetsApi, type PrepareTargetsResult, type ReportSuccess, type UnitResult, type V2Support,
+  type WorkflowTargetApi, type WorkflowTargetEnd
 } from '../../../../packages/campaign-engine/src/index'
 import { cachedFacebookEngineCatalog, facebookEngineCatalogUnavailable, loadFacebookEngineCatalog } from '../../data/repositories/facebookEngineRepository'
 
@@ -22,6 +23,11 @@ export interface FacebookUnitSession {
   onTargetEnd(info: { targetRunId: number; inputDataId: number }): Promise<void>
   /** Q11: chiến dịch vừa tạm dừng theo chuỗi lỗi SYS99 thì AI đọc ảnh lỗi viết lại câu dừng (null = giữ câu của DB). */
   reviseCampaignNote?(info: { targetRunId: number; inputDataId: number; response: ReportSuccess }, signal: AbortSignal): Promise<string | null>
+  /**
+   * Lấy data đầu lượt khi claim đầu của lượt không còn data (nhắn UID "Lấy đề xuất bạn bè", anh chốt 18/11/2026): lõi gọi một lần mỗi
+   * lượt lúc còn giữ lease; 'retry' = đã thêm data, lõi claim lại.
+   */
+  prepareTargets?(api: PrepareTargetsApi): Promise<PrepareTargetsResult>
   /** Sau khi lượt kết thúc: khôi phục danh tính Page, tắt xem trước, nghỉ / lướt FB trước khi chờ hạn mức giờ (như bộ cũ). */
   close(result: UnitResult | null): Promise<void>
 }
@@ -97,6 +103,7 @@ export async function facebookUnitConfig(deps: FacebookRunDependencies, session:
       } : {})
     },
     onTargetEnd: (info: { targetRunId: number; inputDataId: number }) => session.onTargetEnd(info),
+    ...(session.prepareTargets ? { prepareTargets: (api: PrepareTargetsApi) => session.prepareTargets!(api) } : {}),
     pacing: { fullSeconds: deps.host.sleepBetweenActionsSeconds(deps.account, deps.campaign) }
   }
 }

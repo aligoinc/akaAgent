@@ -34,6 +34,27 @@ export function formatActionLog(actionName: string | null | undefined, log: stri
   return text.toLocaleLowerCase('vi-VN').startsWith(action.toLocaleLowerCase('vi-VN')) ? text : `${action}: ${text}`
 }
 
+/**
+ * Dòng lỗi có tên data (anh chốt 18/11/2026, cả Facebook lẫn Zalo): `<thao tác> "<data>": <câu>`. Tiến trình hiện lẫn nhiều chiến dịch
+ * nên dòng lỗi đọc riêng vẫn biết data nào. Câu đã chứa tên data (mẫu {message} của bộ dựng cũ) thì không lặp lại tên.
+ */
+export function formatTargetActionLog(actionName: string | null | undefined, label: string | null | undefined, log: string | null | undefined): string {
+  const action = String(actionName || '').trim()
+  const text = String(log || '').trim()
+  const name = String(label || '').trim()
+  const lower = (value: string) => value.toLocaleLowerCase('vi-VN')
+  const named = name !== '' && name !== 'N/A' && !lower(text).includes(lower(name))
+  if (!action) return named && text ? `"${name}": ${text}` : text
+  if (!text) return named ? `${action} "${name}"` : action
+  if (lower(text).startsWith(lower(action))) {
+    // Câu đã mở đầu bằng tên thao tác ("<thao tác>: …", "<thao tác> thất bại: …"): chèn tên data ngay sau tên thao tác.
+    const rest = text.slice(action.length)
+    if (!named || !/^[\s:]/.test(rest)) return text
+    return /^\s*:/.test(rest) ? `${action} "${name}"${rest.trimStart()}` : `${action} "${name}"${rest}`
+  }
+  return named ? `${action} "${name}": ${text}` : `${action}: ${text}`
+}
+
 export function unitStartProgress(campaignId: number, campaignName: string, accountName: string): ProgressLine {
   return line(campaignId, null, `🚀 Bắt đầu chiến dịch "${campaignName}" trên tài khoản "${accountName}"`, 'info')
 }
@@ -49,6 +70,11 @@ export function targetStartProgress(campaignId: number, inputDataId: number | nu
 
 export function targetDoneProgress(campaignId: number, inputDataId: number | null, label: string): ProgressLine {
   return line(campaignId, inputDataId, `✅ Hoàn thành "${label}"`, 'success')
+}
+
+/** Như executeCampaignV2 của bộ cũ: data chạy xong mà bị bỏ qua (đăng nhóm kèm chia sẻ) in "ℹ️ Bỏ qua" thay cho "✅ Hoàn thành". */
+export function targetSkippedProgress(campaignId: number, inputDataId: number | null, label: string, note: string): ProgressLine {
+  return line(campaignId, inputDataId, `ℹ️ Bỏ qua "${label}": ${note}`, 'info')
 }
 
 export function paceProgress(campaignId: number, seconds: number): ProgressLine {
@@ -73,7 +99,7 @@ export function formatVietnamDateTime(iso: string): string {
  * deferCampaignUntilFutureInput / transitionCampaignToCompleted. Lý do không có câu (còn data chờ trong khung giờ, không đổi gì) → null.
  */
 export function finishProgress(campaignId: number, campaignName: string, finished: { reason?: unknown; schedule?: unknown; slot?: unknown;
-  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown; repeat?: unknown }, runtime: 'desktop' | 'fly',
+  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown; repeat?: unknown; hours?: unknown }, runtime: 'desktop' | 'fly',
   formatDateTime: (iso: string) => string = formatVietnamDateTime): ProgressLine | null {
   const name = `"${campaignName}"`
   const done = (suffix = ''): ProgressLine => line(campaignId, null, `✅ Hoàn thành chiến dịch ${name}${suffix}`, 'success')
@@ -92,6 +118,13 @@ export function finishProgress(campaignId: number, campaignName: string, finishe
     case 'completed_repeat_next_day': return done(' (lượt gửi lặp kế tiếp đã sang ngày mới)')
     case 'completed_repeat_after_cutoff': return done(' (lượt gửi lặp kế tiếp vượt quá giờ dừng trong ngày)')
     case 'completed_no_rerun_data': return done(` (không có data cần chạy lại ${String(finished.suffix ?? '')})`)
+    // Chạy lại sau N giờ (tìm data, comment seeding, newsfeed; V561 finish_campaign_v2): câu của handleCampaignCompletion bước hẹn chạy lại.
+    case 'completed_no_rerun_page': return done(` (không có page cần chạy lại ${String(finished.suffix ?? '')})`)
+    case 'completed_rerun_next_day': return done(' (không hẹn chạy lại theo giờ qua ngày mới)')
+    case 'completed_rerun_after_cutoff': return done(` (lượt chạy lại sau ${String(finished.hours ?? '')} giờ vượt quá giờ dừng trong ngày)`)
+    case 'completed_rerun_no_data': return done(' (không có data cần chạy lại)')
+    case 'rerun_scheduled':
+      return line(campaignId, null, `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch ${name} lúc ${at}`, 'info')
     case 'slot_advanced':
       return line(campaignId, null, `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch ${name} ở khung giờ ${String(finished.slot ?? '')} (${at})`, 'info')
     case 'repeat_scheduled':
@@ -178,9 +211,10 @@ export function campaignWaitProgress(campaignId: number, note: string): Progress
 }
 
 /**
- * Một kết quả do DB chốt. Như logHelperMilestoneProgress: có dòng lịch sử thì in câu của dòng đó, không có dòng
- * (chính sách không ghi lịch sử) thì thêm "⚠️". Từ chối nhận tin in như logZaloMessageOptOutBlocked.
- * Trả null khi Desktop không in gì (dừng chủ động).
+ * Một kết quả do DB chốt. Như logHelperMilestoneProgress: có dòng lịch sử thì in câu của dòng đó. Từ chối nhận tin in như
+ * logZaloMessageOptOutBlocked. Trả null khi Desktop không in gì (dừng chủ động).
+ * Dòng lỗi (anh chốt 18/11/2026, cả Facebook lẫn Zalo): `<emoji> <thao tác> "<data>": <câu> (mã)`; ❌ = data đã đóng mà không thành
+ * công, ⚠️ = data sẽ chạy lại (không có dòng lịch sử) hoặc không rõ đã gửi chưa.
  */
 export function outcomeProgress(campaignId: number, inputDataId: number | null, decision: OutcomeDecision,
   context: { actionName: string; targetLabel: string }): ProgressLine | null {
@@ -189,12 +223,19 @@ export function outcomeProgress(campaignId: number, inputDataId: number | null, 
   if (decision.errorCode && SKIP_GATE_ERROR_CODES.has(decision.errorCode)) {
     return line(campaignId, inputDataId, `🚫 Bỏ qua "${context.targetLabel}": ${withCode(decision.log, code)}`, 'info', code)
   }
-  const text = formatActionLog(decision.actionName || context.actionName, decision.ok ? decision.log : withCode(decision.log, code))
-  if (decision.ok) return line(campaignId, inputDataId, text, decision.reportGroup === 'skipped' ? 'info' : 'success', code)
-  if (decision.detailId === null) return line(campaignId, inputDataId, `⚠️ ${text}`, 'warning', code)
-  // Lỗi mà kết quả là "đã làm từ trước" (đã là bạn bè…) hoặc "thành công": không phải lỗi với khách.
-  if (decision.reportGroup === 'skipped' || decision.reportGroup === 'success') return line(campaignId, inputDataId, text, 'info', code)
-  return line(campaignId, inputDataId, text, decision.deliveryState === 'unknown' ? 'warning' : 'error', code)
+  const actionName = decision.actionName || context.actionName
+  if (decision.ok) {
+    return line(campaignId, inputDataId, formatActionLog(actionName, decision.log), decision.reportGroup === 'skipped' ? 'info' : 'success', code)
+  }
+  const named = formatTargetActionLog(actionName, context.targetLabel, withCode(decision.log, code))
+  if (decision.detailId === null) return line(campaignId, inputDataId, `⚠️ ${named}`, 'warning', code)
+  // Lỗi mà kết quả là "đã làm từ trước" (đã là bạn bè…) hoặc "thành công": không phải lỗi với khách. Bỏ qua vì lỗi của data
+  // (FB40 không thấy ô đăng bài, lớp target_permanent) vẫn là lỗi như bộ cũ Facebook ("❌ Lỗi …").
+  if (decision.reportGroup === 'success' || (decision.reportGroup === 'skipped' && decision.errorClass !== 'target_permanent')) {
+    return line(campaignId, inputDataId, formatActionLog(actionName, withCode(decision.log, code)), 'info', code)
+  }
+  const uncertain = decision.deliveryState === 'unknown' || decision.deliveryState === 'partial'
+  return line(campaignId, inputDataId, `${uncertain ? '⚠️' : '❌'} ${named}`, decision.deliveryState === 'unknown' ? 'warning' : 'error', code)
 }
 
 /**

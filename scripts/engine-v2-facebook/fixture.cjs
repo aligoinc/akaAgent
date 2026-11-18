@@ -93,6 +93,17 @@ async function applyV563SignsOnly(db) {
   await db.query(`BEGIN;\n${SIGN_POLICY_SQL}\nCOMMIT;`)
 }
 
+/**
+ * V575 (mã cụ thể FB41 / FB46, lỗi tệp CFG20 / CFG01, NET01 khi mở trang, câu chờ hạn mức ngày; anh chốt 18/11/2026): DB thử chưa có sổ
+ * migration của Supabase (migration kiểm sổ trước khi chạy) thì dựng bảng sổ tối thiểu. Cần V559 + dấu hiệu V563 như production.
+ */
+const V575_MIGRATION = 'migration_v575_engine_specific_codes_wait_note.sql'
+async function applyV575(db) {
+  await db.query(`CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+    CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (version text PRIMARY KEY, statements text[], name text, created_by text)`)
+  await db.query(readMigration(V575_MIGRATION))
+}
+
 /** Dựng DB engine như production rồi thêm phần tối thiểu cho Facebook. notes: ghi chú bootstrap. */
 async function buildFacebookFixture(db, notes = []) {
   await bootstrap(db, notes)
@@ -101,4 +112,4 @@ async function buildFacebookFixture(db, notes = []) {
 }
 
 module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, V564_MIGRATION, readMigration, applyFacebookStubs,
-  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly }
+  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly, V575_MIGRATION, applyV575 }
