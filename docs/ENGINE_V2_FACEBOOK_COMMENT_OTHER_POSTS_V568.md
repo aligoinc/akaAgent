@@ -4,7 +4,7 @@
 - **V568 đã apply akachat lúc 12:17:31 VN 18/11/2026** theo yêu cầu ("apply rồi create pr"): sổ `20261118051731`, không apply lại, md5 sổ = md5 file = `b2a3b61c…`.
   - Chỉ dữ liệu, 0 lỗi 5xx.
   - [Biên nhận](../migrations/snapshots/engine-facebook-v568/apply-receipt.json).
-- Code ở nhánh `claude/fb-engine-comment-dedupe`, PR vào `dev_3`.
+- Code ở nhánh `claude/fb-engine-comment-dedupe`, [PR #697](https://github.com/aligoinc/akaAgent/pull/697) vào `dev_3` (chưa merge).
 - Anh chốt 18/11: "sửa luôn đi", sau khi xác nhận đây là lỗi logic.
 - Chỉ sửa bản engine của block comment (block 2851); bộ cũ (block 34) không đổi.
 
