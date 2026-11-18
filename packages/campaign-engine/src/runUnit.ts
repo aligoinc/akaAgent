@@ -18,8 +18,8 @@ import { callUntilAvailable, DEFAULT_RETRY, OutcomeReporter, type OutageHandler,
 import { paceDelayMs, type PaceSettings } from './pacing.js'
 import {
   accountStopProgress, campaignNoteProgress, cooldownPauseProgress, campaignPausedProgress, campaignWaitProgress, configIssueProgress, dailyBoundaryProgress,
-  finishProgress, formatVietnamDateTime, gateSkipProgress, outageProgress, outcomeProgress, paceProgress, recoveredProgress, targetDoneProgress,
-  targetStartProgress, unitStartProgress
+  finishProgress, formatVietnamDateTime, gateSkipProgress, outageProgress, outcomeProgress, paceProgress, recoveredProgress, shuffleProgress,
+  targetDoneProgress, targetStartProgress, unitStartProgress
 } from './progress.js'
 import type { ConfigIssue } from './validation.js'
 
@@ -425,12 +425,20 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
     return 'N/A'
   }
   let started = false
+  let shuffleLogged = false
   const skipLogged = new Set<string>()
   const markStarted = (): void => {
     if (started) return
     started = true
     deps.events.progress(unitStartProgress(cfg.campaignId, cfg.campaignName, cfg.accountName))
     deps.events.trace({ type: 'unit_started', campaignId: cfg.campaignId, accountId: cfg.accountId })
+  }
+  /** V564: như Desktop, "🔀 Đã xáo trộn danh sách N group" một lần mỗi lượt, ngay sau "🚀", khi DB đã xáo (N > 1). */
+  const markShuffled = (shuffle: { count: number } | undefined): void => {
+    if (!shuffle || shuffleLogged) return
+    shuffleLogged = true
+    const count = Number(shuffle.count)
+    if (Number.isFinite(count) && count > 1) deps.events.progress(shuffleProgress(cfg.campaignId, count))
   }
 
   const toReport = (claim: Claimed, step: Pick<EngineStep, 'key' | 'actionCode' | 'actionName'>, raw: RawOutcome): ReportOutcome => {
@@ -1003,7 +1011,9 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       const claimCtx: ClaimContext = {
         staffId: cfg.staffId, accountId: cfg.accountId, campaignId: cfg.campaignId, runnerId: cfg.runnerId,
         runtimeTarget: cfg.runtimeTarget, leaseToken, actions: cfg.actions, ...(cfg.requireAny?.length ? { requireAny: cfg.requireAny } : {}),
-        ...(cfg.workflow?.slotMode ? { mode: 'campaign_slot' as const } : {})
+        ...(cfg.workflow?.slotMode ? { mode: 'campaign_slot' as const } : {}),
+        // V564: lượt workflow chưa nhận data nào (kể cả sau cooldown_scan đã cấp lease): DB trả shuffle.count cho dòng 🔀.
+        ...(cfg.workflow && !started ? { unitStarted: false } : {})
       }
       const batch = cfg.batch
       const claim: ClaimResponse | BatchClaimResponse = batch
@@ -1018,7 +1028,10 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       for (const entry of cooldownPaused) deps.events.progress(cooldownPauseProgress(cfg.campaignId, cfg.actionId, entry))
       if (claim.status === 'cooldown_scan') continue
       // Như Desktop: "🚀 Bắt đầu chiến dịch" chỉ khi thật sự nhận được data để chạy.
-      if (claim.status === 'claimed') markStarted()
+      if (claim.status === 'claimed') {
+        markStarted()
+        markShuffled('shuffle' in claim ? claim.shuffle : undefined)
+      }
       if (claim.status !== 'claimed') {
         if (claim.status === 'gate_unavailable') {
           // Như Desktop: "⚠️ Không thể kiểm tra giới hạn gửi/đăng lặp; …"; chỉ in khi câu chờ đổi (ghi chú chiến dịch).

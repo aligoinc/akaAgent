@@ -35,7 +35,7 @@ async function bootstrap(db, notes) {
   // này, chứng minh Zalo không đổi hành vi. Nạp lười để không vòng require với scripts/engine-v2-facebook/fixture.cjs.
   if (process.env.SCENARIO_FACEBOOK_MIGRATIONS === '1') {
     await require('../engine-v2-facebook/fixture.cjs').applyFacebookMigrations(db)
-    notes.push('V556–V558 (engine Facebook): đã apply')
+    notes.push('V556–V558, V564 (engine Facebook): đã apply')
   }
   // "Lặp lại sau khi chạy xong" (V561, dựng trên thân V558 của finish_campaign_v2): SCENARIO_CAMPAIGN_REPEAT=1 (kèm
   // SCENARIO_FACEBOOK_MIGRATIONS=1) để chạy bộ kịch bản trên DB đã có V561, chứng minh chiến dịch không bật lặp không đổi hành vi.
