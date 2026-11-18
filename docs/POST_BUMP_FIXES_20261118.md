@@ -25,7 +25,7 @@ Chiến dịch đăng nhóm đang bật "Kiêm up tin" có 4.183 bài đăng th�
 - Trang "Nội dung của bạn → Đã đăng" (`/groups/<id>/my_posted_content`, mới nhất trước) hiện bài mới sau 6–14 giây, có nút "Xem trong nhóm" `?multi_permalinks=<mã>`. `/groups/<id>/posts/<mã>/` mở đúng bài. Lúc 5,5 giây, đầu danh sách vẫn là bài cũ.
 - **Anh chốt:** bài video không lấy link để up tin. Form cảnh báo khách thay vào đó.
 
-## Đợt sửa (nhánh `claude/fb-post-bump-fixes`)
+## Đợt sửa ([#711](https://github.com/aligoinc/akaAgent/pull/711), nhánh `claude/fb-post-bump-fixes`; thay #680 đã đóng)
 
 Cả bộ cũ lẫn engine đều đi qua các chỗ này: engine tạo lượt up tin bằng đúng `enqueuePostBumpAfterGroupPost` (qua `reportFacebookEngineRows`), và cả hai ghi kết quả comment qua `logExplicitActionResultStep`.
 
