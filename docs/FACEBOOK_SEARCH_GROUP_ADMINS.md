@@ -13,7 +13,7 @@
   `20261118154304`, md5 sổ = file `5fe998a9…`, **không apply lại**; [biên nhận](../migrations/snapshots/engine-facebook-v577/apply-receipt-v578.json)):
   chỗ tìm phần tử của block lấy từ 8 element trong `auto_elements` (mục "Element" bên dưới). Thử thật lại 22:44–22:46 VN (chiến dịch 58486, cùng
   từ khoá): 6/6 group, 20 quản trị viên, 96 giây, **từng group và từng người giống hệt lượt V577**.
-- Code Desktop ở PR [#718](https://github.com/aligoinc/akaAgent/pull/718) (nhánh `claude/fb-search-group-admins`, mở 18/11, chưa merge), **chưa build Desktop**: khách chỉ có ô chọn khi có bản Desktop mới. Tới lúc đó
+- Code **đã merge `dev_3` qua [#718](https://github.com/aligoinc/akaAgent/pull/718) ngày 18/11** theo yêu cầu ("Merge đi"), **chưa build Desktop**: khách chỉ có ô chọn khi có bản Desktop mới. Tới lúc đó
   workflow đã có node mới nhưng app không gửi biến nên block thoát ngay.
 - Chỉ chạy với engine v2 (workflow 319). Chiến dịch chạy bộ cũ (tài khoản "chạy ngẫu nhiên", `engine.facebook` tắt) thì ô chọn không có tác
   dụng: anh chốt 17/11 không đụng bộ cũ.
