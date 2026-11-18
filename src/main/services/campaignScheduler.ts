@@ -49,6 +49,7 @@ import { WebviewRegistry } from '../playwright/webviewController'
 import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, AutoAccount, AutoErrorPolicy, IPC_EVENTS, Campaign, CampaignAction, CampaignActionLimitSettings, CampaignAdvancedContentItem, CampaignDetail, CreateCampaignDetailInput, CampaignDetailStatus, CampaignInputData, CampaignLogAction, CampaignLogEntry, CampaignMediaInput, CampaignRunEvent, CampaignRunEventInput, CampaignSummaryRefreshSignal, ContactType, DataGroupIngestRow, DataTypeCategoryCode } from '../../shared/types'
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { readFacebookSearchGroupCardFields, type FacebookSearchGroupCardFields } from '../../shared/facebookSearchGroupCard'
+import { formatFacebookGroupAdminsLine, readFacebookGroupAdminFields, type FacebookGroupAdminFields } from '../../shared/facebookGroupAdmins'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import {
   getRuntimeMediaDownloadExtensionForMimeType,
@@ -684,7 +685,7 @@ interface FindDataPhoneProfile {
   source: string
 }
 
-interface FindDataFacebookGroup extends FacebookSearchGroupCardFields {
+interface FindDataFacebookGroup extends FacebookSearchGroupCardFields, FacebookGroupAdminFields {
   url: string
   name: string
   privacy?: string
@@ -12075,6 +12076,13 @@ export class CampaignScheduler {
     const selectedEmailSubject = campaign.actionId === EMAIL_SEND_ACTION_ID && selectedAdvancedContentItem
       ? String(selectedAdvancedContentItem.emailSubject ?? legacyAdvancedEmailSubject)
       : (extra.emailSubject || '')
+    // Tìm group bằng search kèm quản trị viên: group đã lưu ở các lượt trước của cùng từ khoá không đọc lại quản trị viên (mỗi lượt app chỉ lưu
+    // group mới; đọc lại là mở lại hàng chục trang Facebook cho dữ liệu sẽ bị bỏ). Chỉ đọc DB khi chiến dịch bật ô này.
+    const findFacebookGroupAdmins = campaign.actionId === FIND_DATA_SEARCH_ACTION_ID
+      && extra.isFindFacebookGroup === true && extra.isFindFacebookGroupAdmins === true
+    const findDataAdminSkipGroupKeys = findFacebookGroupAdmins
+      ? Array.from((await this.getPreviouslyFoundValuesForInputData(campaign.id, detail?.id)).facebookGroups)
+      : []
 
     return {
       campaignId: campaign.id,
@@ -12198,6 +12206,8 @@ export class CampaignScheduler {
       searchGroupMineOnly: extra.searchGroupMineOnly ?? false,
       minSearchGroupMembers: extra.minSearchGroupMembers ?? 0,
       minSearchGroupPostsPerDay: extra.minSearchGroupPostsPerDay ?? 0,
+      isFindFacebookGroupAdmins: findFacebookGroupAdmins,
+      findDataAdminSkipGroupKeys: findDataAdminSkipGroupKeys,
       isFindCommentByKeywords: canUseFindDataCommentContentConditions ? (extra.isFindCommentByKeywords ?? false) : false,
       commentKeywords: canUseFindDataCommentContentConditions ? (extra.commentKeywords ?? '') : '',
       isFindCommentByContentAI: canUseFindDataCommentContentConditions ? (extra.isFindCommentByContentAI ?? false) : false,
@@ -13266,7 +13276,7 @@ export class CampaignScheduler {
       const findZaloGroupLinkAkaBizDesktopTargetCampaignIds = Array.isArray(campaign.extraSettings?.findZaloGroupLinkAkaBizDesktopTargetCampaignIds)
         ? campaign.extraSettings.findZaloGroupLinkAkaBizDesktopTargetCampaignIds
         : []
-      const successLog = this.formatFindDataLogMessage(
+      const findDataLog = this.formatFindDataLogMessage(
         targetName,
         {
           phones: phones.length,
@@ -13280,6 +13290,9 @@ export class CampaignScheduler {
         campaign.extraSettings || {},
         { isFollowUpInputRun, isSearch: isFindDataSearch }
       )
+      // Bật "Lấy thông tin quản trị viên của group": thêm một dòng tổng hợp cho các group mới của lượt này.
+      const groupAdminsLine = formatFacebookGroupAdminsLine(facebookGroups)
+      const successLog = groupAdminsLine ? `${findDataLog}\n${groupAdminsLine}` : findDataLog
       const errMsg = out.error || summaryStep?.error || errorStep?.error || 'Lỗi không xác định'
       const previousCampaignValues = isSuccess
         ? await this.getPreviouslyFoundValues(campaign.id)
@@ -14456,7 +14469,9 @@ export class CampaignScheduler {
       postsPerDay: numberOrUndefined(source.postsPerDay),
       keyword: String(source.keyword || '').trim() || undefined,
       // Thông tin thêm của thẻ nhóm khi block gửi kèm; chỉ giữ trường hợp lệ (docs/FACEBOOK_SEARCH_GROUP_EXPORT_PLAN.md).
-      ...readFacebookSearchGroupCardFields(rawGroup)
+      ...readFacebookSearchGroupCardFields(rawGroup),
+      // Quản trị viên của group khi chiến dịch bật "Lấy thông tin quản trị viên của group" (docs/FACEBOOK_SEARCH_GROUP_ADMINS.md).
+      ...readFacebookGroupAdminFields(rawGroup)
     }
   }
 

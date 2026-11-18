@@ -1,0 +1,1179 @@
+{
+ "readAt": "2026-11-18 21:54",
+ "note": "Đọc chỉ đọc production (akachat) 18/11/2026: workflow engine 319 của facebook_find_data_search, block tổng kết 2910, md5 các bản bộ cũ. nodesText / edgesText là nguyên văn jsonb::text của Postgres (md5 = md5(nodesText || edgesText)).",
+ "workflow": {
+  "defaultVariables": {
+   "commentContentAI": "",
+   "commentKeywords": "",
+   "countCommentFindData": 30,
+   "countSearchGroupFindData": 20,
+   "countSearchPostFindData": 10,
+   "isFindCommentByContentAI": false,
+   "isFindCommentByKeywords": false,
+   "isFindFacebookGroup": false,
+   "isFindInComment": false,
+   "isFindInPost": true,
+   "isFindLinkGroupZalo": false,
+   "isFindPhone": true,
+   "isFindPostByContentAI": false,
+   "isFindPostByKeywords": false,
+   "isFindPostLink": false,
+   "isFindUid": false,
+   "minSearchGroupMembers": 0,
+   "minSearchGroupPostsPerDay": 0,
+   "originalIdentityName": "",
+   "pageIdentityReady": false,
+   "pageIdentityRestoreAfterTarget": true,
+   "pageIdentityRestoreOnly": false,
+   "postContentAI": "",
+   "postKeywords": "",
+   "runAsPage": false,
+   "runAsPageName": "",
+   "runAsPageUid": "",
+   "searchGroupCity": "",
+   "searchGroupMineOnly": false,
+   "searchGroupNearMe": false,
+   "searchGroupPublicOnly": false,
+   "searchPostAuthorFilter": "all",
+   "searchPostDateFilter": "all",
+   "searchPostRecentOnly": false,
+   "searchPostSeenOnly": false,
+   "searchPostTaggedLocation": "all"
+  },
+  "edges": [
+   {
+    "id": "e-prepare-open-posts",
+    "source": "prepare",
+    "target": "open_posts"
+   },
+   {
+    "id": "e-open-posts-filters",
+    "source": "open_posts",
+    "target": "post_filters"
+   },
+   {
+    "id": "e-post-filters-collect",
+    "source": "post_filters",
+    "target": "collect_posts"
+   },
+   {
+    "id": "e-collect-posts-extract",
+    "source": "collect_posts",
+    "target": "extract_posts"
+   },
+   {
+    "id": "e-extract-posts-comments",
+    "source": "extract_posts",
+    "target": "collect_comments"
+   },
+   {
+    "id": "e-collect-comments-extract",
+    "source": "collect_comments",
+    "target": "extract_comments"
+   },
+   {
+    "id": "e-extract-comments-open-groups",
+    "source": "extract_comments",
+    "target": "open_groups"
+   },
+   {
+    "id": "e-open-groups-filters",
+    "source": "open_groups",
+    "target": "group_filters"
+   },
+   {
+    "id": "e-group-filters-collect",
+    "source": "group_filters",
+    "target": "collect_groups"
+   },
+   {
+    "id": "e-collect-groups-summary",
+    "source": "collect_groups",
+    "target": "summary"
+   },
+   {
+    "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+    "source": "page_identity_restore_only",
+    "sourceHandle": "true",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+    "source": "page_identity_restore_only",
+    "sourceHandle": "false",
+    "target": "page_identity_needs_switch"
+   },
+   {
+    "id": "e-page_identity_needs_switch-page_identity_original-true",
+    "source": "page_identity_needs_switch",
+    "sourceHandle": "true",
+    "target": "page_identity_original"
+   },
+   {
+    "id": "e-page_identity_needs_switch-page_identity_enter-false",
+    "source": "page_identity_needs_switch",
+    "sourceHandle": "false",
+    "target": "page_identity_enter"
+   },
+   {
+    "id": "e-page_identity_original-page_identity_switch",
+    "source": "page_identity_original",
+    "target": "page_identity_switch"
+   },
+   {
+    "id": "e-page_identity_switch-page_identity_ready",
+    "source": "page_identity_switch",
+    "target": "page_identity_ready"
+   },
+   {
+    "id": "e-page_identity_ready-page_identity_enter",
+    "source": "page_identity_ready",
+    "target": "page_identity_enter"
+   },
+   {
+    "id": "e-page_identity_original-page_identity_restore_join",
+    "source": "page_identity_original",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_enter-prepare",
+    "source": "page_identity_enter",
+    "target": "prepare"
+   },
+   {
+    "id": "e-summary-page_identity_capture_result",
+    "source": "summary",
+    "target": "page_identity_capture_result"
+   },
+   {
+    "id": "e-page_identity_capture_result-page_identity_restore_join",
+    "source": "page_identity_capture_result",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_restore_join-page_identity_needs_restore",
+    "source": "page_identity_restore_join",
+    "target": "page_identity_needs_restore"
+   },
+   {
+    "id": "e-page_identity_needs_restore-page_identity_restore-true",
+    "source": "page_identity_needs_restore",
+    "sourceHandle": "true",
+    "target": "page_identity_restore"
+   },
+   {
+    "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+    "source": "page_identity_needs_restore",
+    "sourceHandle": "false",
+    "target": "page_identity_result_join"
+   },
+   {
+    "id": "e-page_identity_restore-page_identity_restored",
+    "source": "page_identity_restore",
+    "target": "page_identity_restored"
+   },
+   {
+    "id": "e-page_identity_restored-page_identity_result_join",
+    "source": "page_identity_restored",
+    "target": "page_identity_result_join"
+   },
+   {
+    "id": "e-page_identity_result_join-page_identity_result",
+    "source": "page_identity_result_join",
+    "target": "page_identity_result"
+   }
+  ],
+  "edgesText": "[{\"id\": \"e-prepare-open-posts\", \"source\": \"prepare\", \"target\": \"open_posts\"}, {\"id\": \"e-open-posts-filters\", \"source\": \"open_posts\", \"target\": \"post_filters\"}, {\"id\": \"e-post-filters-collect\", \"source\": \"post_filters\", \"target\": \"collect_posts\"}, {\"id\": \"e-collect-posts-extract\", \"source\": \"collect_posts\", \"target\": \"extract_posts\"}, {\"id\": \"e-extract-posts-comments\", \"source\": \"extract_posts\", \"target\": \"collect_comments\"}, {\"id\": \"e-collect-comments-extract\", \"source\": \"collect_comments\", \"target\": \"extract_comments\"}, {\"id\": \"e-extract-comments-open-groups\", \"source\": \"extract_comments\", \"target\": \"open_groups\"}, {\"id\": \"e-open-groups-filters\", \"source\": \"open_groups\", \"target\": \"group_filters\"}, {\"id\": \"e-group-filters-collect\", \"source\": \"group_filters\", \"target\": \"collect_groups\"}, {\"id\": \"e-collect-groups-summary\", \"source\": \"collect_groups\", \"target\": \"summary\"}, {\"id\": \"e-page_identity_restore_only-page_identity_restore_join-true\", \"source\": \"page_identity_restore_only\", \"target\": \"page_identity_restore_join\", \"sourceHandle\": \"true\"}, {\"id\": \"e-page_identity_restore_only-page_identity_needs_switch-false\", \"source\": \"page_identity_restore_only\", \"target\": \"page_identity_needs_switch\", \"sourceHandle\": \"false\"}, {\"id\": \"e-page_identity_needs_switch-page_identity_original-true\", \"source\": \"page_identity_needs_switch\", \"target\": \"page_identity_original\", \"sourceHandle\": \"true\"}, {\"id\": \"e-page_identity_needs_switch-page_identity_enter-false\", \"source\": \"page_identity_needs_switch\", \"target\": \"page_identity_enter\", \"sourceHandle\": \"false\"}, {\"id\": \"e-page_identity_original-page_identity_switch\", \"source\": \"page_identity_original\", \"target\": \"page_identity_switch\"}, {\"id\": \"e-page_identity_switch-page_identity_ready\", \"source\": \"page_identity_switch\", \"target\": \"page_identity_ready\"}, {\"id\": \"e-page_identity_ready-page_identity_enter\", \"source\": \"page_identity_ready\", \"target\": \"page_identity_enter\"}, {\"id\": \"e-page_identity_original-page_identity_restore_join\", \"source\": \"page_identity_original\", \"target\": \"page_identity_restore_join\"}, {\"id\": \"e-page_identity_enter-prepare\", \"source\": \"page_identity_enter\", \"target\": \"prepare\"}, {\"id\": \"e-summary-page_identity_capture_result\", \"source\": \"summary\", \"target\": \"page_identity_capture_result\"}, {\"id\": \"e-page_identity_capture_result-page_identity_restore_join\", \"source\": \"page_identity_capture_result\", \"target\": \"page_identity_restore_join\"}, {\"id\": \"e-page_identity_restore_join-page_identity_needs_restore\", \"source\": \"page_identity_restore_join\", \"target\": \"page_identity_needs_restore\"}, {\"id\": \"e-page_identity_needs_restore-page_identity_restore-true\", \"source\": \"page_identity_needs_restore\", \"target\": \"page_identity_restore\", \"sourceHandle\": \"true\"}, {\"id\": \"e-page_identity_needs_restore-page_identity_result_join-false\", \"source\": \"page_identity_needs_restore\", \"target\": \"page_identity_result_join\", \"sourceHandle\": \"false\"}, {\"id\": \"e-page_identity_restore-page_identity_restored\", \"source\": \"page_identity_restore\", \"target\": \"page_identity_restored\"}, {\"id\": \"e-page_identity_restored-page_identity_result_join\", \"source\": \"page_identity_restored\", \"target\": \"page_identity_result_join\"}, {\"id\": \"e-page_identity_result_join-page_identity_result\", \"source\": \"page_identity_result_join\", \"target\": \"page_identity_result\"}]",
+  "id": 319,
+  "md5": "ef59b75906fb45bbb8cac5b737901823",
+  "name": "[engine] [Built-in] Facebook - Tìm kiếm data bằng search",
+  "nodes": [
+   {
+    "blockId": 2900,
+    "blockName": "fb_prepare_search_data_context",
+    "config": {},
+    "id": "prepare",
+    "label": "Chuẩn bị",
+    "position": {
+     "x": 0,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2901,
+    "blockName": "fb_open_search_posts",
+    "config": {},
+    "id": "open_posts",
+    "label": "Mở search post",
+    "position": {
+     "x": 260,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2902,
+    "blockName": "fb_apply_search_post_filters",
+    "config": {},
+    "id": "post_filters",
+    "label": "Lọc bài viết",
+    "position": {
+     "x": 520,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2903,
+    "blockName": "fb_collect_search_posts",
+    "config": {},
+    "id": "collect_posts",
+    "label": "Tải bài viết",
+    "position": {
+     "x": 780,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2904,
+    "blockName": "fb_extract_data_from_search_posts",
+    "config": {},
+    "id": "extract_posts",
+    "label": "Lọc data post",
+    "position": {
+     "x": 1040,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2905,
+    "blockName": "fb_collect_search_post_comments",
+    "config": {},
+    "id": "collect_comments",
+    "label": "Tải comment",
+    "position": {
+     "x": 1300,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2906,
+    "blockName": "fb_extract_data_from_search_comments",
+    "config": {},
+    "id": "extract_comments",
+    "label": "Lọc data comment",
+    "position": {
+     "x": 1560,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2907,
+    "blockName": "fb_open_search_groups",
+    "config": {},
+    "id": "open_groups",
+    "label": "Mở search group",
+    "position": {
+     "x": 1820,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2908,
+    "blockName": "fb_apply_search_group_filters",
+    "config": {},
+    "id": "group_filters",
+    "label": "Lọc group",
+    "position": {
+     "x": 2080,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2909,
+    "blockName": "fb_collect_search_groups",
+    "config": {},
+    "id": "collect_groups",
+    "label": "Tải group",
+    "position": {
+     "x": 2340,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2910,
+    "blockName": "fb_find_search_data_summary",
+    "config": {},
+    "id": "summary",
+    "label": "Tổng kết",
+    "position": {
+     "x": 2600,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2838,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+    },
+    "id": "page_identity_restore_only",
+    "label": "Chỉ chuyển về danh tính ban đầu?",
+    "position": {
+     "x": 0,
+     "y": -920
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 2838,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+    },
+    "id": "page_identity_needs_switch",
+    "label": "Cần chuyển sang Page?",
+    "position": {
+     "x": 0,
+     "y": -790
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 2879,
+    "blockName": "fb_get_current_identity_name",
+    "config": {},
+    "id": "page_identity_original",
+    "label": "Nhớ danh tính ban đầu",
+    "position": {
+     "x": -220,
+     "y": -660
+    }
+   },
+   {
+    "blockId": 2880,
+    "blockName": "fb_switch_identity_by_name",
+    "config": {
+     "identityNameFromVars": "runAsPageName"
+    },
+    "id": "page_identity_switch",
+    "label": "Chuyển sang Page đã chọn",
+    "position": {
+     "x": -220,
+     "y": -530
+    }
+   },
+   {
+    "blockId": 2915,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "ready"
+    },
+    "id": "page_identity_ready",
+    "label": "Kiểm tra đã chuyển Page",
+    "position": {
+     "x": -220,
+     "y": -400
+    }
+   },
+   {
+    "blockId": 2840,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_enter",
+    "label": "Chạy hành động chiến dịch",
+    "position": {
+     "x": 0,
+     "y": -240
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 2915,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "capture_result"
+    },
+    "id": "page_identity_capture_result",
+    "label": "Giữ kết quả hành động",
+    "position": {
+     "x": 0,
+     "y": 260
+    }
+   },
+   {
+    "blockId": 2840,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_restore_join",
+    "label": "Kết thúc phần hành động",
+    "position": {
+     "x": 400,
+     "y": 390
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 2838,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+    },
+    "id": "page_identity_needs_restore",
+    "label": "Cần chuyển về danh tính ban đầu?",
+    "position": {
+     "x": 400,
+     "y": 520
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 2880,
+    "blockName": "fb_switch_identity_by_name",
+    "config": {
+     "useOriginalIdentity": true
+    },
+    "id": "page_identity_restore",
+    "label": "Chuyển về danh tính ban đầu",
+    "position": {
+     "x": 180,
+     "y": 650
+    }
+   },
+   {
+    "blockId": 2915,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "restored"
+    },
+    "id": "page_identity_restored",
+    "label": "Kiểm tra đã chuyển về",
+    "position": {
+     "x": 180,
+     "y": 780
+    }
+   },
+   {
+    "blockId": 2840,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_result_join",
+    "label": "Kết thúc phiên Page",
+    "position": {
+     "x": 400,
+     "y": 910
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 2915,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "result"
+    },
+    "id": "page_identity_result",
+    "label": "Trả kết quả hành động",
+    "position": {
+     "x": 400,
+     "y": 1040
+    }
+   }
+  ],
+  "nodesText": "[{\"id\": \"prepare\", \"label\": \"Chuẩn bị\", \"config\": {}, \"blockId\": 2900, \"position\": {\"x\": 0, \"y\": 0}, \"blockName\": \"fb_prepare_search_data_context\"}, {\"id\": \"open_posts\", \"label\": \"Mở search post\", \"config\": {}, \"blockId\": 2901, \"position\": {\"x\": 260, \"y\": 0}, \"blockName\": \"fb_open_search_posts\"}, {\"id\": \"post_filters\", \"label\": \"Lọc bài viết\", \"config\": {}, \"blockId\": 2902, \"position\": {\"x\": 520, \"y\": 0}, \"blockName\": \"fb_apply_search_post_filters\"}, {\"id\": \"collect_posts\", \"label\": \"Tải bài viết\", \"config\": {}, \"blockId\": 2903, \"position\": {\"x\": 780, \"y\": 0}, \"blockName\": \"fb_collect_search_posts\"}, {\"id\": \"extract_posts\", \"label\": \"Lọc data post\", \"config\": {}, \"blockId\": 2904, \"position\": {\"x\": 1040, \"y\": 0}, \"blockName\": \"fb_extract_data_from_search_posts\"}, {\"id\": \"collect_comments\", \"label\": \"Tải comment\", \"config\": {}, \"blockId\": 2905, \"position\": {\"x\": 1300, \"y\": 0}, \"blockName\": \"fb_collect_search_post_comments\"}, {\"id\": \"extract_comments\", \"label\": \"Lọc data comment\", \"config\": {}, \"blockId\": 2906, \"position\": {\"x\": 1560, \"y\": 0}, \"blockName\": \"fb_extract_data_from_search_comments\"}, {\"id\": \"open_groups\", \"label\": \"Mở search group\", \"config\": {}, \"blockId\": 2907, \"position\": {\"x\": 1820, \"y\": 0}, \"blockName\": \"fb_open_search_groups\"}, {\"id\": \"group_filters\", \"label\": \"Lọc group\", \"config\": {}, \"blockId\": 2908, \"position\": {\"x\": 2080, \"y\": 0}, \"blockName\": \"fb_apply_search_group_filters\"}, {\"id\": \"collect_groups\", \"label\": \"Tải group\", \"config\": {}, \"blockId\": 2909, \"position\": {\"x\": 2340, \"y\": 0}, \"blockName\": \"fb_collect_search_groups\"}, {\"id\": \"summary\", \"label\": \"Tổng kết\", \"config\": {}, \"blockId\": 2910, \"position\": {\"x\": 2600, \"y\": 0}, \"blockName\": \"fb_find_search_data_summary\"}, {\"id\": \"page_identity_restore_only\", \"label\": \"Chỉ chuyển về danh tính ban đầu?\", \"config\": {\"condition\": \"vars.runAsPage === true && vars.pageIdentityRestoreOnly === true\"}, \"blockId\": 2838, \"position\": {\"x\": 0, \"y\": -920}, \"blockName\": \"if_else\", \"systemType\": \"ifElse\"}, {\"id\": \"page_identity_needs_switch\", \"label\": \"Cần chuyển sang Page?\", \"config\": {\"condition\": \"vars.runAsPage === true && vars.pageIdentityReady !== true\"}, \"blockId\": 2838, \"position\": {\"x\": 0, \"y\": -790}, \"blockName\": \"if_else\", \"systemType\": \"ifElse\"}, {\"id\": \"page_identity_original\", \"label\": \"Nhớ danh tính ban đầu\", \"config\": {}, \"blockId\": 2879, \"position\": {\"x\": -220, \"y\": -660}, \"blockName\": \"fb_get_current_identity_name\"}, {\"id\": \"page_identity_switch\", \"label\": \"Chuyển sang Page đã chọn\", \"config\": {\"identityNameFromVars\": \"runAsPageName\"}, \"blockId\": 2880, \"position\": {\"x\": -220, \"y\": -530}, \"blockName\": \"fb_switch_identity_by_name\"}, {\"id\": \"page_identity_ready\", \"label\": \"Kiểm tra đã chuyển Page\", \"config\": {\"pageIdentityStateOperation\": \"ready\"}, \"blockId\": 2915, \"position\": {\"x\": -220, \"y\": -400}, \"blockName\": \"fb_campaign_page_identity_state\"}, {\"id\": \"page_identity_enter\", \"label\": \"Chạy hành động chiến dịch\", \"config\": {\"mode\": \"any\"}, \"blockId\": 2840, \"position\": {\"x\": 0, \"y\": -240}, \"blockName\": \"merge\", \"systemType\": \"merge\"}, {\"id\": \"page_identity_capture_result\", \"label\": \"Giữ kết quả hành động\", \"config\": {\"pageIdentityStateOperation\": \"capture_result\"}, \"blockId\": 2915, \"position\": {\"x\": 0, \"y\": 260}, \"blockName\": \"fb_campaign_page_identity_state\"}, {\"id\": \"page_identity_restore_join\", \"label\": \"Kết thúc phần hành động\", \"config\": {\"mode\": \"any\"}, \"blockId\": 2840, \"position\": {\"x\": 400, \"y\": 390}, \"blockName\": \"merge\", \"systemType\": \"merge\"}, {\"id\": \"page_identity_needs_restore\", \"label\": \"Cần chuyển về danh tính ban đầu?\", \"config\": {\"condition\": \"vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)\"}, \"blockId\": 2838, \"position\": {\"x\": 400, \"y\": 520}, \"blockName\": \"if_else\", \"systemType\": \"ifElse\"}, {\"id\": \"page_identity_restore\", \"label\": \"Chuyển về danh tính ban đầu\", \"config\": {\"useOriginalIdentity\": true}, \"blockId\": 2880, \"position\": {\"x\": 180, \"y\": 650}, \"blockName\": \"fb_switch_identity_by_name\"}, {\"id\": \"page_identity_restored\", \"label\": \"Kiểm tra đã chuyển về\", \"config\": {\"pageIdentityStateOperation\": \"restored\"}, \"blockId\": 2915, \"position\": {\"x\": 180, \"y\": 780}, \"blockName\": \"fb_campaign_page_identity_state\"}, {\"id\": \"page_identity_result_join\", \"label\": \"Kết thúc phiên Page\", \"config\": {\"mode\": \"any\"}, \"blockId\": 2840, \"position\": {\"x\": 400, \"y\": 910}, \"blockName\": \"merge\", \"systemType\": \"merge\"}, {\"id\": \"page_identity_result\", \"label\": \"Trả kết quả hành động\", \"config\": {\"pageIdentityStateOperation\": \"result\"}, \"blockId\": 2915, \"position\": {\"x\": 400, \"y\": 1040}, \"blockName\": \"fb_campaign_page_identity_state\"}]",
+  "variablesSchema": [
+   {
+    "label": "Từ khóa",
+    "name": "inputDataUid",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Tìm số điện thoại",
+    "name": "isFindPhone",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm link group Zalo",
+    "name": "isFindLinkGroupZalo",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm UID",
+    "name": "isFindUid",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm link bài post",
+    "name": "isFindPostLink",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm link group Facebook",
+    "name": "isFindFacebookGroup",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm trên post",
+    "name": "isFindInPost",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Tìm trong comment",
+    "name": "isFindInComment",
+    "type": "boolean"
+   },
+   {
+    "default": 10,
+    "label": "Số post tối đa / từ khóa",
+    "name": "countSearchPostFindData",
+    "type": "number"
+   },
+   {
+    "default": 30,
+    "label": "Số comment tối đa / post",
+    "name": "countCommentFindData",
+    "type": "number"
+   },
+   {
+    "default": 20,
+    "label": "Số group tối đa / từ khóa",
+    "name": "countSearchGroupFindData",
+    "type": "number"
+   },
+   {
+    "default": false,
+    "label": "Bài viết mới đây",
+    "name": "searchPostRecentOnly",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Bài viết đã xem",
+    "name": "searchPostSeenOnly",
+    "type": "boolean"
+   },
+   {
+    "default": "all",
+    "label": "Ngày đăng",
+    "name": "searchPostDateFilter",
+    "type": "string"
+   },
+   {
+    "default": "all",
+    "label": "Bài viết của",
+    "name": "searchPostAuthorFilter",
+    "type": "string"
+   },
+   {
+    "default": "all",
+    "label": "Vị trí được gắn thẻ",
+    "name": "searchPostTaggedLocation",
+    "type": "string"
+   },
+   {
+    "default": "",
+    "label": "Tỉnh/Thành phố",
+    "name": "searchGroupCity",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Gần tôi",
+    "name": "searchGroupNearMe",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Nhóm công khai",
+    "name": "searchGroupPublicOnly",
+    "type": "boolean"
+   },
+   {
+    "default": false,
+    "label": "Nhóm của tôi",
+    "name": "searchGroupMineOnly",
+    "type": "boolean"
+   },
+   {
+    "default": 0,
+    "label": "Thành viên tối thiểu",
+    "name": "minSearchGroupMembers",
+    "type": "number"
+   },
+   {
+    "default": 0,
+    "label": "Bài đăng tối thiểu/ngày",
+    "name": "minSearchGroupPostsPerDay",
+    "type": "number"
+   },
+   {
+    "default": false,
+    "label": "Lọc từ khoá bài viết",
+    "name": "isFindPostByKeywords",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "Từ khoá bài viết",
+    "name": "postKeywords",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Lọc ý nghĩa bài viết bằng AI",
+    "name": "isFindPostByContentAI",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "Ý nghĩa bài viết",
+    "name": "postContentAI",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Lọc từ khoá comment",
+    "name": "isFindCommentByKeywords",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "Từ khoá comment",
+    "name": "commentKeywords",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Lọc ý nghĩa comment bằng AI",
+    "name": "isFindCommentByContentAI",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "Ý nghĩa comment",
+    "name": "commentContentAI",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Chạy bằng Page",
+    "name": "runAsPage",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "ID Page",
+    "name": "runAsPageUid",
+    "type": "string"
+   },
+   {
+    "default": "",
+    "label": "Tên Page",
+    "name": "runAsPageName",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Đã chuyển Page trong lượt",
+    "name": "pageIdentityReady",
+    "type": "boolean"
+   },
+   {
+    "default": "",
+    "label": "Danh tính ban đầu",
+    "name": "originalIdentityName",
+    "type": "string"
+   },
+   {
+    "default": false,
+    "label": "Chỉ chuyển về danh tính ban đầu",
+    "name": "pageIdentityRestoreOnly",
+    "type": "boolean"
+   },
+   {
+    "default": true,
+    "label": "Chuyển về sau target (chạy thử)",
+    "name": "pageIdentityRestoreAfterTarget",
+    "type": "boolean"
+   }
+  ],
+  "varsMd5": "3a413a6c107f8d02fe52bc2bff5b43c5"
+ },
+ "engineWorkflow": {
+  "copied_at": "2026-11-17T09:32:47.201372+00:00",
+  "engine_md5": "ef59b75906fb45bbb8cac5b737901823",
+  "is_active": true,
+  "purpose": "facebook_find_data_search",
+  "source_md5": "a7159797e8b002fe486af069026850dc",
+  "source_workflow_id": 239,
+  "updated_at": "2026-11-17T09:32:47.201372+00:00",
+  "workflow_id": 319
+ },
+ "summary": {
+  "code": "  function unique(arr) { return Array.from(new Set((arr || []).map(x => String(x || '').trim()).filter(Boolean))); }\n  function uniqueGroups(rawGroups) { const map = new Map(); for (const rawGroup of Array.isArray(rawGroups) ? rawGroups : []) { if (!rawGroup || typeof rawGroup !== 'object') continue; const url = String(rawGroup.url || '').trim(); const key = url.replace(/\\/+$/g, '').toLowerCase(); if (!url || !key || map.has(key)) continue; map.set(key, { url, name: String(rawGroup.name || '').trim(), privacy: String(rawGroup.privacy || '').trim(), memberCount: Number(rawGroup.memberCount || 0), postsPerDay: Number(rawGroup.postsPerDay || 0), keyword: String(rawGroup.keyword || vars.findDataSearchKeyword || '').trim() }); } return Array.from(map.values()); }\n  function uniqueUidProfiles(arr, allowedUids) { const allowed = new Set(unique(allowedUids)); const map = new Map(); for (const item of Array.isArray(arr) ? arr : []) { if (!item || typeof item !== 'object') continue; const uid = String(item.uid || '').trim(); if (!uid || !allowed.has(uid)) continue; const current = map.get(uid) || { uid, name: '', url: '', source: '' }; map.set(uid, { uid, name: current.name || String(item.name || '').trim(), url: current.url || String(item.url || '').trim(), source: current.source || String(item.source || '').trim() }); } return Array.from(map.values()); }\n  function uniquePhoneProfiles(arr, allowedPhones) { const allowed = new Set(unique(allowedPhones).map(phone => phone.toLowerCase())); const map = new Map(); for (const item of Array.isArray(arr) ? arr : []) { if (!item || typeof item !== 'object') continue; const phone = String(item.phone || '').trim(); const key = phone.toLowerCase(); if (!phone || !allowed.has(key)) continue; const current = map.get(key) || { phone, name: '', uid: '', url: '', source: '' }; map.set(key, { phone: current.phone || phone, name: current.name || String(item.name || '').trim(), uid: current.uid || String(item.uid || '').trim(), url: current.url || String(item.url || '').trim(), source: current.source || String(item.source || '').trim() }); } return Array.from(map.values()); }\n  function ensureSourceData(results) { if (!results.sourceData || typeof results.sourceData !== 'object') results.sourceData = {}; for (const key of ['post', 'comment']) { if (!results.sourceData[key] || typeof results.sourceData[key] !== 'object') results.sourceData[key] = {}; if (!Array.isArray(results.sourceData[key].phones)) results.sourceData[key].phones = []; if (!Array.isArray(results.sourceData[key].linkGroupZalos)) results.sourceData[key].linkGroupZalos = []; if (!Array.isArray(results.sourceData[key].uids)) results.sourceData[key].uids = []; } if (!Array.isArray(results.sourceData.post.postLinks)) results.sourceData.post.postLinks = []; if (!results.sourceData.facebookGroups || typeof results.sourceData.facebookGroups !== 'object') results.sourceData.facebookGroups = {}; if (!Array.isArray(results.sourceData.facebookGroups.groups)) results.sourceData.facebookGroups.groups = []; results.sourceData.post.phones = unique(results.sourceData.post.phones); results.sourceData.post.linkGroupZalos = unique(results.sourceData.post.linkGroupZalos); results.sourceData.post.uids = unique(results.sourceData.post.uids); results.sourceData.post.postLinks = unique(results.sourceData.post.postLinks); results.sourceData.comment.phones = unique(results.sourceData.comment.phones); results.sourceData.comment.linkGroupZalos = unique(results.sourceData.comment.linkGroupZalos); results.sourceData.comment.uids = unique(results.sourceData.comment.uids); results.sourceData.facebookGroups.groups = unique(results.sourceData.facebookGroups.groups); return results.sourceData; }\n  const results = vars.findDataResults || {};\n  const sourceData = ensureSourceData(results);\n  const facebookGroups = uniqueGroups(results.facebookGroups || vars.findDataSearchGroups || []);\n  sourceData.facebookGroups.groups = unique([...(sourceData.facebookGroups.groups || []), ...facebookGroups.map(group => group.url)]);\n  const phones = unique(results.phones); const linkGroupZalos = unique(results.linkGroupZalos); const uids = unique(results.uids); const postLinks = unique(results.postLinks); const uidProfiles = uniqueUidProfiles(results.uidProfiles, uids); const phoneProfiles = uniquePhoneProfiles(results.phoneProfiles, phones);\n  const sourceCounts = { post: { phones: sourceData.post.phones.length, linkGroupZalos: sourceData.post.linkGroupZalos.length, uids: sourceData.post.uids.length, postLinks: sourceData.post.postLinks.length }, comment: { phones: sourceData.comment.phones.length, linkGroupZalos: sourceData.comment.linkGroupZalos.length, uids: sourceData.comment.uids.length }, groupMembers: { uids: 0 }, newInteractors: { uids: 0 }, facebookGroups: { groups: sourceData.facebookGroups.groups.length } };\n  const total = phones.length + linkGroupZalos.length + uids.length + postLinks.length + facebookGroups.length;\n  const notes = [];\n  if (vars.isFindPhone) notes.push('Đã tìm được ' + phones.length + ' số điện thoại');\n  if (vars.isFindLinkGroupZalo) notes.push('Đã tìm được ' + linkGroupZalos.length + ' link group Zalo');\n  if (vars.isFindUid) notes.push('Đã tìm được ' + uids.length + ' UID');\n  if (vars.isFindPostLink) notes.push('Đã tìm được ' + postLinks.length + ' link bài post');\n  if (vars.isFindFacebookGroup) notes.push('Đã tìm được ' + facebookGroups.length + ' link group Facebook');\n  const message = notes.join(' - ') || 'Không có loại data nào được chọn';\n  vars.findDataResults = { phones, linkGroupZalos, uids, postLinks, groupMembers: [], facebookGroups, uidProfiles, phoneProfiles, sourceData, sourceCounts };\n  helpers.log(message);\n  if (vars.findDataSearchHasPost || vars.findDataSearchHasGroup) {\n    await helpers.logRunEvent({ eventType: 'find_data_source_summary', eventName: 'Tổng kết tìm data', targetType: 'summary', status: 'success', isUserVisible: true, elementCount: total, message, extractedData: { entity: { type: 'summary', url: '', name: String(vars.findDataSearchKeyword || vars.inputDataUid || vars.inputDataName || ''), uid: null, contentText: message }, filters: { keywordEnabled: false, keyword: null, matchedKeyword: null, aiPrompt: null, aiFinalPrompt: '', aiRawResult: '', aiCheckResult: '', aiMatched: null, aiReason: null, aiResult: null }, values: { phones, zaloGroupLinks: linkGroupZalos, postLinks, uids, facebookGroups: facebookGroups.map(group => group.url), uidProfiles, phoneProfiles } }, debugData: { searchKeyword: vars.findDataSearchKeyword || vars.inputDataUid || vars.inputDataName || '', sourceCounts, facebookGroups } });\n  }\n  return { ok: true, searchKeyword: vars.findDataSearchKeyword || vars.inputDataUid || vars.inputDataName || '', phones, linkGroupZalos, uids, postLinks, groupMembers: [], facebookGroups, uidProfiles, phoneProfiles, sourceCounts, total, message };\n",
+  "id": 2910,
+  "md5": "c78abe7a868cedbd8db485278d109ba7",
+  "name": "[engine] fb_find_search_data_summary"
+ },
+ "collect": {
+  "id": 2909,
+  "md5": "499445e4406d2095c951b5c1c9aef03d",
+  "name": "[engine] fb_collect_search_groups"
+ },
+ "legacy": {
+  "collectMd5": "91e809e62911aea2c2391ae14676dc3b",
+  "summaryMd5": "c78abe7a868cedbd8db485278d109ba7",
+  "workflowId": 239,
+  "workflowMd5": "a7159797e8b002fe486af069026850dc",
+  "workflowName": "[Built-in] Facebook - Tìm kiếm data bằng search",
+  "nodes": [
+   {
+    "blockId": 2714,
+    "blockName": "fb_prepare_search_data_context",
+    "config": {},
+    "id": "prepare",
+    "label": "Chuẩn bị",
+    "position": {
+     "x": 0,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2715,
+    "blockName": "fb_open_search_posts",
+    "config": {},
+    "id": "open_posts",
+    "label": "Mở search post",
+    "position": {
+     "x": 260,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2716,
+    "blockName": "fb_apply_search_post_filters",
+    "config": {},
+    "id": "post_filters",
+    "label": "Lọc bài viết",
+    "position": {
+     "x": 520,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2717,
+    "blockName": "fb_collect_search_posts",
+    "config": {},
+    "id": "collect_posts",
+    "label": "Tải bài viết",
+    "position": {
+     "x": 780,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2718,
+    "blockName": "fb_extract_data_from_search_posts",
+    "config": {},
+    "id": "extract_posts",
+    "label": "Lọc data post",
+    "position": {
+     "x": 1040,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2719,
+    "blockName": "fb_collect_search_post_comments",
+    "config": {},
+    "id": "collect_comments",
+    "label": "Tải comment",
+    "position": {
+     "x": 1300,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2720,
+    "blockName": "fb_extract_data_from_search_comments",
+    "config": {},
+    "id": "extract_comments",
+    "label": "Lọc data comment",
+    "position": {
+     "x": 1560,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2721,
+    "blockName": "fb_open_search_groups",
+    "config": {},
+    "id": "open_groups",
+    "label": "Mở search group",
+    "position": {
+     "x": 1820,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2722,
+    "blockName": "fb_apply_search_group_filters",
+    "config": {},
+    "id": "group_filters",
+    "label": "Lọc group",
+    "position": {
+     "x": 2080,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2723,
+    "blockName": "fb_collect_search_groups",
+    "config": {},
+    "id": "collect_groups",
+    "label": "Tải group",
+    "position": {
+     "x": 2340,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 2724,
+    "blockName": "fb_find_search_data_summary",
+    "config": {},
+    "id": "summary",
+    "label": "Tổng kết",
+    "position": {
+     "x": 2600,
+     "y": 0
+    }
+   },
+   {
+    "blockId": 1,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && vars.pageIdentityRestoreOnly === true"
+    },
+    "id": "page_identity_restore_only",
+    "label": "Chỉ chuyển về danh tính ban đầu?",
+    "position": {
+     "x": 0,
+     "y": -920
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 1,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && vars.pageIdentityReady !== true"
+    },
+    "id": "page_identity_needs_switch",
+    "label": "Cần chuyển sang Page?",
+    "position": {
+     "x": 0,
+     "y": -790
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 2670,
+    "blockName": "fb_get_current_identity_name",
+    "config": {},
+    "id": "page_identity_original",
+    "label": "Nhớ danh tính ban đầu",
+    "position": {
+     "x": -220,
+     "y": -660
+    }
+   },
+   {
+    "blockId": 2671,
+    "blockName": "fb_switch_identity_by_name",
+    "config": {
+     "identityNameFromVars": "runAsPageName"
+    },
+    "id": "page_identity_switch",
+    "label": "Chuyển sang Page đã chọn",
+    "position": {
+     "x": -220,
+     "y": -530
+    }
+   },
+   {
+    "blockId": 2829,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "ready"
+    },
+    "id": "page_identity_ready",
+    "label": "Kiểm tra đã chuyển Page",
+    "position": {
+     "x": -220,
+     "y": -400
+    }
+   },
+   {
+    "blockId": 4,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_enter",
+    "label": "Chạy hành động chiến dịch",
+    "position": {
+     "x": 0,
+     "y": -240
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 2829,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "capture_result"
+    },
+    "id": "page_identity_capture_result",
+    "label": "Giữ kết quả hành động",
+    "position": {
+     "x": 0,
+     "y": 260
+    }
+   },
+   {
+    "blockId": 4,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_restore_join",
+    "label": "Kết thúc phần hành động",
+    "position": {
+     "x": 400,
+     "y": 390
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 1,
+    "blockName": "if_else",
+    "config": {
+     "condition": "vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)"
+    },
+    "id": "page_identity_needs_restore",
+    "label": "Cần chuyển về danh tính ban đầu?",
+    "position": {
+     "x": 400,
+     "y": 520
+    },
+    "systemType": "ifElse"
+   },
+   {
+    "blockId": 2671,
+    "blockName": "fb_switch_identity_by_name",
+    "config": {
+     "useOriginalIdentity": true
+    },
+    "id": "page_identity_restore",
+    "label": "Chuyển về danh tính ban đầu",
+    "position": {
+     "x": 180,
+     "y": 650
+    }
+   },
+   {
+    "blockId": 2829,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "restored"
+    },
+    "id": "page_identity_restored",
+    "label": "Kiểm tra đã chuyển về",
+    "position": {
+     "x": 180,
+     "y": 780
+    }
+   },
+   {
+    "blockId": 4,
+    "blockName": "merge",
+    "config": {
+     "mode": "any"
+    },
+    "id": "page_identity_result_join",
+    "label": "Kết thúc phiên Page",
+    "position": {
+     "x": 400,
+     "y": 910
+    },
+    "systemType": "merge"
+   },
+   {
+    "blockId": 2829,
+    "blockName": "fb_campaign_page_identity_state",
+    "config": {
+     "pageIdentityStateOperation": "result"
+    },
+    "id": "page_identity_result",
+    "label": "Trả kết quả hành động",
+    "position": {
+     "x": 400,
+     "y": 1040
+    }
+   }
+  ],
+  "edges": [
+   {
+    "id": "e-prepare-open-posts",
+    "source": "prepare",
+    "target": "open_posts"
+   },
+   {
+    "id": "e-open-posts-filters",
+    "source": "open_posts",
+    "target": "post_filters"
+   },
+   {
+    "id": "e-post-filters-collect",
+    "source": "post_filters",
+    "target": "collect_posts"
+   },
+   {
+    "id": "e-collect-posts-extract",
+    "source": "collect_posts",
+    "target": "extract_posts"
+   },
+   {
+    "id": "e-extract-posts-comments",
+    "source": "extract_posts",
+    "target": "collect_comments"
+   },
+   {
+    "id": "e-collect-comments-extract",
+    "source": "collect_comments",
+    "target": "extract_comments"
+   },
+   {
+    "id": "e-extract-comments-open-groups",
+    "source": "extract_comments",
+    "target": "open_groups"
+   },
+   {
+    "id": "e-open-groups-filters",
+    "source": "open_groups",
+    "target": "group_filters"
+   },
+   {
+    "id": "e-group-filters-collect",
+    "source": "group_filters",
+    "target": "collect_groups"
+   },
+   {
+    "id": "e-collect-groups-summary",
+    "source": "collect_groups",
+    "target": "summary"
+   },
+   {
+    "id": "e-page_identity_restore_only-page_identity_restore_join-true",
+    "source": "page_identity_restore_only",
+    "sourceHandle": "true",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_restore_only-page_identity_needs_switch-false",
+    "source": "page_identity_restore_only",
+    "sourceHandle": "false",
+    "target": "page_identity_needs_switch"
+   },
+   {
+    "id": "e-page_identity_needs_switch-page_identity_original-true",
+    "source": "page_identity_needs_switch",
+    "sourceHandle": "true",
+    "target": "page_identity_original"
+   },
+   {
+    "id": "e-page_identity_needs_switch-page_identity_enter-false",
+    "source": "page_identity_needs_switch",
+    "sourceHandle": "false",
+    "target": "page_identity_enter"
+   },
+   {
+    "id": "e-page_identity_original-page_identity_switch",
+    "source": "page_identity_original",
+    "target": "page_identity_switch"
+   },
+   {
+    "id": "e-page_identity_switch-page_identity_ready",
+    "source": "page_identity_switch",
+    "target": "page_identity_ready"
+   },
+   {
+    "id": "e-page_identity_ready-page_identity_enter",
+    "source": "page_identity_ready",
+    "target": "page_identity_enter"
+   },
+   {
+    "id": "e-page_identity_original-page_identity_restore_join",
+    "source": "page_identity_original",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_enter-prepare",
+    "source": "page_identity_enter",
+    "target": "prepare"
+   },
+   {
+    "id": "e-summary-page_identity_capture_result",
+    "source": "summary",
+    "target": "page_identity_capture_result"
+   },
+   {
+    "id": "e-page_identity_capture_result-page_identity_restore_join",
+    "source": "page_identity_capture_result",
+    "target": "page_identity_restore_join"
+   },
+   {
+    "id": "e-page_identity_restore_join-page_identity_needs_restore",
+    "source": "page_identity_restore_join",
+    "target": "page_identity_needs_restore"
+   },
+   {
+    "id": "e-page_identity_needs_restore-page_identity_restore-true",
+    "source": "page_identity_needs_restore",
+    "sourceHandle": "true",
+    "target": "page_identity_restore"
+   },
+   {
+    "id": "e-page_identity_needs_restore-page_identity_result_join-false",
+    "source": "page_identity_needs_restore",
+    "sourceHandle": "false",
+    "target": "page_identity_result_join"
+   },
+   {
+    "id": "e-page_identity_restore-page_identity_restored",
+    "source": "page_identity_restore",
+    "target": "page_identity_restored"
+   },
+   {
+    "id": "e-page_identity_restored-page_identity_result_join",
+    "source": "page_identity_restored",
+    "target": "page_identity_result_join"
+   },
+   {
+    "id": "e-page_identity_result_join-page_identity_result",
+    "source": "page_identity_result_join",
+    "target": "page_identity_result"
+   }
+  ]
+ }
+}

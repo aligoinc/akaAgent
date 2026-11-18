@@ -195,6 +195,33 @@ async function main() {
       ['', '12345678901234567890', '', '', '', '', '', '', '']])
     assert.equal(await cardCalls(), callsBeforePhones, 'chiến dịch tìm trong group không đọc log thẻ')
     assert.deepEqual(await state(() => window.sortSmoke.state.errors), [])
+
+    // Chiến dịch bật "Lấy thông tin quản trị viên của group": cột Quản trị viên ở bảng, sheet "Admin group" trong file.
+    await state(() => { window.sortSmoke.state.adminDetails = true })
+    await page.getByText('Sort campaign 91', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr .find-data-admin-cell').first().waitFor()
+    const adminHead = await tableHead()
+    assert.equal(adminHead[adminHead.indexOf('Bạn bè trong nhóm') + 1], 'Quản trị viên')
+    const adminColumn = adminHead.indexOf('Quản trị viên')
+    assert.equal((await tableRow('https://www.facebook.com/groups/admins-listed/'))[adminColumn],
+      'Căn hộ cho thuê0903221229, canhodn43@gmail.comTrần Mỹ Trinh')
+    assert.equal((await tableRow('https://www.facebook.com/groups/admins-hidden/'))[adminColumn], 'Facebook không hiện')
+    assert.deepEqual(await page.locator('.find-data-admin-cell a').evaluateAll(links => links.map(link => link.getAttribute('href'))),
+      ['https://www.facebook.com/canhodichvu43', 'https://www.facebook.com/profile.php?id=100044882776478'])
+    await options.getByLabel('Link group Facebook', { exact: true }).check()
+    const callsBeforeAdmins = await cardCalls()
+    book = await exportBook()
+    assert.deepEqual(book.SheetNames, ['Sheet1', 'Admin group'])
+    assert.equal(rows(book, 'Sheet1')[0][14], 'Quản trị viên')
+    assert.deepEqual(rows(book, 'Sheet1').slice(1).map(row => row[14]), [2, 'Facebook không hiện'])
+    assert.deepEqual(rows(book, 'Admin group'), [
+      ['Tên group', 'Link group', 'Tên quản trị viên', 'Link trang cá nhân', 'UID', 'Số điện thoại', 'Email', 'Từ khóa'],
+      ['Có quản trị viên', 'https://www.facebook.com/groups/admins-listed/', 'Căn hộ cho thuê', 'https://www.facebook.com/canhodichvu43', '100072022092879', '0903221229', 'canhodn43@gmail.com', 'đà nẵng'],
+      ['Có quản trị viên', 'https://www.facebook.com/groups/admins-listed/', 'Trần Mỹ Trinh', 'https://www.facebook.com/profile.php?id=100044882776478', '100044882776478', '', '', 'đà nẵng']])
+    assert.equal(await cardCalls(), callsBeforeAdmins, 'kết quả đã lưu đủ thì không đọc log thẻ')
+    assert.deepEqual(await state(() => window.sortSmoke.state.errors), [])
+    console.log('PASS quản trị viên của group: cột ở bảng (tên mở trang cá nhân, SĐT, email, lý do khi Facebook không hiện), sheet "Admin group" trong file')
     console.log('PASS chỉ nhóm thì một sheet, chọn loại xuất, tắt hết thì khoá nút; tìm trong group: cột Link Facebook/Nguồn, mẫu Excel cũ giữ nguyên, không đọc log')
   } catch (error) {
     if (page) console.error(await page.evaluate(() => ({ errors: window.sortSmoke?.state.errors, text: document.body.innerText.slice(-1600) })))

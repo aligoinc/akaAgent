@@ -32,6 +32,17 @@ const details = [
     { url: 'https://www.facebook.com/groups/filled/', name: '', memberCount: 1200, postsPerDay: '5', privacy: 'Public' }
   ] } }
 ]
+// Chiến dịch bật "Lấy thông tin quản trị viên của group": kết quả chạy mang admins / adminScan (block mới), đã lưu đủ trường thẻ.
+const adminDetails = [
+  { id: 4, campaignId: 91, accountId: 41, createdAt: firstRunAt, data: { groupUrl: 'đà nẵng', searchKeyword: 'đà nẵng', facebookGroups: [
+    { url: 'https://www.facebook.com/groups/admins-listed/', name: 'Có quản trị viên', memberCount: 137000, postsPerDay: 90, privacy: 'Công khai', postsText: '90+',
+      joinState: 'not_joined', cardVersion: 2, adminScan: 'listed', admins: [
+        { uid: '100072022092879', name: 'Căn hộ cho thuê', url: 'https://www.facebook.com/canhodichvu43', role: 'admin', phones: ['0903221229'], emails: ['canhodn43@gmail.com'], profileRead: true },
+        { uid: '100044882776478', name: 'Trần Mỹ Trinh', url: 'https://www.facebook.com/profile.php?id=100044882776478', role: 'admin', phones: [], emails: [], profileRead: true }] },
+    { url: 'https://www.facebook.com/groups/admins-hidden/', name: 'Riêng tư chưa tham gia', memberCount: 284000, postsPerDay: 90, privacy: 'Riêng tư', postsText: '90+',
+      joinState: 'not_joined', cardVersion: 2, adminScan: 'not_listed', admins: [] }
+  ] } }
+]
 const cards = [
   { key: 'facebook.com/groups/english', seenAt: firstRunAt, card: { name: 'Nhóm tiếng Anh', privacy: 'Công khai', memberCount: 7500,
     postsPerDay: 90, postsText: '90+', friendMemberCount: 2, joinState: 'not_joined' } },
@@ -50,7 +61,7 @@ const handlers: Record<string, any> = {
     total: 2, campaignTotal: 2, page: 1, pageSize: 100, actionOptions: [] }),
   getCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
   getDesktopCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
-  listCampaignDetailsByCampaign: (id: number) => id === 91 ? details : [{
+  listCampaignDetailsByCampaign: (id: number) => id === 91 ? (state.adminDetails ? adminDetails : details) : [{
     id: 3, campaignId: 92, accountId: 41, data: { phones: ['0901234567'], uids: ['12345678901234567890'],
       phoneProfiles: [{ phone: '0901234567', name: 'Người đăng', uid: '100000000000001', url: 'https://www.facebook.com/profile.php?id=100000000000001', source: 'post' }],
       uidProfiles: [{ uid: '12345678901234567890', name: '', url: '', source: 'mystery_source' }],

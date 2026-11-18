@@ -773,6 +773,8 @@ export interface CampaignExtraSettings {
   searchGroupMineOnly?: boolean
   minSearchGroupMembers?: number
   minSearchGroupPostsPerDay?: number
+  /** Tìm group bằng search: mở thêm trang quản trị viên của từng group để lấy tên, link, SĐT, email (docs/FACEBOOK_SEARCH_GROUP_ADMINS.md). */
+  isFindFacebookGroupAdmins?: boolean
   findFacebookGroupPostTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign đăng bài group
   findFacebookGroupCommentTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign comment seeding group/page/profile
   findFacebookGroupJoinTargetCampaignIds?: number[] // Khi tìm group Facebook, đẩy sang campaign tham gia group

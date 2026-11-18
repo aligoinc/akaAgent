@@ -25090,6 +25090,23 @@ body.theme-light :is(
   color: var(--accent-success);
 }
 
+/* Cột Quản trị viên của group: mỗi người một dòng, SĐT / email đứng sau tên. */
+.find-data-result-grid .find-data-admin-cell {
+  min-width: 260px;
+  max-width: 420px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.find-data-admin-line + .find-data-admin-line {
+  margin-top: 2px;
+}
+
+.find-data-admin-contact {
+  margin-left: 6px;
+  color: var(--text-secondary);
+}
+
 .find-data-empty {
   color: var(--text-tertiary);
 }

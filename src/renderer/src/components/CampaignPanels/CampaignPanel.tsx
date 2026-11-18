@@ -563,6 +563,19 @@ const FOUND_DATA_SOURCE_LABELS: Record<string, string> = {
 const FOUND_DATA_EMPTY = <span className="find-data-empty">-</span>
 const foundDataText = (value: string | undefined) => value || FOUND_DATA_EMPTY
 const foundDataCount = (value: number | undefined) => value === undefined ? FOUND_DATA_EMPTY : value.toLocaleString('vi-VN')
+/** Ô "Quản trị viên" của một group: mỗi người một dòng (tên mở trang cá nhân, SĐT, email); không có danh sách thì ghi lý do. */
+const foundDataGroupAdmins = (group: FacebookGroupDisplay) => {
+  if (group.admins.length === 0) return group.adminScan === 'listed' ? '0' : foundDataText(group.adminSummary)
+  return group.admins.map(admin => {
+    const contact = [...admin.phones, ...admin.emails].join(', ')
+    return (
+      <div key={admin.uid || admin.url} className="find-data-admin-line">
+        <a className="find-data-log-link" href={admin.url} target="_blank" rel="noreferrer" title={admin.url}>{admin.name || admin.url}</a>
+        {contact ? <span className="find-data-admin-contact">{contact}</span> : null}
+      </div>
+    )
+  })
+}
 
 const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
@@ -3681,8 +3694,12 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     const group = applyFacebookGroupCard(item.facebookGroup, foundGroupCards?.byKey.get(facebookGroupUrlKey(item.value)))
     return { item, name: item.name || group.name || '', group: describeFacebookGroup(group) }
   }), [foundDataItems, foundGroupCards])
-  const { showGroupColumns: foundDataShowsGroupColumns, showProfileColumns: foundDataShowsProfileColumns } = useMemo(() => ({
+  const {
+    showGroupColumns: foundDataShowsGroupColumns, showAdminColumn: foundDataShowsAdminColumn, showProfileColumns: foundDataShowsProfileColumns
+  } = useMemo(() => ({
     showGroupColumns: foundDataItems.some(item => item.kind === 'facebookGroup'),
+    // Chỉ có cột khi có group đã quét quản trị viên (chiến dịch bật "Lấy thông tin quản trị viên của group").
+    showAdminColumn: foundDataItems.some(item => item.kind === 'facebookGroup' && Boolean(item.facebookGroup?.adminScan)),
     showProfileColumns: foundDataItems.some(item =>
       (item.kind === 'phone' || item.kind === 'uid') && Boolean(item.profileUrl || item.source))
   }), [foundDataItems])
@@ -3716,6 +3733,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
             <td className="find-data-number-cell">{foundDataCount(group.friendMemberCount)}</td>
           </>
         ) : <td colSpan={7} />)}
+        {foundDataShowsAdminColumn && <td className="find-data-admin-cell">{group ? foundDataGroupAdmins(group) : null}</td>}
         {foundDataShowsProfileColumns && (isPerson ? (
           <>
             <td className="find-data-value-cell" title={item.profileUrl || '-'}>
@@ -3735,7 +3753,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
         </td>
       </tr>
     )
-  }), [detailTab, foundDataRows, foundDataShowsGroupColumns, foundDataShowsProfileColumns, foundDataAccountNameById])
+  }), [detailTab, foundDataRows, foundDataShowsGroupColumns, foundDataShowsAdminColumn, foundDataShowsProfileColumns, foundDataAccountNameById])
 
   const findDataLogRows = useMemo(() => (
     campaignRunEvents.map(buildFindDataLogRow)
@@ -7766,6 +7784,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                               <th title="Tài khoản tìm là thành viên nhóm từ tháng">Tham gia từ</th>
                               <th className="find-data-number-cell" title="Số bạn bè của tài khoản tìm là thành viên nhóm">Bạn bè trong nhóm</th>
                             </>
+                          )}
+                          {foundDataShowsAdminColumn && (
+                            <th title="Quản trị viên của nhóm: tên, số điện thoại, email Facebook hiển thị công khai">Quản trị viên</th>
                           )}
                           {foundDataShowsProfileColumns && (
                             <>
