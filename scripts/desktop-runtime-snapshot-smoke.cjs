@@ -173,4 +173,21 @@ pass('readiness helper')
   pass('random Facebook turns publish runningCampaignId and clear it after the run')
 }
 
+// 6. Bộ giữ sau khi máy ngủ (systemSleepGuard): khoá sleepHold chỉ có khi đang giữ; nguồn lỗi = như không giữ.
+{
+  const snapshot = new DesktopRuntimeSnapshot(now)
+  snapshot.attach(() => ({ running: true, accounts: [account(31)], activeAccountIds: [], runningCampaigns: new Map(), isBrowserTabOpen: () => true }))
+  assert.equal('sleepHold' in snapshot.build(), false)
+  let hold = null
+  snapshot.attachSleepHold(() => hold)
+  assert.equal('sleepHold' in snapshot.build(), false)
+  hold = { since: '2026-11-18T19:00:51.000Z', reason: 'clock_gap', extra: 'dropped' }
+  const held = snapshot.build()
+  assert.deepEqual(held.sleepHold, { since: '2026-11-18T19:00:51.000Z', reason: 'clock_gap' })
+  assert.equal(held.scheduler.state, 'idle')
+  snapshot.attachSleepHold(() => { throw new Error('boom') })
+  assert.equal('sleepHold' in snapshot.build(), false)
+  pass('sleepHold appears only while the sleep guard holds')
+}
+
 console.log(`OK ${checks} checks`)

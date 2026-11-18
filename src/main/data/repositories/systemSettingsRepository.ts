@@ -1,4 +1,5 @@
 import { SystemSetting } from '../../../shared/types'
+import { SLEEP_GUARD_SETTING_KEY } from '../../services/systemSleepGuard'
 import { requireCurrentUser } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -46,6 +47,23 @@ export async function listActiveSystemSettingsByKeys(keys: string[]): Promise<Ma
     const setting = mapSystemSettingFromDB(row)
     return [setting.key, setting]
   }))
+}
+
+/**
+ * Công tắc bộ giữ khi máy ngủ (`desktop.sleep_guard`, docs/DESKTOP_SLEEP_GUARD.md). Thiếu dòng = null (dùng mặc định);
+ * lỗi đọc = undefined để bên gọi giữ giá trị đang dùng.
+ */
+export async function readDesktopSleepGuardSetting(): Promise<string | null | undefined> {
+  try {
+    const { data, error } = await client().from('auto_system_settings').select('key,value')
+      .eq('key', SLEEP_GUARD_SETTING_KEY).eq('is_active', true).eq('is_secret', false).limit(1)
+      .abortSignal(AbortSignal.timeout(5_000))
+    if (error) return undefined
+    const row = (data || [])[0] as { value?: string | null } | undefined
+    return row ? row.value ?? null : null
+  } catch {
+    return undefined
+  }
 }
 
 export function getSettingValue(settings: Map<string, SystemSetting>, key: string): string {
