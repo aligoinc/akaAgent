@@ -60,6 +60,17 @@ thiếu dấu dù bản build đúng. Kiểm trước bằng `grep -o` trên `ou
 regex dễ lệch khi PR khác thêm phần tử vào cùng danh sách (`aff-partner-desktop-smoke` hỏng ở 9.9.0 vì #690 thêm khoá sau
 `affiliate.program`): xem log trước khi coi là lỗi app.
 
+**Build 10.0.0 (18/11/2026).** `dist/build-10.0.0-work/` của repo chính: script để luôn ở thư mục này (không chép vào worktree), đường
+dẫn worktree ghi cứng trong script, log ghi thẳng vào đây; `make-receipt.cjs` ghi biên nhận vào `docs/audits/` của worktree.
+`CLAUDE.md` của checkout chính thường có thay đổi chưa commit của phiên khác và có thể đổi giữa lúc build, nên chỉ ghi checksum trước /
+sau, không kiểm giữ nguyên. Lên số chính (9 → 10): trước khi build kiểm mọi chỗ so phiên bản (updater `compareVersions`, ngưỡng
+`desktop.updates.startup_prompt_max_version`, V511 `desktopMinVersion`) và chạy `updater.ts` thật với máy chủ phiên bản giả
+(`00-v10-updater-check.cjs`); PE kiểm `(10<<16)+0`. `scripts/startup-update-prompt-smoke-test.cjs` hỏng từ `321e41fc` (bản giả chỉ có
+`.from`, repository đọc RPC `aka_agent_desktop_startup_policy`), đừng dùng làm bằng chứng. Dấu kiểm mới phải vắng trong main của bản
+trước (đọc `out/main/index.js` từ `app.asar` bản trước): nhiều câu tiến trình của engine trùng câu bộ cũ đã có ("🔀 Đã xáo trộn danh
+sách", "đã được tạm dừng."), nên chọn tên hàm / khoá riêng của PR. `v572-smoke` chạy code block trong Chrome, có lúc lệch ở bản đối
+chứng V563 (thời điểm hộp thoại của trang giả): chạy lại trước khi kết luận.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
