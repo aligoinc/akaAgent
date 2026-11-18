@@ -2141,6 +2141,7 @@ export default function CampaignFormModal({
     searchGroupMineOnly: campaign?.extraSettings?.searchGroupMineOnly ?? false,
     minSearchGroupMembers: campaign?.extraSettings?.minSearchGroupMembers ?? 0,
     minSearchGroupPostsPerDay: campaign?.extraSettings?.minSearchGroupPostsPerDay ?? 0,
+    isFindFacebookGroupAdmins: campaign?.extraSettings?.isFindFacebookGroupAdmins ?? false,
     findDataRerunEnabled: campaign?.extraSettings?.findDataRerunEnabled ?? false,
     findDataRerunAfterHours: normalizeHourValue(campaign?.extraSettings?.findDataRerunAfterHours),
     isFindPostByKeywords: campaign?.extraSettings?.isFindPostByKeywords ?? false,
@@ -6749,6 +6750,7 @@ export default function CampaignFormModal({
             searchGroupMineOnly: isFindDataSearchCampaign ? formData.searchGroupMineOnly : false,
             minSearchGroupMembers: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupMembers) || 0) : 0,
             minSearchGroupPostsPerDay: isFindDataSearchCampaign ? Math.max(0, Number(formData.minSearchGroupPostsPerDay) || 0) : 0,
+            isFindFacebookGroupAdmins: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup ? formData.isFindFacebookGroupAdmins === true : false,
             // Khung "Lặp lại sau khi chạy xong" đang hiện cho loại này (lịch Hàng ngày) thì cài đặt cũ tắt: hai cách không chạy cùng lúc.
             findDataRerunEnabled: !isDataGroupSource && canUseRerunAfterCompletion && !showCampaignRepeat ? formData.findDataRerunEnabled : false,
             findDataRerunAfterHours: canUseRerunAfterCompletion
@@ -12878,6 +12880,21 @@ export default function CampaignFormModal({
               />
               <span>Nhóm của tôi</span>
             </label>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 14 }}>
+            <label className="schedule-checkbox-label">
+              <input
+                type="checkbox"
+                checked={formData.isFindFacebookGroupAdmins}
+                onChange={e => setFormData(p => ({ ...p, isFindFacebookGroupAdmins: e.target.checked }))}
+              />
+              <span>Lấy thông tin quản trị viên của group (tên, link trang cá nhân, SĐT, email)</span>
+            </label>
+            {formData.isFindFacebookGroupAdmins && (
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 24 }}>
+                Mở thêm trang quản trị viên của từng group và trang cá nhân của từng người nên chạy lâu hơn. Group riêng tư chưa tham gia thì Facebook không hiện danh sách quản trị viên.
+              </div>
+            )}
           </div>
         </div>
       )}

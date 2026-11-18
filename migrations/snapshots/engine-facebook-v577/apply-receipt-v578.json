@@ -1,0 +1,104 @@
+{
+  "migration": "migrations/migration_v578_engine_facebook_group_admin_elements.sql",
+  "rollback": "migrations/rollback_v578_engine_facebook_group_admin_elements.sql",
+  "ledger": {
+    "version": "20261118154304",
+    "name": "migration_v578_engine_facebook_group_admin_elements",
+    "statementsMd5": "5fe998a9f9d215bce77273952247a2e2",
+    "createdBy": null
+  },
+  "fileMd5": "5fe998a9f9d215bce77273952247a2e2",
+  "rollbackFileMd5": "ca1c2a157a6f7c4c1899957ed3c23f95",
+  "appliedAtVn": "2026-11-18 22:43:05",
+  "appliedAtUtc": "2026-11-18T15:43:05Z",
+  "approvedBy": "anh (hỏi \"các element mới có lưu vào bảng auto element chưa\", rồi \"chuyển đi\", 18/11 tối)",
+  "numbering": "Kiểm sổ ngay trước apply (22:42:54 VN): số lớn nhất là migration_v577_engine_facebook_search_group_admins, không có migration_v578_%; không nhánh nào giữ V578.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Chỉ dữ liệu (INSERT 8 dòng auto_elements, UPDATE auto_blocks 2922), không DDL.",
+  "preApply": {
+    "readAtVn": "2026-11-18 22:42:54",
+    "block2922Md5": "8c90de2814e6dd273251c89d3c6e6a90",
+    "elementsTotal": 138,
+    "elementNamesTaken": 0,
+    "campaignsRunningWithAdmins": 0
+  },
+  "postApply": {
+    "readAtVn": "2026-11-18 22:43:06",
+    "block2922": {
+      "id": 2922,
+      "len": 18849,
+      "md5": "0dbc5efcd3a4be06491a2d95ee7c2a05",
+      "updated_vn": "22:43:05"
+    },
+    "newElements": [
+      {
+        "id": 1798,
+        "name": "fb_main_region",
+        "xpath": "//*[@role='main']"
+      },
+      {
+        "id": 1799,
+        "name": "fb_group_admin_row",
+        "xpath": "//*[@role='main']//*[@role='listitem']"
+      },
+      {
+        "id": 1800,
+        "name": "fb_group_admin_profile_link",
+        "xpath": ".//a[contains(@href,'/user/') or contains(@href,'profile.php')]"
+      },
+      {
+        "id": 1801,
+        "name": "fb_group_admin_avatar",
+        "xpath": ".//a[@href]//*[local-name()='svg' or local-name()='img']"
+      },
+      {
+        "id": 1802,
+        "name": "fb_group_admin_heading",
+        "xpath": "//*[@role='main']//*[self::h2 or self::h3 or @role='heading']"
+      },
+      {
+        "id": 1803,
+        "name": "fb_profile_tablist",
+        "xpath": "//*[@role='main']//*[@role='tablist']"
+      },
+      {
+        "id": 1804,
+        "name": "fb_profile_directory_link",
+        "xpath": ".//a[contains(@href,'directory_')]"
+      },
+      {
+        "id": 1805,
+        "name": "fb_profile_contact_link",
+        "xpath": ".//a[contains(@href,'directory_contact_info')]"
+      }
+    ],
+    "elementsTotal": 146,
+    "unchanged": {
+      "b2909": "499445e4406d2095c951b5c1c9aef03d",
+      "b2910": "0c15da28a84eaad80cb4169f088c56b6",
+      "wf319": "82d1e03f000af4787c2dbf21c0019d6f"
+    }
+  },
+  "tests": {
+    "adminsSmoke": "CHROMIUM_PATH=<Chrome> LC_ALL=C node scripts/facebook-search-groups/admins-smoke.cjs: 27/27 (9 lượt đọc trang: bản V578 giống hệt bản V577; migration + bản gỡ V577 và V578 trên PG17)"
+  },
+  "realTest": {
+    "when": "2026-11-18 22:44–22:46 VN, sau apply",
+    "how": "App Desktop chạy từ source, nhân viên nhutlq, tài khoản fb LD, chiến dịch 58486 tạo bằng form thật (cùng từ khoá \"bất động sản đà nẵng\", 6 group, bật lấy quản trị viên), engine + workflow 319.",
+    "run": {
+      "runId": 7004943,
+      "adminBlock": {
+        "ms": 95734,
+        "groups": 6,
+        "listed": 6,
+        "notListed": 0,
+        "failed": 0,
+        "admins": 20,
+        "withPhone": 12,
+        "withEmail": 4,
+        "profilesOpened": 16
+      }
+    },
+    "comparedWithV577Run": "So với lượt V577 (chiến dịch 58476, lịch sử 15680945): cùng 6 group, adminScan và từng quản trị viên (UID, tên, link, SĐT, email, profileRead) giống hệt.",
+    "cleanup": "App dev đóng 22:47 VN; hai chiến dịch thử 58476 / 58486 hoàn thành, không còn lease / lượt mở."
+  }
+}

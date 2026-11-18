@@ -3,11 +3,15 @@ import {
   cleanFacebookGroupName, facebookGroupUrlKey, readFacebookSearchGroupCardFields,
   type FacebookGroupJoinState, type FacebookSearchGroupCard, type FacebookSearchGroupCardFields
 } from '../../../../shared/facebookSearchGroupCard'
+import {
+  describeFacebookGroupAdminScan, readFacebookGroupAdminFields,
+  type FacebookGroupAdmin, type FacebookGroupAdminFields, type FacebookGroupAdminScan
+} from '../../../../shared/facebookGroupAdmins'
 import type { FoundFacebookGroupCardEntry } from '../../../../shared/foundFacebookGroupCardsIpc'
 
 export type FoundDataKind = 'phone' | 'zalo' | 'uid' | 'postLink' | 'facebookGroup'
 
-export interface FoundFacebookGroup extends FacebookSearchGroupCardFields {
+export interface FoundFacebookGroup extends FacebookSearchGroupCardFields, FacebookGroupAdminFields {
   url: string
   name: string
   privacy?: string
@@ -37,6 +41,11 @@ const GROUP_HEADERS = [
   'Từ khóa', 'Tài khoản tìm', 'Thời gian tìm'
 ]
 const GROUP_COLUMN_WIDTHS = [40, 60, 16, 10, 12, 12, 22, 14, 20, 14, 18, 30, 26, 22]
+// Chỉ có khi chiến dịch bật "Lấy thông tin quản trị viên của group" (docs/FACEBOOK_SEARCH_GROUP_ADMINS.md).
+const GROUP_ADMIN_HEADER = 'Quản trị viên'
+const ADMIN_SHEET_NAME = 'Admin group'
+const ADMIN_HEADERS = ['Tên group', 'Link group', 'Tên quản trị viên', 'Link trang cá nhân', 'UID', 'Số điện thoại', 'Email', 'Từ khóa']
+const ADMIN_COLUMN_WIDTHS = [40, 50, 32, 50, 20, 26, 34, 30]
 const JOIN_STATE_LABELS: Record<FacebookGroupJoinState, string> = {
   joined: 'Đã tham gia',
   not_joined: 'Chưa tham gia',
@@ -73,7 +82,8 @@ export const toFacebookGroupList = (value: unknown): FoundFacebookGroup[] => {
       memberCount: numberOrUndefined(group.memberCount),
       postsPerDay: knownPostsPerDay(numberOrUndefined(group.postsPerDay)),
       keyword: String(group.keyword || '').trim() || undefined,
-      ...readFacebookSearchGroupCardFields(group)
+      ...readFacebookSearchGroupCardFields(group),
+      ...readFacebookGroupAdminFields(group)
     })
   }
   return groups
@@ -135,6 +145,11 @@ export interface FacebookGroupDisplay {
   memberSince: string
   unreadPosts?: number
   friendMemberCount?: number
+  /** Chưa quét quản trị viên (chiến dịch không bật, hoặc kết quả chạy cũ) thì không có. */
+  adminScan?: FacebookGroupAdminScan
+  admins: FacebookGroupAdmin[]
+  /** Số quản trị viên, hoặc lý do không có danh sách; rỗng khi chưa quét. */
+  adminSummary: string
 }
 
 /** Giá trị hiển thị của một nhóm, dùng chung cho bảng ở tab và file Excel. */
@@ -151,7 +166,10 @@ export const describeFacebookGroup = (group: FoundFacebookGroup | undefined): Fa
     joinState: group?.joinState ? JOIN_STATE_LABELS[group.joinState] : '',
     memberSince: group?.memberSince || '',
     unreadPosts: group?.unreadPosts,
-    friendMemberCount: group?.friendMemberCount
+    friendMemberCount: group?.friendMemberCount,
+    adminScan: group?.adminScan,
+    admins: group?.adminScan === 'listed' ? group.admins ?? [] : [],
+    adminSummary: group ? describeFacebookGroupAdminScan(group) : ''
   }
 }
 
@@ -175,7 +193,10 @@ const earliest = (first: string | undefined, second: string | undefined): string
 const mergeFacebookGroups = (url: string, name: string, primary: FoundFacebookGroup | undefined, secondary: FoundFacebookGroup | undefined): FoundFacebookGroup => {
   const primaryPosts = knownPostsPerDay(primary?.postsPerDay)
   const postsSource = primaryPosts !== undefined ? primary : secondary
+  // Quản trị viên: lấy lượt đã đọc được danh sách; không lượt nào đọc được thì giữ lý do của lượt đến trước.
+  const adminSource = primary?.adminScan === 'listed' ? primary : secondary?.adminScan === 'listed' ? secondary : primary?.adminScan ? primary : secondary
   return {
+    ...(adminSource?.adminScan ? { adminScan: adminSource.adminScan, admins: adminSource.admins ?? [] } : {}),
     url,
     name,
     privacy: primary?.privacy || secondary?.privacy,
@@ -230,10 +251,20 @@ const formatFoundAt = (value: string | undefined): string => {
   return Number.isNaN(date.getTime()) ? '' : date.toLocaleString('vi-VN')
 }
 
-const groupRow = (item: FoundDataExportItem): Array<string | number> => {
+const groupKeywords = (item: FoundDataExportItem): string =>
+  mergeList(item.keywords, item.facebookGroup?.keyword ? [item.facebookGroup.keyword] : []).join(', ')
+
+/** Mỗi quản trị viên một dòng; nhiều SĐT / email của một người ghi chung một ô, cách nhau bằng dấu phẩy. */
+const adminRows = (item: FoundDataExportItem): string[][] =>
+  describeFacebookGroup(item.facebookGroup).admins.map(admin => [
+    item.name || '', item.value, admin.name, admin.url, admin.uid || '', admin.phones.join(', '), admin.emails.join(', '), groupKeywords(item)
+  ])
+
+const groupRow = (item: FoundDataExportItem, withAdmins: boolean): Array<string | number> => {
   const group = item.facebookGroup
   const display = describeFacebookGroup(group)
   const keywords = mergeList(item.keywords, group?.keyword ? [group.keyword] : [])
+  const adminCell = display.adminScan === 'listed' ? display.admins.length : display.adminSummary
   return [
     item.name || '',
     item.value,
@@ -248,7 +279,8 @@ const groupRow = (item: FoundDataExportItem): Array<string | number> => {
     display.friendMemberCount ?? '',
     keywords.join(', '),
     (item.accountNames || []).join(', '),
-    formatFoundAt(item.foundAt)
+    formatFoundAt(item.foundAt),
+    ...(withAdmins ? [adminCell] : [])
   ]
 }
 
@@ -280,10 +312,19 @@ export const buildFoundDataWorkbook = (
   }
 
   if (groups.length > 0) {
-    const sheet = utils.aoa_to_sheet([GROUP_HEADERS, ...groups.map(groupRow)])
-    sheet['!cols'] = GROUP_COLUMN_WIDTHS.map(wch => ({ wch }))
+    // Cột / sheet quản trị viên chỉ thêm khi có nhóm đã quét quản trị viên: file của chiến dịch không bật giữ nguyên mẫu 14 cột.
+    const withAdmins = groups.some(item => item.facebookGroup?.adminScan)
+    const sheet = utils.aoa_to_sheet([withAdmins ? [...GROUP_HEADERS, GROUP_ADMIN_HEADER] : GROUP_HEADERS, ...groups.map(item => groupRow(item, withAdmins))])
+    sheet['!cols'] = (withAdmins ? [...GROUP_COLUMN_WIDTHS, 18] : GROUP_COLUMN_WIDTHS).map(wch => ({ wch }))
     sheet['!autofilter'] = { ref: sheet['!ref']! }
     utils.book_append_sheet(workbook, sheet, templateItems.length > 0 ? 'Group Facebook' : 'Sheet1')
+    const admins = groups.flatMap(adminRows)
+    if (admins.length > 0) {
+      const adminSheet = utils.aoa_to_sheet([ADMIN_HEADERS, ...admins])
+      adminSheet['!cols'] = ADMIN_COLUMN_WIDTHS.map(wch => ({ wch }))
+      adminSheet['!autofilter'] = { ref: adminSheet['!ref']! }
+      utils.book_append_sheet(workbook, adminSheet, ADMIN_SHEET_NAME)
+    }
   }
 
   return workbook

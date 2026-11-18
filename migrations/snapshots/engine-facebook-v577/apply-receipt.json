@@ -1,0 +1,141 @@
+{
+  "migration": "migrations/migration_v577_engine_facebook_search_group_admins.sql",
+  "rollback": "migrations/rollback_v577_engine_facebook_search_group_admins.sql",
+  "ledger": {
+    "version": "20261118150822",
+    "name": "migration_v577_engine_facebook_search_group_admins",
+    "statementsMd5": "74347e2dcffcf333d1b5ac925e952c06",
+    "createdBy": null
+  },
+  "fileMd5": "74347e2dcffcf333d1b5ac925e952c06",
+  "rollbackFileMd5": "feebf9adaba8ccaf6d8f1821e60b80f7",
+  "appliedAtVn": "2026-11-18 22:08:23",
+  "appliedAtUtc": "2026-11-18T15:08:23Z",
+  "approvedBy": "anh (\"Apply rồi thử thật\", 18/11 tối)",
+  "numbering": "Kiểm sổ ngay trước apply (22:08:15 VN): số lớn nhất là migration_v576_engine_orphan_runs, không có migration_v577_%; không nhánh nào của akaAgent / akaAgentWebApp / akaAgentChatApi / SqlServerDashboard giữ V577.",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (một giao dịch, dòng sổ chèn trước COMMIT). Chỉ dữ liệu (INSERT auto_blocks, UPDATE auto_workflows 319, UPDATE auto_blocks 2910), không DDL, không nạp lại schema PostgREST.",
+  "preApply": {
+    "readAtVn": "2026-11-18 22:08:15",
+    "workflow319Md5": "ef59b75906fb45bbb8cac5b737901823",
+    "workflow319VarsMd5": "3a413a6c107f8d02fe52bc2bff5b43c5",
+    "block2910Md5": "c78abe7a868cedbd8db485278d109ba7",
+    "maxBlockId": 2921,
+    "findDataSearchCampaignsRunning": 1
+  },
+  "postApply": {
+    "readAtVn": "2026-11-18 22:08:34",
+    "newBlock": {
+      "id": 2922,
+      "len": 17431,
+      "md5": "8c90de2814e6dd273251c89d3c6e6a90",
+      "name": "[engine] fb_collect_search_group_admins",
+      "updated_vn": "22:08:23"
+    },
+    "block2910Md5": "0c15da28a84eaad80cb4169f088c56b6",
+    "workflow319": {
+      "md5": "82d1e03f000af4787c2dbf21c0019d6f",
+      "nodes": 25,
+      "edges": 28,
+      "node": {
+        "blockId": 2922,
+        "blockName": "fb_collect_search_group_admins",
+        "config": {},
+        "id": "collect_group_admins",
+        "label": "Lấy quản trị viên group",
+        "position": {
+          "x": 2470,
+          "y": 160
+        }
+      },
+      "path": [
+        {
+          "id": "e-collect-groups-admins",
+          "source": "collect_groups",
+          "target": "collect_group_admins"
+        },
+        {
+          "id": "e-group-admins-summary",
+          "source": "collect_group_admins",
+          "target": "summary"
+        }
+      ],
+      "defaultVar": false
+    },
+    "legacyUnchanged": {
+      "workflow239Md5": "a7159797e8b002fe486af069026850dc",
+      "block2723Md5": "91e809e62911aea2c2391ae14676dc3b",
+      "block2724Md5": "c78abe7a868cedbd8db485278d109ba7"
+    },
+    "block2909Md5Unchanged": "499445e4406d2095c951b5c1c9aef03d",
+    "newBlockStepCatalogRows": 0
+  },
+  "tests": {
+    "adminsSmoke": "CHROMIUM_PATH=<Chrome> LC_ALL=C node scripts/facebook-search-groups/admins-smoke.cjs: 22/22 (trước apply)",
+    "realFacebookPageScripts": "18/11, Cốc Cốc, tài khoản thử, chỉ đọc: đoạn đọc danh sách quản trị viên trên 5 group, đoạn đọc trang cá nhân trên 5 trang"
+  },
+  "notes": [
+    "App chưa có ô chọn (Desktop ≤ 9.9.0) không gửi vars.isFindFacebookGroupAdmins nên block mới thoát ngay.",
+    "Bộ cũ (workflow 239, block 2723 / 2724) không đổi."
+  ],
+  "realTest": {
+    "when": "2026-11-18 22:10–22:31 VN, sau apply",
+    "how": "App Desktop chạy từ source checkout dev_3 (npx electron-vite dev, có code ô chọn), nhân viên nhutlq tổ chức 1, tài khoản fb LD (id 135), Facebook thật. Chiến dịch 58476 tạo bằng form thật của app (bật \"Link group Facebook\", 6 group / từ khoá, bật ô \"Lấy thông tin quản trị viên của group\"). Chạy bằng engine (auto_engine_target_runs 199874 reported), workflow 319.",
+    "runs": [
+      {
+        "runId": 7004171,
+        "keyword": "bất động sản đà nẵng",
+        "adminBlock": {
+          "ms": 99205,
+          "groups": 6,
+          "listed": 6,
+          "notListed": 0,
+          "failed": 0,
+          "admins": 20,
+          "withPhone": 12,
+          "withEmail": 4,
+          "profilesOpened": 16
+        },
+        "detailId": 15680945,
+        "log": "… Sau khi lọc trùng: 6 link group Facebook / Quản trị viên group: 20 người của 6/6 group (12 người có số điện thoại, 4 người có email)",
+        "check": "Group 607488220217840 ra đúng 5 quản trị viên (không lấy 2 người kiểm duyệt), batdongsan43danang đúng 4 người, khớp trang Facebook xem tay trước đó; SĐT / email khớp (0903221229 + canhodn43@gmail.com, 0908111404, 0333311152). 4 người quản trị 2 group chỉ mở trang cá nhân một lần."
+      },
+      {
+        "runId": 7004515,
+        "keyword": "bất động sản đà nẵng (chạy lại)",
+        "adminBlock": {
+          "ms": 3,
+          "skipped": true,
+          "reason": "Không có group mới để lấy quản trị viên",
+          "knownGroupCount": 6
+        },
+        "detailId": 15681721,
+        "log": "Tìm data mới bằng search … 0 link group Facebook mới (không có dòng quản trị viên)"
+      },
+      {
+        "runId": 7004537,
+        "keyword": "cho thuê căn hộ đà nẵng (thêm data)",
+        "adminBlock": {
+          "ms": 141769,
+          "groups": 6,
+          "listed": 6,
+          "notListed": 0,
+          "failed": 0,
+          "admins": 25,
+          "withPhone": 7,
+          "withEmail": 4,
+          "profilesOpened": 25
+        },
+        "detailId": 15681903,
+        "log": "… Quản trị viên group: 25 người của 6/6 group (7 người có số điện thoại, 4 người có email)"
+      }
+    ],
+    "ui": "Form thật hiện ô chọn + ghi chú, lưu extra_settings.isFindFacebookGroupAdmins = true; khung Tiến trình hiện dòng \"Quản trị viên group: …\"; tab Data tìm được có cột \"Quản trị viên\" (tên mở trang cá nhân, SĐT, email).",
+    "speed": "53 trang trong 241 giây ≈ 4,5 giây mỗi trang (6 group + 16 trang cá nhân: 99 giây; 6 group + 25 trang cá nhân: 142 giây).",
+    "notCovered": [
+      "Cả 12 group đều công khai: đường not_listed (group riêng tư chưa tham gia) và failed chưa gặp trong lượt thật (đã xem tay trang thật + bài kiểm).",
+      "Chưa bấm Xuất Excel trong app thật (hộp lưu file của hệ điều hành); phần dựng file kiểm bằng bài kiểm giao diện Electron.",
+      "Sau apply tới 22:20 VN chưa có lượt tìm bằng search nào của khách chạy workflow 319 để xem block mới thoát ngay với app chưa có ô chọn (đã kiểm bằng bài kiểm block)."
+    ],
+    "cleanup": "App dev đóng 22:31 VN: presence ended, chiến dịch 58476 hoàn thành, không còn lease / lượt mở; tài khoản fb LD về chờ xử lý."
+  }
+}
