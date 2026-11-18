@@ -200,7 +200,12 @@ Chỉ `tom_tat` bắt buộc. Trường `answer` là bản chữ thường của
 
 Chỉ gửi khi ca là mới hoặc tăng bất thường, một thông báo một ca, nội dung là `tom_tat`. Ca "đã biết" hoặc ca hỏi tiếp không có gì mới thì không gửi. **Chưa kiểm** phiên cloud có công cụ gửi thông báo tới app Claude của anh hay không; đợt 1 thử trước. Nếu không có, phương án dự phòng là anh xem danh sách hội thoại của agent trong panel Hỏi đáp AI của dashboard.
 
-### 7.4 Dựng phiên
+### 7.4 Lệnh cho phiên cloud và lệnh xem cho người vận hành (đã viết)
+
+- [error-watch-agent.cjs](../scripts/engine-v2-facebook/error-watch-agent.cjs): phiên cloud dùng để nhận việc (`next`), gia hạn (`progress`), kiểm và nộp báo cáo (`check`, `answer`), trả việc (`requeue`, `fail`). Không cần thư viện ngoài. Lệnh chỉ nhận câu của đúng agent này (nhận nhầm thì trả về hàng đợi), chỉ lấy con số từ đoạn chữ gửi kèm lúc đánh thức, và từ chối báo cáo sai khuôn hoặc có chuỗi giống số điện thoại, UID dài, khoá, token. Nhờ vậy tệp công việc ngắn đi và phiên không phải tự ghép lệnh gọi API. Kiểm: `node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs` (9 nhóm, máy chủ giả cục bộ); đã gọi thử `next` với API thật khi agent chưa tồn tại, trả "hết việc".
+- [error-watch-status.cjs](../scripts/engine-v2-facebook/error-watch-status.cjs): chỉ đọc, cho anh xem công tắc, lượt tick gần nhất, sổ ca theo trạng thái, ca đang chờ báo, các câu gần đây của agent và yêu cầu ảnh. Trước khi apply migration nó chỉ in "chưa apply"; phần còn lại chưa chạy được lần nào.
+
+### 7.4b Dựng phiên
 
 Phiên riêng (anh chốt 18/11), không dùng chung phiên Hỏi đáp. Trước khi bật agent mới phải sửa câu lệnh phiên Hỏi đáp: bỏ qua mã `kiem-loi-chien-dich-facebook` khi tự cập nhật danh sách agent.
 
