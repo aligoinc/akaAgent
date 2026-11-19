@@ -266,6 +266,8 @@ Anh đồng ý tạo sẵn ("Tạo sẵn, để tắt"). Tác vụ **Kiểm lỗ
 | Connector | Chỉ Supabase, và chỉ công cụ `execute_sql` | Lúc tạo, máy chủ tự gắn cả ba connector của tài khoản (Supabase, Claude Docs, Claude Code Remote); em đã gỡ hai cái không cần và bỏ các công cụ Supabase khác (apply migration, deploy, tạo / dừng project…) |
 | Câu lệnh | Chuyển sang `dev_3`, đọc `docs/FB_ERROR_WATCH_TASK.md`, làm đúng một lượt, kèm các giới hạn cứng | Nội dung công việc nằm trong repo nên sửa không cần đụng tác vụ |
 
+**Chuyển tài khoản 19/11 20:33 VN** (anh: "chuyển sang làm trên tài khoản claude này", "Tạo luôn"). Tác vụ ở bảng trên nằm ở tài khoản akabiz và không nhận việc từ 12:01 VN 19/11. Tác vụ thay thế tạo trên tài khoản claude.ai đang đăng nhập ở Desktop: `trig_01SVrvfyyrHvxoRHihkkeovq`, quản lý ở `https://claude.ai/code/routines/trig_01SVrvfyyrHvxoRHihkkeovq`. Cấu hình y hệt (lịch phút 01 mỗi giờ, Fable 5.2, công cụ Bash / Read / Write / Glob / Grep, câu lệnh chép nguyên văn), môi trường `full` của tài khoản này (`env_01K9qSmTVRGkifC1kQxbBidM`), connector chỉ còn Supabase với riêng `execute_sql` (lúc tạo máy chủ lại tự gắn Supabase, Claude Docs, Claude Code Remote; đã gỡ hai cái sau). Lượt thử 20:33:58 VN: khởi động 4 giây, chuyển `dev_3`, lệnh `next` gọi API được và báo hết việc, cả phiên 22 giây; chưa có lượt nào dùng connector Supabase trên tài khoản này. Tác vụ cũ bên akabiz anh tự tắt. Mã `/fire` tạo trên tác vụ mới.
+
 Hai điều cần biết trước khi bật:
 
 - **`execute_sql` vẫn chạy được lệnh ghi.** Câu lệnh và tệp công việc cấm ghi, nhưng đó là lời dặn, không phải chặn kỹ thuật. Trong các phiên có người, connector Supabase hỏi xác nhận trước mỗi lệnh ghi và không ai bấm thì lệnh không chạy; em chưa kiểm được phiên cloud không người có được hỏi như vậy không. Cách chặn chắc là một connector Supabase ở chế độ chỉ đọc cho riêng tác vụ này.
@@ -350,7 +352,7 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 - Chưa gọi thử đường `/fire` (mới đọc tài liệu chính thức); chưa thử gọi nó từ database bằng `pg_net`; chưa đo số token của một phiên cloud làm một ca.
 - Phiên Hỏi đáp đang ghi hạn "đến hết ngày 19/11/2026" trong câu lệnh; phiên kiểm lỗi dựng theo cùng cách sẽ có cùng điểm yếu là phải có người gia hạn.
 
-## 12. Đợt 2: "Lỗi không xác định" (viết 19/11; V588 đã apply 20:02:31 VN 19/11; code chưa commit)
+## 12. Đợt 2: "Lỗi không xác định" (viết 19/11; V588 đã apply 20:02:31 VN 19/11; code đã merge `dev_3` qua #726 lúc 20:09 VN 19/11)
 
 Yêu cầu được giao: có bảng lưu từng lỗi không xác định (khách hàng, tài khoản, chiến dịch, data, câu lỗi); Claude kiểm xong thì kết luận nằm trong bảng và hiện ra ở kết quả chạy cùng ghi chú data; app có tab "Lỗi không xác định"; có công tắc toàn hệ thống trong database; cấp 1 biến lỗi không xác định thành lỗi có mã, cấp 2 tự gọi hàm sửa.
 
@@ -400,7 +402,7 @@ Bước 6c của hàm tick từ V588:
 - Chạy cả ngoài khung chèn việc (V574 chỉ gọi một lần và chỉ trong khối chèn việc).
 - Mỗi lượt gọi là `POST …/routines/<trig>/fire` với body `{"text":"messageId=<id>"}`; `fireRoutineId` phải đúng dạng `trig_…`, mã đọc từ Vault.
 
-Để bật: anh tạo mã trên trang tác vụ (tài khoản akabiz) và tự chạy `select vault.create_secret('<mã>', 'AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN');`, rồi đặt `fire: true`, `fireRoutineId: "trig_01QRNCgX959THHTS7mkdCS3K"` và bỏ `enqueueWindow` (khung phút 54–58 chỉ cần khi chờ lịch theo giờ).
+Để bật: anh tạo mã trên trang tác vụ mới (tài khoản đang đăng nhập ở Desktop) và tự chạy `select vault.create_secret('<mã>', 'AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN');`, rồi đặt `fire: true`, `fireRoutineId: "trig_01SVrvfyyrHvxoRHihkkeovq"` (tác vụ mới, xem 7.4b) và bỏ `enqueueWindow` (khung phút 54–58 chỉ cần khi chờ lịch theo giờ).
 
 Lịch theo giờ của tác vụ cloud: sau khi `/fire` chạy được một ca thật thì **gỡ trigger lịch** (trang sửa tác vụ, biểu tượng thùng rác ở dòng lịch, rồi Save changes), giữ trigger API. Không dùng công tắc tạm dừng: tác vụ đang tạm dừng trả 400 cho lệnh `/fire`. Phải làm bằng tài khoản akabiz.
 
@@ -417,14 +419,14 @@ Tài liệu Anthropic đọc lại 19/11 ([trang tác vụ](https://code.claude.
 ### 12.6 Thứ tự đưa vào dùng
 
 1. Apply V588: **xong 20:02 VN 19/11**.
-2. Merge `dev_3` để phiên cloud đọc khuôn báo cáo mới.
+2. Merge `dev_3` để phiên cloud đọc khuôn báo cáo mới: **xong qua #726, 20:09 VN 19/11**.
 3. Build Desktop thì admin mới có tab (trước đó duyệt được bằng cách gọi hàm trong SQL với phiên admin).
-4. Bật `/fire` sau khi anh lưu mã vào Vault; chạy được một ca thật thì tắt / hạ lịch theo giờ của tác vụ cloud.
+4. Bật `/fire`: **xong 20:49 VN 19/11** trên tác vụ mới `trig_01SVrvfyyrHvxoRHihkkeovq` (gọi thử từ database: HTTP 200, phiên chạy và báo hết việc; [biên nhận](../migrations/snapshots/engine-error-review-v588/fire-on-receipt.json)). Còn lại: một ca thật đi qua `/fire` (dự kiến 00:54 VN 20/11), rồi gỡ lịch theo giờ của tác vụ và bỏ `enqueueWindow`.
 
 ### 12.7 Chưa kiểm
 
 - V588 đã chạy trên production; chưa có ca nào được duyệt câu nên bước ghi câu vào kết quả chạy và ghi chú data chưa chạy trên dữ liệu thật.
 - Tab chưa chạy trong Electron thật (hàm `list` / `case` đã gọi trên DB thật bằng phiên admin trong lượt chạy thử, các thao tác duyệt thì chưa).
 - Chưa có báo cáo thật nào mang `cau_cho_khach` / `de_xuat_ma_loi`.
-- Đường `/fire` chưa gọi lần nào trên production (bài kiểm dùng `net.http_post` giả); chưa biết tác vụ tắt lịch có còn nhận `/fire` không; chưa đo token của một lượt trống.
+- Đường `/fire` đã gọi thử một lượt trên production (20:49 VN 19/11, không kèm mã câu) nhưng chưa có ca thật nào đi qua; chưa biết tác vụ tắt lịch có còn nhận `/fire` không; chưa đo token của một lượt trống.
 
