@@ -78,6 +78,12 @@ async function main() {
     await db.query(v561.migrationP2)
     pass('apply rồi ROLLBACK không để lại gì; apply thật; apply lần hai bị chặn; quyền đúng từng hàm; gỡ trả hai thân hàm cũ; apply lại được')
 
+    // WITH_V585=1: chạy mọi ca bên dưới trên thân finish_campaign_v2 của V585 (chỉ thêm nhánh đọc danh sách khung giờ dạng mảng).
+    if (process.env.WITH_V585 === '1') {
+      await db.query(require('./build-v585-sql.cjs').migration)
+      console.log('… chạy trên thân hàm V585')
+    }
+
     // ---- Dữ liệu thử ------------------------------------------------------------------------------------------------------
     let nextId = 930000
     const repeat = (every, unit, maxRuns, more = {}) => ({ repeatAfterCompletionEnabled: true, repeatAfterCompletionEvery: every,
