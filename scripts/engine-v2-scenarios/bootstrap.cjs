@@ -125,6 +125,12 @@ async function bootstrap(db, notes) {
     if (process.env.SCENARIO_TARGET_CHECK !== '1') throw new Error('SCENARIO_ORPHAN_RUNS=1 cần SCENARIO_TARGET_CHECK=1 (V576 kiểm thân report_v1 của V571)')
     await require('../fixtures/engine-v2-orphan-runs-v576/setup.cjs').applyV576(db, notes)
   }
+  // V581 (tách Z114: TAG01, DAT02, DAT03, DAT04; chỉ dữ liệu, dựng trên chính sách V500): SCENARIO_V581=1 để chạy bộ kịch bản trên DB
+  // đã có 4 mã mới (lõi mới phát tín hiệu engine uid_is_phone / target_is_self / uid_other_account).
+  if (process.env.SCENARIO_V581 === '1') {
+    await db.query(require('../build-v581-sql.cjs').migration)
+    notes.push('V581 (tách Z114 thành 4 mã): đã apply')
+  }
 }
 
 module.exports = { bootstrap }

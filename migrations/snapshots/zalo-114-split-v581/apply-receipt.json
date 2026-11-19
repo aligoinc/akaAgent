@@ -1,0 +1,62 @@
+{
+  "migration": "migration_v581_zalo_114_split",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-19 11:17:13–11:17:17",
+  "ledger_version": "20261119041713",
+  "file_md5": "3052469594e612f4e0279bf2afe1b736",
+  "ledger_statements_md5": "3052469594e612f4e0279bf2afe1b736",
+  "requested_by_user": "ok chốt vậy đi, apply đi",
+  "method": "node scripts/make-migration-ledger-apply.cjs (dòng sổ trong cùng giao dịch) rồi supabase db query --linked -f; created_by của dòng sổ là NULL",
+  "kind": "chỉ dữ liệu (auto_error, auto_outcome_policies, auto_outcome_signal_rules); không DDL, không đổi hàm, PostgREST không nạp lại schema",
+  "dry_run": "10:34 VN 19/11 chạy thử trong một giao dịch rồi ROLLBACK với bản md5 a9c68b72… (trước khi DAT02 đổi sang 4 data liền thì tạm dừng); bản apply có thêm UPDATE 2 dòng chính sách DAT02 và bước tự kiểm cho phần đó",
+  "before": {
+    "ledger_last": "migration_v580_ai_chat_image_rules",
+    "rules": 122,
+    "policies": 369,
+    "errors": 144,
+    "lint": 0
+  },
+  "after": {
+    "rules": 126,
+    "policies": 399,
+    "errors": 148,
+    "lint": 0,
+    "auto_error_ids": {
+      "TAG01": 169,
+      "DAT02": 170,
+      "DAT03": 171,
+      "DAT04": 172
+    },
+    "policy_ids": {
+      "err_engine_zalo_tag_full": "400-401",
+      "err_engine_zalo_uid_is_phone": "402-413",
+      "err_engine_zalo_target_is_self": "414-425",
+      "err_engine_zalo_uid_other_account": "426-429"
+    },
+    "classify": {
+      "114 x zalo_tag_contact": "err_engine_zalo_tag_full",
+      "114 x zalo_message_stranger": "err_zalo_invalid_param"
+    },
+    "resolved": {
+      "DAT02 x nhắn tin": "cộng chuỗi, ngưỡng 4, tạm dừng, không tính lượt",
+      "DAT03 x nhắn tin": "không cộng chuỗi, không dừng, không tính lượt",
+      "DAT04 x nhắn tin": "cộng chuỗi, ngưỡng 4, tạm dừng, không tính lượt, bỏ bước còn lại"
+    },
+    "engine_3_min_after": {
+      "runs": 478,
+      "stale": 0
+    },
+    "first_real_tag01": {
+      "at_vn": "2026-11-19 11:19:00",
+      "status": "thất bại",
+      "counts_toward_limit": false,
+      "log": "Tài khoản đã gắn tag cho quá nhiều người, Zalo không nhận thêm (TAG01)"
+    },
+    "old_runner": "Bộ chạy cũ không đổi: 11:18:14 VN một tài khoản App Server (tổ chức chưa bật cờ engine) vẫn ghi \"Tham số không hợp lệ\" ở bước gắn tag"
+  },
+  "effective": {
+    "TAG01": "ngay khi apply (luật DB), cả Fly lẫn Desktop",
+    "DAT02_DAT03_DAT04": "khi lõi mới chạy: deploy worker Fly (ChatApi nhánh feat/zalo-z114-split) và build Desktop"
+  },
+  "rollback": "migrations/rollback_v581_zalo_114_split.sql (gỡ thì cũng phải đưa lõi về bản trước)"
+}
