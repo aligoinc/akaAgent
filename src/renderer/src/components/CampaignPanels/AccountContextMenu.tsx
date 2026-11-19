@@ -3,7 +3,7 @@ import { useAuthStore } from '../../stores/authStore'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { useEffect, useLayoutEffect, useRef, useCallback } from 'react'
 import {
-  Globe, RefreshCw, Shield, Play, Pause,
+  Globe, RefreshCw, Shield, ShieldCheck, Play, Pause,
   Unlock, Ban, Edit3, Trash2, ListFilter,
   Info, FolderCog, QrCode, LogOut, ServerCog, Smartphone
 } from 'lucide-react'
@@ -26,6 +26,7 @@ interface AccountContextMenuProps {
   onViewBrowser: (accountId: number) => void
   onReloadPage: (account: AutoAccount) => void
   onCheckLogin: (account: AutoAccount) => void
+  onOpenFacebookBusinessVerify: (account: AutoAccount) => void
   onFacebookRestore: (account: AutoAccount) => void
   onFacebookCredentials: (account: AutoAccount) => void
   onZaloLogin: (account: AutoAccount) => void
@@ -54,6 +55,7 @@ export default function AccountContextMenu({
   onViewBrowser,
   onReloadPage,
   onCheckLogin,
+  onOpenFacebookBusinessVerify,
   onFacebookRestore,
   onFacebookCredentials,
   onZaloLogin,
@@ -177,6 +179,15 @@ export default function AccountContextMenu({
           >
             <Shield size={14} />
             <span>Kiểm tra đăng nhập</span>
+          </button>
+        )}
+        {!isDisabled && account.flatformType === 'facebook' && account.loginStatus === 'đã đăng nhập' && (
+          <button
+            className="context-menu-item"
+            onClick={() => handleAction(() => onOpenFacebookBusinessVerify(account))}
+          >
+            <ShieldCheck size={14} />
+            <span>Kiểm tra nhập mã xác minh Fanpage</span>
           </button>
         )}
         {account.flatformType === 'facebook' && <>

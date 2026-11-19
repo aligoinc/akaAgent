@@ -173,6 +173,17 @@ export interface ZaloMessagePhonePort extends ZaloAuxiliaryPort, ZaloSendExclusi
    * mục tiêu có hồ sơ (raw.profile). Lỗi ghi DB không đổi kết quả.
    */
   saveResolvedProfile(ctx: StepContext, target: ZaloResolvedTarget): Promise<void>
+  /**
+   * UID Zalo của chính tài khoản đang gửi; không biết thì null. Lõi không gửi cho chính mình (tín hiệu engine target_is_self, DAT03):
+   * mình cũng là thành viên của nhóm đang nhắn thì Zalo trả 114. Nơi chạy chưa có hàm này thì giữ cách cũ (gọi Zalo).
+   */
+  ownZaloUid?(ctx: StepContext): Promise<string | null>
+  /**
+   * UID này có nằm trong danh bạ của tài khoản Zalo khác cùng tổ chức mà KHÔNG có ở tài khoản đang gửi không (UID Zalo gắn theo tài
+   * khoản đã quét ra nó). Chỉ gọi sau khi Zalo đã trả 114 cho UID đó; đúng thì lõi đổi tín hiệu thành engine uid_other_account (DAT04).
+   * Không tra được thì ném lỗi hoặc trả false: kết quả giữ nguyên 114.
+   */
+  uidBelongsToOtherAccount?(ctx: StepContext, uid: string): Promise<boolean>
   /** Kiểm danh sách từ chối nhận tin; ném lỗi khi không kiểm được. */
   isOptedOut(ctx: StepContext, identity: { phone?: string; globalId?: string }): Promise<boolean>
   /**
@@ -292,6 +303,20 @@ export function zaloMessagePhoneTargetLabel(target: TargetRow): string {
     if (text) return text
   }
   return 'N/A'
+}
+
+/**
+ * UID của data thực ra là số điện thoại Việt Nam (khách nhập SĐT vào cột UID, có khi mất số 0 đầu vì Excel): 9–11 chữ số, đầu số di
+ * động 3/5/7/8/9, có thể kèm 0 hoặc 84 / +84. UID Zalo thật dài 14–19 chữ số nên không lẫn.
+ */
+export function zaloUidLooksLikePhone(uid: string): boolean {
+  return /^(?:\+?84|0)?[35789]\d{8}$/.test(String(uid || '').trim().replace(/[\s.-]/g, ''))
+}
+
+/** So hai UID Zalo, bỏ hậu tố "_0" (Zalo có lúc trả UID kèm hậu tố này, như getUserProfile của Desktop). */
+export function sameZaloUid(a: string, b: string): boolean {
+  const norm = (value: string): string => String(value || '').trim().replace(/_0$/, '')
+  return norm(a) !== '' && norm(a) === norm(b)
 }
 
 /** Như getInputDataDisplayName của Desktop cho chiến dịch theo UID (thành viên nhóm, khách cũ, bạn bè…): tên → UID → SĐT. */
@@ -457,6 +482,39 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
   const lookup = buildZaloPhoneLookupStep(port)
 
   /**
+   * Zalo trả 114 "Tham số không hợp lệ" cho một UID của chiến dịch theo UID: tra xem UID đó có thuộc danh bạ của tài khoản Zalo khác
+   * cùng tổ chức không (data quét bằng tài khoản A, chạy bằng tài khoản B). Đúng thì đổi tín hiệu thành engine uid_other_account
+   * (DAT04; pha và dữ liệu giữ nguyên, mã Zalo gốc ghi ở evidence). Không tra được / không phải thì giữ nguyên 114. Nhớ kết quả của
+   * data đang chạy để bước kết bạn không tra lại.
+   */
+  let otherAccountCache: { runId: StepContext['targetRunId']; uid: string; value: boolean } | null = null
+  const otherAccountOutcome = async (ctx: StepContext, uid: string, outcome: RawOutcome): Promise<RawOutcome> => {
+    if (outcome.ok || !uidType || !port.uidBelongsToOtherAccount) return outcome
+    if (outcome.signal.kind !== 'zalo_code' || String(outcome.signal.code ?? '') !== '114') return outcome
+    const target = String(uid || '').trim()
+    if (!target) return outcome
+    let other = false
+    if (otherAccountCache && otherAccountCache.runId === ctx.targetRunId && otherAccountCache.uid === target) {
+      other = otherAccountCache.value
+    } else {
+      try {
+        other = await port.uidBelongsToOtherAccount(ctx, target) === true
+      } catch (error) {
+        if (ctx.signal.aborted) throw error
+        port.trace?.({ type: 'uid_other_account_lookup_failed', inputDataId: ctx.target.id, error: errorMessage(error) })
+        return outcome
+      }
+      otherAccountCache = { runId: ctx.targetRunId, uid: target, value: other }
+    }
+    if (!other) return outcome
+    return {
+      ...outcome,
+      signal: { kind: 'engine', code: 'uid_other_account', message: 'UID được quét bằng tài khoản Zalo khác' },
+      evidence: { ...(outcome.evidence ?? {}), zaloCode: '114', ...(outcome.signal.message ? { zaloMessage: outcome.signal.message } : {}) }
+    }
+  }
+
+  /**
    * Nhắn tin group (zaloSendGroupMessage): mục tiêu là ID group của data (giữ nguyên tiền tố "g" như Desktop gửi thường), không đọc
    * hồ sơ, không cổng từ chối nhận tin. Không có ID: Desktop tự đặt mã 114 (tín hiệu engine riêng, DB đổi ra DAT01).
    */
@@ -499,6 +557,25 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
         return { ok: false, phase: 'before_send',
           signal: { kind: 'engine', code: 'target_missing_identity', message: uidType?.missingUidText ?? 'UID người dùng Zalo không hợp lệ' },
           data: { uid } }
+      }
+      // UID Zalo dài 14–19 chữ số: số điện thoại nằm ở cột UID thì Zalo luôn trả 114, không gọi Zalo (DAT02).
+      if (zaloUidLooksLikePhone(uid)) {
+        return { ok: false, phase: 'before_send',
+          signal: { kind: 'engine', code: 'uid_is_phone', message: 'Data là số điện thoại, không phải UID Zalo' }, data: { uid } }
+      }
+      // Data là chính tài khoản đang gửi (mình cũng là thành viên nhóm): Zalo trả 114, không gọi Zalo (DAT03).
+      if (port.ownZaloUid) {
+        let own: string | null = null
+        try {
+          own = await port.ownZaloUid(ctx)
+        } catch (error) {
+          if (ctx.signal.aborted) throw error
+          port.trace?.({ type: 'own_zalo_uid_failed', inputDataId: ctx.target.id, error: errorMessage(error) })
+        }
+        if (own && sameZaloUid(own, uid)) {
+          return { ok: false, phase: 'before_send',
+            signal: { kind: 'engine', code: 'target_is_self', message: 'Không gửi cho chính tài khoản đang gửi' }, data: { uid } }
+        }
       }
       let target = zaloTargetFromInput(uid, inputData(ctx), {}, true)
       try {
@@ -706,7 +783,7 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
             responses.push(sent.response)
             if (call.kind !== 'media') contentSentAt = new Date().toISOString()
           } catch (error) {
-            if (index === 0) return zaloFailure(error, 'after_send', { ...data, sequence: plan.sequence })
+            if (index === 0) return otherAccountOutcome(ctx, target.uid, zaloFailure(error, 'after_send', { ...data, sequence: plan.sequence }))
             if (!(error instanceof ZaloPortError)) throw error
             // Lần gửi thứ hai lỗi sau khi lần đầu đã tới (finalizeZaloPartialSendDetail): giao một phần, không gửi lại.
             const stage = plan.sequence === 'media_then_content' ? 'content_after_media' : 'media_after_content'
@@ -764,7 +841,7 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
           data: { ...data, response: response ?? null, ...engagement.finish(null) }
         }
       } catch (error) {
-        return zaloFailure(error, 'after_send', data)
+        return otherAccountOutcome(ctx, target.uid, zaloFailure(error, 'after_send', data))
       } finally {
         engagement.abandon()
       }

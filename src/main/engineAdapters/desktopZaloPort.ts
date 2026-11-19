@@ -9,7 +9,7 @@ import type { ZaloOutgoingText as RuntimeOutgoingText, ZaloRuntimeService } from
 import { phoneSearchLimitScope } from '../services/zaloPhoneSearch'
 import { getZaloErrorPolicyByCode } from '../data/repositories/errorPolicyRepository'
 import { checkZaloMessageOptOut, prepareZaloMessageOptOut, updateCampaignInputData } from '../data/repositories/campaignRepository'
-import { appendZaloTagsToExistingContacts } from '../data/repositories/accountContactRepository'
+import { appendZaloTagsToExistingContacts, isZaloUidOfOtherAccount } from '../data/repositories/accountContactRepository'
 import { applyAkaBizTagsToContactTargets } from '../data/repositories/contactTagRepository'
 import { engagementMessageIds } from '../../shared/zaloCampaignEngagement'
 import { abandonCampaignEngagementSend, beginCampaignEngagementSend, recordCampaignEngagementDetail, stageCampaignEngagementSource }
@@ -173,6 +173,11 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
       }
     },
     saveResolvedProfile: (_ctx, target) => host.saveResolvedProfile(target),
+    // UID của chính tài khoản gửi: lấy từ phiên Zalo đang giữ (không gọi Zalo), không có thì theo tài khoản đã lưu.
+    ownZaloUid: async () => String(host.zaloRuntime.getCachedOwnUid?.(host.accountId) || host.account.zaloUid || '').trim() || null,
+    // Chỉ gọi sau khi Zalo trả 114: UID thuộc danh bạ của tài khoản khác cùng tổ chức (DAT04). Hạn riêng 10 giây, lỗi thì lõi giữ 114.
+    uidBelongsToOtherAccount: (ctx, uid) =>
+      isZaloUidOfOtherAccount(host.accountId, uid, AbortSignal.any([ctx.signal, AbortSignal.timeout(Math.min(host.callTimeoutMs, 10_000))])),
     saveFoundUser: async (ctx, target, user) => {
       await host.saveContact(user)
       const inputDataId = Number(ctx.target.id)

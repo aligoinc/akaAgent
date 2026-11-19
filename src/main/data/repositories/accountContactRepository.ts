@@ -1755,6 +1755,30 @@ function extractZaloTagsFromExtra(extra: Record<string, unknown>): Array<{ id: s
   return tags
 }
 
+/**
+ * UID Zalo này có nằm trong danh bạ (zalo_users) của tài khoản khác cùng tổ chức mà KHÔNG có ở tài khoản đang gửi không. UID Zalo gắn
+ * theo tài khoản đã quét ra nó, nên data quét bằng tài khoản A mà chạy bằng tài khoản B thì Zalo trả 114. Engine v2 chỉ gọi sau khi
+ * Zalo đã trả 114 cho UID đó (mã DAT04, V581). Một lượt đọc theo chỉ mục zalo_uid; lỗi đọc thì ném để lõi giữ nguyên kết quả 114.
+ */
+export async function isZaloUidOfOtherAccount(accountId: number, uid: string, signal?: AbortSignal): Promise<boolean> {
+  const u = requireCurrentUser()
+  const normalizedAccountId = Number(accountId)
+  const target = String(uid || '').trim().replace(/_0$/, '')
+  if (!Number.isFinite(normalizedAccountId) || normalizedAccountId <= 0 || !target || !u.organizationId) return false
+  let query = client()
+    .from('zalo_users')
+    .select('account_id')
+    .in('zalo_uid', [target, `${target}_0`])
+    .eq('organization_id', u.organizationId)
+    .limit(50)
+  if (signal) query = query.abortSignal(signal)
+  const { data, error } = await query
+  if (error) throw new Error(`Failed to look up Zalo UID owner: ${error.message}`)
+  const owners = (data || []).map(row => Number(row.account_id)).filter(id => Number.isFinite(id))
+  if (owners.includes(normalizedAccountId)) return false
+  return owners.length > 0
+}
+
 export async function appendZaloTagsToExistingContacts(
   accountId: number,
   contactType: ContactType,

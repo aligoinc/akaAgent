@@ -18,6 +18,17 @@ export interface BrowserOpenRequest {
   requestId: number
   accountId: number
   reloadAfterOpen?: boolean
+  /** Open this https page in the account tab instead of the platform home page. */
+  openUrl?: string
+}
+
+function getRequestedOpenUrl(request: BrowserOpenRequest): string | null {
+  try {
+    const url = new URL(String(request.openUrl || ''))
+    return url.protocol === 'https:' ? url.toString() : null
+  } catch {
+    return null
+  }
 }
 
 interface BrowserPageProps {
@@ -336,7 +347,13 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
     if (!wv) return
 
     void initializeWebview(account, wv).then(initialized => {
-      if (!initialized || !pendingOpenRequest.reloadAfterOpen) return
+      if (!initialized) return
+      const requestedUrl = getRequestedOpenUrl(pendingOpenRequest)
+      if (requestedUrl) {
+        void wv.loadURL(requestedUrl).catch(err => console.error('Failed to open requested page:', err))
+        return
+      }
+      if (!pendingOpenRequest.reloadAfterOpen) return
       wv.loadURL(getInitialUrl(account))
     })
 
