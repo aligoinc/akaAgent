@@ -1,18 +1,18 @@
 #!/usr/bin/env node
-// Kiểm V582 trên PostgreSQL 17 cục bộ với code ba block đọc từ production 19/11/2026. Không chạm DB thật.
-// Chạy: LC_ALL=C node scripts/facebook-business-token-v582-smoke.cjs
+// Kiểm V589 trên PostgreSQL 17 cục bộ với code ba block đọc từ production 19/11/2026. Không chạm DB thật.
+// Chạy: LC_ALL=C node scripts/facebook-business-token-v589-smoke.cjs
 // (cần postgresql@17 Homebrew và module pg của akaAgentChatApi, xem fixtures/campaign-outcome-engine/pg-fixture.cjs)
 'use strict'
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { startCluster } = require('./fixtures/campaign-outcome-engine/pg-fixture.cjs')
-const { plan, ENGINE } = require('./build-v582-sql.cjs')
+const { plan, ENGINE } = require('./build-v589-sql.cjs')
 
 const ROOT = path.resolve(__dirname, '..')
-const LIVE = require('./fixtures/facebook-business-token/v582-live-20261119.json')
-const MIGRATION = fs.readFileSync(path.join(ROOT, 'migrations/migration_v582_facebook_business_token_message.sql'), 'utf8')
-const ROLLBACK = fs.readFileSync(path.join(ROOT, 'migrations/rollback_v582_facebook_business_token_message.sql'), 'utf8')
+const LIVE = require('./fixtures/facebook-business-token/v589-live-20261119.json')
+const MIGRATION = fs.readFileSync(path.join(ROOT, 'migrations/migration_v589_facebook_business_token_message.sql'), 'utf8')
+const ROLLBACK = fs.readFileSync(path.join(ROOT, 'migrations/rollback_v589_facebook_business_token_message.sql'), 'utf8')
 const MENU_LABEL = 'Kiểm tra nhập mã xác minh Fanpage'
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
 
@@ -36,7 +36,7 @@ async function rejects(db, sql, pattern) {
 }
 
 async function main() {
-  const cluster = startCluster({ port: 55482, label: 'aka-v582-' })
+  const cluster = startCluster({ port: 55482, label: 'aka-v589-' })
   const db = await cluster.connect()
   try {
     await db.query(`
@@ -60,8 +60,8 @@ async function main() {
     for (const item of plan) assert.equal(before.find(row => Number(row.id) === item.id).md5, item.oldMd5)
     ok('bản chép production khớp md5 mà migration kiểm')
 
-    await rejects(db, ROLLBACK, /Gỡ V582: block \d+ khác bản đã đọc/)
-    ok('bản gỡ từ chối khi V582 chưa apply')
+    await rejects(db, ROLLBACK, /Gỡ V589: block \d+ khác bản đã đọc/)
+    ok('bản gỡ từ chối khi V589 chưa apply')
 
     await db.query(MIGRATION)
     const after = await state(db)
@@ -83,13 +83,13 @@ async function main() {
     assert.equal(after.find(row => Number(row.id) === ENGINE.blockId).code, after.find(row => Number(row.id) === ENGINE.sourceBlockId).code)
     ok('apply: danh mục bước và sổ chép block engine ghi md5 mới, hai bản đăng bài fanpage vẫn giống nhau')
 
-    await rejects(db, MIGRATION, /V582: block 2636 khác bản đã đọc/)
+    await rejects(db, MIGRATION, /V589: block 2636 khác bản đã đọc/)
     ok('apply lần hai bị từ chối')
 
-    await db.query(`INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261119999999', 'migration_v582_facebook_business_token_message')`)
-    await rejects(db, MIGRATION, /V582 đã có trong sổ migration/)
+    await db.query(`INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261119999999', 'migration_v589_facebook_business_token_message')`)
+    await rejects(db, MIGRATION, /V589 đã có trong sổ migration/)
     await db.query(`DELETE FROM supabase_migrations.schema_migrations`)
-    ok('apply bị từ chối khi sổ migration đã có V582')
+    ok('apply bị từ chối khi sổ migration đã có V589')
 
     await db.query(ROLLBACK)
     const restored = await state(db)
@@ -98,7 +98,7 @@ async function main() {
     ok('bản gỡ trả đúng từng byte code cũ và md5 cũ')
 
     await db.query(`UPDATE public.auto_blocks SET code = code || ' ' WHERE id = 2669`)
-    await rejects(db, MIGRATION, /V582: block 2669 khác bản đã đọc/)
+    await rejects(db, MIGRATION, /V589: block 2669 khác bản đã đọc/)
     assert.equal((await state(db)).find(row => Number(row.id) === 2636).md5, plan.find(item => item.id === 2636).oldMd5)
     ok('một block đã bị sửa thì cả migration dừng, không block nào đổi')
 

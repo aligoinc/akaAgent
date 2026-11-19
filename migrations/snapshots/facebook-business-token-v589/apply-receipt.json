@@ -1,0 +1,29 @@
+{
+  "migration": "migration_v589_facebook_business_token_message",
+  "ledger_version": "20261119140749",
+  "applied_at_vn": "2026-11-19 21:07:50",
+  "requested_by_user": "đã phát hành 10.1.0, apply V582 đi",
+  "renumbered_from": "migration_v582_facebook_business_token_message (PR #721). Số 582 trong sổ đã là migration_v582_aka_assistant_images (13:15 VN 19/11), preflight name LIKE 'migration_v582_%' sẽ từ chối. Đổi số trong bộ sinh rồi sinh lại; SQL chỉ khác bản V582 ở con số (so bằng sed 582→589). Code block không ghi số migration nên md5 code giữ nguyên.",
+  "precondition": "Desktop 10.1.0 (có mục menu \"Kiểm tra nhập mã xác minh Fanpage\") đã phát hành: feed version_win/mac/mac_intel trả 10.1.0, ba tệp trên akabiz.net cùng số byte với bộ cài build lại lần 2 (kiểm 21:0x VN 19/11).",
+  "how": "node scripts/make-migration-ledger-apply.cjs (chèn dòng sổ trước COMMIT cuối, cùng giao dịch) rồi supabase db query --linked --workdir <repo akaAgent> -f <file bọc>",
+  "file_md5": "b78b12a8b267b121059d891bb472bdd7",
+  "ledger_statements_md5": "b78b12a8b267b121059d891bb472bdd7",
+  "preflight_read_only_21_07_38_vn": {
+    "blocks": { "2636": "1377132a1e0baa4ae0ac7d6d681b931e", "2669": "21136df214634903530caa9d40c3eefb", "2878": "21136df214634903530caa9d40c3eefb" },
+    "engine_block_steps_18_reviewed_md5": "21136df214634903530caa9d40c3eefb",
+    "engine_block_copies_2878": { "source_md5_at_copy": "21136df214634903530caa9d40c3eefb", "engine_md5_at_copy": "21136df214634903530caa9d40c3eefb" },
+    "ledger_v589_rows": 0
+  },
+  "postflight_21_08_06_vn": {
+    "blocks": { "2636": "51a8e18d7952df3a22820267799beb73", "2669": "e8e2097457b5ca0fe6c6a21ab25c8c87", "2878": "e8e2097457b5ca0fe6c6a21ab25c8c87" },
+    "new_sentence_present": true,
+    "old_sentence_present": false,
+    "engine_block_steps_18_reviewed_md5": "e8e2097457b5ca0fe6c6a21ab25c8c87",
+    "engine_block_copies_2878": { "source_md5_at_copy": "e8e2097457b5ca0fe6c6a21ab25c8c87", "engine_md5_at_copy": "e8e2097457b5ca0fe6c6a21ab25c8c87" }
+  },
+  "ddl": false,
+  "postgrest_schema_reload": "không (chỉ UPDATE dữ liệu)",
+  "local_checks": "LC_ALL=C node scripts/facebook-business-token-v589-smoke.cjs: đạt 8 nhóm (PG17, code ba block đọc từ production 19/11; có bản gỡ, chạy lại bị từ chối, sổ đã có V589 bị từ chối, block bị sửa thì dừng)",
+  "rollback": "migrations/rollback_v589_facebook_business_token_message.sql (chỉ chạy khi cả ba block đang đúng bản V589)",
+  "do_not_reapply": true
+}
