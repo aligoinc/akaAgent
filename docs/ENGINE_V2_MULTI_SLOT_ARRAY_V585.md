@@ -2,7 +2,7 @@
 
 Trạng thái: **đã apply akachat 15:56:22 VN 19/11/2026** theo yêu cầu ("Apply ngay"; sổ `20261119085621`, không apply lại; md5 sổ = file
 `560b3ff9…`; md5 thân hàm `92c119f2…`; [biên nhận](../migrations/snapshots/engine-multi-slot-array-v585/apply-receipt.json)). Code ở nhánh
-`claude/engine-multi-slot-array`.
+`claude/engine-multi-slot-array`, PR [#725](https://github.com/aligoinc/akaAgent/pull/725) vào `dev_3` (chưa merge).
 
 Lúc apply (giờ cao điểm chiều) PostgREST nạp lại schema mất 10,2 giây: trong 30 giây đó 726/19.549 request REST chậm hơn 1 giây, 2 lượt
 `aka_agent_engine_report_v1` của Desktop quá trần 3 giây (lỗi 500), 0 lỗi 503; cửa sổ 30 giây kế tiếp đã bình thường.
