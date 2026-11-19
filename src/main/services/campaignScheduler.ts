@@ -104,6 +104,7 @@ import { ENGINE_OBSERVATION_TTL_MS, engineWaitMessage, isEngineWaitingReason, ty
 import { takeEngineContentIndex } from '../engineAdapters/desktopEngineData'
 import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters/facebook/desktopFacebookRunner'
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
+import { monotonicNow } from '../../shared/monotonicNow'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
@@ -1773,9 +1774,10 @@ export class CampaignScheduler {
     seconds: number,
     account?: AutoAccount
   ): Promise<CampaignSleepResult> {
-    const endAt = Date.now() + seconds * 1000
+    // Đồng hồ đơn điệu: giờ máy bị kéo lùi không kéo dài khoảng nghỉ giữa hai data.
+    const endAt = monotonicNow() + seconds * 1000
     let nextServerControlCheckAt = 0
-    while (Date.now() < endAt) {
+    while (monotonicNow() < endAt) {
       if (!this.running) return { status: 'stopped' }
       if (this.isCampaignPauseRequested(campaign.id)) return { status: 'paused' }
       const boundaryCheck = await this.checkCampaignRunBoundary(campaign.id)
@@ -1784,9 +1786,9 @@ export class CampaignScheduler {
           return { status: 'boundary' }
         }
       }
-      if (account && this.isServerZaloCampaign(account, campaign) && Date.now() >= nextServerControlCheckAt) {
+      if (account && this.isServerZaloCampaign(account, campaign) && monotonicNow() >= nextServerControlCheckAt) {
         // The check after this loop still runs before the next target.
-        nextServerControlCheckAt = Date.now() + SERVER_ZALO_SLEEP_CONTROL_POLL_MS
+        nextServerControlCheckAt = monotonicNow() + SERVER_ZALO_SLEEP_CONTROL_POLL_MS
         const control = await this.supabase.getZaloServerRunControlState(campaign.id, account.id)
         if (this.isServerZaloBoundaryRequested(
           control.campaignStatus,
@@ -1804,7 +1806,7 @@ export class CampaignScheduler {
         }
       }
       if (this.getZaloRuntimeStopReason(campaign.id)) return { status: 'completed' }
-      await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - Date.now()))))
+      await new Promise(resolve => setTimeout(resolve, Math.min(500, Math.max(0, endAt - monotonicNow()))))
     }
     if (!this.running) return { status: 'stopped' }
     if (this.isCampaignPauseRequested(campaign.id)) return { status: 'paused' }
@@ -6178,11 +6180,12 @@ export class CampaignScheduler {
       const hangMs = settings.blockHangMinutes * 60_000
       // Nhịp kiểm: 30 giây (ngưỡng mặc định 10 phút); ngưỡng nhỏ thì kiểm dày hơn.
       const checkMs = Math.min(30_000, Math.max(200, Math.floor(hangMs / 4)))
-      let lastTick = Date.now()
+      // Đo bằng đồng hồ đơn điệu (như vết thao tác): giờ máy bị kéo lùi không che mất một block đang treo.
+      let lastTick = monotonicNow()
       // Block treo (Q20): quá N phút không có thao tác nào (không tính lúc nghỉ theo cài đặt, lúc máy ngủ) thì đóng cửa sổ ẩn: thao tác
       // đang chờ trên trang trả lỗi, block kết thúc, data đi theo chính sách (SYS04), chạy data kế.
       hangTimer = setInterval(() => {
-        const now = Date.now()
+        const now = monotonicNow()
         // Máy vừa ngủ dậy (nhịp kiểm bị trễ xa): thời gian ngủ không tính là treo.
         if (now - lastTick > 3 * checkMs) trace.touch()
         lastTick = now

@@ -13,6 +13,7 @@ import type {
 } from './zaloRuntimeService'
 import { randomUUID } from 'node:crypto'
 import WebSocket from 'ws'
+import { monotonicDeadline } from '../../shared/monotonicNow'
 
 const ZALO_CHAT_API_DEFAULT_ORIGIN = 'https://aka-agent-chat-api.fly.dev'
 const REQUEST_TIMEOUT_MS = 15_000
@@ -692,7 +693,7 @@ export class ZaloChatApiClient {
       generation: this.generation
     }
     this.activeDataScanByAccount.set(accountId, active)
-    const deadline = Date.now() + DATA_SCAN_OPERATION_TIMEOUT_MS
+    const deadline = monotonicDeadline(DATA_SCAN_OPERATION_TIMEOUT_MS)
     let consecutiveFailures = 0
     let terminalObserved = false
     let lastProgressMessage: string | undefined
@@ -729,7 +730,7 @@ export class ZaloChatApiClient {
         }
       }
 
-      while (Date.now() < deadline) {
+      while (!deadline.expired()) {
         signal?.throwIfAborted()
         if (
           active.generation !== this.generation ||

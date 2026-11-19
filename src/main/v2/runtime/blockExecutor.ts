@@ -2,6 +2,7 @@ import * as vm from 'vm'
 import { BlockResult } from '../../../shared/v2Types'
 import { PageController } from './pageController'
 import { BlockHelpers, BlockRuntimeHelpers, BlockRuntimeMetadata, createBlockHelpers } from './blockHelpers'
+import { monotonicNow } from '../../../shared/monotonicNow'
 
 export interface BlockExecuteContext {
   input: Record<string, unknown>
@@ -37,6 +38,25 @@ export interface BlockExecuteOptions {
  *   - undefined → output = {}
  *   - throw → success=false, error=message
  */
+/**
+ * Date của sandbox: `Date.now()` và `new Date()` (không tham số) bám đồng hồ đơn điệu, neo vào giờ máy lúc block bắt đầu. Code block trong
+ * auto_blocks tự đếm hạn kiểu `while (Date.now() < deadline)`; giờ máy bị kéo lùi giữa chừng thì vòng đó không bao giờ hết (19/11/2026:
+ * 18 block có vòng như vậy). Mọi thứ khác (`new Date(x)`, `Date.parse`, `Date()`, `instanceof Date`) là Date thật.
+ */
+export function createBlockDate(): DateConstructor {
+  const wallAtStart = Date.now()
+  const monoAtStart = monotonicNow()
+  const now = (): number => wallAtStart + Math.round(monotonicNow() - monoAtStart)
+  return new Proxy(Date, {
+    get(target, property) {
+      return property === 'now' ? now : Reflect.get(target, property)
+    },
+    construct(target, args: unknown[]) {
+      return args.length === 0 ? new target(now()) : Reflect.construct(target, args)
+    }
+  })
+}
+
 export class BlockExecutor {
   async execute(opts: BlockExecuteOptions, ctx: BlockExecuteContext): Promise<BlockResult> {
     const startTime = Date.now()
@@ -67,7 +87,7 @@ export class BlockExecutor {
         error: (...args: unknown[]) => helpers.log('[error] ' + args.map(a => typeof a === 'string' ? a : safeStringify(a)).join(' '))
       },
       setTimeout, clearTimeout, setInterval, clearInterval,
-      Promise, JSON, Math, Date, RegExp,
+      Promise, JSON, Math, Date: createBlockDate(), RegExp,
       Array, Object, String, Number, Boolean,
       Map, Set, Symbol, Error, URL, URLSearchParams
     })

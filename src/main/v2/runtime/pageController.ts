@@ -1,4 +1,5 @@
 import { WebContents, type Event } from 'electron'
+import { monotonicNow } from '../../../shared/monotonicNow'
 
 export function isNavigationAbortError(err: unknown): boolean {
   const e = err as { code?: string; errno?: number; message?: string } | null
@@ -223,10 +224,11 @@ export class PageController {
   async waitForSelector(selector: string, opts: WaitForSelectorOpts = {}): Promise<boolean> {
     const timeout = opts.timeout ?? 30000
     const state = opts.state ?? 'visible'
-    const startTime = Date.now()
+    // Đồng hồ đơn điệu: giờ máy bị kéo lùi không làm vòng chờ này kéo dài vô hạn.
+    const startTime = monotonicNow()
     const interval = 200
     let polls = 0
-    while (Date.now() - startTime < timeout) {
+    while (monotonicNow() - startTime < timeout) {
       const found = await this.exec<boolean>(`
         var el = resolveSelector(${safeJS(selector)});
         ${state === 'attached'
@@ -463,8 +465,8 @@ export class PageController {
           dataTransfer.clearData();
           if (!shouldVerify) return { accepted: true };
 
-          var deadline = Date.now() + 750;
-          while (Date.now() <= deadline) {
+          var deadline = performance.now() + 750;
+          while (performance.now() <= deadline) {
             var htmlChanged = String(el.innerHTML || "") !== beforeHtml;
             var textChanged = String(el.innerText || el.textContent || "") !== beforeText;
             if (htmlChanged || textChanged || mutationObserved) return { accepted: true };
