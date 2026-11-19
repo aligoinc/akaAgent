@@ -212,30 +212,6 @@ export class MediaStorageService {
     }
   }
 
-  /**
-   * Cất một tệp đang nằm trong bộ nhớ (không qua đĩa) vào kho, với khoá do nơi gọi dựng sẵn. Có hạn giờ để một lượt tải treo
-   * không giữ bộ nhớ mãi. Dùng cho ảnh đính kèm câu hỏi của Hỏi đáp AI.
-   */
-  async uploadBuffer(
-    settings: ResolvedMediaStorageSettings,
-    input: { objectKey: string; body: Buffer; contentType: string; cacheControl?: string; timeoutMs?: number }
-  ): Promise<MediaUploadOutput> {
-    this.assertConfigured(settings)
-    await this.buildR2Client(settings).send(new PutObjectCommand({
-      Bucket: settings.bucket,
-      Key: input.objectKey,
-      Body: input.body,
-      ContentType: input.contentType,
-      ...(input.cacheControl ? { CacheControl: input.cacheControl } : {})
-    }), { abortSignal: AbortSignal.timeout(input.timeoutMs ?? 60_000) })
-    return {
-      objectKey: input.objectKey,
-      cloudUrl: buildMediaCloudUrl(settings.publicBaseUrl, input.objectKey),
-      sizeBytes: input.body.length,
-      mimeType: input.contentType
-    }
-  }
-
   async test(settings: ResolvedMediaStorageSettings): Promise<{ ok: boolean; cloudUrl?: string }> {
     this.assertConfigured(settings)
     const objectKey = buildMediaObjectKey('media-storage-test.txt', settings.keyPrefix)

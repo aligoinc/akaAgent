@@ -45,6 +45,13 @@ export const AI_CHAT_ENDPOINTS = {
   images: '/ai-chat/images'
 } as const
 
+/**
+ * Đường tải ảnh câu hỏi dành cho app Desktop (đường dẫn đầy đủ trên API Web, không qua `API_PREFIX` của phiên Web):
+ * POST, `Authorization: Bearer <token phiên Desktop>`, thân `AiChatImageUpload`. Trả `{ ok: true, data: AiChatImage }`
+ * hoặc `{ ok: false, code, message }`. Ảnh vào đúng kho và đúng thư mục như ảnh tải từ Web.
+ */
+export const AI_CHAT_DESKTOP_IMAGE_PATH = '/api/aka-agent/desktop/v1/ai-chat/images'
+
 export type AiChatIntakeFieldType = 'text' | 'textarea' | 'select' | 'checkbox'
 export interface AiChatIntakeField {
   key: string

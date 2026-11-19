@@ -5,23 +5,24 @@ import {
 } from '../../../shared/aiChatDesktop'
 import { callAiChat } from '../../data/repositories/aiChatRepository'
 import { getCurrentUser } from '../../data/currentUser'
-import { resolveMediaStorageSettings } from '../../data/repositories/mediaFileRepository'
+import { desktopSession } from '../../data/supabaseClient'
+import { AI_CHAT_IMAGE_API_URL, uploadAiChatImageToApi } from '../../services/aiChatImageApi'
 import { AiChatImageService } from '../../services/aiChatImageService'
-import { mediaStorageService, type ResolvedMediaStorageSettings } from '../../services/mediaStorageService'
 
 const MAX_PAYLOAD_CHARS = 64_000
 
 /**
- * Ảnh đính kèm câu hỏi: cất vào kho media của hệ thống bằng đúng cấu hình và đường ghi của thư viện media (không pool,
- * không kết nối giữ lâu, không hẹn giờ). Tệp ảnh là bất biến (tên là UUID) nên cho trình duyệt giữ lâu.
+ * Ảnh đính kèm câu hỏi: gửi lên API Web bằng token phiên Desktop (như đường AI của Desktop); API cất ảnh vào kho media của
+ * hệ thống. Không pool, không kết nối giữ lâu, không hẹn giờ.
  */
-const aiChatImages = new AiChatImageService<ResolvedMediaStorageSettings>({
+const aiChatImages = new AiChatImageService({
   identity: () => {
     const user = getCurrentUser()
     return user ? { staffId: user.staffId, organizationId: user.organizationId } : null
   },
-  settings: () => resolveMediaStorageSettings(),
-  put: (settings, input) => mediaStorageService.uploadBuffer(settings, { ...input, cacheControl: 'public, max-age=31536000, immutable' })
+  upload: image => uploadAiChatImageToApi({
+    url: AI_CHAT_IMAGE_API_URL, token: signal => desktopSession.token(signal), fetch: (...args) => fetch(...args)
+  }, image)
 })
 
 function toIpcFailure(error: unknown, label: string): AiChatIpcResult {
@@ -55,7 +56,7 @@ export function registerAiChatHandlers(mainWindow: BrowserWindow): void {
     }
   })
 
-  // Một ảnh mỗi lượt gọi (base64 của tối đa 5 MB); dịch vụ kiểm định dạng thật, dung lượng và nhịp tải rồi mới ghi kho.
+  // Một ảnh mỗi lượt gọi (base64 của tối đa 5 MB); dịch vụ kiểm sơ bộ rồi gửi lên API Web, API mới là nơi ghi kho.
   ipcMain.handle(AI_CHAT_IPC.uploadImage, async (event: IpcMainInvokeEvent, image: unknown): Promise<AiChatIpcResult> => {
     assertSender(event)
     try {

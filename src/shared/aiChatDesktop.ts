@@ -25,7 +25,7 @@ export type AiChatDesktopAction = (typeof AI_CHAT_DESKTOP_ACTIONS)[number]
 
 export type AiChatIpcResult = { ok: true; data: unknown } | { ok: false; code: string; message: string }
 export type AiChatIpcCall = (action: AiChatDesktopAction, payload: Record<string, unknown>) => Promise<AiChatIpcResult>
-/** Tải một ảnh đính kèm câu hỏi: tiến trình chính cất ảnh vào kho media của hệ thống rồi trả URL (`AiChatImage`). */
+/** Tải một ảnh đính kèm câu hỏi: tiến trình chính gửi ảnh lên API Web, API cất vào kho media của hệ thống rồi trả URL (`AiChatImage`). */
 export type AiChatImageIpcCall = (image: AiChatImageUpload) => Promise<AiChatIpcResult>
 
 /** Lỗi mang `code` là mã `ai_chat_*` để bộ điều khiển dùng chung phân loại (xem `aiChatErrorCode`). */

@@ -1,15 +1,20 @@
 // Ảnh đính kèm câu hỏi của Hỏi đáp AI trên Desktop: dịch vụ của tiến trình chính (src/main/services/aiChatImageService.ts),
-// cổng IPC dùng chung (src/shared/aiChatDesktop.ts) và bộ điều khiển hội thoại (src/shared/aiChat.ts). Kho media là giả (Map).
+// đường gửi ảnh lên API Web (src/main/services/aiChatImageApi.ts), cổng IPC dùng chung (src/shared/aiChatDesktop.ts) và bộ điều
+// khiển hội thoại (src/shared/aiChat.ts). API Web ở đây là một máy chủ HTTP cục bộ làm đúng hợp đồng của đường
+// AI_CHAT_DESKTOP_IMAGE_PATH (đường thật: akaAgentWebApp apps/api/src/modules/ai-chat/aiChatDesktopImages.routes.ts, có bài
+// kiểm riêng ở đó); kho media là Map trong bộ nhớ.
 //   node desktop_image_smoke.mjs <bundle>                        : phần không cần database (RPC giả)
 //   node desktop_image_smoke.mjs <bundle> <psql> <socket> <port> : thêm một vòng đầy đủ với RPC Desktop `aka_agent_ai_chat` thật
 //                                                                  trên lõi đã vá và handler thật của Edge Function ai-chat-agent
 // Chạy: bash scripts/ai-chat/desktop_image_smoke.sh ; vòng đầy đủ do akaAgentWebApp scripts/test-ai-chat-images-sql.sh gọi.
 import { execFileSync } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
+import { createServer } from 'node:http'
 
 const [bundle, psqlBin, host, port] = process.argv.slice(2)
 const {
-  AiChatImageService, AiChatDesktopError, AiChatThreadController, AI_CHAT_IMAGE_BASE64_MAX, aiChatErrorCode, createAiChatAgentHandler,
-  createAiChatIpcTransport, newAiChatRequestId, sniffAiChatImageType
+  AiChatImageService, AiChatDesktopError, AiChatThreadController, AI_CHAT_DESKTOP_IMAGE_PATH, AI_CHAT_IMAGE_BASE64_MAX, aiChatErrorCode,
+  createAiChatAgentHandler, createAiChatIpcTransport, newAiChatRequestId, sniffAiChatImageType, uploadAiChatImageToApi
 } = await import(bundle)
 
 let failed = 0
@@ -23,28 +28,57 @@ const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 4, 5])
 const WEBP = Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50, 6])
 const upload = (bytes, mimeType) => ({ mimeType, dataBase64: Buffer.from(bytes).toString('base64') })
 
-const SETTINGS = {
-  provider: 'r2', endpointUrl: 'https://r2.example', accessKeyId: 'key', secretAccessKey: 'secret', bucket: 'akabiz',
-  publicBaseUrl: 'https://pub-e2e.r2.dev/', keyPrefix: '/aka-agent/'
-}
 const STORE_PREFIX = 'https://pub-e2e.r2.dev/aka-agent/ai-chat/'
 const OWN = /^https:\/\/pub-e2e\.r2\.dev\/aka-agent\/ai-chat\/1\/1\/[0-9a-f-]{36}\.(png|jpg|webp)$/
+const EXTENSION = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' }
+const servers = []
 
-/** Một "tiến trình chính" giả: phiên đăng nhập, kho media (Map) và đồng hồ đều điều khiển được. */
-function createMain(options = {}) {
-  const state = { identity: { staffId: 1, organizationId: 1 }, settings: { ...SETTINGS }, now: 1_000_000, files: new Map(), puts: 0, settingsReads: 0, putFails: false, onPut: null }
+/**
+ * API Web giả, đúng hợp đồng của đường tải ảnh cho Desktop: Bearer token của phiên → nhân viên, tệp vào thư mục của nhân viên đó,
+ * trả `{ ok: true, data }` hoặc `{ ok: false, code, message }`. `api.respond` cho phép thay câu trả lời để thử các nhánh lỗi.
+ */
+async function startApi() {
+  const api = { sessions: new Map([['token-1-1', { staffId: 1, organizationId: 1 }], ['token-2-1', { staffId: 2, organizationId: 1 }]]),
+    files: new Map(), hits: 0, requests: [], respond: null, onStore: null }
+  const server = createServer((req, res) => {
+    const chunks = []
+    req.on('data', chunk => chunks.push(chunk))
+    req.on('end', async () => {
+      const send = (status, body, type = 'application/json') => { res.writeHead(status, { 'content-type': type }); res.end(typeof body === 'string' ? body : JSON.stringify(body)) }
+      api.hits += 1
+      const authorization = String(req.headers.authorization || '')
+      let body = {}
+      try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')) } catch { body = {} }
+      api.requests.push({ method: req.method, path: req.url, authorization, keys: Object.keys(body).sort(), mimeType: body.mimeType })
+      if (api.respond) return api.respond(send, res)
+      if (req.method !== 'POST' || req.url !== AI_CHAT_DESKTOP_IMAGE_PATH) return send(404, 'Not Found', 'text/plain')
+      const identity = api.sessions.get(/^Bearer (.+)$/.exec(authorization)?.[1])
+      if (!identity) return send(401, { ok: false, code: 'ai_chat_access_denied', message: 'x' })
+      const bytes = Buffer.from(String(body.dataBase64 || ''), 'base64')
+      const mimeType = sniffAiChatImageType(bytes)
+      if (!mimeType) return send(400, { ok: false, code: 'ai_chat_image_type_invalid', message: 'x' })
+      if (api.onStore) await api.onStore()
+      const url = `${STORE_PREFIX}${identity.organizationId}/${identity.staffId}/${randomUUID()}.${EXTENSION[mimeType]}`
+      api.files.set(url, { bytes: new Uint8Array(bytes), contentType: mimeType })
+      send(200, { ok: true, data: { url, mimeType, sizeBytes: bytes.length } })
+    })
+  })
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
+  servers.push(server)
+  api.url = `http://127.0.0.1:${server.address().port}${AI_CHAT_DESKTOP_IMAGE_PATH}`
+  return api
+}
+
+/** Một "tiến trình chính" giả: phiên đăng nhập và API Web đều điều khiển được; mã của Desktop là mã thật. */
+async function createMain(options = {}) {
+  const api = options.api ?? await startApi()
+  const state = { identity: { staffId: 1, organizationId: 1 }, token: 'token-1-1', tokenFails: false, url: api.url, timeoutMs: undefined }
   const service = new AiChatImageService({
     identity: () => state.identity,
-    settings: async () => { state.settingsReads += 1; if (state.settings === null) throw new Error('db'); return state.settings },
-    put: async (settings, input) => {
-      state.puts += 1
-      if (state.putFails) throw new Error('network')
-      if (state.onPut) await state.onPut()
-      const url = `${settings.publicBaseUrl.replace(/\/+$/, '')}/${input.objectKey}`
-      state.files.set(url, { bytes: new Uint8Array(input.body), contentType: input.contentType })
-      return { cloudUrl: url }
-    },
-    now: () => state.now
+    upload: image => uploadAiChatImageToApi({
+      url: state.url, fetch: (...args) => fetch(...args), timeoutMs: state.timeoutMs,
+      token: async () => { if (state.tokenFails) throw new Error('no session'); return state.token }
+    }, image)
   })
   // Cùng cách đóng gói kết quả với aiChatHandlers.ts.
   const wrap = async run => {
@@ -60,7 +94,7 @@ function createMain(options = {}) {
     (action, payload) => wrap(() => service.call(action, payload, rpc)),
     image => wrap(() => service.upload(image))
   )
-  return { state, service, transport }
+  return { api, state, service, transport }
 }
 
 // ─────────────────────────────── Phần 1: không cần database ───────────────────────────────
@@ -68,56 +102,78 @@ function createMain(options = {}) {
   ok(sniffAiChatImageType(PNG) === 'image/png' && sniffAiChatImageType(JPG) === 'image/jpeg' && sniffAiChatImageType(WEBP) === 'image/webp'
     && sniffAiChatImageType(Buffer.from('GIF89a..........')) === null, 'nhận định dạng thật theo byte đầu: PNG, JPG, WEBP; GIF bị từ chối')
   ok(createAiChatIpcTransport(async () => ({ ok: true, data: {} })).uploadImage === undefined, 'cổng IPC không nối kênh tải ảnh thì không có uploadImage (giao diện ẩn nút)')
+  ok(AI_CHAT_DESKTOP_IMAGE_PATH === '/api/aka-agent/desktop/v1/ai-chat/images', 'đường tải ảnh của Desktop trên API Web lấy từ hợp đồng dùng chung')
 
-  const main = createMain()
+  const main = await createMain()
   const png = await main.transport.uploadImage(upload(PNG, 'image/png'))
   const jpg = await main.transport.uploadImage(upload(JPG, 'image/jpeg'))
   const webp = await main.transport.uploadImage(upload(WEBP, 'image/webp'))
-  ok(OWN.test(png.url) && png.url.endsWith('.png') && png.mimeType === 'image/png' && png.sizeBytes === PNG.length, 'tải PNG: URL nằm đúng thư mục <tiền tố kho>/ai-chat/<tổ chức>/<nhân viên>/<uuid>.png')
+  ok(OWN.test(png.url) && png.url.endsWith('.png') && png.mimeType === 'image/png' && png.sizeBytes === PNG.length, 'tải PNG qua API Web: URL nằm đúng thư mục <tiền tố kho>/ai-chat/<tổ chức>/<nhân viên>/<uuid>.png')
   ok(jpg.url.endsWith('.jpg') && webp.url.endsWith('.webp') && new Set([png.url, jpg.url, webp.url]).size === 3, 'tải JPG, WEBP: đuôi theo định dạng thật, mỗi ảnh một tên')
-  ok(same(main.state.files.get(png.url)?.bytes, PNG) && main.state.files.get(jpg.url)?.contentType === 'image/jpeg', 'kho nhận đúng nội dung tệp và content-type')
-  ok(main.state.settingsReads === 1, 'cấu hình kho chỉ đọc một lần cho cả loạt ảnh (giữ 60 giây)')
+  ok(same(main.api.files.get(png.url)?.bytes, PNG) && main.api.files.get(jpg.url)?.contentType === 'image/jpeg', 'API nhận đúng nội dung tệp')
+  const sent = main.api.requests[0]
+  ok(sent.method === 'POST' && sent.path === AI_CHAT_DESKTOP_IMAGE_PATH && sent.authorization === 'Bearer token-1-1' && same(sent.keys, ['dataBase64', 'mimeType']),
+    'Desktop gửi POST kèm token phiên; thân chỉ có mimeType và dataBase64 (không gửi nhân viên, tổ chức hay khóa kho)')
   const mislabeled = await main.transport.uploadImage(upload(JPG, 'image/png'))
-  ok(mislabeled.mimeType === 'image/jpeg' && mislabeled.url.endsWith('.jpg'), 'khai PNG nhưng tệp là JPG: lưu theo định dạng thật')
+  ok(mislabeled.mimeType === 'image/jpeg' && mislabeled.url.endsWith('.jpg') && main.api.requests.at(-1).mimeType === 'image/jpeg', 'khai PNG nhưng tệp là JPG: gửi và lưu theo định dạng thật')
 
+  const hitsBefore = main.api.hits
   ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/gif'))) === 'ai_chat_image_type_invalid', 'định dạng khai không nhận (GIF): từ chối')
   ok(await codeOf(main.transport.uploadImage(upload(Buffer.from('<html>khong phai anh</html>'), 'image/png'))) === 'ai_chat_image_type_invalid', 'tệp không phải ảnh đội lốt PNG: từ chối')
   ok(await codeOf(main.transport.uploadImage({ mimeType: 'image/png', dataBase64: 'không phải base64!' })) === 'ai_chat_images_invalid', 'base64 hỏng: từ chối')
   ok(await codeOf(main.transport.uploadImage({ mimeType: 'image/png', dataBase64: '' })) === 'ai_chat_images_invalid', 'thiếu nội dung: từ chối')
   ok(await codeOf(main.transport.uploadImage({ mimeType: 'image/png', dataBase64: 'A'.repeat(AI_CHAT_IMAGE_BASE64_MAX + 4) })) === 'ai_chat_image_too_large', 'ảnh lớn hơn 5 MB: từ chối trước khi giải mã')
-  const putsBefore = main.state.puts
-  await codeOf(main.transport.uploadImage(upload(PNG, 'image/gif')))
-  ok(main.state.puts === putsBefore, 'ảnh bị từ chối không được ghi vào kho')
+  ok(main.api.hits === hitsBefore, 'ảnh bị từ chối ngay trên máy không được gửi lên API')
 
-  main.state.putFails = true
-  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'kho lỗi lúc ghi: báo không tải được ảnh')
-  main.state.putFails = false
+  // Câu trả lời lỗi của API và các trường hợp API không trả theo hợp đồng.
+  const filesBefore = main.api.files.size
+  main.api.respond = send => send(429, { ok: false, code: 'ai_chat_image_rate_limited', message: 'x' })
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_rate_limited', 'API báo quá nhịp tải (30 ảnh / 10 phút): giữ nguyên mã lỗi của API')
+  main.api.respond = send => send(503, { ok: false, code: 'ai_chat_images_not_ready', message: 'x' })
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_images_not_ready', 'API báo kho media chưa cấu hình: báo chưa nhận ảnh')
+  main.api.respond = send => send(404, 'Not Found', 'text/plain')
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_images_not_ready', 'API Web chưa có đường này (404, bản API cũ): báo chưa nhận ảnh')
+  main.api.respond = send => send(401, 'Unauthorized', 'text/plain')
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_access_denied', 'cổng trung gian trả 401 không theo hợp đồng: báo không có quyền')
+  main.api.respond = send => send(502, '<html>Bad gateway</html>', 'text/html')
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'lỗi máy chủ không theo hợp đồng: báo không tải được ảnh')
+  main.api.respond = send => send(200, { ok: true, data: { url: 'javascript:alert(1)', mimeType: 'image/png', sizeBytes: 3 } })
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'API trả URL không phải http(s): không nhận')
+  main.api.respond = send => send(200, { ok: true, data: { mimeType: 'image/png' } })
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'API trả dữ liệu thiếu trường: không nhận')
+  main.api.respond = () => undefined
+  main.state.timeoutMs = 150
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'API không trả lời: bỏ lượt tải khi hết hạn chờ')
+  main.state.timeoutMs = undefined
+  main.api.respond = null
+  main.state.url = 'http://127.0.0.1:9/khong-co-may-chu'
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_upload_failed', 'không nối được API: báo không tải được ảnh')
+  main.state.url = main.api.url
+  main.state.tokenFails = true
+  const hitsNoToken = main.api.hits
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_unavailable' && main.api.hits === hitsNoToken, 'không lấy được token phiên: không gửi gì lên API')
+  main.state.tokenFails = false
+  main.state.token = 'token-da-thu-hoi'
+  ok(await codeOf(main.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_access_denied', 'API từ chối token của phiên đã thu hồi')
+  main.state.token = 'token-1-1'
+  ok(main.api.files.size === filesBefore && (await main.transport.uploadImage(upload(PNG, 'image/png'))).url.endsWith('.png'), 'các lượt lỗi không để lại tệp; sau đó tải lại bình thường')
 
-  // Kho chưa cấu hình, chưa đăng nhập, đổi tài khoản giữa chừng.
-  const unconfigured = createMain()
-  unconfigured.state.settings = { ...SETTINGS, publicBaseUrl: '' }
-  ok(await codeOf(unconfigured.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_images_not_ready' && unconfigured.state.puts === 0, 'kho media chưa cấu hình: báo chưa nhận ảnh, không ghi gì')
-  const signedOut = createMain()
+  // Chưa đăng nhập, đổi tài khoản giữa chừng.
+  const signedOut = await createMain()
   signedOut.state.identity = null
-  ok(await codeOf(signedOut.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_access_denied', 'chưa đăng nhập: từ chối')
-  const switched = createMain()
-  switched.state.onPut = async () => { switched.state.identity = { staffId: 2, organizationId: 1 } }
+  ok(await codeOf(signedOut.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_access_denied' && signedOut.api.hits === 0, 'chưa đăng nhập: từ chối, không gửi gì')
+  const switched = await createMain()
+  switched.api.onStore = async () => { switched.state.identity = { staffId: 2, organizationId: 1 } }
   ok(await codeOf(switched.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_unavailable', 'đổi tài khoản trong lúc tải: không trả ảnh của phiên cũ cho phiên mới')
 
-  // Nhịp tải: 30 ảnh mỗi 10 phút cho mỗi nhân viên.
-  const limited = createMain()
-  for (let i = 0; i < 30; i += 1) await limited.transport.uploadImage(upload(PNG, 'image/png'))
-  ok(await codeOf(limited.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_rate_limited' && limited.state.puts === 30, 'ảnh thứ 31 trong 10 phút: bị chặn')
-  limited.state.now += 10 * 60_000 + 1
-  ok((await limited.transport.uploadImage(upload(PNG, 'image/png'))).url.endsWith('.png'), 'sau 10 phút: tải tiếp được')
-  // Tối đa 4 lượt cùng lúc.
-  const busy = createMain()
+  // Tối đa 4 lượt cùng lúc trên một app.
+  const busy = await createMain()
   let release
   const gate = new Promise(resolve => { release = resolve })
-  busy.state.onPut = () => gate
+  busy.api.onStore = () => gate
   const running = [0, 1, 2, 3].map(() => busy.transport.uploadImage(upload(PNG, 'image/png')))
-  await new Promise(resolve => setTimeout(resolve, 20))
-  ok(await codeOf(busy.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_rate_limited', 'đang có 4 lượt tải: lượt thứ 5 bị chặn')
+  await new Promise(resolve => setTimeout(resolve, 80))
+  ok(await codeOf(busy.transport.uploadImage(upload(PNG, 'image/png'))) === 'ai_chat_image_rate_limited' && busy.api.hits === 4, 'đang có 4 lượt tải: lượt thứ 5 bị chặn ngay trên máy')
   release()
   ok((await Promise.all(running)).length === 4, '4 lượt tải cùng lúc đều xong')
 
@@ -132,7 +188,7 @@ function createMain(options = {}) {
       completedAt: null, deadlineAt: new Date(Date.now() + 60_000).toISOString(), errorCode: null, errorMessage: null, rating: null }]
   })
   let dbStoresImages = true
-  const withRpc = createMain({
+  const withRpc = await createMain({
     rpc: async (action, payload) => {
       calls.push({ action, payload })
       if (action === 'cancel') return { changed: false, revision: 2, lastReadSeq: 0, serverTime: new Date().toISOString() }
@@ -149,10 +205,18 @@ function createMain(options = {}) {
   const foreign = `${STORE_PREFIX}1/2/0b7d6a2e-8a3b-4d55-9c1e-6f1c2f0e4f1a.png`
   ok(await codeOf(withRpc.transport.open({ requestId: newAiChatRequestId(), projectId: 1, campaignId: null, question: 'Ảnh người khác', intake: {}, images: [foreign] })) === 'ai_chat_images_invalid'
     && calls.length === before, 'open kèm ảnh trong thư mục của nhân viên khác: từ chối, không gọi RPC')
+  const notUploadedHere = `${STORE_PREFIX}1/1/0b7d6a2e-8a3b-4d55-9c1e-6f1c2f0e4f1a.png`
+  ok(await codeOf(withRpc.transport.ask(7, { requestId: newAiChatRequestId(), question: 'Ảnh không qua nút đính kèm', images: [notUploadedHere] })) === 'ai_chat_images_invalid'
+    && calls.length === before, 'ask kèm URL không phải ảnh vừa tải lên trong phiên này: từ chối, không gọi RPC')
   ok(await codeOf(withRpc.transport.ask(7, { requestId: newAiChatRequestId(), question: 'Ảnh ngoài', images: ['https://example.com/a.png'] })) === 'ai_chat_images_invalid'
     && calls.length === before, 'ask kèm URL ngoài kho media: từ chối, không gọi RPC')
   ok(await codeOf(withRpc.transport.ask(7, { requestId: newAiChatRequestId(), question: 'Nhiều', images: Array.from({ length: 11 }, (_, i) => `${own}?${i}`) })) === 'ai_chat_too_many_images',
     'quá 10 URL trong một lệnh: từ chối')
+  // Đổi sang tài khoản khác trên cùng app: ảnh của phiên trước không dùng được nữa.
+  withRpc.state.identity = { staffId: 2, organizationId: 1 }
+  ok(await codeOf(withRpc.transport.ask(7, { requestId: newAiChatRequestId(), question: 'Ảnh của phiên trước', images: [own] })) === 'ai_chat_images_invalid'
+    && calls.length === before, 'đổi tài khoản: ảnh do phiên trước tải lên bị từ chối')
+  withRpc.state.identity = { staffId: 1, organizationId: 1 }
   dbStoresImages = false
   ok(await codeOf(withRpc.transport.ask(7, { requestId: newAiChatRequestId(), question: 'DB cũ', images: [own] })) === 'ai_chat_images_not_ready'
     && calls.at(-1).action === 'cancel' && calls.at(-1).payload.messageId === 70, 'database chưa nhận ảnh (lõi cũ bỏ qua images): dừng câu vừa ghi rồi báo rõ')
@@ -182,12 +246,12 @@ if (psqlBin) {
       return { data: null, error: { code: '22023', message: /ERROR:\s+(.*)/.exec(String(error.stderr ?? error.message))?.[1]?.trim() ?? 'unknown' } }
     }
   }
-  const main = createMain({ rpc })
+  const main = await createMain({ rpc })
   const BASE = 'https://e2e.supabase.co/functions/v1/ai-chat-agent'
-  // Bộ trả lời đọc ảnh từ đúng kho mà tiến trình chính của Desktop vừa ghi.
+  // Bộ trả lời đọc ảnh từ đúng kho mà API Web vừa ghi cho Desktop.
   const handler = createAiChatAgentHandler({
     rpc: edgeCall('aka_agent_ai_chat_worker'), reader: edgeCall('aka_agent_ai_chat_reader'), insert: edgeCall('aka_agent_ai_chat_insert'),
-    images: { prefix: async () => STORE_PREFIX, download: async link => main.state.files.get(link)?.bytes ?? null }, publicBaseUrl: BASE
+    images: { prefix: async () => STORE_PREFIX, download: async link => main.api.files.get(link)?.bytes ?? null }, publicBaseUrl: BASE
   })
   const post = async (path, body) => (await handler(new Request(BASE + path, { method: 'POST', body: JSON.stringify(body ?? {}) }))).json()
   const download = async link => {
@@ -237,5 +301,6 @@ if (psqlBin) {
   ok(plain.changed && plain.messages.at(-1).images.length === 0, 'ask không ảnh vẫn chạy như trước')
 }
 
+for (const server of servers) { server.closeAllConnections?.(); server.close() }
 console.log(failed === 0 ? `PASS_DESKTOP_IMAGES ${total}` : `FAIL_DESKTOP_IMAGES ${failed}/${total}`)
 process.exit(failed === 0 ? 0 : 1)
