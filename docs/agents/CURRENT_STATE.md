@@ -46,9 +46,20 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop 10.1.0](../audits/akaagent-10.1.0-20261119/README.md):
+**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 20:23:50–20:26:56 VN, 19/11/2026. Chưa upload/phát hành/feed (anh tự phát
+hành). Không build App Server** (9/247 file trong gói Server đổi sau 10.0.0: phần engine / Facebook App Server không chạy, và #724 đo khoảng
+chờ bằng đồng hồ đơn điệu, không đổi hành vi khi giờ máy đúng). Nguồn worktree `release-10.1.0`, nhánh `codex/release-10.1.0` `930f85fc`
+(chỉ đổi version) trên `origin/dev_3` `f31c8e7f` sau PR #725. Mới so với 10.0.0: tách Z114 trong engine Zalo Desktop (#720, V581),
+mục menu "Kiểm tra nhập mã xác minh Fanpage" (#721; V582 câu ở block chưa apply, phải đổi số vì 582 đã thuộc `aka_assistant_images`),
+ảnh đính kèm Hỏi đáp AI (#722), hạn chờ đo bằng đồng hồ đơn điệu (#724). 66/70 bước kiểm đạt; 4 bước lỗi đã giải thích:
+`server-rest-smoke` (script kiểm không cấp `monotonicNow` sau #724, bản sao có cấp 19/19), `ai-chat-images-ui-smoke` (cần
+`AI_CHAT_UI_CHROMIUM`, chạy lại 8 nhóm đạt), `zalo-message-status-sync` và phát lại bản chép 18/11 như 10.0.0. Không DB/deploy service
+trong bước build. [Receipt](../audits/akaagent-10.1.0-20261119/build-receipt.json).
+
 [Build akaAgent Desktop 10.0.0](../audits/akaagent-10.0.0-20261118/README.md):
-**Đã build lại lần 2 Windows x64, Mac ARM64, Mac Intel x64 lúc 23:22:11–23:25:27 VN, 18/11/2026, vì `dev_3` có code mới (#718). Chưa
-upload/phát hành/feed (lúc 23:29 VN feed cả ba nền tảng còn 9.9.0; anh tự phát hành). Không build App Server** (3/246 file trong gói
+**Đã build lại lần 2 Windows x64, Mac ARM64, Mac Intel x64 lúc 23:22:11–23:25:27 VN, 18/11/2026, vì `dev_3` có code mới (#718). Đã
+phát hành: feed cả ba nền tảng trả 10.0.0 (kiểm 08:40 VN và 20:01 VN 19/11). Không build App Server** (3/246 file trong gói
 Server đổi sau lần 1, #718 không đổi hành vi đường Zalo Server; từ 9.9.0 chỉ #702 chạm đường này: App Server vẫn báo câu cũ khi proxy từ
 chối lúc quét QR). Nguồn worktree `release-10.0.0`, nhánh `codex/release-10.0.0-r2` = `origin/dev_3` `fad8c14f` sau PR #718 (version đã
 10.0.0 từ #717, không commit đổi version). **Bộ cài lần 1 (nền `514d306c`, 21:39–21:43 VN, merge `dev_3` qua #717) đã bị thay, không
