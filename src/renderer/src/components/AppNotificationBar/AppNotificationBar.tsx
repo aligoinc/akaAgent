@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, CircleAlert, ExternalLink, Info, WifiOff } from 'lucide-react'
 import type { AppNotification, AppNotificationLevel } from '../../../../shared/types'
 import { APP_NOTIFICATION_REFRESH_EVENT } from '../../stores/renewalReminderStore'
+import { isUpgradePortalUrl } from '../../../../shared/upgradePortal'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 
 const REFRESH_INTERVAL_MS = 60 * 60_000
 
@@ -81,6 +83,8 @@ export default function AppNotificationBar() {
     : notification!.message
   const linkUrl = isOffline ? null : notification!.linkUrl
   const linkLabel = notification?.linkLabel || 'Xem chi tiết'
+  // Link tới cổng gia hạn / nâng cấp (gồm thông báo nhắc gia hạn kiểu cũ): mở form trong phần mềm. Link khác mở trình duyệt.
+  const opensUpgradePortal = isUpgradePortalUrl(linkUrl)
 
   return (
     <div
@@ -99,9 +103,10 @@ export default function AppNotificationBar() {
           href={linkUrl}
           target="_blank"
           rel="noreferrer"
+          onClick={opensUpgradePortal ? event => { event.preventDefault(); useUpgradePortalStore.getState().open({ from: 'banner' }) } : undefined}
         >
           <span>{linkLabel}</span>
-          <ExternalLink size={14} aria-hidden="true" />
+          {!opensUpgradePortal && <ExternalLink size={14} aria-hidden="true" />}
         </a>
       )}
     </div>

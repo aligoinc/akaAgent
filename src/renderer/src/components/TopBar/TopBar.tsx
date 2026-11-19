@@ -19,6 +19,7 @@ import {
   Monitor,
   MessageSquare,
   Moon,
+  PackagePlus,
   RefreshCw,
   SearchX,
   ServerCog,
@@ -38,6 +39,8 @@ import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
 import NotificationBell from '../Notifications/NotificationBell'
 import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
+import { UPGRADE_PORTAL_MENU_CAPTION, UPGRADE_PORTAL_MENU_LABEL } from '../../../../shared/upgradePortal'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 import { ENGINE_ERROR_REVIEW_MENU_LABEL } from '../../../../shared/engineErrorReview'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
@@ -375,6 +378,19 @@ export default function TopBar({
                 <Info size={16} />
                 <span>Thông tin tài khoản</span>
               </button>
+              {/* Mọi tài khoản đều thấy, không theo công tắc nào; bấm mới gọi DB (xin vé mở cổng). */}
+              {user && <button
+                type="button"
+                className="app-sidebar-flyout-item app-sidebar-flyout-item-captioned"
+                role="menuitem"
+                onClick={() => { setAccountMenuOpen(false); useUpgradePortalStore.getState().open({ from: 'menu' }) }}
+              >
+                <PackagePlus size={16} />
+                <span className="app-sidebar-flyout-item-text">
+                  <span>{UPGRADE_PORTAL_MENU_LABEL}</span>
+                  <small>{UPGRADE_PORTAL_MENU_CAPTION}</small>
+                </span>
+              </button>}
               <button
                 type="button"
                 className={`app-sidebar-flyout-item ${availableUpdateVersion ? 'has-update' : ''}`}

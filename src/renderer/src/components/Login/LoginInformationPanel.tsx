@@ -1,5 +1,7 @@
 import { AlertTriangle, ArrowUpRight, BookOpen, CheckCircle2, CircleAlert, CreditCard, Globe2, Info, MessageCircle, Sparkles } from 'lucide-react'
 import type { LoginScreenContent } from '../../../../shared/types'
+import { isUpgradePortalUrl } from '../../../../shared/upgradePortal'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 
 const noticeIcons = { info: Info, success: CheckCircle2, warning: AlertTriangle, error: CircleAlert }
 const resourceLinks: {
@@ -51,13 +53,25 @@ export default function LoginInformationPanel({ content }: { content: LoginScree
         <nav className="login-resources" aria-label="Liên kết hữu ích">
           <h3>Liên kết hữu ích</h3>
           <div className="login-resource-grid">
-            {visibleLinks.map(({ key, label, detail, icon: LinkIcon }) => (
-              <a key={key} className="login-resource" href={links[key]!} target="_blank" rel="noopener noreferrer">
-                <LinkIcon className="login-resource-icon" size={20} strokeWidth={1.7} aria-hidden="true" />
-                <span><strong>{label}</strong><small>{detail}</small></span>
-                <ArrowUpRight className="login-resource-arrow" size={15} aria-hidden="true" />
-              </a>
-            ))}
+            {visibleLinks.map(({ key, label, detail, icon: LinkIcon }) => {
+              // "Nâng cấp và thanh toán" trỏ tới cổng gia hạn: mở form trong phần mềm (chưa đăng nhập nên khách đăng nhập
+              // ngay trên trang CRM trong form). Địa chỉ khác vẫn mở trình duyệt như các link còn lại.
+              const opensForm = key === 'upgradePayment' && isUpgradePortalUrl(links[key])
+              return (
+                <a
+                  key={key}
+                  className="login-resource"
+                  href={links[key]!}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={opensForm ? event => { event.preventDefault(); useUpgradePortalStore.getState().open({ from: 'login' }) } : undefined}
+                >
+                  <LinkIcon className="login-resource-icon" size={20} strokeWidth={1.7} aria-hidden="true" />
+                  <span><strong>{label}</strong><small>{detail}</small></span>
+                  <ArrowUpRight className="login-resource-arrow" size={15} aria-hidden="true" />
+                </a>
+              )
+            })}
           </div>
         </nav>
       )}

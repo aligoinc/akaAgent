@@ -1,9 +1,22 @@
 import { X, AlertCircle, CheckCircle, Info } from 'lucide-react'
 import { useUiStore } from '../../stores/uiStore'
+import { useAuthStore } from '../../stores/authStore'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
+import { UPGRADE_PORTAL_FEATURE_BUTTON_LABEL } from '../../../../shared/upgradePortal'
+import { isUpgradePortalFeatureMessage } from '../../../../shared/upgradePortalDesktop'
 
 export default function AlertModal() {
   const { alert, closeAlert } = useUiStore()
+  const loggedIn = useAuthStore(state => !!state.user)
   if (!alert.isOpen) return null
+
+  // "Tính năng … chưa được kích hoạt hoặc đã hết hạn.": thêm lối mua / dùng thử ngay trong thông báo (form "Nâng cấp và mua
+  // gói"). Chỉ áp dụng cho thông báo lỗi chưa có nút riêng và khi đang đăng nhập; nút "Đóng" giữ nguyên.
+  const offerUpgrade = loggedIn && alert.type === 'error' && !alert.action && isUpgradePortalFeatureMessage(alert.message)
+  const handleUpgrade = () => {
+    closeAlert()
+    useUpgradePortalStore.getState().open({ from: 'feature' })
+  }
 
   const handleAction = () => {
     const action = alert.action
@@ -29,9 +42,16 @@ export default function AlertModal() {
           {alert.message}
         </div>
         <div className="modal-footer" style={{ justifyContent: 'center', gap: '8px', borderTop: 'none', paddingBottom: '24px' }}>
-          <button className="btn btn-primary" onClick={alert.action ? handleAction : closeAlert} style={{ padding: '8px 32px' }}>
-            {alert.action?.label || 'Đóng'}
-          </button>
+          {offerUpgrade ? (
+            <>
+              <button className="btn btn-secondary" onClick={closeAlert} style={{ padding: '8px 24px' }}>Đóng</button>
+              <button className="btn btn-primary" onClick={handleUpgrade} style={{ padding: '8px 24px' }}>{UPGRADE_PORTAL_FEATURE_BUTTON_LABEL}</button>
+            </>
+          ) : (
+            <button className="btn btn-primary" onClick={alert.action ? handleAction : closeAlert} style={{ padding: '8px 32px' }}>
+              {alert.action?.label || 'Đóng'}
+            </button>
+          )}
         </div>
       </div>
     </div>

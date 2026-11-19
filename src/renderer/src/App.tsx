@@ -34,6 +34,7 @@ import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequ
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import RenewalReminderBanner from './components/RenewalReminder/RenewalReminderBanner'
 import RenewalReminderHost from './components/RenewalReminder/RenewalReminderHost'
+import UpgradePortalHost from './components/UpgradePortal/UpgradePortalHost'
 import { useRenewalReminderStore } from './stores/renewalReminderStore'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
 import type { NotificationTarget } from './components/Notifications/notificationTargets'
@@ -439,6 +440,8 @@ export default function App() {
       <div className={`app-layout ${platformClass}`}>
         <div className="app-window-drag-frame" aria-hidden="true" />
         {renewal ? <RenewalPage /> : <LoginPage />}
+        {/* Link "Nâng cấp và thanh toán" ở màn đăng nhập mở form trong phần mềm; màn Gia hạn trước đăng nhập đã có trang riêng. */}
+        {!renewal && <UpgradePortalHost scope={null} />}
         <AlertModal />
         <ConfirmModal />
         <CampaignEditDialogs />
@@ -659,6 +662,7 @@ export default function App() {
       )}
       <CustomerFeedbackLauncher />
       <RenewalReminderHost scope={`${user.organizationId}:${user.staffId}`} />
+      <UpgradePortalHost scope={`${user.organizationId}:${user.staffId}`} />
     </div>
   )
 }
