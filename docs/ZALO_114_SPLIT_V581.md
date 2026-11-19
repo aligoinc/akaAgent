@@ -11,8 +11,9 @@ Chỉ áp dụng cho engine v2 (bộ chạy cũ không đổi).
   4 luật, 0 dòng lint, engine chạy bình thường (478 lượt trong 3 phút, 0 lượt bị cắt ngang). Dòng TAG01 thật đầu tiên lúc 11:19:00 VN
   ("thất bại", không tính lượt, đúng câu đã duyệt).
 - Lõi `packages/campaign-engine`, cổng Desktop: đã merge `dev_3` qua [aligoinc/akaAgent#720](https://github.com/aligoinc/akaAgent/pull/720) ngày 19/11/2026 theo yêu
-  cầu ("Merge cả hai"). Cổng Fly và lõi chép sang ChatApi: PR [aligoinc/akaAgentChatApi#174](https://github.com/aligoinc/akaAgentChatApi/pull/174)
-  (merge vào `dev` khi CI xanh, cùng yêu cầu). Chưa deploy worker Fly, chưa build Desktop.
+  cầu ("Merge cả hai"). Cổng Fly và lõi chép sang ChatApi: đã merge `dev` qua
+  [aligoinc/akaAgentChatApi#174](https://github.com/aligoinc/akaAgentChatApi/pull/174) cùng ngày (anh: "merge đi ko cần chờ CI xanh đâu";
+  CI còn chạy lúc merge). Chưa deploy worker Fly, chưa build Desktop.
 - TAG01 có hiệu lực từ lúc apply cho tài khoản chạy engine v2. DAT02, DAT03, DAT04 cần lõi mới: deploy `worker` Fly và build Desktop.
 - **Bộ chạy cũ không đổi**: tổ chức chưa bật cờ engine v2 (còn chạy trên App Server) vẫn hiện "Tham số không hợp lệ" khi tag đầy. Ngày
   19/11 tới 11:18 VN: 4 tài khoản như vậy (6869, 12133, 10254, 11713; tổ chức 1300, 1914, 1090) có 70 lượt, 3 tài khoản engine (5474,
