@@ -46,6 +46,8 @@ import { BROWSER_RUN_LIMITS_IPC, type BrowserRunLimits, type SaveBrowserRunLimit
 import { CAMPAIGN_TYPE_VISIBILITY_IPC, type CampaignTypeVisibilityResult, type CampaignVisibilityChange } from '../shared/campaignTypeVisibility'
 import { RENEWAL_REMINDER_IPC, type RenewalReminderExternalResult, type RenewalReminderOpenResult } from '../shared/renewalReminderDesktop'
 import type { RenewalReminderState } from '../shared/renewalReminder'
+import type { UpgradePortalLinkRequest } from '../shared/upgradePortal'
+import { UPGRADE_PORTAL_IPC, type UpgradePortalCloseResult, type UpgradePortalExternalResult, type UpgradePortalOpenResult } from '../shared/upgradePortalDesktop'
 import { adminAPI } from './adminBridge'
 import { staffManagementAPI } from './staffManagementBridge'
 import { appAccessAPI } from './appAccessBridge'
@@ -699,6 +701,20 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, state: RenewalWebState) => callback(state)
     ipcRenderer.on(RENEWAL_REMINDER_IPC.webState, handler)
     return () => ipcRenderer.removeListener(RENEWAL_REMINDER_IPC.webState, handler)
+  },
+
+  // Nâng cấp và mua gói (docs/UPGRADE_PORTAL_DESKTOP.md): mọi lối mở chung một form nhúng cổng CRM. Link (có thể có vé) do
+  // tiến trình chính tự nạp vào form; không có link hay mã vé nào đi qua đây.
+  openUpgradePortal: (request: UpgradePortalLinkRequest): Promise<UpgradePortalOpenResult> =>
+    ipcRenderer.invoke(UPGRADE_PORTAL_IPC.open, request),
+  reloadUpgradePortal: (): Promise<RenewalWebState> => ipcRenderer.invoke(UPGRADE_PORTAL_IPC.webReload),
+  closeUpgradePortal: (): Promise<UpgradePortalCloseResult> => ipcRenderer.invoke(UPGRADE_PORTAL_IPC.close),
+  openUpgradePortalExternal: (request: UpgradePortalLinkRequest): Promise<UpgradePortalExternalResult> =>
+    ipcRenderer.invoke(UPGRADE_PORTAL_IPC.openExternal, request),
+  onUpgradePortalWebState: (callback: (state: RenewalWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: RenewalWebState) => callback(state)
+    ipcRenderer.on(UPGRADE_PORTAL_IPC.webState, handler)
+    return () => ipcRenderer.removeListener(UPGRADE_PORTAL_IPC.webState, handler)
   },
 
   // Reports

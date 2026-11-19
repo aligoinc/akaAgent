@@ -47,6 +47,7 @@ import { registerAccountContactHandlers } from './handlers/accountContactHandler
 import { registerAuthHandlers, type AuthRenewalControl } from './handlers/authHandlers'
 import { registerRenewalWebHandlers } from './handlers/renewalWebHandlers'
 import { registerRenewalReminderHandlers } from './handlers/renewalReminderHandlers'
+import { createUpgradePortalWebControl } from './handlers/upgradePortalHandlers'
 import { renewalReminderService } from '../services/renewalReminderService'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
@@ -1527,7 +1528,13 @@ export function registerIpcHandlers(
     }
   })
   authRenewal = renewalControl
-  registerRenewalWebHandlers(mainWindow, renewalControl, registerRenewalReminderHandlers(mainWindow, refreshEntitlementsForRenewal))
+  registerRenewalWebHandlers(
+    mainWindow,
+    renewalControl,
+    registerRenewalReminderHandlers(mainWindow, refreshEntitlementsForRenewal),
+    // Form "Nâng cấp và mua gói": dùng chung webview với cửa sổ "Gia hạn gói" (docs/UPGRADE_PORTAL_DESKTOP.md).
+    createUpgradePortalWebControl(refreshEntitlementsForRenewal)
+  )
   registerUpdateHandlers(mainWindow)
   registerAiHandlers()
   registerAkaBizIntegrationHandlers()

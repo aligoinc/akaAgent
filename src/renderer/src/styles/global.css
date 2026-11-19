@@ -26795,6 +26795,35 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
   font-weight: 700;
 }
 
+/* Nâng cấp và mua gói (docs/UPGRADE_PORTAL_DESKTOP.md): form nhúng cổng CRM dùng chung khung với cửa sổ "Gia hạn gói".
+   Form mở được từ trong các hộp thoại khác (thông báo tính năng chưa kích hoạt) nên nằm trên mọi hộp thoại, dưới hộp báo lỗi. */
+.upgrade-portal-overlay { z-index: 9000; }
+.app-sidebar-flyout-item.app-sidebar-flyout-item-captioned { height: auto; min-height: 44px; padding-top: 6px; padding-bottom: 6px; }
+.app-sidebar-flyout-item-text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.app-sidebar-flyout-item-text small { color: var(--text-secondary); font-size: 11px; font-weight: 500; line-height: 1.25; }
+.account-profile-more-button {
+  width: 100%;
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px dashed var(--border-default);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+.account-profile-more-button:hover { background: var(--bg-hover); }
+.account-profile-more-button:focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+.account-profile-more-button svg { flex-shrink: 0; color: var(--accent-primary); }
+.account-profile-more-button > span { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.account-profile-more-button strong { font-size: 12.5px; font-weight: 700; }
+.account-profile-more-button small { color: var(--text-secondary); font-size: 11.5px; }
+.upgrade-portal-inline-button { margin-left: 10px; vertical-align: middle; }
+
 /* Giới thiệu nhận hoa hồng (components/AffPartner/AffPartnerModal.tsx) */
 .aff-partner-modal {
   width: min(600px, calc(100vw - 32px));

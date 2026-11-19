@@ -3,6 +3,9 @@ import { Plus, Save, Trash2, UserMinus, UserPlus, X } from 'lucide-react'
 import { AccountGroupSettings, AutoAccount, AutoAccountAction, AutoAccountGroup } from '../../../../shared/types'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
+import { UPGRADE_PORTAL_FEATURE_BUTTON_LABEL } from '../../../../shared/upgradePortal'
+import { isUpgradePortalFeatureMessage } from '../../../../shared/upgradePortalDesktop'
 import {
   canUsePlatform,
   clampDailyLimitToEntitlement,
@@ -623,7 +626,21 @@ export default function AccountGroupManagerModal({
               </div>
             </div>
 
-            {error && <div className="account-info-error">{error}</div>}
+            {error && (
+              <div className="account-info-error">
+                {error}
+                {/* Tính năng chưa kích hoạt: thêm lối mua / dùng thử (form "Nâng cấp và mua gói"). */}
+                {isUpgradePortalFeatureMessage(error) && (
+                  <button
+                    type="button"
+                    className="renewal-reminder-secondary upgrade-portal-inline-button"
+                    onClick={() => useUpgradePortalStore.getState().open({ from: 'feature' })}
+                  >
+                    {UPGRADE_PORTAL_FEATURE_BUTTON_LABEL}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

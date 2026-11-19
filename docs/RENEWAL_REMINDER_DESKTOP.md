@@ -75,6 +75,8 @@ tới lần kích hoạt sau. Lần đọc đầu chưa xong thì chưa hiện g
   `currentRenewalId` như cũ) hoặc `reminder` (gắn mã phiên đăng nhập của service nhắc gia hạn). Hai chế độ dùng chung
   phân vùng `akaagent_renewal` và chung một chuỗi dọn dẹp nên không bao giờ cùng tồn tại (dispose đặt lại handler của
   session). Kênh `AUTH_RENEWAL_*` và cách gắn với lượt gia hạn giữ nguyên.
+  Từ 19/11/2026 có thêm chủ sở hữu thứ ba `shop` (form "Nâng cấp và mua gói", [UPGRADE_PORTAL_DESKTOP.md](UPGRADE_PORTAL_DESKTOP.md));
+  khung cửa sổ tách ra `PortalWebWindow.tsx` dùng chung, `RenewalReminderWindow.tsx` chỉ còn là lớp bọc (giao diện không đổi).
 - `RenewalWebService` chỉ thêm hai tuỳ chọn: `stateChannel` (mặc định kênh cũ `AUTH_RENEWAL_WEB_STATE`) và
   `onOrderCompleted`. Chặn điều hướng ngoài `https://crm.akabiz.net/gia-han*`, link ngoài/popup → trình duyệt, chặn tải
   file, chỉ cấp quyền ghi clipboard, xoá storage/cache/kết nối khi đóng: như cũ.

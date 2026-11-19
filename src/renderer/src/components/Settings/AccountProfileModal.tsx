@@ -1,9 +1,15 @@
-import { Info, Package, Phone, User, X } from 'lucide-react'
+import { Info, Package, PackagePlus, Phone, User, X } from 'lucide-react'
 import { useMemo } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useRenewalReminderStore } from '../../stores/renewalReminderStore'
 import { renewalProductGroup, renewalReminderTexts, type RenewalReminder } from '../../../../shared/renewalReminder'
 import type { AuthAccountProduct } from '../../../../shared/types'
+import {
+  UPGRADE_PORTAL_MORE_BUTTON_CAPTION,
+  UPGRADE_PORTAL_MORE_BUTTON_LABEL,
+  UPGRADE_PORTAL_PRODUCT_BUTTON_LABEL
+} from '../../../../shared/upgradePortal'
+import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 
 interface AccountProfileModalProps {
   onClose: () => void
@@ -38,6 +44,11 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
   const user = useAuthStore(state => state.user)
   const reminderState = useRenewalReminderStore(state => state.state)
   const openRenewalWindow = useRenewalReminderStore(state => state.openWindow)
+  // Form "Nâng cấp và mua gói": có id dòng sản phẩm thì cổng chọn sẵn đúng sản phẩm đó, không có thì mở chế độ mua hàng.
+  const openUpgradePortal = (entitlementId: number | null) => {
+    onClose()
+    useUpgradePortalStore.getState().open({ from: 'account', entitlementId })
+  }
   const reminder = reminderState?.enabled ? reminderState.reminder : null
   const reminderTexts = reminder && reminderState?.today ? renewalReminderTexts(reminder, reminderState.today) : null
   const products = useMemo(
@@ -120,9 +131,13 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                         <span className={`account-profile-product-status ${product.isActive ? 'is-active' : 'is-expired'}`}>
                           {product.isActive ? 'Còn hạn' : 'Hết hạn'}
                         </span>
-                        {reminderTexts && isReminderProduct(reminder, product) && (
+                        {reminderTexts && isReminderProduct(reminder, product) ? (
                           <button type="button" className="renewal-reminder-primary" onClick={() => { onClose(); openRenewalWindow() }}>
                             {reminderTexts.button}
+                          </button>
+                        ) : (
+                          <button type="button" className="renewal-reminder-secondary" onClick={() => openUpgradePortal(product.organizationProductId)}>
+                            {UPGRADE_PORTAL_PRODUCT_BUTTON_LABEL}
                           </button>
                         )}
                       </span>
@@ -131,6 +146,14 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                 ))}
               </div>
             )}
+
+            <button type="button" className="account-profile-more-button" onClick={() => openUpgradePortal(null)}>
+              <PackagePlus size={18} aria-hidden="true" />
+              <span>
+                <strong>{UPGRADE_PORTAL_MORE_BUTTON_LABEL}</strong>
+                <small>{UPGRADE_PORTAL_MORE_BUTTON_CAPTION}</small>
+              </span>
+            </button>
           </div>
         </div>
 

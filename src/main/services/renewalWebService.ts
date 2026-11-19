@@ -18,6 +18,8 @@ interface RenewalWebDependencies {
   stateChannel?: string
   /** Trang CRM vừa báo đơn đã kích hoạt (gọi một lần). */
   onOrderCompleted?: () => void
+  /** Câu báo lỗi riêng của form "Nâng cấp và mua gói"; bỏ trống thì dùng câu của trang gia hạn. */
+  texts?: { openFailed?: string; loadFailed?: string }
 }
 
 function isPortalOrigin(value: string): boolean {
@@ -34,8 +36,9 @@ function openExternal(value: string): void {
 }
 
 /**
- * Trình duyệt nhúng của cổng gia hạn: màn Gia hạn trước đăng nhập và cửa sổ "Gia hạn gói" khi đang đăng nhập
- * (nhắc gia hạn; `isAllowed` gắn với phiên đăng nhập thay vì lượt gia hạn). Chỉ mở cổng CRM /gia-han,
+ * Trình duyệt nhúng của cổng gia hạn: màn Gia hạn trước đăng nhập, cửa sổ "Gia hạn gói" khi đang đăng nhập
+ * (nhắc gia hạn; `isAllowed` gắn với phiên đăng nhập thay vì lượt gia hạn) và form "Nâng cấp và mua gói"
+ * (docs/UPGRADE_PORTAL_DESKTOP.md). Chỉ mở cổng CRM /gia-han,
  * phân vùng không lưu đĩa và bị xoá khi đóng màn; link ký số đi thẳng từ main
  * vào guest, không qua renderer.
  */
@@ -129,13 +132,13 @@ export class RenewalWebService {
       link = await this.deps.createLink()
     } catch (error) {
       if (generation === this.loadGeneration && this.isCurrent()) {
-        this.publish({ status: 'error', message: error instanceof Error ? error.message : 'Không thể mở trang gia hạn.' })
+        this.publish({ status: 'error', message: error instanceof Error ? error.message : this.deps.texts?.openFailed ?? 'Không thể mở trang gia hạn.' })
       }
       return
     }
     if (generation !== this.loadGeneration || guest !== this.guest || guest.isDestroyed() || !this.isCurrent()) return
     if (!isRenewalPortalUrl(link.url)) {
-      this.publish({ status: 'error', message: 'Không thể mở trang gia hạn.' })
+      this.publish({ status: 'error', message: this.deps.texts?.openFailed ?? 'Không thể mở trang gia hạn.' })
       return
     }
     this.publish({ signed: link.signed })
@@ -145,7 +148,7 @@ export class RenewalWebService {
     } catch {
       // Lỗi tải được renderer hiển thị qua sự kiện did-fail-load của webview.
       if (generation === this.loadGeneration && this.isCurrent()) {
-        this.publish({ status: 'error', message: 'Không tải được trang gia hạn. Vui lòng kiểm tra internet và thử lại.' })
+        this.publish({ status: 'error', message: this.deps.texts?.loadFailed ?? 'Không tải được trang gia hạn. Vui lòng kiểm tra internet và thử lại.' })
       }
     }
   }
