@@ -20,6 +20,7 @@ import {
   MessageSquare,
   Moon,
   RefreshCw,
+  SearchX,
   ServerCog,
   ShieldCheck,
   Settings,
@@ -37,6 +38,7 @@ import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
 import NotificationBell from '../Notifications/NotificationBell'
 import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
+import { ENGINE_ERROR_REVIEW_MENU_LABEL } from '../../../../shared/engineErrorReview'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
@@ -54,6 +56,7 @@ interface TopBarProps {
   onOpenChangePassword: () => void
   /** Mục "Đối tác akaBiz": mở trang đối tác của cổng bằng trình duyệt ngoài. */
   onOpenAffPartner: () => void
+  onOpenEngineErrorReview: () => void
   /** Mở trang Thông báo; truyền id để mở sẵn chi tiết một thông báo. */
   onOpenNotifications: (notificationId?: number) => void
   currentVersion: string
@@ -90,6 +93,7 @@ export default function TopBar({
   onOpenGeneralSettings,
   onOpenChangePassword,
   onOpenAffPartner,
+  onOpenEngineErrorReview,
   onOpenNotifications,
   currentVersion,
   availableUpdateVersion,
@@ -394,6 +398,10 @@ export default function TopBar({
               {/* Tính năng cơ bản: mọi tài khoản đều thấy, không theo công tắc nào. */}
               {user && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onOpenAffPartner() }}>
                 <Handshake size={16} /><span>{AFF_PARTNER_MENU_LABEL}</span>
+              </button>}
+              {/* Chỉ admin akaBiz: ca lỗi của bộ kiểm lỗi chiến dịch (V588). */}
+              {isAdminAkabiz && <button type="button" className="app-sidebar-flyout-item" role="menuitem" onClick={() => { setAccountMenuOpen(false); onOpenEngineErrorReview() }}>
+                <SearchX size={16} /><span>{ENGINE_ERROR_REVIEW_MENU_LABEL}</span>
               </button>}
               <button type="button" className="app-sidebar-flyout-item" onClick={handleOpenChangePassword} role="menuitem">
                 <KeyRound size={16} />

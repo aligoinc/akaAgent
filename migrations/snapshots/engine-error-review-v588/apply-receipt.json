@@ -1,0 +1,222 @@
+{
+ "migration": "migration_v588_engine_error_review",
+ "file": "migrations/migration_v588_engine_error_review.sql",
+ "file_md5": "a851282cbe6074ff7cdc9c1dca38f95f",
+ "rollback": "migrations/rollback_v588_engine_error_review.sql",
+ "rollback_md5": "47096725a8cea3333f91f03fcc8840ff",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by_user": "ok apply V586 đi (19/11/2026 ~19:58 VN)",
+ "renumbered": "Viết với số 586. Lúc kiểm trước apply (19:59 VN) sổ đã có migration_v586_aka_assistant_attachments (18:20 VN) và migration_v587_aka_assistant_data_attachments (19:37 VN) của phiên khác, nên đổi số trong bộ sinh thành 588 rồi sinh lại (thân hàm tick có chú thích nhắc số nên md5 thân đổi da8e118c… → b4e8c5008ce2b9c50501c14c66b6c5de). Chạy lại bài kiểm với bản V588: error-review-v588-smoke 11/11, error-watch-smoke 17/17, error-watch-agent-smoke 10/10.",
+ "method": "node scripts/make-migration-ledger-apply.cjs + supabase db query --linked -f (một giao dịch, dòng sổ chèn ngay trước COMMIT)",
+ "trial_rollback": {
+  "when_vn": "2026-11-19 20:02:09–20:02:12",
+  "note": "Chạy nguyên văn migration trong một giao dịch rồi ROLLBACK, kèm 2 lượt tick và gọi hàm review bằng phiên aka_agent_desktop của nhân viên 4 (admin akaBiz).",
+  "result": {
+   "bad": "{\"ok\": false, \"code\": \"bad_status\"}",
+   "case": "ok=true itemTotal=22 items=22 keys=id,message,staffId,dataName,accountId,staffName,campaignId,occurredAt,publicCode,accountName,inputDataId,targetRunId,campaignName,noteAppliedAt,organizationId,organizationName",
+   "case_ms": "15",
+   "cases_report": "3/55 note_proposed=0 code_proposed=0",
+   "end": "2026-11-19 13:02:12.01408+00",
+   "items": "460",
+   "items2": "460",
+   "items_size": "488 kB",
+   "list": "{\"ok\": true, \"state\": {\"lastError\": null, \"lastTickAt\": \"2026-11-19T13:02:11.975672+00:00\", \"tasksToday\": 10}, \"total\": 55, \"counts\": {\"new\": 47, \"failed\": 6, \"reported\": 2}, \"settings\": {\"fire\": false, \"enabled\": true, \"enqueue\": true, \"imageRequests\": false}, \"needsReview\": 0} n_cases=50",
+   "list_ms": "7",
+   "mig_done": "2026-11-19 13:02:11.954069+00",
+   "note_applied": "0",
+   "start": "2026-11-19 13:02:09.365244+00",
+   "tick1": {
+    "cases": 0,
+    "enabled": true,
+    "enqueue": false,
+    "fired": 0,
+    "from": "2026-11-19T13:01:45.092548+00:00",
+    "imageRequests": 0,
+    "inserted": [],
+    "items": 0,
+    "notes": 0,
+    "ok": true,
+    "paused": 0,
+    "refired": 0,
+    "seen": 0,
+    "skipped": [],
+    "spikes": 0,
+    "stale": 0,
+    "tasksToday": 10,
+    "to": "2026-11-19T13:01:56.954885+00:00"
+   },
+   "tick1_ms": "21",
+   "tick2": {
+    "cases": 0,
+    "enabled": true,
+    "enqueue": false,
+    "fired": 0,
+    "from": "2026-11-19T13:01:56.954885+00:00",
+    "imageRequests": 0,
+    "inserted": [],
+    "items": 0,
+    "notes": 0,
+    "ok": true,
+    "paused": 0,
+    "refired": 0,
+    "seen": 0,
+    "skipped": [],
+    "spikes": 0,
+    "stale": 0,
+    "tasksToday": 10,
+    "to": "2026-11-19T13:01:56.975672+00:00"
+   },
+   "tick2_ms": "13",
+   "tick_md5": "b4e8c5008ce2b9c50501c14c66b6c5de"
+  }
+ },
+ "applied": {
+  "started_vn": "2026-11-19 20:02:29",
+  "committed_vn": "2026-11-19 20:02:31 (PostgREST nhận lệnh nạp lại schema 20:02:31.92)",
+  "ledger": {
+   "by": null,
+   "md5": "a851282cbe6074ff7cdc9c1dca38f95f",
+   "n": 1,
+   "name": "migration_v588_engine_error_review",
+   "version": "20261119130229"
+  }
+ },
+ "postgrest": {
+  "schema_cache_queried_ms": 3337.9,
+  "loaded_vn": "20:02:36"
+ },
+ "edge_logs_rest": {
+  "window_vn": "20:01:00–20:03:00, gom 20 giây",
+  "e5xx": 0,
+  "e503": 0,
+  "slow_over_1s": {
+   "20:02:00": 2,
+   "20:02:20": 52,
+   "20:02:40": 0
+  },
+  "p99_ms": {
+   "20:01:40": 147,
+   "20:02:20": 886,
+   "20:02:40": 214
+  }
+ },
+ "post_check": {
+  "cases": {
+   "code_proposed": 0,
+   "fired": 0,
+   "n": 55,
+   "note_proposed": 0,
+   "with_report": 3
+  },
+  "cfg": "{\"fire\": false, \"enabled\": true, \"enqueue\": true, \"staffId\": 4, \"maxPerDay\": 10, \"knownCodes\": [\"err_fb_group_composer_editor_not_found\", \"err_group_post_frequency_limit\", \"err_fb_group_cannot_post_not_member\", \"err_fb_group_cannot_post_unavailable\", \"err_fb_add_friend_unavailable\", \"err_fb_page_inbox_customer_not_found\", \"err_fb_page_inbox_wrong_conversation\", \"err_engine_fb_no_history\", \"err_engine_cancelled\", \"err_network_offline\", \"err_media_local_file_missing\"], \"maxPending\": 2, \"regrowDays\": 7, \"projectCode\": \"kiem-loi-chien-dich-facebook\", \"regrowFactor\": 3, \"resendPerDay\": 2, \"enqueueWindow\": {\"toMinute\": 58, \"fromMinute\": 54}, \"imageRequests\": false, \"imageMaxTableMb\": 2048}",
+  "cron_last": [
+   {
+    "dur": "00:00:00.052586",
+    "return_message": "1 row",
+    "start_time": "2026-11-19T13:02:00.088864+00:00",
+    "status": "succeeded"
+   },
+   {
+    "dur": "00:00:00.097415",
+    "return_message": "1 row",
+    "start_time": "2026-11-19T13:00:00.132417+00:00",
+    "status": "succeeded"
+   },
+   {
+    "dur": "00:00:00.051149",
+    "return_message": "1 row",
+    "start_time": "2026-11-19T12:58:00.088551+00:00",
+    "status": "succeeded"
+   }
+  ],
+  "details_touched": 0,
+  "items": 460,
+  "items_acl": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres}",
+  "items_cases": 50,
+  "items_rls": true,
+  "ledger": {
+   "by": null,
+   "md5": "a851282cbe6074ff7cdc9c1dca38f95f",
+   "n": 1,
+   "name": "migration_v588_engine_error_review",
+   "version": "20261119130229"
+  },
+  "new_cols": 44,
+  "now_vn": "20:02:48",
+  "review_acl": "{postgres=X/postgres,aka_agent_desktop=X/postgres}",
+  "state": {
+   "last_error": null,
+   "last_result": {
+    "cases": 0,
+    "enabled": true,
+    "enqueue": false,
+    "fired": 0,
+    "from": "2026-11-19T12:59:45.136879+00:00",
+    "imageRequests": 0,
+    "inserted": [],
+    "ok": true,
+    "paused": 0,
+    "seen": 6,
+    "skipped": [],
+    "spikes": 0,
+    "stale": 0,
+    "tasksToday": 10,
+    "to": "2026-11-19T13:01:45.092548+00:00"
+   },
+   "last_tick_at": "2026-11-19T13:02:00.092548+00:00"
+  },
+  "tick_acl": "{postgres=X/postgres,service_role=X/postgres}",
+  "tick_md5": "b4e8c5008ce2b9c50501c14c66b6c5de",
+  "tick_secdef": true
+ },
+ "first_ticks_after_apply": {
+  "cron_last": [
+   {
+    "ms": 67,
+    "return_message": "1 row",
+    "st": "20:04:00",
+    "status": "succeeded"
+   },
+   {
+    "ms": 62,
+    "return_message": "1 row",
+    "st": "20:06:00",
+    "status": "succeeded"
+   }
+  ],
+  "items": 464,
+  "now_vn": "20:06:09",
+  "pg_errors_fn": 0,
+  "state": {
+   "last_error": null,
+   "last_result": {
+    "cases": 1,
+    "enabled": true,
+    "enqueue": false,
+    "fired": 0,
+    "from": "2026-11-19T13:03:45.124755+00:00",
+    "imageRequests": 0,
+    "inserted": [],
+    "items": 4,
+    "notes": 0,
+    "ok": true,
+    "paused": 1,
+    "refired": 0,
+    "seen": 14,
+    "skipped": [],
+    "spikes": 0,
+    "stale": 0,
+    "tasksToday": 10,
+    "to": "2026-11-19T13:05:45.084043+00:00"
+   },
+   "last_tick_at": "2026-11-19T13:06:00.084043+00:00"
+  }
+ },
+ "settings_unchanged": "engine.error_watch giữ nguyên: enabled true, enqueue true (khung phút 54–58), fire false, imageRequests false. Vault chưa có AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN.",
+ "not_done": [
+  "chưa bật /fire",
+  "chưa commit / merge nhánh claude/fb-error-watch-live (phiên cloud chưa đọc khuôn báo cáo mới)",
+  "chưa build Desktop nên chưa có tab trong app",
+  "chưa có ca nào mang câu cho khách hay đề xuất mã lỗi"
+ ]
+}

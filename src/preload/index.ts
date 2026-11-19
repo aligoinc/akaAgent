@@ -56,6 +56,10 @@ import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../
 import type { AiChatImageUpload } from '../shared/aiChat'
 import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
 import type { AffPartnerResponse } from '../shared/affPartner'
+import {
+  ENGINE_ERROR_REVIEW_IPC,
+  type EngineErrorCaseResponse, type EngineErrorDecision, type EngineErrorList, type EngineErrorListQuery, type EngineErrorReviewIpcResult
+} from '../shared/engineErrorReview'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
   type CampaignSupportControlRequest, type CampaignSupportImageRequest, type CampaignSupportVariant } from '../shared/campaignSupport'
 import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type SaveCampaignDraftRequest,
@@ -256,6 +260,18 @@ const electronAPI = {
     ipcRenderer.invoke(AFF_PARTNER_IPC.summary),
   affPartnerOpenPortal: (): Promise<AffPartnerIpcResult<AffPartnerOpenPortalResult>> =>
     ipcRenderer.invoke(AFF_PARTNER_IPC.openPortal),
+
+  // Tab "Lỗi không xác định" (V588, admin akaBiz): đọc / duyệt ca lỗi của bộ kiểm lỗi chiến dịch Facebook. Chỉ gọi khi admin mở tab hoặc bấm nút.
+  engineErrorReviewList: (query?: EngineErrorListQuery): Promise<EngineErrorReviewIpcResult<EngineErrorList>> =>
+    ipcRenderer.invoke(ENGINE_ERROR_REVIEW_IPC.call, 'list', query ?? {}),
+  engineErrorReviewCase: (caseKey: string, page?: { limit?: number; offset?: number }): Promise<EngineErrorReviewIpcResult<EngineErrorCaseResponse>> =>
+    ipcRenderer.invoke(ENGINE_ERROR_REVIEW_IPC.call, 'case', { caseKey, ...page }),
+  engineErrorReviewNote: (caseKey: string, decision: 'approve' | 'reject', note?: string): Promise<EngineErrorReviewIpcResult<EngineErrorDecision>> =>
+    ipcRenderer.invoke(ENGINE_ERROR_REVIEW_IPC.call, 'note', { caseKey, decision, note }),
+  engineErrorReviewCode: (caseKey: string, decision: 'approve' | 'reject'): Promise<EngineErrorReviewIpcResult<EngineErrorDecision>> =>
+    ipcRenderer.invoke(ENGINE_ERROR_REVIEW_IPC.call, 'code', { caseKey, decision }),
+  engineErrorReviewMark: (caseKey: string, status: 'known' | 'new'): Promise<EngineErrorReviewIpcResult<EngineErrorDecision>> =>
+    ipcRenderer.invoke(ENGINE_ERROR_REVIEW_IPC.call, 'mark', { caseKey, status }),
 
   openCampaignSupport: (campaignId: number, startRequestId?: string, variant?: CampaignSupportVariant): Promise<CampaignSupportConversation> =>
     ipcRenderer.invoke(CAMPAIGN_SUPPORT_IPC.open, campaignId, startRequestId, variant),

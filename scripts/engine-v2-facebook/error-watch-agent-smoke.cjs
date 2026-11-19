@@ -116,6 +116,28 @@ async function main() {
     assert.match(errs([]), /JSON object/)
   })
 
+  await check('đề xuất câu cho khách và mã lỗi mới: đúng khuôn thì nhận, có mã nội bộ / từ kỹ thuật / mã công khai / xuống dòng thì từ chối', () => {
+    const errs = raw => agent.validateReport(raw).errors.join(' | ')
+    const proposal = { ten_loi: 'Không xác nhận được bài đã đăng', cau_cho_khach: 'Chưa xác nhận được bài đã đăng', buoc_tiep_theo: 'Vui lòng xem lại trong nhóm',
+      cach_xu_ly: 'Không tính lượt, không cộng chuỗi lỗi, data về hàng đợi', dau_hieu: 'Bước click_post báo không đọc được trạng thái trang' }
+    const ok = agent.validateReport({ ...GOOD, cau_cho_khach: 'Chưa xác nhận được bài đã đăng', de_xuat_ma_loi: proposal })
+    assert.deepEqual(ok.errors, [])
+    assert.match(ok.answer, /Câu cho khách \(đề xuất, chờ duyệt\): Chưa xác nhận được bài đã đăng/)
+    assert.match(ok.answer, /Đề xuất mã lỗi mới \(chờ duyệt\):\n- Tên lỗi: Không xác nhận được bài đã đăng/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'abc' }), /cau_cho_khach: 5–200 ký tự/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'x'.repeat(201) }), /cau_cho_khach: 5–200 ký tự/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'Dòng một\nDòng hai' }), /viết trên một dòng/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'Lỗi err_undefined khi đăng bài' }), /không dùng mã nội bộ/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'Không tìm thấy selector của ô nhập' }), /không dùng mã nội bộ/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 'Chưa xác nhận được bài đã đăng (SYS99)' }), /không tự kèm mã công khai/)
+    assert.match(errs({ ...GOOD, cau_cho_khach: 12 }), /cau_cho_khach: phải là chuỗi/)
+    assert.match(errs({ ...GOOD, de_xuat_ma_loi: 'x' }), /de_xuat_ma_loi: phải là object/)
+    assert.match(errs({ ...GOOD, de_xuat_ma_loi: { ...proposal, la: 1 } }), /de_xuat_ma_loi: khoá lạ "la"/)
+    assert.match(errs({ ...GOOD, de_xuat_ma_loi: { ...proposal, cau_cho_khach: undefined } }), /de_xuat_ma_loi\.cau_cho_khach: bắt buộc/)
+    assert.match(errs({ ...GOOD, de_xuat_ma_loi: { ...proposal, dau_hieu: '' } }), /de_xuat_ma_loi\.dau_hieu: bắt buộc/)
+    assert.match(errs({ ...GOOD, de_xuat_ma_loi: { ...proposal, ten_loi: 'abc' } }), /de_xuat_ma_loi\.ten_loi/)
+  })
+
   await check('next: nhận câu cũ nhất bằng /next có lọc mã agent, lưu tệp, in câu hỏi và quy tắc', async () => {
     const s = await api(route => route === 'next' ? { status: 200, data: { ok: true, question: job(514) } } : null)
     const r = await run(s.url, ['next'], env)
