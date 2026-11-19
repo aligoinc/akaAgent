@@ -1,0 +1,46 @@
+{
+  "migration": "migration_v585_engine_multi_slot_array",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh nhutlq (\"Apply ngay\", 19/11/2026)",
+  "applied_at_vn": "2026-11-19 15:56:22",
+  "ledger_version": "20261119085621",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked (dòng sổ trong cùng giao dịch)",
+  "file_md5": "560b3ff9ff2a393f74a5d3a63131c07e",
+  "ledger_statement_md5": "560b3ff9ff2a393f74a5d3a63131c07e",
+  "function": "public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)",
+  "functiondef_md5_before": "d8c9a144ae30718e7a5aed5d58914fb1",
+  "functiondef_md5_after": "92c119f20d47ea5eee0770b5e6498d41",
+  "acl_after": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres",
+  "precheck": {
+    "at_vn": "2026-11-19 15:56:05",
+    "ledger_top": "migration_v584_aka_assistant_data_images (20261119080713)",
+    "v585_in_ledger": 0,
+    "active_client_backends": 4
+  },
+  "postgrest": {
+    "reload_message_at_utc": "2026-11-19T08:56:22.145Z",
+    "schema_cache_queried_ms": 10191.3,
+    "loaded_at_utc": "2026-11-19T08:56:32.878Z"
+  },
+  "impact_rest_v1": {
+    "window_utc": "08:56:00–08:56:30",
+    "requests": 19549,
+    "over_1s": 726,
+    "p50_ms": 53,
+    "p99_ms": 2217,
+    "http_5xx": 2,
+    "http_503": 0,
+    "http_5xx_detail": "2 lượt rpc/aka_agent_engine_report_v1 (Desktop) quá trần 3 giây ở bước ghi auto_automation_detail lúc 08:56:25 và 08:56:27 UTC",
+    "next_window_08:56:30": "2 request trên 1 giây, 0 lỗi 5xx",
+    "next_window_08:57:00": "0 request trên 1 giây, 0 lỗi 5xx"
+  },
+  "engine_runs_started_08:40_to_08:56:30_utc": {
+    "reported_desktop": 1272,
+    "reported_fly": 266,
+    "open_at_15:57:51_vn": [256633, 257523]
+  },
+  "not_done": [
+    "Chưa cho chạy lại ba chiến dịch 58847 / 58849 / 59089 của tổ chức 2214 (đang hoàn thành)",
+    "Chưa thấy lượt chạy thật nào đi qua nhánh khung giờ dạng mảng sau khi apply"
+  ]
+}

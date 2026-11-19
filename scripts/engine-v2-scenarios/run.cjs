@@ -41,6 +41,8 @@ const HEARTBEAT_MS = 61_237 // khác mọi nhịp nghỉ thật để đồng h�
 const HEARTBEAT_REAL_MS = Number(process.env.ENGINE_SCENARIO_HEARTBEAT_REAL_MS || 15000)
 // Vi phạm đã biết, chưa sửa: vẫn in ra nhưng không làm mã thoát thành 1, để mã thoát chỉ báo lỗi mới.
 // Sửa xong thì xoá dòng tương ứng (docs/CAMPAIGN_OUTCOME_ENGINE_SCENARIO_TEST.md mục E).
+/** Lý do của hàm kết thúc lượt khi nó đặt lại data cho lượt kế tiếp (data đã gửi quay lại "chờ xử lý" là đúng). */
+const PASS_RESET_REASONS = new Set(['slot_advanced', 'repeat_scheduled', 'rerun_scheduled'])
 const KNOWN_INVARIANTS = {
   I1b: 'E1: data trùng trong cùng lô chia sẻ, bộ cũ cũng vậy, chưa sửa'
 }
@@ -329,7 +331,13 @@ async function runUnitOnce(run, entry, x = {}) {
     ...(afterReport ? { afterReport } : {}),
     ...(x.shouldStopAfterTarget ? { shouldStopAfterTarget: x.shouldStopAfterTarget } : {}),
     ...(x.maxTargets ? { maxTargets: x.maxTargets } : {}),
-    onNoTarget: async info => rpc('SELECT public.aka_agent_engine_finish_campaign_v2($1, $2, $3) AS r', [entry.accountId, info.leaseToken, info.note ?? null]),
+    onNoTarget: async info => {
+      const finished = await rpc('SELECT public.aka_agent_engine_finish_campaign_v2($1, $2, $3) AS r', [entry.accountId, info.leaseToken, info.note ?? null])
+      // Lượt xong và hàm kết thúc lượt đặt lại data cho lượt kế (nhiều khung giờ, gửi lặp lại, lặp lại sau khi chạy xong): ghi lại lúc đặt
+      // lại để I7 chỉ xét kết quả của lượt đang chạy, không tính kết quả của lượt trước.
+      if (PASS_RESET_REASONS.has(finished?.reason)) (log.passResets ??= {})[entry.campaignId] = new Date().toISOString()
+      return finished
+    },
     formatTime: iso => new Date(iso).toISOString(),
     pacing: { fullSeconds: 1 }, stepTimeoutMs: 2500, heartbeatMs: HEARTBEAT_MS, retry: { callTimeoutMs: 8000, backoffMs: [5, 10, 20] }, drainTimeoutMs: 2000
   }
@@ -825,10 +833,14 @@ async function invariants(db, log, scope) {
   // I6 tín hiệu chưa có luật.
   const unmatched = await q(`SELECT platform, action_code, phase, signal_kind, pattern_key, fallback_error_code, hit_count FROM public.auto_outcome_unmatched ORDER BY hit_count DESC`)
   // I7 data đã có thể nhận mà về hàng đợi / tạm dừng.
+  // Chiến dịch được đặt lại data cho lượt kế (PASS_RESET_REASONS) thì chỉ xét kết quả ghi sau lần đặt lại gần nhất: gửi lại ở lượt kế là
+  // đúng cài đặt của khách.
+  const passResets = Object.entries(log.passResets ?? {})
   fail('I7', 'Data đã gửi được / không rõ mà còn chờ chạy lại', await q(`SELECT i.id, i.status, i.note, array_agg(DISTINCT o.action_code || ':' || o.delivery_state) AS d
     FROM public.auto_campaign_input_data i JOIN public.auto_engine_outcomes o ON o.input_data_id = i.id
     WHERE i.campaign_id = ANY($1::bigint[]) AND i.status = 'chờ xử lý' AND o.delivery_state IN ('delivered', 'partial', 'unknown')
-    GROUP BY i.id, i.status, i.note`, [campaigns]))
+      AND o.created_at > coalesce((SELECT r.at FROM unnest($2::bigint[], $3::timestamptz[]) AS r(id, at) WHERE r.id = i.campaign_id), '-infinity')
+    GROUP BY i.id, i.status, i.note`, [campaigns, passResets.map(([id]) => id), passResets.map(([, at]) => at)]))
   // I8 trạng thái chiến dịch / tài khoản hợp lệ, không ai kẹt "đang chạy".
   fail('I8', 'Chiến dịch / tài khoản kẹt "đang chạy" hoặc trạng thái lạ', await q(`SELECT 'campaign' k, id, status, note FROM public.auto_campaigns
     WHERE id = ANY($1::bigint[]) AND (status = 'đang chạy' OR status NOT IN ('chờ xử lý', 'tạm dừng', 'hoàn thành'))

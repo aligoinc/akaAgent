@@ -44,6 +44,13 @@ async function bootstrap(db, notes) {
     await require('../fixtures/campaign-outcome-engine/campaign-repeat-v561.cjs').applyCampaignRepeatV561(db)
     notes.push('V561 (lặp lại sau khi chạy xong): đã apply')
   }
+  // V585 (hàm kết thúc lượt đọc danh sách "Chạy nhiều khung giờ" dạng mảng; kiểm thân finish_campaign_v2 của V561): SCENARIO_MULTI_SLOT_ARRAY=1
+  // (kèm SCENARIO_CAMPAIGN_REPEAT=1) để chạy bộ kịch bản trên DB đã có V585, chứng minh danh sách dạng chuỗi và các nhánh khác không đổi.
+  if (process.env.SCENARIO_MULTI_SLOT_ARRAY === '1') {
+    if (process.env.SCENARIO_CAMPAIGN_REPEAT !== '1') throw new Error('SCENARIO_MULTI_SLOT_ARRAY=1 cần SCENARIO_CAMPAIGN_REPEAT=1 (V585 dựng trên thân V561)')
+    await db.query(require('../build-v585-sql.cjs').migration)
+    notes.push('V585 (khung giờ dạng mảng): đã apply')
+  }
   // Kiểm người nhận trên toàn hệ thống (V571, dựng trên thân claim V564 và report V558): SCENARIO_TARGET_CHECK=1 (kèm SCENARIO_FACEBOOK_MIGRATIONS=1) để
   // chạy bộ kịch bản trên DB đã có V571 (thiết lập engine.target_check mặc định off), chứng minh Zalo không đổi hành vi khi chưa bật.
   if (process.env.SCENARIO_TARGET_CHECK === '1') {
