@@ -20,6 +20,7 @@ import { phoneSearchErrorCode } from './zaloPhoneSearch'
 import { withRequestDeadline } from './requestDeadline'
 import { sanitizeDiagnosticText } from '../../shared/campaignDiagnostics'
 import { zaloPhoneCheckDailyLimitMessage, type ZaloPhoneCheckUsage } from '../../shared/zaloPhoneCheck'
+import { monotonicDeadline } from '../../shared/monotonicNow'
 
 interface ActiveContactLoad {
   controller: AbortController
@@ -1258,12 +1259,12 @@ export class ContactLoader {
     loadState: ActiveContactLoad,
     delayMs: number
   ): Promise<void> {
-    const deadline = Date.now() + Math.max(0, delayMs)
-    while (Date.now() < deadline) {
+    const deadline = monotonicDeadline(delayMs)
+    while (!deadline.expired()) {
       if (this.isLoadCancelled(accountId, loadState.variables) || loadState.controller.signal.aborted) {
         throw new Error('Đã dừng quét bạn bè Zalo')
       }
-      await this.sleep(Math.min(250, deadline - Date.now()))
+      await this.sleep(Math.min(250, deadline.remaining()))
     }
   }
 

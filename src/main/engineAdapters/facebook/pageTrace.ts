@@ -10,6 +10,7 @@
 //
 // Không ghi nội dung khách gõ / dán, không ghi chuỗi truy vấn của URL (có thể chứa token).
 import type { PageController } from '../../v2/runtime/pageController'
+import { monotonicNow } from '../../../shared/monotonicNow'
 
 export interface PageTraceOp {
   /** Thao tác: click, type, paste, press, wait, evaluate, api, navigate… */
@@ -97,17 +98,18 @@ export class PageTrace {
   private ops: PageTraceOp[] = []
   private dropped = 0
   private bytes = 0
-  private blockStartedAt = Date.now()
+  private blockStartedAt = 0
   private lastUrl = ''
   private readonly names = new Map<string, string>()
   private sendOps: readonly string[] = []
   private attempted = false
   private sleeping = 0
-  private lastActivity = Date.now()
+  private lastActivity = 0
   /** Lời gọi trên trang đang chờ (tracePage): abandonPending kết thúc chúng. */
   private readonly pending = new Set<(error: Error) => void>()
 
-  constructor(private readonly now: () => number = Date.now) {
+  /** `now` chỉ để đo khoảng thời gian (thời lượng thao tác, thời gian không hoạt động): mặc định là đồng hồ đơn điệu, không theo giờ máy. */
+  constructor(private readonly now: () => number = monotonicNow) {
     this.blockStartedAt = now()
     this.lastActivity = this.blockStartedAt
   }
