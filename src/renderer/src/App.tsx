@@ -370,12 +370,13 @@ export default function App() {
     setShowProxyManager(true)
   }
 
-  const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean }) => {
+  const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean; openUrl?: string }) => {
     browserOpenRequestSeq.current += 1
     setBrowserOpenRequest({
       requestId: browserOpenRequestSeq.current,
       accountId: request.accountId,
-      reloadAfterOpen: request.reloadAfterOpen === true
+      reloadAfterOpen: request.reloadAfterOpen === true,
+      openUrl: request.openUrl
     })
     setActivePage('browsers')
   }, [])

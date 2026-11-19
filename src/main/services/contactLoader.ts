@@ -80,6 +80,8 @@ const PAGE_INBOX_CONTACT_TYPE: ContactType = 'page_inbox_customer'
 const FACEBOOK_GRAPH_API_BASE = 'https://graph.facebook.com/v25.0'
 const PAGE_INBOX_BATCH_SIZE = 500
 const PAGE_INBOX_MAX_FETCH_FAILURES = 3
+// Shown whenever the Business page gives no token.
+const PAGE_INBOX_TOKEN_MISSING_ERROR = 'Facebook đang yêu cầu nhập mã xác minh cho tài khoản này. Bấm chuột phải vào tài khoản, chọn "Kiểm tra nhập mã xác minh Fanpage", nhập mã rồi tìm data lại'
 const ZALO_FRIEND_PAGE_SIZE = 500
 const ZALO_FRIEND_API_MIN_DELAY_MS = 2000
 const ZALO_FRIEND_API_MAX_DELAY_MS = 5000
@@ -726,7 +728,7 @@ export class ContactLoader {
 
       const userAccessToken = await read(() => this.extractFacebookUserAccessToken(page, loadState.controller.signal))
       if (!userAccessToken) {
-        throw new Error('Không lấy được token Facebook. Vui lòng mở lại tab Facebook/Business và thử lại.')
+        throw new Error(PAGE_INBOX_TOKEN_MISSING_ERROR)
       }
 
       const cookieHeader = await read(() => this.getFacebookCookieHeader(page))
@@ -878,7 +880,9 @@ export class ContactLoader {
         })
       }
 
-      this.sendProgress(`❌ Lỗi quét ${typeName}: ${errMsg}. Đã lưu ${savedCount} data.`, {
+      // Mention the saved count only when part of the scan was kept.
+      const errorText = `${String(errMsg).replace(/[.\s]+$/, '')}.${savedCount > 0 ? ` Đã lưu ${savedCount} data.` : ''}`
+      this.sendProgress(`❌ Lỗi quét ${typeName}: ${errorText}`, {
         accountId,
         contactType: PAGE_INBOX_CONTACT_TYPE,
         runKey: loadState.runKey
@@ -886,7 +890,7 @@ export class ContactLoader {
       return finish({
         success: false,
         count: savedCount,
-        error: `${errMsg}. Đã lưu ${savedCount} data.`,
+        error: errorText,
         pageInboxStopReason: 'error'
       })
     } finally {

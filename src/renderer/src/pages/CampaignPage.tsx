@@ -12,7 +12,7 @@ interface CampaignPageProps {
   isActive: boolean
   /** Mở tài khoản từ nơi khác (ví dụ thông báo): lọc chiến dịch theo tài khoản và mở Thông tin tài khoản. */
   accountOpenRequest?: { accountId: number; requestId: number } | null
-  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean; openUrl?: string }) => void
   onOpenGeneralSettings?: OpenGeneralSettings
   onOpenContentTemplates?: (initialChannel?: ContentTemplateChannelName) => void
   dataGroupCampaignRequest?: DataGroupCampaignNavigationRequest | null

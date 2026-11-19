@@ -11,6 +11,9 @@ const EMPTY_EMAIL_CONFIG: EmailAccountConfig = {
   brandName: '', host: 'smtp.gmail.com', port: 587, secure: false, user: '', pass: '', fromEmail: '', replyTo: '', cc: ''
 }
 const ZALO_QR_TTL_MS = 100_000
+// The Business page the Page inbox scan reads; Facebook asks for the
+// verification code here before the scan can get its token.
+const FACEBOOK_BUSINESS_VERIFY_URL = 'https://business.facebook.com/content_management'
 
 import AccountContextMenu from './AccountContextMenu'
 import FacebookImportModal from './FacebookImportModal'
@@ -29,7 +32,7 @@ import { campaignHasLocalOnlyMedia } from './localCampaignMedia'
 interface AccountPanelProps {
   editAccountRequest?: { accountId: number; requestId: number } | null
   onAccountFormClosed?: () => void
-  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean }) => void
+  onNavigateToBrowser?: (request: { accountId: number; reloadAfterOpen?: boolean; openUrl?: string }) => void
   onFilterCampaigns?: (accountId: number | null) => void
   onOpenRandomPlan: (accountId: number) => void
   onOpenAccountInfo: (accountId: number) => void
@@ -837,6 +840,10 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
     onNavigateToBrowser?.({ accountId, reloadAfterOpen: false })
   }
 
+  const handleOpenFacebookBusinessVerify = (account: AutoAccount) => {
+    onNavigateToBrowser?.({ accountId: account.id, openUrl: FACEBOOK_BUSINESS_VERIFY_URL })
+  }
+
   const handleReloadPage = async (account: AutoAccount) => {
     if (!window.electronAPI?.reloadAccountPage) {
       useUiStore.getState().showAlert('Tính năng này cần Electron API', 'error')
@@ -1430,6 +1437,7 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
           onViewBrowser={handleViewBrowser}
           onReloadPage={handleReloadPage}
           onCheckLogin={handleCheckLogin}
+          onOpenFacebookBusinessVerify={handleOpenFacebookBusinessVerify}
           onRandomToggle={account => void toggleRandom(account)}
           onRandomConfig={account => setRandomConfig({ account, enable: false })}
           onRandomPlan={account => onOpenRandomPlan(account.id)}
