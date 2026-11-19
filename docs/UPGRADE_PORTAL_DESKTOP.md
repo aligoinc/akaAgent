@@ -37,7 +37,7 @@ có nút riêng cạnh câu lỗi. Các câu "Gói hiện tại không hỗ tr�
 ## Thành phần
 
 - Hợp đồng: `src/shared/upgradePortal.ts`, chép **nguyên văn** từ akaAgentWebApp `packages/control-api/src/upgradePortal.ts`
-  (sửa ở WebApp trước rồi chép lại; smoke giữ md5 `967dafaa…`). Phần riêng Desktop ở `src/shared/upgradePortalDesktop.ts`: tên
+  (sửa ở WebApp trước rồi chép lại; smoke giữ md5 `b1912618…`). Phần riêng Desktop ở `src/shared/upgradePortalDesktop.ts`: tên
   kênh IPC, mã lỗi, câu chữ của form, `buildUpgradePortalDesktopLink`, `isUpgradePortalFeatureMessage`.
 - Tiến trình chính: `src/main/ipc/handlers/upgradePortalHandlers.ts` (`createUpgradePortalWebControl`: một hàm mở cổng cho mọi
   lối) và các kênh `upgrade-portal:*` trong `src/main/ipc/handlers/renewalWebHandlers.ts`.

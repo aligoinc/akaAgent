@@ -69,7 +69,10 @@ export interface UpgradePortalLink {
   signed: boolean
 }
 
-/** `POST /upgrade/link`. Desktop không trả link về giao diện: tiến trình chính tự nạp link vào form và chỉ trả `{ signed }`. */
+/**
+ * `POST /upgrade/link`. Desktop không trả link về giao diện: tiến trình chính tự nạp link vào form nhúng; giao diện chỉ
+ * nhận trạng thái của form (đang tải, có vé hay không) qua kênh trạng thái, không bao giờ cầm link hay vé.
+ */
 export type UpgradePortalLinkResponse = UpgradePortalLink
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

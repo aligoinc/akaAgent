@@ -12,7 +12,7 @@ const { join, resolve } = require('node:path')
 const { build } = require('esbuild')
 
 const ROOT = resolve(__dirname, '..')
-const CONTRACT_MD5 = '967dafaa8211a6034b08869411ee4071'
+const CONTRACT_MD5 = 'b1912618d26dc5737947bbfff06736ca'
 const TICKET = 'a'.repeat(64)
 const PARTITION = 'akaagent_renewal'
 let failed = 0
