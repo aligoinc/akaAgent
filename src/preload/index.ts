@@ -53,6 +53,7 @@ import { groupSharingAPI } from './groupSharingBridge'
 import { dataGroupExternalSyncAPI } from './dataGroupExternalSyncBridge'
 import type { CampaignActionUsage } from '../shared/types'
 import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../shared/aiChatDesktop'
+import type { AiChatImageUpload } from '../shared/aiChat'
 import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
 import type { AffPartnerResponse } from '../shared/affPartner'
 import { CAMPAIGN_SUPPORT_IPC, type CampaignSupportConversation, type CampaignSupportSendRequest,
@@ -245,6 +246,10 @@ const electronAPI = {
 
   aiChatCall: (action: AiChatDesktopAction, payload: Record<string, unknown>): Promise<AiChatIpcResult> =>
     ipcRenderer.invoke(AI_CHAT_IPC.call, action, payload),
+
+  // Ảnh đính kèm câu hỏi của Hỏi đáp AI: tiến trình chính cất ảnh vào kho media rồi trả URL.
+  aiChatUploadImage: (image: AiChatImageUpload): Promise<AiChatIpcResult> =>
+    ipcRenderer.invoke(AI_CHAT_IPC.uploadImage, image),
 
   // Giới thiệu nhận hoa hồng (docs/AFF_PARTNER_DESKTOP.md): đọc DB chỉ khi mở hộp thoại / bấm mở trang quản lý.
   affPartnerSummary: (): Promise<AffPartnerIpcResult<AffPartnerResponse>> =>
