@@ -1,0 +1,61 @@
+{
+  "what": "Bật chạy thật bộ kiểm lỗi chiến dịch Facebook (V574): agent, chèn việc, tác vụ cloud",
+  "approvedBy": "anh (\"Bật ngay\", 19/11, sau khi xem sổ ca gom qua đêm); đổi mô hình (\"dùng model fable 5.2 đi\"); chạy ngay một ca (\"chạy ngay 1 cái cho tôi xem thử đi\")",
+  "before": {
+    "readAtVn": "2026-11-19 08:26",
+    "cases": 23,
+    "hits": 91,
+    "campaignPauses": 8,
+    "byKind": {
+      "ma_chua_ket_luan": 12,
+      "chua_phan_loai": 7,
+      "luot_bo_do": 4
+    },
+    "tickErrors": 0,
+    "pendingQuestionsStaff4": 0,
+    "qaSessionPrompt": "lượt hẹn tạo 08:26 VN vẫn giữ bản sửa 18/11 (bỏ qua agent kiem-loi-chien-dich-facebook)"
+  },
+  "goLive": {
+    "atUtc": "2026-11-19T01:31:15Z",
+    "atVn": "2026-11-19 08:31:15",
+    "db": "một giao dịch: ai_project id 15 is_active false → true; auto_system_settings engine.error_watch thêm enqueue true + enqueueWindow {fromMinute 54, toMinute 58} (UPDATE có điều kiện: enabled true, enqueue false, fire false, imageRequests false, chưa có enqueueWindow)",
+    "routine": {
+      "id": "trig_01QRNCgX959THHTS7mkdCS3K",
+      "enabledAtUtc": "2026-11-19T01:31:18Z",
+      "cron": "1 * * * *",
+      "modelChangedAtUtc": "2026-11-19T01:40:02Z",
+      "model": "claude-fable-5-2",
+      "modelBefore": "claude-sonnet-5-5"
+    },
+    "stillOff": [
+      "imageRequests",
+      "fire"
+    ]
+  },
+  "firstRun": {
+    "enqueue": "08:41:16 VN, gọi tay aka_agent_engine_error_watch_tick_v1() trong một giao dịch có mở rồi trả lại enqueueWindow; hàm chèn messageId 529 (thread 481), ca err_fb_page_inbox_message_box_not_found|fb_message_page_inbox_customer|send_message, 20 lượt, 3 lần dừng",
+    "session": "cse_01HMz18Hrbbsf2s1qZXDQHD4 (chạy tay bằng RemoteTrigger run 08:41:21 VN)",
+    "sandboxReadySeconds": 4,
+    "claimedAtVn": "08:41:39",
+    "answeredAtVn": "08:44:23",
+    "durationSeconds": 188,
+    "turns": 32,
+    "dbAccess": "connector Supabase execute_sql, chỉ lệnh đọc (đọc log phiên)",
+    "api": "error-watch-agent.cjs next / answer chạy được từ môi trường full",
+    "report": "đúng khuôn, 5208 ký tự, kết luận chua_du_du_lieu",
+    "notification": "phiên có công cụ PushNotification, đã gửi một thông báo"
+  },
+  "turnOff": "enqueue = false trong engine.error_watch (ngừng chèn việc); tắt tác vụ cloud ở https://claude.ai/code/routines/trig_01QRNCgX959THHTS7mkdCS3K; ai_project 15 is_active = false",
+  "notDone": [
+    "Chưa thử: xin ảnh, mã lỗi tăng bất thường, gửi lại câu quá hạn, báo lại ca tăng.",
+    "Chưa kiểm lại nội dung hai báo cáo đầu (câu 529, 530)."
+  ],
+  "firstScheduledRun": {
+    "enqueue": "08:54:00 VN, job pg_cron tự chèn messageId 530 (thread 482), ca err_fb_comment_box_not_found|fb_comment|comment_current_post|Facebook yêu cầu xác minh tài khoản (checkpoint), 2 lượt, 2 lần dừng",
+    "session": "cse_01HMz18Dmepmprp7pZhaBLiF (theo lịch, bắt đầu 09:01:31 VN)",
+    "claimedAtVn": "09:01:51",
+    "answeredAtVn": "09:03:33",
+    "report": "đúng khuôn, 5123 ký tự, kết luận loi_app (độ chắc cao)",
+    "case529": "sổ chuyển reported ở lượt tick 08:46 VN"
+  }
+}

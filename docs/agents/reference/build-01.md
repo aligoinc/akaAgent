@@ -77,6 +77,16 @@ work trước khi chạy lại, vì script ghi đè log cùng tên. Trước khi
 để kiểm dấu của PR mới vắng ở lần 1. Version đã merge vào `dev_3` thì nhánh build lại không có commit đổi version. Biên nhận giữ lần 1 ở
 mục riêng (receipt khoá `rebuild.replaces_round_1`).
 
+**Build 10.1.0 (19/11/2026).** `dist/build-10.1.0-work/` của repo chính, cùng bộ script của 10.0.0 (đổi worktree, số bản,
+`(10<<16)+1`). Bản đối chứng cho dấu mới là `app.asar` giải nén bằng `7za` từ bộ cài 10.0.0 đang trên feed; dấu mới của bản trước
+(`markers-new.json` của nó) chuyển thành dấu phải còn. Hai smoke cần chú ý: `run-ai-chat-images-ui-smoke.cjs` dùng Chromium riêng của
+Playwright (không có trên máy build) và chỉ nhận Chrome qua `AI_CHAT_UI_CHROMIUM`, không qua `CHROMIUM_PATH`;
+`server-rest-request-reduction-smoke.cjs` chạy nguyên văn thân `sleepBetweenTargets` trong VM nên hỏng khi thân hàm gọi thêm hàm import (sau #724
+cần cấp `monotonicNow`). Kịch bản engine trên DB như production thêm `SCENARIO_MULTI_SLOT_ARRAY=1` (V585, cần kèm `SCENARIO_CAMPAIGN_REPEAT=1`).
+Build lại lần 2 cùng ngày vì #726 merge sau khi cắt nhánh: nhánh `codex/release-<ver>-r2` từ `dev_3` mới + cherry-pick commit version
+(version chưa merge), cất bộ cài / bằng chứng lần 1 như 10.0.0. Chạy lại smoke bằng script lấy từ commit khác phải `git fetch` trước:
+`git show <sha>:<file> > tệp` với commit chưa có trên máy cho tệp rỗng, và node chạy tệp rỗng vẫn thoát 0.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

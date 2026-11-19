@@ -104,7 +104,7 @@ class Scheduler {
   ${method('isServerZaloBoundaryRequested')}
   ${method('latchServerZaloPause')}
 }
-module.exports = Scheduler`, { Date: fake.Date, setTimeout: fake.setTimeout })
+module.exports = Scheduler`, { Date: fake.Date, setTimeout: fake.setTimeout, monotonicNow: () => fake.clock.now })
     const start = fake.clock.now
     const calls = []
     const scheduler = Object.assign(new Scheduler(), {

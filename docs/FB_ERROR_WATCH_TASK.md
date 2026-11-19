@@ -89,7 +89,15 @@ Viết một tệp JSON trong thư mục tạm rồi nộp bằng `answer`:
   "de_xuat": ["…"],
   "do_chac": "cao | trung_binh | thap",
   "da_tung_ket_luan": "tên tài liệu hoặc ghi chú trong repo, nếu có",
-  "can_anh_quyet": "câu hỏi cho anh, nếu có"
+  "can_anh_quyet": "câu hỏi cho anh, nếu có",
+  "cau_cho_khach": "đề xuất một câu ngắn cho khách hàng thay cho câu lỗi hiện tại, nếu có",
+  "de_xuat_ma_loi": {
+    "ten_loi": "tên lỗi mới, 5–80 ký tự",
+    "cau_cho_khach": "câu khách thấy khi gặp lỗi này",
+    "buoc_tiep_theo": "việc khách cần làm, chỉ ghi khi khách thật sự cần làm gì",
+    "cach_xu_ly": "tính lượt hay không, cộng chuỗi lỗi hay không, data về hàng đợi hay đóng, có dừng chiến dịch không",
+    "dau_hieu": "nhận dạng bằng gì: bước nào, câu lỗi nào, chữ / nút / hộp thoại nào trên trang"
+  }
 }
 ```
 
@@ -109,8 +117,21 @@ Nguyên tắc:
 
 - Mỗi kết luận phải có bằng chứng đã đọc được: mã lượt data, bước lỗi, số liệu, tên tệp code. Không đoán nguyên nhân.
 - Đề xuất là việc cụ thể cho người sửa: đổi luật nào, chính sách nào, tệp code nào, có cần build Desktop không. Bạn không tự làm các việc đó.
-- Câu chữ cho khách hàng (tên lỗi, bước tiếp theo): chỉ nêu là cần anh duyệt, không tự soạn thành câu cuối.
+- Câu chữ cho khách hàng (`cau_cho_khach`, `de_xuat_ma_loi`) chỉ là đề xuất. Database giữ ở trạng thái chờ duyệt; anh duyệt trong app thì câu mới được ghi cho khách, mã mới được thêm vào bảng mã lỗi. Bạn không tự ghi gì.
 - Ca hỏi tiếp: chỉ báo điều mới so với báo cáo trước (số liệu đổi, ảnh mới về, bằng chứng mới). Không có gì mới thì nói vậy trong một hai câu và vẫn nộp.
+
+## Câu cho khách và đề xuất mã lỗi
+
+Hai trường này không bắt buộc. Chỉ ghi khi đã có bằng chứng, không ghi khi `ket_luan = chua_du_du_lieu`.
+
+`cau_cho_khach`: câu khách sẽ thấy ở dòng lịch sử và ghi chú data thay cho câu hiện tại (ví dụ thay "Có lỗi xảy ra"). Quy tắc:
+
+- Một dòng, 5–200 ký tự, tiếng Việt dễ hiểu với người không làm kỹ thuật.
+- Nói điều đã xảy ra mà đã kiểm được. Không đoán nguyên nhân.
+- Chỉ thêm việc cần làm khi khách thật sự cần làm gì (đăng nhập lại, kiểm tra tệp, vào nhóm…).
+- Không mã nội bộ (`err_…`), không tên block, selector, XPath, từ tiếng Anh kỹ thuật. Không tự kèm mã công khai như "(SYS99)": hệ thống tự thêm.
+
+`de_xuat_ma_loi`: chỉ ghi khi ca là một mẫu lỗi lặp lại, đang rơi vào mã chung (SYS99, FB42, FB44…) và có dấu hiệu nhận dạng chắc chắn (bước lỗi cộng câu lỗi, hoặc chữ / nút / hộp thoại có mặt trên trang). Ghi đủ `ten_loi`, `cau_cho_khach`, `cach_xu_ly`, `dau_hieu`. Mã chỉ nói một nguyên nhân khi dấu hiệu của đúng nguyên nhân đó có mặt; "không thấy" thì đặt tên kiểu "Không thấy …". Cách xử lý mặc định giữ như mã đang áp dụng cho trường hợp đó, trừ khi bằng chứng cho thấy data đang bị đóng oan hoặc chiến dịch bị dừng oan.
 
 ## Thông báo
 

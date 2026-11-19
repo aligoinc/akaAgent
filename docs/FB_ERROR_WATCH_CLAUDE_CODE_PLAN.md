@@ -1,6 +1,6 @@
 # Phương án: Claude Code tự kiểm lỗi chạy chiến dịch Facebook qua hàng việc `ai_*`
 
-Ngày lập: 18/11/2026. Bản 8 (đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); **migration đợt 1 đã apply 17:25 VN 18/11 và phần đọc lỗi đã bật 17:26 VN**, mục 5.6). Chưa chèn việc nào: công tắc chèn việc, xin ảnh, đánh thức, agent và tác vụ cloud đều còn tắt. Các câu còn mở ở mục 10.
+Ngày lập: 18/11/2026. Bản 10 (đợt 2 "lỗi không xác định" đã viết code 19/11, V588 đã apply 20:02 VN 19/11, mục 12; đã làm đợt 0, kết quả ở [FB_ERROR_WATCH_DOT0_20261118.md](FB_ERROR_WATCH_DOT0_20261118.md); migration đợt 1 đã apply 17:25 VN 18/11 và phần đọc lỗi đã bật 17:26 VN, mục 5.6; **bật chạy thật 08:31 VN 19/11: agent, chèn việc và tác vụ cloud đều đang bật, ca đầu tiên đã có báo cáo**, mục 5.7). Xin ảnh tự động và đường đánh thức vẫn tắt. Các câu còn mở ở mục 10.
 
 ### Anh đã chốt (18/11/2026)
 
@@ -16,6 +16,7 @@ Ngày lập: 18/11/2026. Bản 8 (đã làm đợt 0, kết quả ở [FB_ERROR_
 | 8 | Bộ tạo việc: **chọn cách đỡ tốn token AI nhất** | Là job trong database (mục 5 và mục 7.5): phát hiện lỗi bằng SQL, không tốn token nào |
 | 9 | **Cả 5 loại ca** ở mục 5.2 đều thành việc | — |
 | 10 | Xin ảnh tự động: **không đặt trần theo ngày** | Chỉ giữ mỗi ca một yêu cầu và mỗi khách một yêu cầu mỗi ngày; thêm chốt dung lượng ở mục 6 |
+| 11 | (19/11) **Đưa lỗi mới vào bảng mã lỗi cũng phải anh duyệt trước** | Claude chỉ đề xuất mã, câu cho khách, chính sách và luật nhận dạng; đề xuất nằm ở trạng thái chờ duyệt, không tự ghi vào database. Tự gọi hàm sửa (cấp 2) chưa làm |
 
 ## 1. Tóm tắt
 
@@ -169,6 +170,30 @@ Cùng lúc đó phiên khác đã apply `migration_v575_engine_specific_codes_wa
 
 Cũng tối 18/11 anh chốt: bật chạy thật (agent, chèn việc, tác vụ cloud) chờ tới 19/11; không dùng đường đánh thức `/fire`, tác vụ cloud chạy mỗi giờ một lượt. Vì mỗi câu có hạn 60 phút tính từ lúc chèn, khi bật chèn việc phải đặt `enqueueWindow` để database chỉ chèn trong vài phút cuối mỗi giờ, ngay trước lượt chạy của tác vụ cloud (phút 01).
 
+### 5.7 Bật chạy thật (19/11, 08:31 VN)
+
+Anh đồng ý bật ("Bật ngay") sau khi xem sổ ca gom qua đêm. [Biên nhận](../migrations/snapshots/engine-error-watch-v574/go-live-receipt.json).
+
+| Bước | Kết quả |
+|---|---|
+| Sổ ca trước khi bật (08:26 VN) | 23 ca, 91 lượt lỗi, 8 lần dừng chiến dịch, gom từ 17:27 VN 18/11: 12 ca mã chưa có kết luận, 7 ca chưa phân loại, 4 ca lượt bị bỏ dở. Job đọc lỗi không lỗi lượt nào |
+| Kiểm trước | Tệp công việc và lệnh nhận việc có trên `dev_3`. Câu lệnh phiên Hỏi đáp (lượt hẹn tạo 08:26 VN) vẫn giữ bản sửa 18/11. Nhân viên 4 không có câu nào đang chờ |
+| Bật agent và chèn việc (08:31:15 VN) | Một giao dịch: `ai_project` 15 `is_active = true`; thiết lập thêm `enqueue: true` và `enqueueWindow` phút 54–58. Xin ảnh và đường đánh thức giữ tắt |
+| Bật tác vụ cloud (08:31:18 VN) | Lịch phút 01 mỗi giờ, lượt theo lịch đầu tiên 09:01 VN |
+| Đổi mô hình (08:40 VN) | Anh bảo dùng Fable 5.2 (lúc tạo là Sonnet 5.5) |
+| Chạy ngay một ca (08:41 VN) | Anh bảo chạy ngay một cái để xem. Trong một giao dịch: mở khung phút, gọi hàm tạo việc, trả lại khung 54–58. Hàm chèn câu 529 (ca FB46 hộp thư Page, 20 lượt, 3 lần dừng). Rồi cho tác vụ cloud chạy tay |
+| Phiên cloud đầu tiên | Khởi động 4 giây, nhận câu 08:41:39, nộp báo cáo đúng khuôn 08:44:23, cả phiên 188 giây, 32 lượt gọi công cụ. Đọc database qua connector được (chỉ có lệnh đọc), gọi API nhận / nộp việc từ môi trường `full` được |
+| Thông báo | Phiên cloud có công cụ gửi thông báo đẩy của app Claude và đã gửi một thông báo tóm tắt ca. Không cần connector nào thêm |
+| Lượt tự động đầu tiên | 08:54:00 VN job tự chèn câu 530 (ca FB41 "Facebook yêu cầu xác minh tài khoản" khi comment). Tác vụ cloud chạy theo lịch 09:01:31, nhận câu 09:01:51, nộp báo cáo 09:03:33. Ca FB46 chuyển "đã báo cáo" ở lượt 08:46 |
+
+Báo cáo ca đầu (câu 529, FB46 "Không tìm thấy ô để nhập tin nhắn"): kết luận "chưa đủ dữ liệu", cần ảnh. 19 trên 20 lượt ở một chiến dịch của tổ chức 441; cùng tài khoản và cùng Page vẫn gửi được 308 lượt trong ngày. Báo cáo nêu thêm một điểm mới chưa ai kiểm lại: chuỗi data lỗi của chiến dịch không về 0 khi khách bấm tiếp tục, nên chiến dịch đó bị dừng lại 2 lần, mỗi lần chỉ sau một data lỗi.
+
+Báo cáo ca thứ hai (câu 530, FB41 trên trang xác minh): kết luận "lỗi app", độ chắc cao. Block comment bản engine (2869) nhận ra trang `/checkpoint/` nhưng trả mã FB41 thay vì FB04, nên 2 data bị đóng, chuỗi lỗi bị cộng và trạng thái đăng nhập của tài khoản không đổi sang checkpoint, khác quyết định Q6. Báo cáo đề xuất hai cách (sửa block trong database, hoặc sửa bộ lập lịch Desktop). Chưa ai kiểm lại.
+
+Chạy ngay một ca, không chờ phút 54 (dùng lại được): trong MỘT giao dịch đặt `enqueueWindow.fromMinute` thành 0, gọi `select public.aka_agent_engine_error_watch_tick_v1()`, đặt lại 54 rồi COMMIT; job pg_cron không bao giờ thấy khung mở. Tránh giây đầu của phút chẵn vì hàm bỏ lượt khi job đang giữ khoá. Sau đó cho tác vụ cloud chạy tay.
+
+Dừng: đặt `enqueue` thành `false` (ngừng chèn việc, có hiệu lực ở lượt kế); tắt tác vụ cloud ở trang quản lý (ngừng nhận việc); tắt agent bằng `is_active = false`.
+
 ## 6. Ảnh lỗi từ máy khách (anh chốt điểm 5)
 
 - Khi một ca **lỗi chưa phân loại** hoặc **mẫu lỗi lạ** được tạo, bộ tạo việc gọi luôn `aka_agent_desktop_diagnostic_request_v1(nhân viên của lượt mẫu, {"targetRunId": …}, 'error-watch')`. Hàm này có sẵn từ V556.
@@ -225,26 +250,28 @@ Chỉ gửi khi ca là mới hoặc tăng bất thường, một thông báo m�
 - [error-watch-agent.cjs](../scripts/engine-v2-facebook/error-watch-agent.cjs): phiên cloud dùng để nhận việc (`next`), gia hạn (`progress`), kiểm và nộp báo cáo (`check`, `answer`), trả việc (`requeue`, `fail`). Không cần thư viện ngoài. Lệnh chỉ nhận câu của đúng agent này (nhận nhầm thì trả về hàng đợi), chỉ lấy con số từ đoạn chữ gửi kèm lúc đánh thức, và từ chối báo cáo sai khuôn hoặc có chuỗi giống số điện thoại, UID dài, khoá, token. Nhờ vậy tệp công việc ngắn đi và phiên không phải tự ghép lệnh gọi API. Kiểm: `node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs` (9 nhóm, máy chủ giả cục bộ); đã gọi thử `next` với API thật khi agent chưa tồn tại, trả "hết việc".
 - [error-watch-status.cjs](../scripts/engine-v2-facebook/error-watch-status.cjs): chỉ đọc, cho anh xem công tắc, lượt tick gần nhất, sổ ca theo trạng thái, ca đang chờ báo, các câu gần đây của agent và yêu cầu ảnh. Đã chạy trên production sau khi apply (18/11 17:30 VN): in đúng công tắc, lượt gần nhất và 6 ca trong sổ; phần câu của agent và yêu cầu ảnh chưa có dữ liệu để in.
 
-### 7.4b Tác vụ cloud (đã tạo 18/11 17:01 VN, đang TẮT)
+### 7.4b Tác vụ cloud (đã tạo 18/11 17:01 VN, BẬT từ 08:31 VN 19/11)
 
 Anh đồng ý tạo sẵn ("Tạo sẵn, để tắt"). Tác vụ **Kiểm lỗi chiến dịch Facebook (engine v2)**, mã `trig_01QRNCgX959THHTS7mkdCS3K`, quản lý ở `https://claude.ai/code/routines/trig_01QRNCgX959THHTS7mkdCS3K`.
 
 | Mục | Giá trị | Ghi chú |
 |---|---|---|
-| Trạng thái | Tắt | Chưa chạy lượt nào |
+| Trạng thái | Bật từ 08:31 VN 19/11 | Lượt đầu chạy tay 08:41 VN 19/11 (mục 5.7) |
 | Lịch | Mỗi giờ một lượt (phút 01) | Lưới đỡ; lịch của tác vụ cloud không được dày hơn một giờ. Đánh thức ngay khi có việc thì dùng đường `/fire` (mục 7.5) |
 | Mỗi lượt | Một phiên mới, làm một câu rồi kết thúc | Không giữ phiên lâu dài, không tự hẹn lại |
 | Repo | `aligoinc/akaAgent` | Nhánh mặc định trên GitHub là `dev_2` (cũ), nên câu lệnh bảo phiên chuyển sang `dev_3` trước. Tệp công việc vào `dev_3` qua PR #708 (merge 18/11); thiếu tệp thì phiên dừng với một dòng báo |
-| Mô hình | Sonnet 5.5 | Mặc định của công cụ tạo tác vụ; đổi được trên trang quản lý |
+| Mô hình | Fable 5.2 | Anh chốt 19/11 ("dùng model fable 5.2 đi"); lúc tạo là Sonnet 5.5. Đổi được trên trang quản lý |
 | Môi trường cloud | `full` | Tài khoản có hai môi trường (`full`, `Default`); em chọn `full` để phiên gọi được API và GitHub. Chưa thử `Default` |
 | Công cụ | Bash, Read, Write, Glob, Grep | Không có công cụ sửa tệp |
 | Connector | Chỉ Supabase, và chỉ công cụ `execute_sql` | Lúc tạo, máy chủ tự gắn cả ba connector của tài khoản (Supabase, Claude Docs, Claude Code Remote); em đã gỡ hai cái không cần và bỏ các công cụ Supabase khác (apply migration, deploy, tạo / dừng project…) |
 | Câu lệnh | Chuyển sang `dev_3`, đọc `docs/FB_ERROR_WATCH_TASK.md`, làm đúng một lượt, kèm các giới hạn cứng | Nội dung công việc nằm trong repo nên sửa không cần đụng tác vụ |
 
+**Chuyển tài khoản 19/11 20:33 VN** (anh: "chuyển sang làm trên tài khoản claude này", "Tạo luôn"). Tác vụ ở bảng trên nằm ở tài khoản akabiz và không nhận việc từ 12:01 VN 19/11. Tác vụ thay thế tạo trên tài khoản claude.ai đang đăng nhập ở Desktop: `trig_01SVrvfyyrHvxoRHihkkeovq`, quản lý ở `https://claude.ai/code/routines/trig_01SVrvfyyrHvxoRHihkkeovq`. Cấu hình y hệt (lịch phút 01 mỗi giờ, Fable 5.2, công cụ Bash / Read / Write / Glob / Grep, câu lệnh chép nguyên văn), môi trường `full` của tài khoản này (`env_01K9qSmTVRGkifC1kQxbBidM`), connector chỉ còn Supabase với riêng `execute_sql` (lúc tạo máy chủ lại tự gắn Supabase, Claude Docs, Claude Code Remote; đã gỡ hai cái sau). Lượt thử 20:33:58 VN: khởi động 4 giây, chuyển `dev_3`, lệnh `next` gọi API được và báo hết việc, cả phiên 22 giây; chưa có lượt nào dùng connector Supabase trên tài khoản này. Tác vụ cũ bên akabiz anh tự tắt. Mã `/fire` tạo trên tác vụ mới.
+
 Hai điều cần biết trước khi bật:
 
 - **`execute_sql` vẫn chạy được lệnh ghi.** Câu lệnh và tệp công việc cấm ghi, nhưng đó là lời dặn, không phải chặn kỹ thuật. Trong các phiên có người, connector Supabase hỏi xác nhận trước mỗi lệnh ghi và không ai bấm thì lệnh không chạy; em chưa kiểm được phiên cloud không người có được hỏi như vậy không. Cách chặn chắc là một connector Supabase ở chế độ chỉ đọc cho riêng tác vụ này.
-- **Thông báo qua app Claude chưa có đường.** Em đã gỡ connector Claude Code Remote vì nó cho phiên tạo và xoá tác vụ, quá rộng với một phiên đọc dữ liệu không tin cậy. Không có nó, em không biết phiên còn công cụ nào để gửi thông báo; câu lệnh bảo phiên bỏ qua bước thông báo nếu không có công cụ. Mỗi lượt vẫn là một phiên xem được trong danh sách phiên của anh.
+- **Thông báo qua app Claude: có đường (kiểm 19/11).** Phiên cloud có sẵn công cụ gửi thông báo đẩy và lượt đầu đã gửi được, dù em đã gỡ connector Claude Code Remote (connector đó cho phiên tạo và xoá tác vụ, quá rộng với một phiên đọc dữ liệu không tin cậy). Mỗi lượt cũng là một phiên xem được trong danh sách phiên của anh.
 
 Khi dùng đường `/fire`: anh tạo mã trên trang quản lý của tác vụ (thêm trigger API → Generate token), tự lưu vào Vault bằng `select vault.create_secret('<mã vừa tạo>', 'AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN');` trong SQL Editor, rồi thêm `"fire": true, "fireRoutineId": "trig_01QRNCgX959THHTS7mkdCS3K"` vào thiết lập `engine.error_watch`. Mã không đi qua chat và không nằm trong repo.
 
@@ -299,7 +326,7 @@ Từ đó em đề xuất cho câu Q-F:
 | Đợt | Nội dung | Chạm production |
 |---|---|---|
 | 0 | **Đã làm 18/11** ([kết quả](FB_ERROR_WATCH_DOT0_20261118.md)): câu phát hiện ca lỗi [error-watch-dryrun.sql](../scripts/engine-v2-facebook/error-watch-dryrun.sql) chạy chỉ đọc; tệp công việc [FB_ERROR_WATCH_TASK.md](FB_ERROR_WATCH_TASK.md); kiểm tay 3 ca thật và viết 3 báo cáo mẫu. Đường đánh thức tác vụ cloud: xem mục 7.5 | Không |
-| 1 | Migration đã viết (mục 5.1) và đã chạy thử trong một giao dịch rồi huỷ (mục 5.5). **Đã làm 18/11 (mục 5.6)**: (a) chọn số thật ngay trước khi apply; (b) apply, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`. **Còn lại**: xem sổ ca 1–2 ngày; (d) anh sửa câu lệnh phiên Hỏi đáp để bỏ qua agent mới, rồi bật agent; (e) dựng tác vụ cloud riêng; bật job với trần thấp (10 việc mỗi ngày), chưa xin ảnh, chưa thông báo | 1 migration, 2 dòng dữ liệu, 1 job |
+| 1 | Migration đã viết (mục 5.1) và đã chạy thử trong một giao dịch rồi huỷ (mục 5.5). **Đã làm 18/11 (mục 5.6)**: (a) chọn số thật ngay trước khi apply; (b) apply, mọi công tắc tắt, agent chưa bật; (c) bật `enabled`. **Đã làm 19/11 (mục 5.7)**: (d) câu lệnh phiên Hỏi đáp đã sửa 18/11, agent bật; (e) tác vụ cloud bật, chèn việc bật với trần 10 việc mỗi ngày, chưa xin ảnh. **Còn lại**: theo dõi 3 ngày theo tiêu chí nghiệm thu bên dưới | 1 migration, 2 dòng dữ liệu, 1 job |
 | 2 | Bật xin ảnh tự động và thông báo app Claude; nâng trần việc lên 30 mỗi ngày | Thiết lập |
 | 3 | Tuỳ kết quả: mở sang engine Zalo (`auto_outcome_unmatched` Zalo đang có 316 mẫu, 1.362 lượt) | Thiết lập |
 
@@ -316,10 +343,90 @@ Nghiệm thu đợt 1, sau 3 ngày: mỗi việc có báo cáo `hoàn thành` đ
 
 ## 11. Chưa kiểm
 
-- Migration đã apply và job pg_cron đã tự chạy phần đọc lỗi (mục 5.6). Chưa thử trên production ngoài giao dịch thử ở mục 5.5: chèn việc. Chưa thử lần nào: xin ảnh, mã lỗi tăng bất thường.
-- Tác vụ cloud đã tạo nhưng chưa chạy lượt nào: chưa biết phiên có đọc được database qua connector, có gọi được API từ môi trường `full`, và có công cụ gửi thông báo app Claude không (mục 7.4b).
+- Đã chạy thật 19/11 (mục 5.7): chèn việc, phiên cloud đọc database qua connector, gọi API từ môi trường `full`, nộp báo cáo đúng khuôn, gửi thông báo. Hai ca đầu: một ca chèn bằng lượt gọi tay và chạy tay, một ca chèn tự động 08:54 và chạy theo lịch 09:01.
+- Chưa thử lần nào: xin ảnh, mã lỗi tăng bất thường, gửi lại câu quá hạn, báo lại ca tăng gấp 3.
+- Chưa kiểm lại nội dung hai báo cáo đầu ("chuỗi lỗi không về 0 khi bấm tiếp tục"; "trang xác minh ra FB41 thay vì FB04").
 - Chưa thử đọc ảnh 2 MB dạng base64 qua connector Supabase trong phiên cloud.
-- Chưa đo thời gian kiểm một ca trên phiên cloud. Ba ca kiểm tay ở đợt 0 mỗi ca cần 5–10 lượt đọc database và vài tệp code, khớp ước lượng 5–15 phút.
+- Thời gian kiểm một ca trên phiên cloud: ca đầu 188 giây (Fable 5.2, 32 lượt gọi công cụ, 11 lượt đọc database). Chưa đo số token.
 - Câu phát hiện ca lỗi mới chạy trên 23 giờ dữ liệu; chưa xét được loại "mã lỗi tăng bất thường" vì chưa đủ 7 ngày làm mức nền.
 - Chưa gọi thử đường `/fire` (mới đọc tài liệu chính thức); chưa thử gọi nó từ database bằng `pg_net`; chưa đo số token của một phiên cloud làm một ca.
 - Phiên Hỏi đáp đang ghi hạn "đến hết ngày 19/11/2026" trong câu lệnh; phiên kiểm lỗi dựng theo cùng cách sẽ có cùng điểm yếu là phải có người gia hạn.
+
+## 12. Đợt 2: "Lỗi không xác định" (viết 19/11; V588 đã apply 20:02:31 VN 19/11; code đã merge `dev_3` qua #726 lúc 20:09 VN 19/11)
+
+Yêu cầu được giao: có bảng lưu từng lỗi không xác định (khách hàng, tài khoản, chiến dịch, data, câu lỗi); Claude kiểm xong thì kết luận nằm trong bảng và hiện ra ở kết quả chạy cùng ghi chú data; app có tab "Lỗi không xác định"; có công tắc toàn hệ thống trong database; cấp 1 biến lỗi không xác định thành lỗi có mã, cấp 2 tự gọi hàm sửa.
+
+### 12.1 Anh đã chốt (19/11)
+
+| # | Quyết định |
+|---|---|
+| 1 | Phạm vi giữ engine Facebook và các loại ca đang chạy; Zalo làm sau |
+| 2 | Tab cho admin akaBiz trước. Khách chỉ thấy một câu ngắn trong kết quả chạy, anh duyệt từng câu |
+| 3 | Phiên cloud giữ quyền đọc database để điều tra, cấm ghi; kết quả nộp qua API |
+| 4 | ~~Lịch mỗi giờ một lượt như hiện tại~~ Anh đổi cuối chiều 19/11: tác vụ cloud không tự dậy theo giờ để hỏi "có việc không" nữa, vì lượt trống vẫn tốn token |
+| 5 | **Job trong database kiểm trước, có câu hỏi thì mới gọi Claude dậy** bằng đường `/fire` ("chỉ query db, khi nào db có lỗi thì mới gọi prompt"; đổi quyết định "không dùng `/fire`" hôm 18/11). Mã do anh tạo trên trang tác vụ và tự lưu vào Vault |
+| 6 | **Cấp 1 chỉ đề xuất, anh duyệt trước rồi mới ghi vào database** ("cấp 1 cũng đừng tự đưa vào db, cũng cần phải tôi duyệt trước"). Cấp 2 chưa làm |
+
+### 12.2 Database: V588 (`migrations/migration_v588_engine_error_review.sql`, sinh bằng `node scripts/build-v588-sql.cjs`)
+
+- Bảng `private.auto_engine_error_items`: mỗi kết quả lỗi thuộc một ca là một dòng (tổ chức, nhân viên, tài khoản, chiến dịch, data, lượt, mã công khai, câu lỗi, dòng lịch sử). Khoá `result_key` nên một kết quả chỉ ghi một lần; lượt bỏ dở dùng khoá `stale:<lượt>`. Giữ `itemRetentionDays` ngày (mặc định 30, tối thiểu 7).
+- Sổ ca `private.auto_engine_error_cases` thêm 17 cột: báo cáo (`report`, `report_message_id`, `report_at`, `summary`, `conclusion`, `confidence`), câu cho khách (`customer_note`, trạng thái `none / proposed / approved / rejected`, người và giờ duyệt), đề xuất mã lỗi (`code_proposal`, trạng thái thêm `applied`, người và giờ duyệt), lượt gọi `/fire` (`fired_message_id`, `fired_at`, `fire_count`).
+- Hàm tick (thân V574 md5 `a93263ce…` → `b4e8c500…`, vá 10 chỗ): ghi từng lượt lỗi; khi câu của ca có báo cáo thì chép kết luận về sổ ca, `cau_cho_khach` và `de_xuat_ma_loi` của báo cáo vào trạng thái **chờ duyệt** (không đè cái đã duyệt); câu đã duyệt thì ghi vào `auto_campaign_details.log` (câu + mã công khai trong ngoặc, câu cũ giữ ở `data.errorReview.originalLog`) và `auto_campaign_input_data.note` (chỉ khi ghi chú còn đúng câu cũ), tối đa 100 lượt mỗi tick; bỏ duyệt thì trả câu cũ. Kết quả tick thêm `items`, `notes`, `refired`. Bước gọi `/fire` viết lại, xem 12.5.
+- Hàm `public.aka_agent_engine_error_review(p_action, p_payload)`: chỉ `aka_agent_desktop`, chỉ nhân viên `is_admin_akabiz`, trần 8 giây. Thao tác `list`, `case`, `note` (duyệt / bỏ câu cho khách, 5–200 ký tự, admin sửa được câu), `code` (duyệt / bỏ đề xuất mã lỗi, **chỉ ghi quyết định**; thêm mã vào bảng mã lỗi vẫn bằng migration do anh duyệt), `mark` (đã biết / mở lại).
+- `ai_project.output_schema` của agent thêm hai thuộc tính tuỳ chọn `cau_cho_khach`, `de_xuat_ma_loi`.
+- Công tắc toàn hệ thống: vẫn là `auto_system_settings` `engine.error_watch` (`enabled` tắt thì không đọc lỗi, không ghi lượt, không ghi câu). Không thêm công tắc mới.
+- Bản gỡ `rollback_v588_engine_error_review.sql` dừng nếu còn lượt mang câu đã ghi, trừ khi `SET LOCAL aka.v588_rollback_keep_notes = 'on'`.
+- **Đã apply akachat 20:02:31 VN 19/11/2026** theo yêu cầu ("ok apply V586 đi"; sổ `20261119130229 / migration_v588_engine_error_review`, không apply lại, md5 sổ = file `a851282c…`; [biên nhận](../migrations/snapshots/engine-error-review-v588/apply-receipt.json)). Viết với số 586; lúc kiểm trước apply sổ đã có V586 / V587 `aka_assistant` của phiên khác nên đổi số trong bộ sinh rồi sinh lại. Trước đó chạy thử nguyên văn trên production trong một giao dịch rồi huỷ (migration 2,6 giây, chép 460 lượt lỗi của 50 ca và 3 báo cáo sẵn có, tick 13–21 ms, `list` 7 ms, `case` 15 ms bằng phiên admin). Sau apply: PostgREST nạp lại schema 3,3 giây, 0 lỗi 5xx, 52 request REST chậm hơn 1 giây trong 20 giây; hai lượt job đầu 62–67 ms, lượt 20:06 ghi 4 lượt lỗi mới. Thiết lập `engine.error_watch` không đổi (`fire` vẫn tắt).
+- Kiểm: `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-facebook/error-review-v588-smoke.cjs` (11 nhóm, PG17 cục bộ; có nhóm `/fire` với `net.http_post` và Vault giả), `error-watch-smoke.cjs` (17 nhóm, V574 không đổi hành vi).
+
+### 12.3 Phiên cloud
+
+- Khuôn báo cáo thêm `cau_cho_khach` (một dòng 5–200 ký tự, không mã nội bộ, không tên block / selector, không tự kèm mã công khai) và `de_xuat_ma_loi` (`ten_loi`, `cau_cho_khach`, `buoc_tiep_theo`, `cach_xu_ly`, `dau_hieu`). Lệnh nộp `error-watch-agent.cjs` từ chối báo cáo sai khuôn (`error-watch-agent-smoke.cjs`, 10 nhóm).
+- [FB_ERROR_WATCH_TASK.md](FB_ERROR_WATCH_TASK.md) ghi rõ hai trường này chỉ là đề xuất. Phiên cloud đọc tệp này từ `dev_3`, nên chỉ có hiệu lực sau khi merge.
+
+### 12.4 Desktop: tab "Lỗi không xác định" (admin akaBiz)
+
+- Mục menu tài khoản, chỉ hiện khi `user.isAdminAkabiz`; mở hộp thoại `components/EngineErrorReview/EngineErrorReviewModal.tsx`: danh sách ca (lọc trạng thái, loại ca, chờ duyệt, tìm theo mã / câu lỗi), chi tiết ca (kết luận của Claude, báo cáo đầy đủ, câu cho khách, đề xuất mã lỗi, các lượt lỗi theo khách hàng / tài khoản / chiến dịch / data).
+- Một kênh IPC `engine-error-review:call` (`handlers/engineErrorReviewHandlers.ts` → `engineErrorReviewRepository.ts`), hợp đồng ở `src/shared/engineErrorReview.ts`. Tiến trình chính lọc payload theo từng thao tác và chặn tài khoản không phải admin trước khi gọi DB. DB chưa có V588 (`PGRST202`) thì hộp thoại báo "đang được cập nhật".
+- Chỉ đọc DB khi mở tab, đổi bộ lọc hoặc bấm nút; không hẹn giờ. Duyệt câu cho khách phải qua hộp xác nhận ghi rõ số lượt và câu khách sẽ thấy.
+- Kiểm: hai typecheck 0 lỗi; `CHROMIUM_PATH=<Chrome> node scripts/run-engine-error-review-ui-smoke.cjs` (10 nhóm, hộp thoại thật với IPC giả lập).
+
+### 12.5 Cách chạy bền: database kiểm trước, có câu hỏi mới gọi Claude (chờ mã của anh)
+
+Mỗi lượt theo lịch của tác vụ cloud là một phiên Claude mới, kể cả khi không có việc (đọc câu lệnh, hỏi hàng việc, thấy trống, kết thúc). Với trần 10 việc mỗi ngày thì ít nhất 14 trong 24 lượt theo giờ là lượt trống. Tác vụ cloud không có kiểu "chỉ chạy một câu SQL": lượt nào cũng là một phiên có mô hình (tài liệu Anthropic đọc 19/11: không có chế độ chỉ chạy script, không có điều kiện "có việc mới chạy câu lệnh"; script cài đặt của môi trường chạy trước Claude nhưng được lưu snapshot nên các phiên sau bỏ qua, không làm bước kiểm trước được). Nên phần kiểm phải nằm ngoài Claude, và nó đã có sẵn: job pg_cron 2 phút một lượt, không tốn token.
+
+Bước 6c của hàm tick từ V588:
+
+- Chỉ gọi khi có câu của bộ kiểm lỗi đang "chờ câu trả lời" (chưa phiên nào nhận) và còn hơn 5 phút mới hết hạn. Không có câu thì không gọi gì.
+- Lượt đầu gọi ngay trong tick chèn câu. Sau `fireRetryMinutes` phút (mặc định 10, tối thiểu 4) câu vẫn chưa ai nhận thì gọi lại, tối đa `fireMaxPerMessage` lượt mỗi câu (mặc định 3). Lý do: pg_net gửi sau khi giao dịch xong và không báo lỗi HTTP về hàm, nên "đã gọi" chưa chắc tác vụ đã chạy.
+- Chạy cả ngoài khung chèn việc (V574 chỉ gọi một lần và chỉ trong khối chèn việc).
+- Mỗi lượt gọi là `POST …/routines/<trig>/fire` với body `{"text":"messageId=<id>"}`; `fireRoutineId` phải đúng dạng `trig_…`, mã đọc từ Vault.
+
+Để bật: anh tạo mã trên trang tác vụ mới (tài khoản đang đăng nhập ở Desktop) và tự chạy `select vault.create_secret('<mã>', 'AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN');`, rồi đặt `fire: true`, `fireRoutineId: "trig_01SVrvfyyrHvxoRHihkkeovq"` (tác vụ mới, xem 7.4b) và bỏ `enqueueWindow` (khung phút 54–58 chỉ cần khi chờ lịch theo giờ).
+
+Lịch theo giờ của tác vụ cloud: sau khi `/fire` chạy được một ca thật thì **gỡ trigger lịch** (trang sửa tác vụ, biểu tượng thùng rác ở dòng lịch, rồi Save changes), giữ trigger API. Không dùng công tắc tạm dừng: tác vụ đang tạm dừng trả 400 cho lệnh `/fire`. Phải làm bằng tài khoản akabiz.
+
+Tài liệu Anthropic đọc lại 19/11 ([trang tác vụ](https://code.claude.com/docs/en/routines.md), [API fire](https://platform.claude.com/docs/en/api/claude-code/routines-fire)):
+
+- Tạo mã: claude.ai/code/routines → mở tác vụ → Edit → dòng Trigger bấm `+` → API → Generate token. Mã (`sk-ant-oat01-…`) hiện một lần, có hiệu lực ngay; Regenerate thì mã cũ hết hiệu lực ngay; Delete token gỡ luôn trigger API.
+- Tác vụ chỉ có trigger API (không lịch) là hợp lệ: "A task with only an API trigger runs when you call its endpoint". Tài liệu không nói rõ gỡ trigger lịch có giữ nguyên trigger API hay không, nên gỡ xong phải kiểm lại.
+- Lệnh gọi trả 200 kèm `claude_code_session_id` ngay, không chờ phiên chạy; mỗi lệnh một phiên mới, không có khoá chống gọi trùng. Lỗi: 400 (tác vụ tạm dừng), 401, 403, 404, 429 kèm `Retry-After`.
+- Header `anthropic-beta` không bắt buộc (hàm tick vẫn gửi, vô hại); `anthropic-version` từ `2023-06-01` trở lên.
+- Trần: 30 lượt mỗi giờ mỗi tác vụ (chung với Run now), 100 lượt mỗi giờ mỗi tài khoản. Lượt `/fire` tính vào hạn mức sử dụng của gói như phiên thường; hết hạn mức thì lượt bị từ chối tới khi cửa sổ sử dụng đặt lại (trừ khi tổ chức bật usage credits).
+
+**Việc phải xem trước:** từ lượt 12:01 VN 19/11 tác vụ cloud không nhận việc (câu 534, 536, 543 hết hạn thành "lỗi"; câu 550 chèn 15:54 chưa ai nhận lúc 16:52). Mỗi câu hết hạn vẫn tính vào trần 10 việc mỗi ngày. Chưa rõ lý do; phiên Desktop đang đăng nhập tài khoản claude.ai khác nên không đọc được lịch sử chạy của tác vụ. Nếu tác vụ hỏng thật thì `/fire` cũng không chạy được.
+
+### 12.6 Thứ tự đưa vào dùng
+
+1. Apply V588: **xong 20:02 VN 19/11**.
+2. Merge `dev_3` để phiên cloud đọc khuôn báo cáo mới: **xong qua #726, 20:09 VN 19/11**.
+3. Build Desktop thì admin mới có tab (trước đó duyệt được bằng cách gọi hàm trong SQL với phiên admin).
+4. Bật `/fire`: **xong 20:49 VN 19/11** trên tác vụ mới `trig_01SVrvfyyrHvxoRHihkkeovq` (gọi thử từ database: HTTP 200, phiên chạy và báo hết việc; [biên nhận](../migrations/snapshots/engine-error-review-v588/fire-on-receipt.json)). Còn lại: một ca thật đi qua `/fire` (dự kiến 00:54 VN 20/11), rồi gỡ lịch theo giờ của tác vụ và bỏ `enqueueWindow`.
+
+### 12.7 Chưa kiểm
+
+- V588 đã chạy trên production; chưa có ca nào được duyệt câu nên bước ghi câu vào kết quả chạy và ghi chú data chưa chạy trên dữ liệu thật.
+- Tab chưa chạy trong Electron thật (hàm `list` / `case` đã gọi trên DB thật bằng phiên admin trong lượt chạy thử, các thao tác duyệt thì chưa).
+- Chưa có báo cáo thật nào mang `cau_cho_khach` / `de_xuat_ma_loi`.
+- Đường `/fire` đã gọi thử một lượt trên production (20:49 VN 19/11, không kèm mã câu) nhưng chưa có ca thật nào đi qua; chưa biết tác vụ tắt lịch có còn nhận `/fire` không; chưa đo token của một lượt trống.
+

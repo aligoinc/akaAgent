@@ -26976,3 +26976,357 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
   font-size: 13px;
   line-height: 1.6;
 }
+
+/* =========== LỖI KHÔNG XÁC ĐỊNH (admin akaBiz, V588) =========== */
+.engine-error-modal {
+  width: min(1180px, calc(100vw - 32px));
+  height: min(820px, 90vh);
+  max-height: 90vh;
+}
+
+.engine-error-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.engine-error-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.engine-error-summary strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.engine-error-summary-error {
+  color: var(--accent-error);
+}
+
+.engine-error-layout {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+}
+
+.engine-error-list-pane {
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--border-default);
+}
+
+.engine-error-filters {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.engine-error-filter-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.engine-error-filter-row .panel-input {
+  min-width: 0;
+  flex: 1;
+}
+
+.engine-error-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.engine-error-inline-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.engine-error-cases {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.engine-error-case {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  text-align: left;
+  cursor: pointer;
+}
+
+.engine-error-case:hover {
+  background: var(--bg-hover);
+}
+
+.engine-error-case.selected {
+  background: var(--bg-tertiary);
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
+.engine-error-case-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.engine-error-case-time {
+  margin-left: auto;
+  color: var(--text-tertiary);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.engine-error-case-pattern {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+  word-break: break-word;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.engine-error-case-meta,
+.engine-error-case-conclusion {
+  color: var(--text-tertiary);
+  font-size: 11px;
+}
+
+.engine-error-case-conclusion {
+  color: var(--accent-info);
+}
+
+.engine-error-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.engine-error-chip-warning {
+  background: color-mix(in srgb, var(--accent-warning) 20%, transparent);
+  color: var(--text-primary);
+}
+
+.engine-error-chip-success {
+  background: color-mix(in srgb, var(--accent-success) 20%, transparent);
+  color: var(--text-primary);
+}
+
+.engine-error-state {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 32px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+
+.engine-error-state p {
+  margin: 0;
+  line-height: 1.6;
+}
+
+.engine-error-more {
+  display: block;
+  margin: 8px auto;
+}
+
+.engine-error-detail-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.engine-error-detail {
+  display: grid;
+  gap: 12px;
+  padding: 16px 20px;
+}
+
+.engine-error-section {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.engine-error-detail-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 15px;
+}
+
+.engine-error-detail-actions {
+  margin-left: auto;
+}
+
+.engine-error-pattern {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+  user-select: text;
+}
+
+.engine-error-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.engine-error-facts code {
+  color: var(--text-primary);
+  font-size: 11px;
+  user-select: text;
+}
+
+.engine-error-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.engine-error-text {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+.engine-error-muted {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.engine-error-over {
+  color: var(--accent-error);
+  font-size: 12px;
+}
+
+.engine-error-answer {
+  max-height: 320px;
+  margin: 0;
+  padding: 10px 12px;
+  overflow: auto;
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-family);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.engine-error-note {
+  resize: vertical;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.engine-error-note-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.engine-error-buttons {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.engine-error-proposal {
+  display: grid;
+  grid-template-columns: 140px minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.engine-error-proposal dt {
+  color: var(--text-tertiary);
+}
+
+.engine-error-proposal dd {
+  margin: 0;
+  color: var(--text-primary);
+  line-height: 1.5;
+  user-select: text;
+}
+
+.engine-error-table-wrap {
+  overflow-x: auto;
+}
+
+.engine-error-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.engine-error-table th,
+.engine-error-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-default);
+  text-align: left;
+  vertical-align: top;
+}
+
+.engine-error-table th {
+  color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.engine-error-message {
+  max-width: 320px;
+  word-break: break-word;
+  user-select: text;
+}
