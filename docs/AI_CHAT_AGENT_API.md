@@ -1,5 +1,7 @@
 # API cho agent trả lời "Hỏi đáp AI"
 
+> **Tài liệu này là của bản 1 (chỉ có `/list`, `/start`, `/answer`, `/status`) và đã cũ.** Mã ở `supabase/functions/ai-chat-agent/` từ 19/11/2026 là bản 5: bản 4 đang chạy trên production (chép lại từ production) cộng đường `/image` để bộ trả lời tải ảnh khách gửi kèm. Hợp đồng đầy đủ của bản 4 và bản 5 nằm ở akaAgentWebApp: `docs/AI_CHAT_AGENT_API.txt` (đường `/image` ở mục A.9) và `docs/AI_CHAT_IMAGES.md`.
+
 Tài liệu này dành cho agent (Claude Code hoặc bộ trả lời khác) nhận câu hỏi của khách trong tab Trợ lý và ghi câu trả lời về database. Agent chỉ cần đọc tệp này.
 
 - **Địa chỉ gốc**: `https://cgjbsmqtfhqvttudyjzq.supabase.co/functions/v1/ai-chat-agent`
