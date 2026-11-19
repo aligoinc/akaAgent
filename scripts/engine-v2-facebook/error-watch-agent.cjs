@@ -12,7 +12,7 @@
 //   node scripts/engine-v2-facebook/error-watch-agent.cjs fail N "câu báo lỗi"  không làm được câu này
 //
 // Tệp báo cáo là một JSON object theo khuôn của agent (tom_tat, khoa, ma, so_lieu, ket_luan, nen_sua_app, bang_chung, nguyen_nhan, de_xuat,
-// do_chac, da_tung_ket_luan, can_anh_quyet). Có thể kèm khoá "answer" (chữ thường); không có thì lệnh tự dựng từ các trường trên.
+// do_chac, da_tung_ket_luan, can_anh_quyet, cau_cho_khach, de_xuat_ma_loi). Có thể kèm khoá "answer" (chữ thường); không có thì lệnh tự dựng từ các trường trên.
 //
 // Mã thoát: 0 xong · 2 hết việc · 3 báo cáo sai khuôn hoặc tham số sai · 4 câu không còn nhận / ghi được (bỏ câu đó) · 5 tính năng tắt hoặc
 // API từ chối · 1 lỗi khác (mạng, API lỗi tạm).
@@ -165,12 +165,30 @@ function sensitiveFindings(text) {
   return found
 }
 
+const CODE_PROPOSAL_KEYS = ['ten_loi', 'cau_cho_khach', 'buoc_tiep_theo', 'cach_xu_ly', 'dau_hieu']
+
+/** Câu viết cho khách: một dòng, 5–200 ký tự, không mã nội bộ, không tên kỹ thuật, không tự kèm mã công khai (hệ thống tự thêm). */
+function customerTextErrors(name, value) {
+  if (value === undefined) return []
+  if (!isString(value)) return [`${name}: phải là chuỗi`]
+  const text = value.trim()
+  const errors = []
+  if (text.length < 5 || text.length > 200) errors.push(`${name}: 5–200 ký tự`)
+  if (/[\r\n]/.test(text)) errors.push(`${name}: viết trên một dòng`)
+  if (/err_[a-z0-9_]+|\b(?:xpath|selector|block|workflow|engine|stale|lease|timeout|waitForSelector|null|undefined)\b|\/\/\*|\[role=/i.test(text)) {
+    errors.push(`${name}: không dùng mã nội bộ hay từ kỹ thuật (err_…, block, selector, XPath, timeout…)`)
+  }
+  if (/\((?:FB|SYS|NET|CFG|UNK|RUN|Z|EXC|TAG|DAT)[0-9]{1,3}\)/.test(text)) errors.push(`${name}: không tự kèm mã công khai, hệ thống tự thêm`)
+  return errors
+}
+
 /** Kiểm báo cáo theo khuôn của agent, chặt hơn mức API bắt buộc. Trả { errors, report, answer }. */
 function validateReport(raw) {
   const errors = []
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return { errors: ['báo cáo phải là một JSON object'] }
   const { answer: answerIn, ...report } = raw
-  const known = ['tom_tat', 'khoa', 'ma', 'so_lieu', 'ket_luan', 'nen_sua_app', 'bang_chung', 'nguyen_nhan', 'de_xuat', 'do_chac', 'da_tung_ket_luan', 'can_anh_quyet']
+  const known = ['tom_tat', 'khoa', 'ma', 'so_lieu', 'ket_luan', 'nen_sua_app', 'bang_chung', 'nguyen_nhan', 'de_xuat', 'do_chac', 'da_tung_ket_luan', 'can_anh_quyet',
+    'cau_cho_khach', 'de_xuat_ma_loi']
   for (const key of Object.keys(report)) if (!known.includes(key)) errors.push(`khoá lạ "${key}"`)
   if (!isString(report.tom_tat) || report.tom_tat.trim().length < 10) errors.push('tom_tat: bắt buộc, một hai câu')
   else if (report.tom_tat.length > 700) errors.push('tom_tat: tối đa 700 ký tự')
@@ -192,6 +210,22 @@ function validateReport(raw) {
     if (!report.so_lieu || typeof report.so_lieu !== 'object' || Array.isArray(report.so_lieu)) errors.push('so_lieu: phải là object')
     else for (const key of ['so_luot', 'so_chien_dich', 'so_tai_khoan', 'so_to_chuc']) {
       if (report.so_lieu[key] !== undefined && !Number.isInteger(report.so_lieu[key])) errors.push(`so_lieu.${key}: phải là số nguyên`)
+    }
+  }
+  // Câu cho khách và mã lỗi mới chỉ là ĐỀ XUẤT: database giữ ở trạng thái chờ duyệt, không tự ghi cho khách, không tự thêm mã.
+  for (const error of customerTextErrors('cau_cho_khach', report.cau_cho_khach)) errors.push(error)
+  if (report.de_xuat_ma_loi !== undefined) {
+    const p = report.de_xuat_ma_loi
+    if (!p || typeof p !== 'object' || Array.isArray(p)) errors.push('de_xuat_ma_loi: phải là object')
+    else {
+      for (const key of Object.keys(p)) if (!CODE_PROPOSAL_KEYS.includes(key)) errors.push(`de_xuat_ma_loi: khoá lạ "${key}"`)
+      if (!isString(p.ten_loi) || p.ten_loi.trim().length < 5 || p.ten_loi.length > 80) errors.push('de_xuat_ma_loi.ten_loi: bắt buộc, 5–80 ký tự')
+      if (p.cau_cho_khach === undefined) errors.push('de_xuat_ma_loi.cau_cho_khach: bắt buộc')
+      for (const error of customerTextErrors('de_xuat_ma_loi.cau_cho_khach', p.cau_cho_khach)) errors.push(error)
+      for (const error of customerTextErrors('de_xuat_ma_loi.buoc_tiep_theo', p.buoc_tiep_theo)) errors.push(error)
+      for (const key of ['cach_xu_ly', 'dau_hieu']) {
+        if (!isString(p[key]) || p[key].trim().length < 5 || p[key].length > 500) errors.push(`de_xuat_ma_loi.${key}: bắt buộc, 5–500 ký tự`)
+      }
     }
   }
   if (answerIn !== undefined && !isString(answerIn)) errors.push('answer: phải là chuỗi')
@@ -217,6 +251,12 @@ function plainAnswer(report) {
   if (Array.isArray(report.bang_chung) && report.bang_chung.length) out.push(`Bằng chứng:\n${report.bang_chung.map((x, i) => `${i + 1}. ${x}`).join('\n')}`)
   if (Array.isArray(report.de_xuat) && report.de_xuat.length) out.push(`Đề xuất:\n${report.de_xuat.map((x, i) => `${i + 1}. ${x}`).join('\n')}`)
   if (report.da_tung_ket_luan) out.push(`Đã từng kết luận: ${report.da_tung_ket_luan}`)
+  if (report.cau_cho_khach) out.push(`Câu cho khách (đề xuất, chờ duyệt): ${String(report.cau_cho_khach).trim()}`)
+  if (report.de_xuat_ma_loi && typeof report.de_xuat_ma_loi === 'object') {
+    const p = report.de_xuat_ma_loi
+    out.push(['Đề xuất mã lỗi mới (chờ duyệt):', `- Tên lỗi: ${p.ten_loi || ''}`, `- Câu cho khách: ${p.cau_cho_khach || ''}`,
+      ...(p.buoc_tiep_theo ? [`- Bước tiếp theo cho khách: ${p.buoc_tiep_theo}`] : []), `- Cách xử lý: ${p.cach_xu_ly || ''}`, `- Dấu hiệu nhận dạng: ${p.dau_hieu || ''}`].join('\n'))
+  }
   if (report.can_anh_quyet) out.push(`Cần anh quyết: ${report.can_anh_quyet}`)
   return out.filter(Boolean).join('\n\n')
 }

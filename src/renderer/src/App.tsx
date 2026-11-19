@@ -25,6 +25,7 @@ import GeneralSettingsModal, { type GeneralSettingsMenu, type GeneralSettingsOpe
 import ContentTemplateManagerModal from './components/Settings/ContentTemplateManagerModal'
 import ChangePasswordModal from './components/Settings/ChangePasswordModal'
 import AffPartnerModal from './components/AffPartner/AffPartnerModal'
+import EngineErrorReviewModal from './components/EngineErrorReview/EngineErrorReviewModal'
 import AccountProfileModal from './components/Settings/AccountProfileModal'
 import MediaLibraryModal from './components/Media/MediaLibraryModal'
 import ProxyManagerModal from './components/CampaignPanels/ProxyManagerModal'
@@ -137,6 +138,7 @@ export default function App() {
   const [generalSettingsRequest, setGeneralSettingsRequest] = useState<(GeneralSettingsOpenOptions & { menu: GeneralSettingsMenu; returnFocusTo: HTMLElement | null }) | null>(null)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showAffPartner, setShowAffPartner] = useState(false)
+  const [showEngineErrorReview, setShowEngineErrorReview] = useState(false)
   const [showAccountProfile, setShowAccountProfile] = useState(false)
   const [localVersion, setLocalVersion] = useState('')
   const [checkingUpdate, setCheckingUpdate] = useState(false)
@@ -151,7 +153,7 @@ export default function App() {
   useNotificationUnreadSync(user ? `${user.organizationId}:${user.staffId}` : null, activePage)
   // Đăng xuất / đổi tài khoản thì đóng hộp thoại giới thiệu để không mở lại cho tài khoản khác.
   const affPartnerScope = user ? `${user.organizationId}:${user.staffId}` : null
-  useEffect(() => { setShowAffPartner(false) }, [affPartnerScope])
+  useEffect(() => { setShowAffPartner(false); setShowEngineErrorReview(false) }, [affPartnerScope])
   // Mục "Đối tác akaBiz": mở thẳng trang đối tác của cổng bằng trình duyệt ngoài. Không mở được (mất mạng, không gọi được
   // trình duyệt) thì hiện hộp thoại trong app: có mã, link, câu báo lỗi và nút thử lại.
   const affPartnerOpening = useRef(false)
@@ -482,6 +484,7 @@ export default function App() {
           onOpenGeneralSettings={() => openGeneralSettings()}
           onOpenChangePassword={() => setShowChangePassword(true)}
           onOpenAffPartner={openAffPartnerPortal}
+          onOpenEngineErrorReview={() => setShowEngineErrorReview(true)}
           onOpenNotifications={openNotifications}
           currentVersion={localVersion}
           availableUpdateVersion={availableUpdate?.remoteVersion}
@@ -640,6 +643,9 @@ export default function App() {
       )}
       {showAffPartner && user && (
         <AffPartnerModal onClose={() => setShowAffPartner(false)} />
+      )}
+      {showEngineErrorReview && user?.isAdminAkabiz && (
+        <EngineErrorReviewModal onClose={() => setShowEngineErrorReview(false)} />
       )}
       {showAccountProfile && (
         <AccountProfileModal onClose={() => setShowAccountProfile(false)} />
