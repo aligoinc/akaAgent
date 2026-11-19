@@ -1,0 +1,76 @@
+{
+ "what": "Bật đường /fire của bộ kiểm lỗi chiến dịch Facebook, trỏ vào tác vụ cloud mới trên tài khoản claude.ai đang đăng nhập ở Desktop",
+ "requested_by_user": [
+  "chuyển sang làm trên tài khoản claude này được ko",
+  "Tạo luôn",
+  "xong r (đã tạo mã và lưu Vault)"
+ ],
+ "routine": {
+  "id": "trig_01SVrvfyyrHvxoRHihkkeovq",
+  "url": "https://claude.ai/code/routines/trig_01SVrvfyyrHvxoRHihkkeovq",
+  "created_vn": "2026-11-19 20:33:37",
+  "cron": "1 * * * *",
+  "model": "claude-fable-5-2",
+  "environment": "full (env_01K9qSmTVRGkifC1kQxbBidM)",
+  "allowed_tools": [
+   "Bash",
+   "Read",
+   "Write",
+   "Glob",
+   "Grep"
+  ],
+  "mcp_connections": [
+   {
+    "name": "Supabase",
+    "permitted_tools": [
+     "execute_sql"
+    ]
+   }
+  ],
+  "api_token_created_vn": "2026-11-19 20:46:42 (anh tạo trên trang tác vụ)"
+ },
+ "old_routine": {
+  "id": "trig_01QRNCgX959THHTS7mkdCS3K",
+  "account": "akabiz",
+  "note": "không nhận việc từ 12:01 VN 19/11; chỉ anh tắt được, chưa xác nhận đã tắt"
+ },
+ "vault": {
+  "name": "AKA_AGENT_ENGINE_ERROR_WATCH_FIRE_TOKEN",
+  "created_vn": "2026-11-19 20:48:15",
+  "checked": "chỉ kiểm có 1 dòng, dài 108 ký tự, đúng tiền tố, không có khoảng trắng; không đọc giá trị ra ngoài database"
+ },
+ "manual_run_test": {
+  "session": "cse_01Ce2Ke61ir7JjHYgkMSnuGd",
+  "at_vn": "20:33:58",
+  "result": "chuyển dev_3, lệnh next gọi API được, Hết việc, 22 giây"
+ },
+ "fire_test": {
+  "at_vn": "20:49:13",
+  "how": "một lệnh net.http_post từ database, header như hàm tick, mã lấy từ Vault, body text không kèm mã câu",
+  "pg_net_request_id": 847175,
+  "http_status": 200,
+  "session": "cse_01Ce2Ke9agJxq6CpznNx7eV9",
+  "result": "phiên nhận khối routine-fire-payload như dữ liệu, chạy next --fire-text, Hết việc, 20 giây"
+ },
+ "setting_change": {
+  "at_vn": "2026-11-19 20:49:42",
+  "key": "engine.error_watch",
+  "changed": {
+   "fire": [
+    false,
+    true
+   ],
+   "fireRoutineId": [
+    null,
+    "trig_01SVrvfyyrHvxoRHihkkeovq"
+   ]
+  },
+  "unchanged": "enabled true, enqueue true, enqueueWindow phút 54–58, imageRequests false, các ngưỡng khác"
+ },
+ "rollback": "đặt fire: false trong engine.error_watch (có hiệu lực ở lượt tick kế, không DDL); bỏ hẳn: xoá mã trên trang tác vụ (Delete token) và xoá dòng Vault",
+ "not_verified": [
+  "chưa có ca thật nào đi qua /fire (hôm nay đã hết 10/10 việc; ca đầu dự kiến 00:54 VN 20/11)",
+  "connector Supabase của tài khoản mới chưa được dùng trong phiên nào",
+  "lịch mỗi giờ của tác vụ vẫn còn (chờ một ca thật qua /fire rồi mới gỡ)"
+ ]
+}
