@@ -14,6 +14,24 @@ export const aiChatAttention = new AiChatAttentionController({ transport: aiChat
 
 const visible = () => document.visibilityState === 'visible'
 
+// Số ảnh tối đa đính kèm một câu hỏi, lấy từ `limits` của lượt tải danh sách agent. 0 = DB chưa nhận ảnh hoặc chưa tải:
+// modal và ô hỏi tiếp không hiện nút đính ảnh.
+let imageLimit = 0
+const imageLimitListeners = new Set<() => void>()
+export function setAiChatImageLimit(value: number): void {
+  const next = Number.isSafeInteger(value) && value > 0 ? value : 0
+  if (next === imageLimit) return
+  imageLimit = next
+  Array.from(imageLimitListeners).forEach(listener => listener())
+}
+const subscribeImageLimit = (listener: () => void) => {
+  imageLimitListeners.add(listener)
+  return () => { imageLimitListeners.delete(listener) }
+}
+export function useAiChatImageLimit(): number {
+  return useSyncExternalStore(subscribeImageLimit, () => imageLimit)
+}
+
 /** Danh sách agent hỏi đáp. `null` = chưa tải, tắt, hoặc API/DB chưa có (ẩn toàn bộ mục hỏi đáp, không báo lỗi). */
 export function useAiChatAgents(scopeKey: string): AiChatAgents | null {
   const [agents, setAgents] = useState<AiChatAgents | null>(null)
@@ -30,10 +48,12 @@ export function useAiChatAgents(scopeKey: string): AiChatAgents | null {
         if (cancelled) return
         loadedAt = Date.now()
         setAgents(result.enabled ? result : null)
-      }).catch(() => { if (!cancelled) setAgents(null) })
+        setAiChatImageLimit(result.enabled ? result.limits.maxImagesPerQuestion : 0)
+      }).catch(() => { if (!cancelled) { setAgents(null); setAiChatImageLimit(0) } })
     }
     const onFocus = () => { if (visible() && Date.now() - loadedAt > AGENTS_MAX_AGE_MS) load() }
     setAgents(null)
+    setAiChatImageLimit(0)
     load()
     window.addEventListener('focus', onFocus)
     document.addEventListener('visibilitychange', onFocus)

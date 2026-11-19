@@ -5,6 +5,8 @@ import {
   AI_CHAT_MAX_QUESTION, aiChatErrorCode, aiChatErrorMessage, newAiChatRequestId, validateAiChatIntake, validateAiChatQuestion,
   type AiChatProject, type AiChatSnapshot
 } from '../../../../shared/aiChat'
+import { AiChatAttachmentList, AiChatImageButton, useAiChatAttachments } from './AiChatImages'
+import { useAiChatImageLimit } from './aiChatStore'
 import { aiChatTransport } from './aiChatTransport'
 import '../../styles/aiChat.css'
 
@@ -26,6 +28,11 @@ export function AiChatStartModal({ project, campaign, onClose, onOpened }: AiCha
   const [error, setError] = useState<string | null>(null)
   const input = useRef<HTMLTextAreaElement>(null)
   const inFlight = useRef(false)
+  const maxImages = useAiChatImageLimit()
+  const attachments = useAiChatAttachments(maxImages)
+  // Thêm hoặc bỏ ảnh thì lời báo lỗi cũ của form không còn đúng nữa.
+  const attachmentCount = attachments.items.length
+  useEffect(() => { setError(null) }, [attachmentCount])
 
   useEffect(() => {
     input.current?.focus()
@@ -38,15 +45,18 @@ export function AiChatStartModal({ project, campaign, onClose, onOpened }: AiCha
   }, [onClose])
 
   const submit = async () => {
-    if (inFlight.current) return
-    const invalid = validateAiChatQuestion(question) ?? validateAiChatIntake(project, intake)
+    if (inFlight.current || attachments.uploading) return
+    if (attachments.failed) { setError('Có ảnh chưa tải lên được. Bỏ ảnh lỗi rồi gửi lại.'); return }
+    const images = attachments.urls
+    const invalid = validateAiChatQuestion(question, images.length) ?? validateAiChatIntake(project, intake)
     if (invalid) { setError(aiChatErrorMessage(invalid)); return }
     inFlight.current = true
     setSubmitting(true)
     setError(null)
     try {
       onOpened(await aiChatTransport.open({
-        requestId: requestId.current, projectId: project.id, campaignId: campaign?.id ?? null, question: question.trim(), intake
+        requestId: requestId.current, projectId: project.id, campaignId: campaign?.id ?? null, question: question.trim(), intake,
+        ...(images.length ? { images } : {})
       }))
     } catch (failure) {
       const code = aiChatErrorCode(failure)
@@ -72,9 +82,14 @@ export function AiChatStartModal({ project, campaign, onClose, onOpened }: AiCha
         <label className="ai-chat-field">
           <span>Câu hỏi của bạn</span>
           <textarea ref={input} value={question} rows={4} maxLength={AI_CHAT_MAX_QUESTION} placeholder="Nhập điều bạn muốn hỏi về chiến dịch này..."
-            onChange={event => { setQuestion(event.target.value); setError(null) }}
+            onChange={event => { setQuestion(event.target.value); setError(null) }} onPaste={attachments.onPaste}
             onKeyDown={event => { if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) { event.preventDefault(); void submit() } }} />
         </label>
+        {attachments.enabled && <div className="ai-chat-attach-row">
+          <AiChatImageButton attachments={attachments} maxImages={maxImages} />
+          <span>Tối đa {maxImages} ảnh, mỗi ảnh 5 MB. Có thể dán ảnh chụp màn hình vào ô câu hỏi.</span>
+        </div>}
+        <AiChatAttachmentList attachments={attachments} />
         {project.suggestedQuestions.length > 0 && <div className="ai-chat-suggestions" aria-label="Câu hỏi gợi ý">
           {project.suggestedQuestions.map(item => <button type="button" key={item} className={item === question.trim() ? 'active' : ''}
             onClick={() => { setQuestion(item); setError(null); input.current?.focus() }}>{item}</button>)}
@@ -101,8 +116,10 @@ export function AiChatStartModal({ project, campaign, onClose, onOpened }: AiCha
       </fieldset>
       <div className="modal-footer">
         <button type="button" className="btn btn-ghost" onClick={onClose} disabled={submitting}>Huỷ</button>
-        <button type="button" className="btn btn-primary" onClick={() => void submit()} disabled={submitting || !question.trim()}>
-          {submitting ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Gửi câu hỏi
+        <button type="button" className="btn btn-primary" onClick={() => void submit()}
+          disabled={submitting || attachments.uploading || (!question.trim() && !attachments.urls.length)}
+          title={attachments.uploading ? 'Đang tải ảnh lên...' : undefined}>
+          {submitting || attachments.uploading ? <Loader2 size={14} className="spin" /> : <Send size={14} />} Gửi câu hỏi
         </button>
       </div>
     </div>

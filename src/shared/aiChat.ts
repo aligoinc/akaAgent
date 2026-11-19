@@ -17,6 +17,15 @@ export const AI_CHAT_ACTIVE_STATUSES: readonly AiChatMessageStatus[] = [
   'chờ câu trả lời', 'đang lấy thông tin câu hỏi', 'đang tìm câu trả lời', 'đã có câu trả lời'
 ]
 export const AI_CHAT_MAX_QUESTION = 4000
+/** Ảnh đính kèm câu hỏi: số ảnh mặc định mỗi câu (server trả số thật ở `limits.maxImagesPerQuestion`), dung lượng và định dạng nhận. */
+export const AI_CHAT_MAX_IMAGES = 3
+export const AI_CHAT_IMAGE_MAX_BYTES = 5 * 1024 * 1024
+export const AI_CHAT_IMAGE_TYPES: readonly string[] = ['image/png', 'image/jpeg', 'image/webp']
+/**
+ * Ảnh nằm ở kho media của hệ thống (cùng kho với thư viện media của chiến dịch), trong thư mục riêng
+ * `<tiền tố kho>/ai-chat/<tổ chức>/<nhân viên>/<uuid>.<png|jpg|webp>`; không vào thư viện media của khách.
+ */
+export const AI_CHAT_IMAGE_FOLDER = 'ai-chat'
 export const AI_CHAT_NOT_READY = 'ai_chat_not_ready'
 export const AI_CHAT_UNAVAILABLE = 'ai_chat_unavailable'
 /** Nhóm agent hiện trong menu Trợ lý của danh sách chiến dịch. */
@@ -31,7 +40,9 @@ export const AI_CHAT_ENDPOINTS = {
   read: (threadId: number) => `/ai-chat/threads/${threadId}/read`,
   cancel: (threadId: number, messageId: number) => `/ai-chat/threads/${threadId}/messages/${messageId}/cancel`,
   retry: (threadId: number, messageId: number) => `/ai-chat/threads/${threadId}/messages/${messageId}/retry`,
-  rating: (threadId: number, messageId: number) => `/ai-chat/threads/${threadId}/messages/${messageId}/rating`
+  rating: (threadId: number, messageId: number) => `/ai-chat/threads/${threadId}/messages/${messageId}/rating`,
+  /** POST: tải một ảnh lên kho media của hệ thống. */
+  images: '/ai-chat/images'
 } as const
 
 export type AiChatIntakeFieldType = 'text' | 'textarea' | 'select' | 'checkbox'
@@ -56,9 +67,19 @@ export interface AiChatProject {
   requiresCampaign: boolean
   timeoutSeconds: number
   version: number
+  /** Kiểu trả lời của agent (DB có việc 0b). Thiếu = 'claude_code'. Danh sách mặc định chỉ có agent 'claude_code'. */
+  answerMode?: AiChatAnswerMode
 }
+/** 'claude_code': bộ trả lời ngoài nhận việc; 'prompt': API trả lời ngay trong lượt hỏi (như Agent Tự động hóa). */
+export type AiChatAnswerMode = 'claude_code' | 'prompt'
 export interface AiChatGroup { id: number; code: string; name: string; description: string; projects: AiChatProject[] }
-export interface AiChatLimits { maxQuestionLength: number; maxPendingPerStaff: number; maxQuestionsPerDay: number }
+export interface AiChatLimits {
+  maxQuestionLength: number
+  maxPendingPerStaff: number
+  maxQuestionsPerDay: number
+  /** Số ảnh tối đa đính kèm một câu hỏi. 0 = server chưa nhận ảnh (ẩn nút đính ảnh). */
+  maxImagesPerQuestion: number
+}
 export interface AiChatAgents { enabled: boolean; groups: AiChatGroup[]; limits: AiChatLimits; serverTime: string }
 
 export interface AiChatThread {
@@ -85,6 +106,8 @@ export interface AiChatThread {
   /** Có kết quả (trả lời hoặc lỗi) mà người dùng chưa xem. */
   unread: boolean
   createdAt: string
+  /** Kiểu trả lời của hội thoại (DB có việc 0b). Thiếu = 'claude_code'. */
+  answerMode?: AiChatAnswerMode
 }
 export interface AiChatMessage {
   id: number
@@ -92,6 +115,8 @@ export interface AiChatMessage {
   seq: number
   requestId: string
   question: string
+  /** URL các ảnh người hỏi đính kèm (có thể rỗng); mở thẳng bằng URL. */
+  images: string[]
   /** Chỉ có khi status = 'hoàn thành'. */
   answer: string | null
   answerJson: Record<string, unknown> | null
@@ -137,8 +162,15 @@ export interface AiChatOpenRequest {
   campaignId?: number | null
   question: string
   intake?: Record<string, string | boolean>
+  /** URL ảnh đã tải lên bằng `uploadImage`. Có ảnh thì `question` được để trống. */
+  images?: string[]
 }
-export interface AiChatAskRequest { requestId: string; question: string; afterRevision?: number }
+export interface AiChatAskRequest { requestId: string; question: string; afterRevision?: number; images?: string[] }
+
+/** Một ảnh gửi lên kho: nội dung tệp mã hóa base64 (không kèm tiền tố `data:`). */
+export interface AiChatImageUpload { mimeType: string; dataBase64: string }
+/** Ảnh đã nằm trong kho media: `url` là giá trị gửi kèm câu hỏi (cũng là địa chỉ để hiện ảnh). */
+export interface AiChatImage { url: string; mimeType: string; sizeBytes: number }
 
 /** Cổng gọi server. Web/mobile: HTTP tới API WebApp. Desktop: RPC `aka_agent_ai_chat`. */
 export interface AiChatTransport {
@@ -153,6 +185,8 @@ export interface AiChatTransport {
   retry(threadId: number, messageId: number, afterRevision: number): Promise<AiChatSnapshot>
   rate(threadId: number, messageId: number, rating: 1 | -1 | null, afterRevision: number, note?: string): Promise<AiChatSnapshot>
   markRead(threadId: number, seq: number): Promise<AiChatReadResult>
+  /** Tải một ảnh lên kho media của hệ thống. Nơi nào chưa có (Desktop, iOS bản cũ) thì giao diện không hiện nút đính ảnh. */
+  uploadImage?(image: AiChatImageUpload, signal?: AbortSignal): Promise<AiChatImage>
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -171,6 +205,14 @@ export function aiChatErrorMessage(code: string | null | undefined): string {
     case 'ai_chat_campaign_not_found': return 'Không tìm thấy chiến dịch hoặc chiến dịch không thuộc bạn.'
     case 'ai_chat_question_required': return 'Vui lòng nhập câu hỏi.'
     case 'ai_chat_question_too_long': return 'Câu hỏi tối đa 4.000 ký tự.'
+    case 'ai_chat_images_invalid': return 'Ảnh đính kèm không hợp lệ. Vui lòng bỏ ảnh rồi chọn lại.'
+    case 'ai_chat_too_many_images': return 'Số ảnh đính kèm vượt quá giới hạn của một câu hỏi.'
+    case 'ai_chat_image_type_invalid': return 'Chỉ nhận ảnh PNG, JPG hoặc WEBP.'
+    case 'ai_chat_image_too_large': return 'Mỗi ảnh tối đa 5 MB.'
+    case 'ai_chat_image_rate_limited': return 'Bạn tải ảnh lên quá nhanh. Vui lòng chờ một phút rồi thử lại.'
+    case 'ai_chat_image_upload_failed': return 'Không tải được ảnh lên. Vui lòng thử lại.'
+    case 'ai_chat_image_not_found': return 'Không tìm thấy ảnh.'
+    case 'ai_chat_images_not_ready': return 'Trợ lý chưa nhận ảnh đính kèm. Vui lòng gửi câu hỏi không kèm ảnh.'
     case 'ai_chat_intake_required': return 'Vui lòng điền đủ các thông tin bắt buộc.'
     case 'ai_chat_message_pending': return 'Chờ trợ lý trả lời câu hiện tại trước khi hỏi tiếp.'
     case 'ai_chat_too_many_pending': return 'Bạn đang có nhiều câu hỏi chờ trả lời. Vui lòng chờ một câu xong rồi hỏi tiếp.'
@@ -219,12 +261,36 @@ export function aiChatProjectsForCampaign(agents: AiChatAgents | null | undefine
     .filter(project => aiChatProjectApplies(project, campaign))
 }
 
-/** Kiểm tra câu hỏi trước khi gửi; trả mã lỗi `ai_chat_*` hoặc null. */
-export function validateAiChatQuestion(question: string): string | null {
+/** Kiểm tra câu hỏi trước khi gửi; trả mã lỗi `ai_chat_*` hoặc null. Có ảnh đính kèm thì được để trống câu hỏi. */
+export function validateAiChatQuestion(question: string, imageCount = 0): string | null {
   const text = question.trim()
-  if (!text) return 'ai_chat_question_required'
+  if (!text && imageCount <= 0) return 'ai_chat_question_required'
   if (text.length > AI_CHAT_MAX_QUESTION) return 'ai_chat_question_too_long'
   return null
+}
+
+/** Kiểm tra một tệp ảnh trước khi tải lên; trả mã lỗi `ai_chat_*` hoặc null. */
+export function validateAiChatImage(image: { mimeType: string; sizeBytes: number }): string | null {
+  if (!AI_CHAT_IMAGE_TYPES.includes(image.mimeType.toLowerCase())) return 'ai_chat_image_type_invalid'
+  if (!(image.sizeBytes > 0)) return 'ai_chat_images_invalid'
+  if (image.sizeBytes > AI_CHAT_IMAGE_MAX_BYTES) return 'ai_chat_image_too_large'
+  return null
+}
+
+const AI_CHAT_IMAGE_NAME = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(?:png|jpg|webp)$/
+
+/** Khóa của một ảnh trong kho media: `<tiền tố kho>/ai-chat/<tổ chức>/<nhân viên>/<tên>`. */
+export function aiChatImageObjectKey(keyPrefix: string, organizationId: number, staffId: number, name: string): string {
+  return [keyPrefix.trim().replace(/^\/+|\/+$/g, ''), AI_CHAT_IMAGE_FOLDER, String(organizationId), String(staffId), name].filter(Boolean).join('/')
+}
+
+/**
+ * URL có phải ảnh do chính nhân viên này tải lên kho media không. `publicBaseUrl`, `keyPrefix` là cấu hình của kho
+ * (`media.storage.public_base_url`, `media.storage.key_prefix`).
+ */
+export function isOwnAiChatImageUrl(url: string, store: { publicBaseUrl: string; keyPrefix: string }, organizationId: number, staffId: number): boolean {
+  const prefix = `${store.publicBaseUrl.trim().replace(/\/+$/, '')}/${aiChatImageObjectKey(store.keyPrefix, organizationId, staffId, '')}/`
+  return url.startsWith(prefix) && AI_CHAT_IMAGE_NAME.test(url.slice(prefix.length))
 }
 
 /** Kiểm tra các ô modal thu thêm theo `intakeSchema`. */
@@ -345,8 +411,13 @@ export function parseAiChatProject(value: unknown): AiChatProject {
     appliesTo: { platforms: strings(applies.platforms), actionIds: strings(applies.actionIds) },
     requiresCampaign: data.requiresCampaign !== false,
     timeoutSeconds: count(data.timeoutSeconds, 300) || 300,
-    version: count(data.version, 1) || 1
+    version: count(data.version, 1) || 1,
+    ...answerModeOf(data.answerMode)
   }
+}
+
+function answerModeOf(value: unknown): { answerMode?: AiChatAnswerMode } {
+  return value === 'claude_code' || value === 'prompt' ? { answerMode: value } : {}
 }
 
 export function parseAiChatAgents(value: unknown): AiChatAgents {
@@ -364,7 +435,9 @@ export function parseAiChatAgents(value: unknown): AiChatAgents {
     limits: {
       maxQuestionLength: count(limits.maxQuestionLength, AI_CHAT_MAX_QUESTION) || AI_CHAT_MAX_QUESTION,
       maxPendingPerStaff: count(limits.maxPendingPerStaff, 3),
-      maxQuestionsPerDay: count(limits.maxQuestionsPerDay, 50)
+      maxQuestionsPerDay: count(limits.maxQuestionsPerDay, 50),
+      // Server chưa có phần nhận ảnh thì không trả khóa này: 0 = ẩn nút đính ảnh.
+      maxImagesPerQuestion: Math.min(count(limits.maxImagesPerQuestion, 0), 10)
     },
     serverTime: optionalTime(data.serverTime) ?? new Date(0).toISOString()
   }
@@ -382,7 +455,8 @@ export function parseAiChatThread(value: unknown): AiChatThread {
     revision: id(data.revision), messageCount: count(data.messageCount), lastMessageSeq: count(data.lastMessageSeq),
     lastMessageStatus: lastStatus, lastMessageAt: time(data.lastMessageAt), lastReadSeq: count(data.lastReadSeq),
     pending: isAiChatStatusActive(lastStatus),
-    unread: data.unread === true, createdAt: time(data.createdAt)
+    unread: data.unread === true, createdAt: time(data.createdAt),
+    ...answerModeOf(data.answerMode)
   }
 }
 
@@ -392,6 +466,7 @@ export function parseAiChatMessage(value: unknown): AiChatMessage {
   const done = messageStatus === 'hoàn thành'
   return {
     id: id(data.id), threadId: id(data.threadId), seq: id(data.seq), requestId: str(data.requestId), question: str(data.question),
+    images: strings(data.images).filter(url => /^https?:\/\/\S+$/i.test(url)).slice(0, 10),
     // Phòng thủ hai lớp: server đã ẩn, client cũng không giữ câu trả lời của câu chưa hoàn thành.
     answer: done ? nullableStr(data.answer) : null,
     answerJson: done && isRow(data.answerJson) ? data.answerJson : null,
@@ -401,6 +476,13 @@ export function parseAiChatMessage(value: unknown): AiChatMessage {
     deadlineAt: time(data.deadlineAt), errorCode: nullableStr(data.errorCode), errorMessage: nullableStr(data.errorMessage),
     rating: data.rating === 1 || data.rating === -1 ? data.rating : null
   }
+}
+
+export function parseAiChatImage(value: unknown): AiChatImage {
+  const data = row(value)
+  const url = str(data.url)
+  if (!/^https?:\/\/\S+$/i.test(url)) throw new AiChatContractError()
+  return { url, mimeType: str(data.mimeType), sizeBytes: count(data.sizeBytes) }
 }
 
 export function parseAiChatSnapshot(value: unknown): AiChatSnapshot {
@@ -545,7 +627,7 @@ export interface AiChatControllerState extends AiChatThreadState {
   /** Lỗi của lệnh vừa gửi (hiện cạnh ô nhập). */
   actionError: string | null
   /** Câu hỏi gửi chưa thành công: gửi lại dùng đúng requestId cũ để không tạo câu trùng. */
-  unsent: { requestId: string; question: string } | null
+  unsent: { requestId: string; question: string; images?: string[] } | null
 }
 
 export const EMPTY_AI_CHAT_CONTROLLER_STATE: AiChatControllerState = {
@@ -635,13 +717,16 @@ export class AiChatThreadController {
   /** Đóng hội thoại đang xem (đổi chiến dịch, đăng xuất). Câu đang chờ vẫn được server xử lý. */
   close(): void { this.reset('idle') }
 
-  /** Hỏi tiếp. Trả true nếu câu hỏi đã được server nhận. */
-  async ask(question: string): Promise<boolean> {
+  /** Hỏi tiếp, có thể kèm URL các ảnh đã tải lên. Trả true nếu câu hỏi đã được server nhận. */
+  async ask(question: string, images: readonly string[] = []): Promise<boolean> {
     const clean = question.trim()
-    const invalid = validateAiChatQuestion(clean)
+    const invalid = validateAiChatQuestion(clean, images.length)
     if (invalid) { this.patch({ actionError: aiChatErrorMessage(invalid) }); return false }
     if (!aiChatCanAsk(this.state) || !this.state.thread) return false
-    const unsent = this.state.unsent?.question === clean ? this.state.unsent : { requestId: this.newRequestId(), question: clean }
+    const previous = this.state.unsent
+    const same = !!previous && previous.question === clean && (previous.images ?? []).join('\n') === images.join('\n')
+    const unsent = same && previous ? previous
+      : { requestId: this.newRequestId(), question: clean, ...(images.length ? { images: Array.from(images) } : {}) }
     const threadId = this.state.thread.id
     return this.command(() => this.deps.transport.ask(threadId, { ...unsent, afterRevision: this.state.revision }), {
       before: { unsent },

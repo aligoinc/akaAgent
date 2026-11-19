@@ -5,8 +5,9 @@ import {
   isAiChatStatusActive,
   type AiChatControllerState, type AiChatMessage, type AiChatSnapshot, type AiChatThread, type AiChatThreadCursor
 } from '../../../../shared/aiChat'
+import { AiChatAttachmentList, AiChatImageButton, AiChatMessageImages, useAiChatAttachments } from './AiChatImages'
 import { aiChatTransport } from './aiChatTransport'
-import { useAiChatThread } from './aiChatStore'
+import { useAiChatImageLimit, useAiChatThread } from './aiChatStore'
 import '../../styles/aiChat.css'
 
 /** Yêu cầu mở hội thoại từ bên ngoài (menu Trợ lý, modal bắt đầu). `key` đổi = một yêu cầu mới. */
@@ -135,6 +136,7 @@ function MessageItem({ message, last, state, now, onCancel, onRetry, onRate }: {
   const pending = isAiChatStatusActive(message.status)
   return <div className="ai-chat-turn">
     <div className="assistant-message user"><div className="assistant-message-content">{message.question}</div></div>
+    <AiChatMessageImages images={message.images} />
     {message.status === 'hoàn thành' && <div className="assistant-message assistant">
       <div className="assistant-message-content ai-chat-answer-content">
         <Answer message={message} />
@@ -182,15 +184,19 @@ export function AiChatTab({ request, active, onThreadChange }: AiChatTabProps) {
   const pending = isAiChatStatusActive(last?.status)
   const canAsk = aiChatCanAsk(state)
   const now = useNow(view === 'thread' && pending && active)
+  const maxImages = useAiChatImageLimit()
+  const attachments = useAiChatAttachments(maxImages)
+  const clearAttachments = attachments.clear
 
   useEffect(() => {
     if (!request || handledRequest.current === request.key) return
     handledRequest.current = request.key
     setView('thread')
     setDraft('')
+    clearAttachments()
     if (request.snapshot) controller.adopt(request.snapshot)
     else if (request.threadId) void controller.load(request.threadId)
-  }, [request, controller])
+  }, [request, controller, clearAttachments])
 
   const thread = view === 'thread' ? state.thread : null
   useEffect(() => { onThreadChange?.(thread) }, [thread?.id, thread?.campaignName, onThreadChange]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,9 +217,11 @@ export function AiChatTab({ request, active, onThreadChange }: AiChatTabProps) {
     wasPending.current = pending
   }, [pending, active, view])
 
+  const images = attachments.urls
+  const sendable = canAsk && !attachments.uploading && !attachments.failed && (!!draft.trim() || images.length > 0)
   const send = async () => {
-    if (!canAsk || !draft.trim()) return
-    if (await controller.ask(draft)) setDraft('')
+    if (!sendable) return
+    if (await controller.ask(draft, images)) { setDraft(''); attachments.clear() }
   }
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.nativeEvent.isComposing) return
@@ -222,6 +230,7 @@ export function AiChatTab({ request, active, onThreadChange }: AiChatTabProps) {
   const openFromList = (item: AiChatThread) => {
     setView('thread')
     setDraft('')
+    attachments.clear()
     void controller.load(item.id)
   }
 
@@ -246,12 +255,15 @@ export function AiChatTab({ request, active, onThreadChange }: AiChatTabProps) {
           onCancel={() => void controller.cancel()} onRetry={() => void controller.retry()} onRate={rating => void controller.rate(message.id, rating)} />)}
       </div>
       {state.actionError && <div className="assistant-inline-error ai-chat-action-error" role="alert"><AlertTriangle size={14} /><span>{state.actionError}</span></div>}
+      <AiChatAttachmentList attachments={attachments} disabled={state.busy} />
       <div className="assistant-chat-input ai-chat-input">
+        <AiChatImageButton attachments={attachments} maxImages={maxImages} disabled={!canAsk} compact />
         <textarea ref={inputRef} className="assistant-chat-textarea" value={draft} rows={2} maxLength={AI_CHAT_MAX_QUESTION} disabled={!canAsk}
           aria-label="Câu hỏi tiếp theo"
           placeholder={pending ? 'Đang chờ câu trả lời...' : state.thread?.status === 'đã đóng' ? 'Hội thoại đã đóng.' : 'Nhập câu hỏi tiếp theo...'}
-          onChange={event => setDraft(event.target.value)} onKeyDown={onKeyDown} />
-        <button type="button" className="assistant-chat-send" onClick={() => void send()} disabled={!canAsk || !draft.trim()} title={pending ? 'Đang chờ câu trả lời' : 'Gửi'}>
+          onChange={event => setDraft(event.target.value)} onKeyDown={onKeyDown} onPaste={canAsk ? attachments.onPaste : undefined} />
+        <button type="button" className="assistant-chat-send" onClick={() => void send()} disabled={!sendable}
+          title={pending ? 'Đang chờ câu trả lời' : attachments.uploading ? 'Đang tải ảnh lên...' : attachments.failed ? 'Bỏ ảnh lỗi rồi gửi' : 'Gửi'}>
           {state.busy ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
         </button>
       </div>
