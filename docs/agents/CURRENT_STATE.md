@@ -47,14 +47,16 @@ Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
 [Build akaAgent Desktop 10.1.0](../audits/akaagent-10.1.0-20261119/README.md):
-**Đã build local Windows x64, Mac ARM64, Mac Intel x64 lúc 20:23:50–20:26:56 VN, 19/11/2026. Chưa upload/phát hành/feed (anh tự phát
-hành). Không build App Server** (9/247 file trong gói Server đổi sau 10.0.0: phần engine / Facebook App Server không chạy, và #724 đo khoảng
-chờ bằng đồng hồ đơn điệu, không đổi hành vi khi giờ máy đúng). Nguồn worktree `release-10.1.0`, nhánh `codex/release-10.1.0` `930f85fc`
-(chỉ đổi version) trên `origin/dev_3` `f31c8e7f` sau PR #725. Mới so với 10.0.0: tách Z114 trong engine Zalo Desktop (#720, V581),
-mục menu "Kiểm tra nhập mã xác minh Fanpage" (#721; V582 câu ở block chưa apply, phải đổi số vì 582 đã thuộc `aka_assistant_images`),
-ảnh đính kèm Hỏi đáp AI (#722), hạn chờ đo bằng đồng hồ đơn điệu (#724). 66/70 bước kiểm đạt; 4 bước lỗi đã giải thích:
-`server-rest-smoke` (script kiểm không cấp `monotonicNow` sau #724, bản sao có cấp 19/19), `ai-chat-images-ui-smoke` (cần
-`AI_CHAT_UI_CHROMIUM`, chạy lại 8 nhóm đạt), `zalo-message-status-sync` và phát lại bản chép 18/11 như 10.0.0. Không DB/deploy service
+**Đã build lại lần 2 Windows x64, Mac ARM64, Mac Intel x64 lúc 20:54:28–20:57:39 VN, 19/11/2026, vì #726 (mục "Lỗi không xác định"
+cho admin akaBiz, V588) merge `dev_3` lúc 20:09 VN sau khi cắt nhánh lần 1. Chưa upload/phát hành/feed (anh tự phát hành). Không build App
+Server** (9/247 file trong gói Server đổi sau 10.0.0, 0 sau lần 1: phần engine / Facebook App Server không chạy, và #724 đo khoảng chờ bằng
+đồng hồ đơn điệu, không đổi hành vi khi giờ máy đúng). Nguồn worktree `release-10.1.0`, nhánh `codex/release-10.1.0-r2` `a195d29d` (chỉ
+đổi version, cherry-pick của commit version lần 1) trên `origin/dev_3` `f778ffa9` sau PR #726. **Bộ cài lần 1 (nền `f31c8e7f`, 20:23–20:26
+VN, nhánh `codex/release-10.1.0` / PR #727) đã bị thay, không phát hành**, giữ ở `dist/build-10.1.0-r1-f31c8e7f/` của repo chính. Mới so
+với 10.0.0: mục "Lỗi không xác định" (#726), tách Z114 trong engine Zalo Desktop (#720, V581), mục menu "Kiểm tra nhập mã xác minh
+Fanpage" (#721; V582 câu ở block chưa apply, phải đổi số vì 582 đã thuộc `aka_assistant_images`), ảnh đính kèm Hỏi đáp AI (#722), hạn chờ
+đo bằng đồng hồ đơn điệu (#724). Lần 2: 69/72 bước kiểm đạt; `server-rest-smoke` hỏng vì script kiểm sau #724 (bản sửa #728 merge sau khi
+cắt nhánh; chạy lại script của #728 19/19), `zalo-message-status-sync` và phát lại bản chép 18/11 như 10.0.0. Không DB/deploy service
 trong bước build. [Receipt](../audits/akaagent-10.1.0-20261119/build-receipt.json).
 
 [Build akaAgent Desktop 10.0.0](../audits/akaagent-10.0.0-20261118/README.md):
