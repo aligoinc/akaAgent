@@ -50,7 +50,7 @@ Chưa phủ (cố ý, để đợt sau):
 
 ## Sửa 20/11/2026: máy phải thức liền mạch 60 giây mới nhận việc
 
-Trạng thái: nhánh `claude/sleep-guard-settle`, PR vào `dev_3` mở 20/11/2026, **chưa merge, chưa build Desktop**. Không migration.
+Trạng thái: nhánh `claude/sleep-guard-settle`, PR [#735](https://github.com/aligoinc/akaAgent/pull/735) vào `dev_3` mở 20/11/2026, **chưa merge, chưa build Desktop**. Không migration.
 
 Đo trên một máy Mac chạy 10.0.0 (đã có bộ giữ) ngày 19/11, bằng `edge_logs` lọc theo
 `request.sb.jwt.authorization.payload.subject` = `auth_user_id` của nhân viên (`private.aka_agent_desktop_users`):
