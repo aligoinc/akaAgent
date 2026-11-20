@@ -384,6 +384,7 @@ export function registerIpcHandlers(
   desktopRuntimeSnapshot.reset()
   desktopRuntimeSnapshot.attach(() => campaignScheduler.getRuntimeSnapshotSource())
   desktopRuntimeSnapshot.attachSleepHold(() => sleepGuard.snapshot())
+  desktopRuntimeSnapshot.attachSleepRelease(() => sleepGuard.releaseSnapshot())
   const campaignScheduler = new CampaignScheduler(
     supabase,
     webviewRegistry,

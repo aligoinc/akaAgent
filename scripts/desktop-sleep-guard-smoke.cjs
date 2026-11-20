@@ -19,7 +19,8 @@ function load(file) {
 }
 
 const {
-  SystemSleepGuard, parseSleepGuardSwitch, sleepGuardPlatform, DEFAULT_SLEEP_GUARD_SWITCH, SLEEP_GUARD_SETTING_KEY, SLEEP_GUARD_GAP_MS
+  SystemSleepGuard, parseSleepGuardSwitch, sleepGuardPlatform, DEFAULT_SLEEP_GUARD_SWITCH, SLEEP_GUARD_SETTING_KEY, SLEEP_GUARD_GAP_MS,
+  SLEEP_GUARD_STALL_MS, SLEEP_GUARD_WAKE_NOISE_MS
 } = load(path.join(root, 'src/main/services/systemSleepGuard.ts'))
 const plain = value => value === null ? null : JSON.parse(JSON.stringify(value))
 
@@ -42,19 +43,28 @@ function machine({ platform = 'mac', idle = () => 3600 } = {}) {
   return { state, guard, advance, awake, sleep }
 }
 
-// 1. Công tắc: thiếu / sai = mặc định (Mac bật, Windows tắt, 10 phút); từng khoá đọc riêng.
+// 1. Công tắc: thiếu / sai = mặc định (Mac bật, Windows tắt, 10 phút, thức liền 60 giây); từng khoá đọc riêng.
 {
   assert.equal(SLEEP_GUARD_SETTING_KEY, 'desktop.sleep_guard')
-  assert.deepEqual(plain(DEFAULT_SLEEP_GUARD_SWITCH), { mac: true, win: false, awakeMinutes: 10 })
+  const DEFAULTS = { mac: true, win: false, awakeMinutes: 10, settleSeconds: 60 }
+  assert.deepEqual(plain(DEFAULT_SLEEP_GUARD_SWITCH), DEFAULTS)
   for (const raw of [undefined, null, '', 'không phải json', '[]', '"mac"', '42', '{"mac":"true"}']) {
-    assert.deepEqual(plain(parseSleepGuardSwitch(raw)), { mac: true, win: false, awakeMinutes: 10 }, String(raw))
+    assert.deepEqual(plain(parseSleepGuardSwitch(raw)), DEFAULTS, String(raw))
   }
-  assert.deepEqual(plain(parseSleepGuardSwitch('{"mac":false}')), { mac: false, win: false, awakeMinutes: 10 })
-  assert.deepEqual(plain(parseSleepGuardSwitch('{"win":true,"awakeMinutes":30}')), { mac: true, win: true, awakeMinutes: 30 })
-  assert.deepEqual(plain(parseSleepGuardSwitch({ mac: false, win: true, awakeMinutes: 1 })), { mac: false, win: true, awakeMinutes: 1 })
+  assert.deepEqual(plain(parseSleepGuardSwitch('{"mac":false}')), { ...DEFAULTS, mac: false })
+  assert.deepEqual(plain(parseSleepGuardSwitch('{"win":true,"awakeMinutes":30}')), { ...DEFAULTS, win: true, awakeMinutes: 30 })
+  assert.deepEqual(plain(parseSleepGuardSwitch({ mac: false, win: true, awakeMinutes: 1 })), { ...DEFAULTS, mac: false, win: true, awakeMinutes: 1 })
   for (const minutes of [0, 121, 2.5, '10', -5]) {
     assert.equal(parseSleepGuardSwitch({ awakeMinutes: minutes }).awakeMinutes, 10, String(minutes))
   }
+  // settleSeconds: 0 (như bản đầu) tới 600; sai thì 60.
+  assert.equal(parseSleepGuardSwitch('{"settleSeconds":0}').settleSeconds, 0)
+  assert.equal(parseSleepGuardSwitch({ settleSeconds: 120 }).settleSeconds, 120)
+  for (const seconds of [-1, 601, 2.5, '60', null]) {
+    assert.equal(parseSleepGuardSwitch({ settleSeconds: seconds }).settleSeconds, 60, String(seconds))
+  }
+  assert.equal(SLEEP_GUARD_STALL_MS, 5_000)
+  assert.equal(SLEEP_GUARD_WAKE_NOISE_MS, 5_000)
   assert.equal(sleepGuardPlatform('darwin'), 'mac')
   assert.equal(sleepGuardPlatform('win32'), 'win')
   assert.equal(sleepGuardPlatform('linux'), null)
@@ -110,27 +120,124 @@ function machine({ platform = 'mac', idle = () => 3600 } = {}) {
   pass('30 dark wakes of 5 s each never start new work')
 }
 
-// 5. Người dùng mở máy: có thao tác sau lần thức thì nhận việc lại ngay; mở khoá màn hình cũng vậy.
+// 5. Người dùng mở máy: có thao tác sau lần thức, hoặc mở khoá màn hình, thì nhận việc lại khi máy đã thức liền 60 giây.
 {
   const m = machine()
   m.awake(5)
   m.sleep(40 * 60_000)
   assert.equal(m.guard.canStartWork(), false)
-  m.awake(3)
-  assert.equal(m.guard.canStartWork(), false)
-  m.state.idle = () => 0 // vừa di chuột
+  m.state.idle = () => 0 // người dùng đang gõ / di chuột liên tục
+  m.awake(59)
+  assert.equal(m.guard.canStartWork(), false, 'chưa đủ 60 giây thức liền')
+  assert.deepEqual(m.state.releases, [])
   m.awake(1)
   assert.equal(m.guard.canStartWork(), true)
   assert.deepEqual(m.state.releases, ['user_active'])
+  assert.deepEqual(plain(m.guard.releaseSnapshot()), { at: '2026-11-17T18:41:05.000Z', reason: 'user_active',
+    heldSince: '2026-11-17T18:40:05.000Z', awakeSeconds: 60 })
   const n = machine()
   n.awake(2)
   n.guard.noteSuspend()
   n.sleep(20 * 60_000)
   assert.equal(n.guard.canStartWork(), false)
   n.guard.noteUserActive()
+  assert.equal(n.guard.canStartWork(), false, 'mở khoá chưa đủ: máy mới thức')
+  n.awake(59)
+  assert.equal(n.guard.canStartWork(), false)
+  n.awake(1)
   assert.equal(n.guard.canStartWork(), true)
   assert.deepEqual(n.state.releases, ['user_active'])
-  pass('user input after wake or screen unlock releases the hold')
+  // Thao tác một lần lúc vừa thức (trong 5 giây đầu) rồi bỏ đi: không tính là có người, chờ quy tắc thức đủ 10 phút.
+  const o = machine()
+  o.awake(2)
+  o.sleep(20 * 60_000)
+  assert.equal(o.guard.canStartWork(), false)
+  const wake = o.state.mono
+  o.state.idle = () => Math.floor((o.state.mono - wake - 2_000) / 1000) // thao tác cuối ở giây thứ 2 sau khi thức
+  o.awake(9 * 60)
+  assert.equal(o.guard.canStartWork(), false)
+  o.awake(60)
+  assert.equal(o.guard.canStartWork(), true)
+  assert.deepEqual(o.state.releases, ['awake'])
+  pass('user input after wake or screen unlock releases the hold only after 60 s of continuous wake')
+}
+
+// 5b. Máy Mac 10.0.0 của một khách ngày 19/11/2026 (đo bằng edge_logs): 22 lần thức tạm trong buổi chiều, 5 lần dài 4–15 giây đã lọt.
+//     Dựng lại cả ba đường nghi ngờ cùng lúc ở MỌI lần thức: sự kiện mở khoá đến ngay lúc thức, bộ đếm "không thao tác" bị hệ điều hành
+//     đặt lại 1,5 giây sau khi thức, và máy đứng 20 giây giữa lần thức. Không lần nào được nhận việc mới.
+{
+  const run = settleSeconds => {
+    const m = machine()
+    if (settleSeconds !== undefined) m.guard.setSwitch(parseSleepGuardSwitch({ settleSeconds }))
+    m.awake(10)
+    m.guard.noteSuspend()
+    let started = 0
+    const durations = [15, 1, 3, 2, 3, 1, 1, 1, 1, 1, 4, 4, 5, 1, 1, 1, 4, 4, 5, 4, 2, 8]
+    for (const [index, seconds] of durations.entries()) {
+      m.sleep(index === durations.length - 1 ? 3 * 60_000 : 16 * 60_000 + 20_000)
+      const wake = m.state.mono
+      m.state.idle = () => Math.max(0, Math.floor((m.state.mono - wake - 1_500) / 1000))
+      if (m.guard.canStartWork()) started++
+      m.guard.noteUserActive()
+      for (let second = 0; second < seconds; second++) {
+        m.advance(1_000)
+        m.guard.beat()
+        if (m.guard.canStartWork()) started++
+        // Giữa lần thức dài, máy đứng 20 giây rồi chạy tiếp (dưới ngưỡng 60 giây nên không tính là ngủ).
+        if (seconds >= 8 && second === 3) { m.advance(20_000); if (m.guard.canStartWork()) started++ }
+      }
+    }
+    return { started, releases: m.state.releases.slice() }
+  }
+  const fixed = run(undefined)
+  assert.deepEqual(fixed, { started: 0, releases: [] })
+  // Cùng kịch bản với `settleSeconds: 0` (cách của bản 10.0.0 / 10.1.0): lọt ngay từ lần thức đầu.
+  const old = run(0)
+  assert.ok(old.started > 0, JSON.stringify(old))
+  assert.equal(old.releases[0], 'user_active')
+  pass('brief wakes with unlock events, reset idle counter and sub-minute stalls never start work (settleSeconds 0 reproduces the leak)')
+}
+
+// 5c. Tiến trình chạy chập chờn lúc máy ngủ (nhịp cách nhau 10–50 giây suốt 30 phút, không nhịp nào trễ tới 60 giây): thời gian đứng
+//     không được cộng thành "đã thức 10 phút".
+{
+  const m = machine()
+  m.awake(5)
+  m.guard.noteSuspend()
+  for (let i = 0; i < 60; i++) {
+    m.advance(10_000 + (i % 5) * 10_000)
+    assert.equal(m.guard.canStartWork(), false, `nhịp chập chờn ${i}`)
+  }
+  assert.deepEqual(m.state.releases, [])
+  // Thức hẳn và liền mạch: quy tắc 10 phút vẫn chạy.
+  m.awake(10 * 60)
+  assert.equal(m.guard.canStartWork(), true)
+  assert.deepEqual(m.state.releases, ['awake'])
+  pass('sporadic beats during sleep do not add up to the awake timer')
+}
+
+// 5d. Tắt yêu cầu thức liền mạch từ xa (`settleSeconds: 0`): thôi giữ ngay khi có thao tác / mở khoá như bản đầu.
+{
+  const m = machine()
+  m.guard.setSwitch(parseSleepGuardSwitch({ settleSeconds: 0 }))
+  m.awake(5)
+  m.sleep(40 * 60_000)
+  assert.equal(m.guard.canStartWork(), false)
+  m.awake(3)
+  assert.equal(m.guard.canStartWork(), false)
+  m.state.idle = () => 0
+  m.awake(1)
+  assert.equal(m.guard.canStartWork(), true)
+  const n = machine()
+  n.guard.setSwitch(parseSleepGuardSwitch({ settleSeconds: 0 }))
+  n.awake(2)
+  n.guard.noteSuspend()
+  n.sleep(20 * 60_000)
+  assert.equal(n.guard.canStartWork(), false)
+  n.guard.noteUserActive()
+  assert.equal(n.guard.canStartWork(), true)
+  assert.equal(n.guard.releaseSnapshot().reason, 'user_active')
+  pass('settleSeconds 0 restores immediate release')
 }
 
 // 6. Thao tác cuối ngay trước khi ngủ, bộ đếm thời gian không thao tác không tính lúc ngủ, số giây làm tròn xuống:
@@ -260,6 +367,7 @@ function machine({ platform = 'mac', idle = () => 3600 } = {}) {
   assert.match(random, new RegExp(`if \\(!this\\.running \\|\\| ${held.source}\\) return`))
   const handlers = fs.readFileSync(path.join(root, 'src/main/ipc/handlers.ts'), 'utf8')
   assert.match(handlers, /startWorkGate: \(\) => sleepGuard\.canStartWork\(\)/)
+  assert.match(handlers, /desktopRuntimeSnapshot\.attachSleepRelease\(\(\) => sleepGuard\.releaseSnapshot\(\)\)/)
   assert.match(handlers, /powerMonitor\.on\('suspend', \(\) => \{[^}]*sleepGuard\.noteSuspend\(\)/)
   assert.match(handlers, /powerMonitor\.on\('unlock-screen', \(\) => sleepGuard\.noteUserActive\(\)\)/)
   assert.match(handlers, /wakeSchedulerAfterSleep = \(\) => setImmediate\(\(\) => campaignScheduler\.wakeNow\('sleep-guard-released'\)\)/)
