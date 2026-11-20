@@ -1,6 +1,6 @@
 ---
-description: Biến session này thành hộp thư của bộ kiểm lỗi chiến dịch Facebook. Chờ báo cáo mới của phiên cloud (chạy nền, không tốn token khi chờ), báo ngay khi có ca cần làm, và mở session con để sửa từng ca khi anh bảo.
-argument-hint: "[--from <mã câu> để xem lại từ câu đó]"
+description: Biến session này thành hộp thư của bộ kiểm lỗi chiến dịch Facebook. Mỗi giờ xem database một lần (chạy nền, không tốn token khi chờ), có ca cần làm thì báo, và mở session con để sửa từng ca khi anh bảo.
+argument-hint: "[--interval <giây>, mặc định 3600] [--from <mã câu> để xem lại từ câu đó]"
 ---
 
 Session này là **hộp thư lỗi**. Phiên cloud "Kiểm lỗi chiến dịch Facebook (engine v2)" điều tra từng ca và nộp báo cáo vào database; session này
@@ -14,7 +14,7 @@ Tham số: `$ARGUMENTS` (để trống là bình thường).
 `node scripts/engine-v2-facebook/error-watch-inbox.cjs` (chỉ đọc production, đọc bằng `supabase db query --linked` qua checkout chính):
 
 - `list [--limit 10]`: các báo cáo gần nhất cần anh làm gì.
-- `wait [--interval 120]`: hỏi database mỗi 120 giây; có báo cáo cần làm thì in ra rồi **thoát mã 0**; báo cáo không cần làm gì thì chỉ ghi
+- `wait --interval 3600`: hỏi database mỗi giờ một lần (anh chốt 20/11); có báo cáo cần làm thì in ra rồi **thoát mã 0**; báo cáo không cần làm gì thì chỉ ghi
   nhận; lỗi database 5 lần liền thì thoát mã 3. Con trỏ lưu ở `~/.cache/akaagent/error-watch-inbox.json`, nên mở lại hộp thư không báo trùng.
 
 Không có tệp này (checkout cũ hơn `dev_3`) thì lấy bản trên `dev_3`:
@@ -24,14 +24,15 @@ Không có tệp này (checkout cũ hơn `dev_3`) thì lấy bản trên `dev_3`
 ## Khi bắt đầu
 
 1. Chạy `list --limit 10` và trình bày ngắn: mỗi ca một dòng `Câu <mã> · <việc> · <mã lỗi> · <tóm tắt một câu>`.
-2. Chạy `wait --interval 120` (thêm `$ARGUMENTS` nếu có) **ở chế độ chạy nền** (`run_in_background`). Chỉ giữ đúng một lệnh chờ; ghi nhớ mã
+2. Chạy `wait --interval 3600` (`$ARGUMENTS` có `--interval` thì dùng số đó; thêm `--from` nếu có) **ở chế độ chạy nền** (`run_in_background`). Chỉ giữ đúng một lệnh chờ; ghi nhớ mã
    tác vụ nền của nó.
-3. Nói một dòng: hộp thư đang chờ; muốn sửa ca nào thì bảo "sửa câu <mã>".
+3. Nói một dòng: hộp thư xem database mỗi giờ một lần (ca mới có thể hiện trễ tới 1 giờ); muốn sửa ca nào thì bảo "sửa câu <mã>"; muốn xem
+   ngay thì bảo "xem hộp thư" (chạy `list`, không dừng lệnh chờ).
 
 ## Khi lệnh chờ kết thúc
 
 - **Mã 0 (có báo cáo mới):** đọc tệp kết quả của tác vụ nền, trình bày từng báo cáo: `Câu <mã> · <việc> · <mã lỗi>`, tóm tắt một hai câu, điều
-  anh cần quyết (nếu có), có gì đang chờ duyệt trong tab "Lỗi không xác định". Rồi chạy lại `wait` ở chế độ nền ngay.
+  anh cần quyết (nếu có), có gì đang chờ duyệt trong tab "Lỗi không xác định". Rồi chạy lại `wait` (cùng `--interval`) ở chế độ nền ngay.
 - **Mã 3 (không đọc được database):** báo một dòng kèm câu lỗi, chạy lại `wait` ở chế độ nền.
 - Mã khác: báo một dòng, chạy lại `wait`.
 

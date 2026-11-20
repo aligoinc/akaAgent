@@ -2,8 +2,8 @@
 // Hộp thư của bộ kiểm lỗi chiến dịch Facebook cho một session Claude Code trên máy (lệnh /hop-thu-loi). CHỈ ĐỌC production.
 //   node scripts/engine-v2-facebook/error-watch-inbox.cjs list [--limit 10] [--all]
 //       báo cáo gần nhất của phiên cloud (mặc định chỉ báo cáo cần anh làm gì)
-//   node scripts/engine-v2-facebook/error-watch-inbox.cjs wait [--interval 120] [--all] [--from <mã câu>] [--once] [--state <tệp>]
-//       chờ báo cáo mới: hỏi database mỗi --interval giây (tối thiểu 30), có báo cáo cần làm thì in ra và THOÁT (mã 0) để session được đánh thức;
+//   node scripts/engine-v2-facebook/error-watch-inbox.cjs wait [--interval 3600] [--all] [--from <mã câu>] [--once] [--state <tệp>]
+//       chờ báo cáo mới: hỏi database mỗi --interval giây (mặc định 3600 = mỗi giờ, anh chốt 20/11; tối thiểu 30), có báo cáo cần làm thì in ra và THOÁT (mã 0) để session được đánh thức;
 //       báo cáo không cần làm gì thì chỉ ghi nhận rồi chờ tiếp. --once: hỏi một lần, không có thì thoát mã 2. Lỗi database 5 lần liền: thoát mã 3.
 // Con trỏ (mã câu đã xem tới đâu) lưu ở --state, mặc định ~/.cache/akaagent/error-watch-inbox.json. Lần đầu chưa có con trỏ thì bắt đầu từ câu
 // mới nhất (không in lại lịch sử), trừ khi có --from.
@@ -119,7 +119,7 @@ function list() {
 }
 
 async function wait() {
-  const interval = Math.max(Number(opt('--interval', 120)) || 120, 30) * 1000
+  const interval = Math.max(Number(opt('--interval', 3600)) || 3600, 30) * 1000
   const all = flag('--all')
   let cursor = idOf(opt('--from', null))
   if (cursor !== null) cursor = Math.max(cursor - 1, 0)
@@ -160,7 +160,7 @@ async function wait() {
 async function main() {
   if (mode === 'list') return list()
   if (mode === 'wait') return wait()
-  console.log('Dùng: error-watch-inbox.cjs list [--limit N] [--all] | wait [--interval 120] [--all] [--from <mã câu>] [--once] [--state <tệp>]')
+  console.log('Dùng: error-watch-inbox.cjs list [--limit N] [--all] | wait [--interval 3600] [--all] [--from <mã câu>] [--once] [--state <tệp>]')
   return 1
 }
 
