@@ -84,11 +84,19 @@ Câu do hệ thống tạo bắt đầu bằng `[Tự động]`. Với câu hỏ
    nén gzip như ảnh:
 
    ```sql
-   select public.aka_agent_desktop_diagnostic_doms_v1(<mã yêu cầu>);
+   -- Có DOM nào, của ảnh nào (không kéo nội dung):
+   select d->>'imageId' as image_id, d->'meta' as meta, d->>'bytes' as bytes
+     from jsonb_array_elements(public.aka_agent_desktop_diagnostic_doms_v1(<mã yêu cầu>)->'doms') d;
+   -- Lấy từng trang một (0 = trang đầu):
+   select public.aka_agent_desktop_diagnostic_doms_v1(<mã yêu cầu>)->'doms'->0->>'gzipBase64' as b64;
    ```
 
    Mỗi DOM là `gzipBase64` (gzip mã base64, khoảng 70–110 KB chữ). Lưu ra thư mục tạm, giải nén (`base64 -d dom.b64 | gunzip > dom.html`, mỗi
    trang khoảng 0,3–0,5 MB), rồi tìm bằng `grep` / script trong tệp. Đừng in cả trang vào câu trả lời.
+
+   Lấy ảnh hay DOM qua connector: kết quả quá lớn được tự lưu ra một tệp (thông báo lỗi ghi đường dẫn tệp). Đừng chép chuỗi base64 bằng tay; đọc
+   tệp đó bằng script (Python / Node), tách chuỗi base64 trong kết quả JSON rồi giải mã ra tệp trong thư mục tạm, kiểm byte đầu (`ffd8` với ảnh JPEG,
+   `1f8b` với DOM gzip). Mỗi lần chỉ lấy một ảnh / một trang (`->'files'-><thứ tự>->>'base64'`, `->'doms'-><thứ tự>->>'gzipBase64'`) để tệp gọn.
 
    DOM dùng để biết phần tử block chờ có trên trang không (ô bình luận, nút Đăng, hộp thoại đang mở…) và Facebook đang hiện câu gì. DOM có cả thanh
    bên, tin nhắn riêng, thông báo của khách: áp dụng đúng quy tắc như ảnh, không chép tên người, tên nhóm, nội dung bài hay tin nhắn vào báo cáo.
