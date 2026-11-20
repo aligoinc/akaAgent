@@ -23,7 +23,7 @@ import { DEFAULT_PAGE_INBOX_SCAN_DAYS, DEFAULT_PAGE_INBOX_MAX_CUSTOMERS, PAGE_IN
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
 import { useBrowserOpenStore } from '../../stores/browserOpenStore'
-import { DATA_SCAN_OPEN_BROWSER_LABEL, describeDataScanError } from '../../../../shared/dataScanBrowserHelp'
+import { DATA_SCAN_BROWSER_OPEN_DELAY_MS, DATA_SCAN_OPEN_BROWSER_LABEL, DATA_SCAN_OPENING_BROWSER_LABEL, describeDataScanError } from '../../../../shared/dataScanBrowserHelp'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers' | 'upload_data'
 export type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
@@ -1219,11 +1219,20 @@ export default function DataScanModal({
     showAlert(view.message, 'error', {
       extraAction: {
         label: DATA_SCAN_OPEN_BROWSER_LABEL,
-        onClick: () => {
+        pendingLabel: DATA_SCAN_OPENING_BROWSER_LABEL,
+        onClick: async signal => {
+          // Tab tải trang ở phía sau trong lúc nút hiện "Đang mở…"; hết thời gian chờ thì luôn chuyển trang (kể cả khi
+          // trang chưa tải xong / lỗi). Đóng / X trong lúc chờ huỷ việc chuyển trang.
+          useBrowserOpenStore.getState().open({ accountId: browserAccountId, openUrl, showPage: false })
+          await new Promise<void>(resolve => {
+            const timer = setTimeout(resolve, DATA_SCAN_BROWSER_OPEN_DELAY_MS)
+            signal.addEventListener('abort', () => { clearTimeout(timer); resolve() }, { once: true })
+          })
+          if (signal.aborted) return
           // Cửa sổ nằm trong form chiến dịch / Nhóm data bị ẩn cùng form khi sang trang Trình duyệt; chỉ cửa sổ đứng
           // riêng (mở từ thanh trên cùng) thu nhỏ vào góc để khách quay lại quét.
           if (!onSelect) setMinimized(true)
-          useBrowserOpenStore.getState().open({ accountId: browserAccountId, openUrl })
+          useBrowserOpenStore.getState().showPage()
         }
       }
     })

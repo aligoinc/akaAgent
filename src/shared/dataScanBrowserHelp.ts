@@ -4,6 +4,13 @@
  */
 
 export const DATA_SCAN_OPEN_BROWSER_LABEL = 'Mở trình duyệt'
+/** Chữ nút trong lúc chờ (anh chốt 20/11/2026). */
+export const DATA_SCAN_OPENING_BROWSER_LABEL = 'Đang mở…'
+/**
+ * Bấm "Mở trình duyệt": tab tải trang ở phía sau, nút hiện "Đang mở…" đúng chừng này rồi luôn chuyển sang trang Trình duyệt
+ * (anh chốt chờ cố định, không đợi trang tải xong: trang lỗi thì khách vẫn phải thấy tab).
+ */
+export const DATA_SCAN_BROWSER_OPEN_DELAY_MS = 3000
 
 export const FACEBOOK_HOME_URL = 'https://www.facebook.com/'
 export const FACEBOOK_BUSINESS_CONTENT_URL = 'https://business.facebook.com/content_management'

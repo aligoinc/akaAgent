@@ -1,5 +1,6 @@
-import { X, AlertCircle, CheckCircle, Info } from 'lucide-react'
-import { useUiStore } from '../../stores/uiStore'
+import { useEffect, useRef, useState } from 'react'
+import { X, AlertCircle, CheckCircle, Info, Loader2 } from 'lucide-react'
+import { useUiStore, type AlertAction } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 import { UPGRADE_PORTAL_FEATURE_BUTTON_LABEL } from '../../../../shared/upgradePortal'
@@ -8,7 +9,23 @@ import { isUpgradePortalFeatureMessage } from '../../../../shared/upgradePortalD
 export default function AlertModal() {
   const { alert, closeAlert } = useUiStore()
   const loggedIn = useAuthStore(state => !!state.user)
+  // Nút thêm đang chạy việc có Promise (ví dụ "Mở trình duyệt" chờ vài giây cho tab tải trang).
+  const [pendingAction, setPendingAction] = useState<AlertAction | null>(null)
+  const pendingController = useRef<AbortController | null>(null)
+  useEffect(() => {
+    if (alert.isOpen && alert.extraAction === pendingAction) return
+    pendingController.current?.abort()
+    pendingController.current = null
+    setPendingAction(null)
+  }, [alert.isOpen, alert.extraAction, pendingAction])
   if (!alert.isOpen) return null
+
+  const busy = pendingAction !== null && pendingAction === alert.extraAction
+  // Đóng / X luôn bấm được: huỷ việc đang chờ của nút thêm rồi đóng hộp.
+  const handleClose = () => {
+    pendingController.current?.abort()
+    closeAlert()
+  }
 
   // "Tính năng … chưa được kích hoạt hoặc đã hết hạn.": thêm lối mua / dùng thử ngay trong thông báo (form "Nâng cấp và mua
   // gói"). Chỉ áp dụng cho thông báo lỗi chưa có nút riêng và khi đang đăng nhập; nút "Đóng" giữ nguyên.
@@ -20,18 +37,30 @@ export default function AlertModal() {
 
   const handleAction = () => {
     const action = alert.action
+    pendingController.current?.abort()
     closeAlert()
     if (action) {
-      void action.onClick()
+      void action.onClick(new AbortController().signal)
     }
   }
 
   const handleExtraAction = () => {
     const action = alert.extraAction
-    closeAlert()
-    if (action) {
-      void action.onClick()
+    if (!action || busy) return
+    const controller = new AbortController()
+    const result = action.onClick(controller.signal)
+    if (!result || typeof (result as Promise<void>).then !== 'function') {
+      closeAlert()
+      return
     }
+    pendingController.current = controller
+    setPendingAction(action)
+    void (result as Promise<void>)
+      .catch(error => console.error('Alert action failed:', error))
+      .finally(() => {
+        if (controller.signal.aborted) return
+        if (useUiStore.getState().alert.extraAction === action) closeAlert()
+      })
   }
 
   return (
@@ -44,7 +73,7 @@ export default function AlertModal() {
             {alert.type === 'info' && <Info color="var(--text-primary)" size={20} />}
             <span>{alert.type === 'error' ? 'Lỗi' : alert.type === 'success' ? 'Thành công' : 'Thông báo'}</span>
           </h2>
-          <button className="btn-icon" onClick={closeAlert}><X size={18} /></button>
+          <button className="btn-icon" onClick={handleClose}><X size={18} /></button>
         </div>
         <div className="campaign-modal-body" style={{ padding: '24px 16px', fontSize: '14px', textAlign: 'center', color: 'var(--text-primary)', whiteSpace: 'pre-wrap' }}>
           {alert.message}
@@ -52,10 +81,14 @@ export default function AlertModal() {
         <div className="modal-footer" style={{ justifyContent: 'center', gap: '8px', borderTop: 'none', paddingBottom: '24px' }}>
           {alert.extraAction ? (
             <>
-              <button className="btn btn-secondary" onClick={alert.action ? handleAction : closeAlert} style={{ padding: '8px 24px' }}>
+              <button className="btn btn-secondary" onClick={alert.action ? handleAction : handleClose} style={{ padding: '8px 24px' }}>
                 {alert.action?.label || 'Đóng'}
               </button>
-              <button className="btn btn-primary" onClick={handleExtraAction} style={{ padding: '8px 24px' }}>{alert.extraAction.label}</button>
+              <button className="btn btn-primary" onClick={handleExtraAction} disabled={busy} aria-busy={busy}
+                style={{ padding: '8px 24px', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                {busy && <Loader2 size={14} className="spin" />}
+                {busy ? (alert.extraAction.pendingLabel || alert.extraAction.label) : alert.extraAction.label}
+              </button>
             </>
           ) : offerUpgrade ? (
             <>

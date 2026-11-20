@@ -5,7 +5,12 @@ export type ConfirmVariant = 'danger' | 'primary'
 
 export interface AlertAction {
   label: string
-  onClick: () => void | Promise<void>
+  /**
+   * Nút thêm (`extraAction`) trả Promise thì hộp giữ mở tới khi xong: nút khoá, hiện vòng xoay + `pendingLabel`.
+   * Đóng / X trong lúc chờ huỷ `signal` rồi đóng hộp.
+   */
+  onClick: (signal: AbortSignal) => void | Promise<void>
+  pendingLabel?: string
 }
 
 export interface AlertOptions {
