@@ -23,7 +23,10 @@ const V563 = require('../build-v563-sql.cjs')
 const V575 = require('../build-v575-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
+// FB_DESKTOP_ONLY=<chữ trong tên ca>: chỉ chạy các ca có tên chứa chữ đó (soạn / dò một ca); để trống thì chạy hết.
+const ONLY = String(process.env.FB_DESKTOP_ONLY || '').trim()
 async function check(name, fn) {
+  if (ONLY && !name.includes(ONLY)) return
   try { await fn(); checks++; console.log(`PASS ${name}`) } catch (error) { failed++; console.log(`FAIL ${name}: ${error.stack || error.message}`) }
 }
 
@@ -161,6 +164,9 @@ class FakePage {
   async press(key) { this.clicks.push('press:' + key) }
   async evaluate(code) {
     if (this.destroyed) throw new Error('Browser page is not connected')
+    this.scenario.onEvaluate?.(code)
+    // Thời gian block chờ (helpers.sleep có tín hiệu huỷ) trước khi làm tiếp: ca lượt bị ngắt từ ngoài khi block đang chờ.
+    if (code === 'typeWaitMs' || code === 'verifyWaitMs' || code === 'sendWaitMs') return this.scenario[code] ?? null
     if (code === 'formClosed') return this.scenario.formClosed !== false
     if (code === 'typeError') return this.scenario.typeError ?? null
     if (code === 'postLink') return this.scenario.postLink ?? ''
@@ -190,6 +196,8 @@ try { await page.waitForSelector(sel, { timeout: 100 }) } catch (cause) {
 await page.click(sel)
 return { opened: true }` },
   { id: 28, name: 'fb_type_post_content', code: `const failure = await page.evaluate('typeError')
+const typeWait = await page.evaluate('typeWaitMs')
+if (typeWait) await helpers.sleep(typeWait, signal)
 if (failure) throw new Error(failure)
 await page.type(await helpers.element('fb_composer_editor'), 'Nội dung'); return { typed: true }` },
   { id: 30, name: 'fb_click_post_button', code: `
@@ -199,6 +207,8 @@ await page.click(btn)
 await helpers.sleep(5, signal)
 return { posted: true }` },
   { id: 2624, name: 'fb_verify_group_post_form_closed', code: `
+const verifyWait = await page.evaluate('verifyWaitMs')
+if (verifyWait) await helpers.sleep(verifyWait, signal)
 const ok = await page.evaluate('formClosed')
 if (!ok) throw new Error('Form đăng bài chưa đóng sau 60 giây')
 return { ok: true, posted: true, submitClosed: true, message: 'Form đăng bài đã đóng' }` },
@@ -334,7 +344,9 @@ const UID_WORKFLOW_ID = 5006
 const SUGGEST_BLOCK = { id: 9651, name: 'fb_collect_suggested_friends_test', code: `
 if (vars.collectSuggestedFriendsOnly !== true || Number(vars.suggestedFriendsCount) !== 2) throw new Error('biến lấy đề xuất sai')
 return { suggestedProfiles: [{ uid: '100001', name: 'Bạn A' }, { uid: '100002', name: 'Bạn B' }, { uid: '100001', name: 'Trùng' }] }` }
-const SEND_BLOCK = { id: 9652, name: 'fb_send_message', code: `return { ok: true }` }
+const SEND_BLOCK = { id: 9652, name: 'fb_send_message', code: `const sendWait = await page.evaluate('sendWaitMs')
+if (sendWait) await helpers.sleep(sendWait, signal)
+return { ok: true }` }
 const suggestWorkflow = () => ({ id: SUGGEST_WORKFLOW_ID, name: 'Nhắn tin UID', defaultVariables: {}, edges: [],
   nodes: [{ id: 'collect', blockId: 9651, blockName: 'fb_collect_suggested_friends_test', config: {} }] })
 const uidWorkflow = () => ({ id: UID_WORKFLOW_ID, name: '[engine] Nhắn tin UID', defaultVariables: {}, edges: [],
@@ -865,6 +877,69 @@ async function main() {
       } finally {
         host.isPauseRequested = original
       }
+    })
+
+    // Lượt bị ngắt từ ngoài khi block đang chờ (ca kiểm lỗi 565, 566 ngày 20/11/2026): thoát / cập nhật app, tạm dừng, đăng xuất bật tín hiệu
+    // huỷ, helpers.sleep ném "Block bị huỷ trong khi sleep". Trước bản sửa bộ dựng cũ ghi dòng "lỗi" err_undefined (SYS99): cộng chuỗi data
+    // lỗi, làm dừng chiến dịch. Nay theo hai mã có sẵn: sau dấu gửi → SYS02 (đóng data, không gửi lại), trước dấu gửi → RUN01 (về hàng đợi).
+    const streakOf = async campaign => (await db.query(`SELECT error_code, decision->'contrib'->>'streak' AS streak,
+      decision->'contrib'->>'campaignEffect' AS effect FROM public.auto_engine_outcomes WHERE campaign_id = $1 AND NOT ok ORDER BY created_at`, [campaign])).rows
+    const interruptAfter = ms => { setTimeout(() => scheduler.engineRunner.abortAll(), ms) }
+
+    await check('bị ngắt khi đang chờ xác nhận sau cú bấm Đăng (ca 566): SYS02 thay SYS99, data đóng không đăng lại, không cộng chuỗi, không dừng chiến dịch', async () => {
+      const entry = await makeCampaign({ targets: 2 })
+      const { page: fake } = await run(entry, { verifyWaitMs: 5_000, onClick: sel => { if (sel === ELEMENTS.fb_post_button) interruptAfter(60) } })
+      assert.equal(fake.clicks.filter(c => c === ELEMENTS.fb_post_button).length, 1, 'đã bấm Đăng đúng một lần')
+      const out = (await outcomes(entry.campaign.id)).filter(o => o.action_code === 'fb_post_group')
+      assert.equal(out.length, 1, JSON.stringify(out))
+      assert.equal(out[0].error_code, 'err_engine_interrupted_while_sending', JSON.stringify(out))
+      assert.equal(out[0].phase, 'in_flight')
+      assert.match(String(out[0].signal?.message ?? ''), /Block bị huỷ trong khi sleep/, 'giữ câu lỗi gốc để tra')
+      assert.ok((await marks(entry.campaign.id)).every(m => m.state !== 'pending'))
+      const rows = (await details(entry.campaign.id)).filter(r => r.action_code === 'fb_post_group')
+      assert.equal(rows.length, 1, JSON.stringify(rows)); assert.match(rows[0].log, /\(SYS02\)$/)
+      const all = await inputs(entry.campaign.id)
+      assert.equal(all[0].status, 'hoàn thành', 'không rõ bài đã lên chưa: đóng data, không đăng lại')
+      assert.equal(all[1].status, 'chờ xử lý', 'data sau không chạy khi lượt đã bị ngắt')
+      for (const o of await streakOf(entry.campaign.id)) {
+        assert.notEqual(o.streak, 'increment', JSON.stringify(o)); assert.notEqual(o.effect, 'pause', JSON.stringify(o))
+      }
+      assert.notEqual((await facade.getCampaign(entry.campaign.id)).status, 'tạm dừng')
+      assert.ok(!progress.some(p => p.includes('SYS99')), progress.join('\n'))
+    })
+
+    await check('bị ngắt trước cú bấm Đăng (đang gõ nội dung): không ghi lịch sử, data về hàng đợi, không có lỗi chung', async () => {
+      const entry = await makeCampaign()
+      const { page: fake } = await run(entry, { typeWaitMs: 5_000, onClick: sel => { if (sel === ELEMENTS.fb_composer_button) interruptAfter(60) } })
+      assert.equal(fake.clicks.filter(c => c === ELEMENTS.fb_post_button).length, 0, 'chưa bấm Đăng')
+      assert.deepEqual(await details(entry.campaign.id), [])
+      const failures = await streakOf(entry.campaign.id)
+      assert.ok(failures.every(o => o.error_code === 'err_engine_cancelled'), JSON.stringify(failures))
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+      assert.ok((await marks(entry.campaign.id)).every(m => m.state !== 'pending'))
+    })
+
+    await check('bị ngắt khi block gửi tin đang chờ, dấu gửi đã ghi trước block (ca 565): SYS02 thay SYS99, không cộng chuỗi, không dừng chiến dịch', async () => {
+      const entry = await makeCampaign({ actionId: 'facebook_message_uid' })
+      await run(entry, { sendWaitMs: 5_000, onEvaluate: code => { if (code === 'sendWaitMs') interruptAfter(60) } })
+      const out = await outcomes(entry.campaign.id)
+      assert.equal(out.length, 1, JSON.stringify(out))
+      assert.equal(out[0].error_code, 'err_engine_interrupted_while_sending', JSON.stringify(out))
+      assert.equal(out[0].phase, 'in_flight')
+      const rows = await details(entry.campaign.id)
+      assert.equal(rows.length, 1, JSON.stringify(rows)); assert.match(rows[0].log, /\(SYS02\)$/)
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+      for (const o of await streakOf(entry.campaign.id)) {
+        assert.notEqual(o.streak, 'increment', JSON.stringify(o)); assert.notEqual(o.effect, 'pause', JSON.stringify(o))
+      }
+      assert.notEqual((await facade.getCampaign(entry.campaign.id)).status, 'tạm dừng')
+    })
+
+    await check('block lỗi thật khi lượt không bị ngắt vẫn là lỗi chung như cũ (bản sửa lượt bị ngắt không che lỗi của trang)', async () => {
+      const entry = await makeCampaign()
+      await run(entry, { verifyWaitMs: 20, formClosed: false })
+      const out = (await outcomes(entry.campaign.id)).filter(o => o.action_code === 'fb_post_group')
+      assert.equal(out.length, 1, JSON.stringify(out)); assert.equal(out[0].error_code, 'err_undefined')
     })
 
     await check('đăng trang cá nhân (lượt theo lịch, không có dòng data): một lượt cho mốc lịch, dòng lịch sử như bộ cũ, mốc đã chạy không chạy lại', async () => {
