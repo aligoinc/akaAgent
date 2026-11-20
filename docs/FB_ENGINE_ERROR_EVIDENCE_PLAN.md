@@ -3,9 +3,9 @@
 20/11/2026. Chỉ áp dụng cho engine v2 Facebook, bộ cũ không đổi.
 
 **Tình trạng (20/11/2026):**
-- Code xong ở nhánh `claude/fb-error-evidence` (worktree `.claude/worktrees/fb-error-evidence`), chưa commit, chưa build Desktop.
+- Code xong ở nhánh `claude/fb-error-evidence`, [PR #739](https://github.com/aligoinc/akaAgent/pull/739) vào `dev_3`, chưa merge, chưa build Desktop.
 - Migration [V595](../migrations/migration_v595_desktop_diagnostic_dom.sql) và [bản gỡ](../migrations/rollback_v595_desktop_diagnostic_dom.sql) đã
-  viết, **chưa apply**. Số V594 đã có phiên khác giữ (worktree `akaAgent-fb-page-access`, chưa vào sổ); kiểm lại sổ ngay trước khi apply.
+  viết, **chưa apply**. Sổ đã có V594 (`engine_error_watch_hourly_skip` của phiên khác, apply 20/11); kiểm lại sổ ngay trước khi apply.
 - Bộ kiểm đã chạy:
   - `screenshots-smoke.cjs` 10/10 nhóm, PG17 với V595 thật: DB chưa có V595, đã có V595, các trường hợp bị từ chối, bản gỡ;
   - `desktop-fb-smoke.cjs` 38/38;
