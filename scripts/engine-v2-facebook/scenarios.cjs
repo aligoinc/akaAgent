@@ -5,7 +5,12 @@
 // biến. Không chạm DB thật, không mở Facebook.
 //
 //   node scripts/engine-v2-facebook/scenarios.cjs [--seeds 3] [--campaigns 6] [--targets 8] [--fault 0.08] [--crash 0.03] [--dbchaos 0.03] [--out r.json]
-//     [--before-v575]
+//     [--before-v575] [--interrupt 0.05] [--pages 2]
+//
+// --interrupt P (20/11/2026, ca kiểm lỗi 565 / 566): ở mỗi chỗ block đang chờ (trước / sau cú bấm, chờ xác nhận, lấy link, comment, chuyển
+//   sang Page…), với xác suất P bộ lập lịch bị dừng như khi thoát / cập nhật app (scheduler.stop() thật), rồi "mở lại app" (tiến trình
+//   mới). --pages N thêm N chiến dịch nhắn tin chạy bằng Page (nhánh page_identity_* như workflow production). Mặc định cả hai = 0: bộ kịch
+//   bản chạy y như trước.
 //
 // DB thử như production 18/11/2026: V556–V558, V564, V559, dấu hiệu của V563, V575 (--before-v575 để chạy trên DB trước V575).
 //
@@ -16,7 +21,11 @@
 //   B4 data đã có cú gửi không bao giờ về lại hàng đợi (sẽ gửi lần nữa);
 //   B5 hết lượt: không còn lượt data mở, không còn lease;
 //   B6 không "thành công giả": dòng thành công của data phải có cú gửi tương ứng trong thế giới;
-//   B7 trang cá nhân: mỗi mốc lịch tối đa một bài.
+//   B7 trang cá nhân: mỗi mốc lịch tối đa một bài;
+//   B8 nhắn tin bằng Page: mỗi data tối đa một tin, tin nào cũng có dấu "sắp gửi" trước đó;
+//   N1 lượt bị ngắt từ ngoài không thành lỗi chung: kết quả mang câu "Block bị huỷ…" chỉ được là "đã dừng" (RUN01) hoặc "bị ngắt khi
+//      đang gửi" (SYS02), không cộng chuỗi data lỗi, không tạm dừng chiến dịch;
+//   N2 bị ngắt lúc đang chuyển sang Page không thành FB06 "không chuyển được sang Page" (bài này không tiêm lỗi chuyển Page).
 'use strict'
 const fs = require('node:fs')
 const os = require('node:os')
@@ -43,6 +52,8 @@ const TARGETS = Number(opt('--targets', 8))
 const FAULT = Number(opt('--fault', 0.08))
 const CRASH = Number(opt('--crash', 0.03))
 const DBCHAOS = Number(opt('--dbchaos', 0.03))
+const INTERRUPT = Number(opt('--interrupt', 0))
+const PAGES = Number(opt('--pages', 0))
 const OUT = opt('--out')
 const WITH_V575 = !args.includes('--before-v575')
 const PORT = Number(process.env.FB_SCENARIO_PORT || 55557)
@@ -56,6 +67,8 @@ function rng(seed) {
 // ------------------------------------------------------------------------------------------------ block giả (code chạy thật trong vm)
 const BLOCKS = [
   { id: 27, name: 'fb_open_composer', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('open')
 const sel = await helpers.element('fb_composer_button')
 try { await page.waitForSelector(sel, { timeout: 100 }) } catch (cause) {
   return { opened: false, actionResult: { actionCode: input.composerActionCode || 'fb_post_group', statusCode: 'campaign_detail_error',
@@ -64,7 +77,9 @@ try { await page.waitForSelector(sel, { timeout: 100 }) } catch (cause) {
 }
 await page.click(sel)
 return { opened: true }` },
-  { id: 28, name: 'fb_type_post_content', code: `await page.type(await helpers.element('fb_composer_editor'), 'Nội dung'); return { typed: true }` },
+  { id: 28, name: 'fb_type_post_content', code: `const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('type')
+await page.type(await helpers.element('fb_composer_editor'), 'Nội dung'); return { typed: true }` },
   { id: 2794, name: 'fb_select_group_post_share_targets', code: `
 const enabled = vars.enableGroupPostShareToJoinedGroups === true
 const targets = Array.isArray(vars.groupPostShareTargets) ? vars.groupPostShareTargets : []
@@ -74,23 +89,76 @@ const selectedTargets = targets.slice(0, Math.min(max, 2))
 await page.evaluate('share:' + JSON.stringify(selectedTargets.map(t => Number(t.id))))
 return { enabled: true, skipped: false, selectedCount: selectedTargets.length, selectedTargets }` },
   { id: 30, name: 'fb_click_post_button', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
 const btn = await helpers.element('fb_post_button')
 await page.waitForSelector(btn, { timeout: 100 })
+await pause('post:before')
 await page.click(btn)
+await pause('post:after')
 return { posted: true }` },
   { id: 2624, name: 'fb_verify_group_post_form_closed', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('verify')
 const ok = await page.evaluate('formClosed')
 if (!ok) throw new Error('Form đăng bài chưa đóng sau 60 giây')
 return { ok: true, posted: true, submitClosed: true, message: 'Form đăng bài đã đóng' }` },
-  { id: 2833, name: 'fb_get_first_group_post_link', code: `return { postUrl: 'https://www.facebook.com/groups/g/posts/' + (vars.inputDataId ?? 0) + '/' }` },
+  { id: 2833, name: 'fb_get_first_group_post_link', code: `const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('link')
+return { postUrl: 'https://www.facebook.com/groups/g/posts/' + (vars.inputDataId ?? 0) + '/' }` },
   { id: 34, name: 'fb_comment_at_position', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
 const position = (vars.loopIndex ?? 0) + 1
 await page.evaluate('position:' + position)
 await page.click(await helpers.element('fb_comment_box'))
+await pause('comment:before')
 await page.press('Enter')
-return { commented: true, position, text: 'Bình luận ' + position }` }
+await pause('comment:after')
+return { commented: true, position, text: 'Bình luận ' + position }` },
+  // Nhắn tin bằng Page (--pages): dấu gửi ghi trước block (mức 1) như block gửi tin production; ba block của nhánh page_identity_*.
+  { id: 9704, name: 'fb_send_message', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('send:before')
+await page.click(await helpers.element('fb_send_button'))
+await pause('send:after')
+return { ok: true }` },
+  { id: 9701, name: 'fb_get_current_identity_name', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+await pause('identity:original')
+vars.originalIdentityName = 'Tài khoản gốc'
+return { ok: true, identityName: 'Tài khoản gốc' }` },
+  { id: 9702, name: 'fb_switch_identity_by_name', code: `
+const pause = async where => { const ms = await page.evaluate('pause:' + where); if (ms) await helpers.sleep(ms, signal) }
+const name = input.useOriginalIdentity === true ? vars.originalIdentityName : vars[input.identityNameFromVars || 'runAsPageName']
+await pause(input.useOriginalIdentity === true ? 'identity:restore' : 'identity:switch')
+await page.evaluate('identity:' + name)
+return { ok: true, identityName: name }` },
+  { id: 9703, name: 'fb_campaign_page_identity_state', code: `return { ok: true, operation: input.pageIdentityStateOperation }` }
 ]
-const GROUP_WF = 5101, TIMELINE_WF = 5102
+const GROUP_WF = 5101, TIMELINE_WF = 5102, PAGE_WF = 5103
+/** Nhánh chạy bằng Page bọc quanh thân workflow, đúng cấu trúc assertPageIdentityWorkflow kiểm (như workflow "[engine]" production). */
+function withPageIdentity(workflow, root, leaf) {
+  const id = name => 'page_identity_' + name
+  const state = operation => ({ blockId: 9703, blockName: 'fb_campaign_page_identity_state', config: { pageIdentityStateOperation: operation } })
+  const ifElse = condition => ({ blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition } })
+  const merge = () => ({ blockId: 0, blockName: 'merge', systemType: 'merge', config: { mode: 'any' } })
+  const nodes = {
+    restore_only: ifElse('vars.runAsPage === true && vars.pageIdentityRestoreOnly === true'),
+    needs_switch: ifElse('vars.runAsPage === true && vars.pageIdentityReady !== true'),
+    original: { blockId: 9701, blockName: 'fb_get_current_identity_name', config: {} },
+    switch: { blockId: 9702, blockName: 'fb_switch_identity_by_name', config: { identityNameFromVars: 'runAsPageName' } },
+    ready: state('ready'), enter: merge(), capture_result: state('capture_result'), restore_join: merge(),
+    needs_restore: ifElse('vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)'),
+    restore: { blockId: 9702, blockName: 'fb_switch_identity_by_name', config: { useOriginalIdentity: true } },
+    restored: state('restored'), result_join: merge(), result: state('result')
+  }
+  const edges = ['restore_only:restore_join:true', 'restore_only:needs_switch:false', 'needs_switch:original:true', 'needs_switch:enter:false',
+    'original:switch:', 'switch:ready:', 'ready:enter:', 'original:restore_join:', 'capture_result:restore_join:', 'restore_join:needs_restore:',
+    'needs_restore:restore:true', 'needs_restore:result_join:false', 'restore:restored:', 'restored:result_join:', 'result_join:result:']
+    .map((text, index) => { const [source, target, handle] = text.split(':'); return { id: 'pi' + index, source: id(source), target: id(target), ...(handle ? { sourceHandle: handle } : {}) } })
+  return { ...workflow,
+    nodes: [...Object.entries(nodes).map(([name, node]) => ({ id: id(name), ...node })), ...workflow.nodes],
+    edges: [...edges, { id: 'pi-enter', source: id('enter'), target: root }, { id: 'pi-leaf', source: leaf, target: id('capture_result') }, ...workflow.edges] }
+}
 const WORKFLOWS = new Map([
   [GROUP_WF, { id: GROUP_WF, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
     { id: 'e1', source: 'open', target: 'gate' }, { id: 'e2', source: 'gate', target: 'type', sourceHandle: 'true' },
@@ -114,7 +182,9 @@ const WORKFLOWS = new Map([
     { id: 'open', blockId: 27, blockName: 'fb_open_composer', config: { composerActionCode: 'fb_post_my_profile' } },
     { id: 'gate', blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition: 'input.opened === true' } },
     { id: 'type', blockId: 28, blockName: 'fb_type_post_content', config: {} },
-    { id: 'post', blockId: 30, blockName: 'fb_click_post_button', config: { composerActionCode: 'fb_post_my_profile' } }] }]
+    { id: 'post', blockId: 30, blockName: 'fb_click_post_button', config: { composerActionCode: 'fb_post_my_profile' } }] }],
+  [PAGE_WF, withPageIdentity({ id: PAGE_WF, name: '[engine] Nhắn tin UID', defaultVariables: {}, edges: [],
+    nodes: [{ id: 'send', blockId: 9704, blockName: 'fb_send_message', config: {} }] }, 'send', 'send')]
 ])
 
 // ------------------------------------------------------------------------------------------------ thế giới Facebook giả
@@ -127,6 +197,7 @@ class World {
     this.shareTo = []
     this.faults = {}
     this.crashed = null
+    this.interrupts = []
   }
   begin(ctx) { this.current = ctx; this.position = null; this.shareTo = [] }
   pick(kind, choices) {
@@ -163,6 +234,15 @@ class WorldPage {
     if (text.startsWith('position:')) { this.world.position = Number(text.slice(9)); return null }
     if (text.startsWith('share:')) { this.world.shareTo = JSON.parse(text.slice(6)); return null }
     if (text === 'formClosed') return this.world.pick('form', [['stuck', FAULT / 2]]) !== 'stuck'
+    if (text.startsWith('pause:')) {
+      // Dừng app đúng lúc block đang chờ ở chỗ này: block ngủ 40 ms, 2 ms sau bộ lập lịch bị dừng (tín hiệu huỷ bật giữa lúc ngủ).
+      const where = text.slice(6)
+      if (!(INTERRUPT > 0) || this.instance.interrupted || !this.world.pick('interrupt', [[where, INTERRUPT]])) return 0
+      const c = this.world.current ?? {}
+      this.world.interrupts.push({ where, campaign: c.campaignId ?? null, target: c.inputDataId ?? null, run: c.run ?? null, at: Date.now() })
+      setTimeout(() => this.instance.interrupt(), 2)
+      return 40
+    }
     return null
   }
   async gesture(kind) {
@@ -178,6 +258,7 @@ class WorldPage {
   async click(sel) {
     this.alive()
     if (String(sel).endsWith('fb_post_button')) return this.gesture('post')
+    if (String(sel).endsWith('fb_send_button')) return this.gesture('message')
   }
   async press() { this.alive(); return this.gesture('comment') }
 }
@@ -189,7 +270,7 @@ async function main() {
   const db = await cluster.connect()
   db.setTypeParser(20, 'text', value => Number(value))
   const one = async (sql, params = []) => (await db.query(sql, params)).rows[0]
-  const report = { startedAt: new Date().toISOString(), options: { SEEDS, CAMPAIGNS, TARGETS, FAULT, CRASH, DBCHAOS, WITH_V575 }, seeds: [], violations: [] }
+  const report = { startedAt: new Date().toISOString(), options: { SEEDS, CAMPAIGNS, TARGETS, FAULT, CRASH, DBCHAOS, WITH_V575, INTERRUPT, PAGES }, seeds: [], violations: [] }
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-fb-scenarios-userdata-'))
   try {
     await buildFacebookFixture(db)
@@ -204,9 +285,11 @@ async function main() {
     await db.query(`CREATE OR REPLACE FUNCTION public.aka_agent_engine_action_limit(p_campaign_id bigint, p_account_id bigint, p_action_code text)
       RETURNS jsonb LANGUAGE sql STABLE AS $f$ SELECT NULL::jsonb $f$`)
     for (const b of BLOCKS) await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3)`, [b.id, b.name, b.code])
-    await db.query(`INSERT INTO public.auto_workflows (id, name) VALUES ($1, 'g'), ($2, 't')`, [GROUP_WF, TIMELINE_WF])
-    await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_group_post', $1), ('facebook_timeline_post', $2)`,
-      [GROUP_WF, TIMELINE_WF])
+    await db.query(`INSERT INTO public.auto_workflows (id, name) VALUES ($1, 'g'), ($2, 't'), ($3, 'p')`, [GROUP_WF, TIMELINE_WF, PAGE_WF])
+    await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_group_post', $1), ('facebook_timeline_post', $2),
+      ('facebook_message_uid', $3)`, [GROUP_WF, TIMELINE_WF, PAGE_WF])
+    await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, step_kind, action_code, commit_level, send_ops)
+      VALUES (9704, 'delivery', 'fb_message_stranger', 1, '[]')`)
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, workflow_id, step_kind, action_code, commit_level, send_ops) VALUES
       (27, NULL, 'result', NULL, 1, '[]'), (30, $1, 'delivery', 'fb_post_group', 2, '["click:fb_post_button"]'),
       (30, $2, 'delivery', 'fb_post_my_profile', 2, '["click:fb_post_button"]'), (34, NULL, 'delivery', 'fb_comment', 2, '["press:Enter"]'),
@@ -229,7 +312,10 @@ async function main() {
       let instanceNo = 0
       const deadRunners = new Set()
       const newInstance = () => {
-        const instance = { no: ++instanceNo, dead: false, crash() { this.dead = true; for (const c of scheduler.engineRunner.runs?.values?.() ?? []) c.abort() } }
+        const instance = { no: ++instanceNo, dead: false, interrupted: false,
+          crash() { this.dead = true; for (const c of scheduler.engineRunner.runs?.values?.() ?? []) c.abort() },
+          // Thoát / cập nhật app: scheduler.stop() thật (huỷ lượt engine, huỷ tín hiệu của workflow đang chạy); tiến trình vẫn sống tới khi lượt dọn xong.
+          interrupt() { if (this.interrupted || this.dead) return; this.interrupted = true; scheduler.stop() } }
         const base = fakeClient(db, [])
         const CHAOS = new Set(['aka_agent_engine_report_v1', 'aka_agent_engine_mark_sending_v1', 'aka_agent_engine_claim_target_v1',
           'aka_agent_engine_claim_batch_v1', 'aka_agent_engine_heartbeat_v1'])
@@ -262,7 +348,7 @@ async function main() {
         scheduler.running = true
         let page = new WorldPage(world, instance)
         scheduler.backgroundPages = { getOrCreate: () => (page.dead ? (page = new WorldPage(world, instance)) : page), destroy() { page.dead = true },
-          destroyAll() {}, createTemporary() { return { page } } }
+          destroyAll() { page.dead = true }, createTemporary() { return { page } } }
         Object.assign(scheduler, { startBackgroundPreview() {}, stopBackgroundPreview() {}, selectAutomationBrowser() {}, broadcastCampaignUpdate() {} })
         const engineRun = scheduler.engineV2.run.bind(scheduler.engineV2)
         scheduler.engineV2.run = async (wf, variables, pageArg, ctx = {}) => {
@@ -297,7 +383,26 @@ async function main() {
             ids.push(id)
           }
         }
-        campaigns.push({ campaign, account, timeline, share, ids, slots: timeline ? 3 : 0, units: [], pauses: 0, restarts: 0 })
+        campaigns.push({ campaign, account, timeline, share, ids, slots: timeline ? 3 : 0, units: [], pauses: 0, restarts: 0, interrupts: 0 })
+      }
+      // Chiến dịch nhắn tin chạy bằng Page (--pages): thêm sau, không đổi các chiến dịch của bộ kịch bản gốc.
+      for (let p = 0; p < PAGES; p++) {
+        const account = ++nextId, campaign = ++nextId
+        await db.query(`INSERT INTO public.auto_accounts (id, name, flatform_type, login_status, status, is_active, is_delete, staff_id, organization_id,
+            is_zalo_server, is_zalo_show_web) OVERRIDING SYSTEM VALUE VALUES ($1, 'FB', 'facebook', 'đã đăng nhập', 'chờ xử lý', true, false, $2, $3, false, false)`,
+          [account, STAFF, ORG])
+        await db.query(`INSERT INTO public.auto_campaigns (id, name, action_id, account_id, status, schedule, is_delete, staff_id, organization_id, schedule_type,
+            content, extra_settings) OVERRIDING SYSTEM VALUE VALUES ($1, $2, 'facebook_message_uid', $3, 'chờ xử lý', now() - interval '1 minute', false, $4, $5,
+            'daily', 'Nội dung', $6)`, [campaign, `Kịch bản Page ${seed}.${p}`, account, STAFF, ORG,
+          JSON.stringify({ runAsPage: true, runAsPageUid: '900' + p, runAsPageName: 'Page thử ' + p })])
+        const ids = []
+        for (let i = 0; i < TARGETS; i++) {
+          const id = ++nextId
+          await db.query(`INSERT INTO public.auto_campaign_input_data (id, campaign_id, name, uid, status, is_delete) OVERRIDING SYSTEM VALUE
+            VALUES ($1, $2, $3, $4, 'chờ xử lý', false)`, [id, campaign, `Người ${i + 1}`, `10000${seed}${p}${i}`])
+          ids.push(id)
+        }
+        campaigns.push({ campaign, account, timeline: false, share: false, page: true, ids, slots: 0, units: [], pauses: 0, restarts: 0, interrupts: 0 })
       }
 
       const accountObj = async id => ({ ...mod.mapAccountFromDB(await one('SELECT * FROM public.auto_accounts WHERE id = $1', [id])),
@@ -313,7 +418,7 @@ async function main() {
           await new Promise(resolve => setTimeout(resolve, 100))
         }
         let slotsDone = 0
-        for (let unit = 0; unit < 80; unit++) {
+        for (let unit = 0; unit < (INTERRUPT > 0 ? 300 : 80); unit++) {
           const row = await one('SELECT status, note FROM public.auto_campaigns WHERE id = $1', [c.campaign])
           if (row.status === 'tạm dừng') c.pauses++
           if (!c.timeline) {
@@ -343,6 +448,10 @@ async function main() {
             // Tiến trình chết: bộ chạy mới (lease cũ hết hạn ở vòng sau).
             deadRunners.add(proc.scheduler.engineRunner.runnerId)
             c.restarts++
+            proc = newInstance()
+          } else if (proc.instance.interrupted) {
+            // App đã thoát êm (lượt đã dọn xong, lease phải được nhả: B5 vẫn kiểm) rồi được mở lại.
+            c.interrupts++
             proc = newInstance()
           }
         }
@@ -404,6 +513,38 @@ async function main() {
         const real = world.sends.filter(x => x.kind === 'comment' && Number(x.target) === id).length
         if (n > real) fail('B6 comment thành công giả', { target: id, rows: n, real })
       }
+      // B8 nhắn tin bằng Page.
+      const messages = new Map()
+      for (const s of world.sends.filter(x => x.kind === 'message')) {
+        messages.set(s.target, (messages.get(s.target) || 0) + 1)
+        if (!markOf(s.target, 'fb_message_stranger')) fail('B3 nhắn tin mà chưa ghi dấu', { target: s.target })
+      }
+      for (const [id, n] of messages) {
+        if (n > 1) fail('B8 nhắn tin trùng', { target: id, n })
+        if (finals.get(Number(id)) === 'chờ xử lý') fail('B4 data đã nhắn lại về hàng đợi', { target: id })
+      }
+      for (const d of details) {
+        if (d.action_code === 'fb_message_stranger' && d.status === 'thành công' && !(messages.get(Number(d.input_data_id)) > 0)) {
+          fail('B6 nhắn tin thành công giả', { target: d.input_data_id })
+        }
+      }
+      // N1 / N2 lượt bị ngắt từ ngoài.
+      const failures = (await db.query(`SELECT target_run_id, campaign_id, result_key, action_code, phase, error_code, signal->>'message' AS message,
+          decision->'contrib'->>'streak' AS streak, decision->'contrib'->>'campaignEffect' AS effect
+        FROM public.auto_engine_outcomes WHERE campaign_id = ANY($1) AND NOT ok`, [campaigns.map(c => c.campaign)])).rows
+      const INTERRUPTED_CODES = new Set(['err_engine_cancelled', 'err_engine_interrupted_while_sending'])
+      for (const o of failures) {
+        if (/Block bị huỷ/.test(String(o.message ?? ''))) {
+          if (!INTERRUPTED_CODES.has(o.error_code) || o.streak === 'increment' || o.effect === 'pause') {
+            fail('N1 lượt bị ngắt thành lỗi chung', { run: o.target_run_id, key: o.result_key, action: o.action_code, phase: o.phase, code: o.error_code,
+              streak: o.streak, effect: o.effect, where: world.interrupts.filter(i => Number(i.run) === Number(o.target_run_id)).map(i => i.where) })
+          }
+        }
+        if (o.error_code === 'err_fb_identity_switch_failed') {
+          fail('N2 bị ngắt lúc chuyển sang Page thành FB06', { run: o.target_run_id, key: o.result_key, effect: o.effect, message: String(o.message ?? '').slice(0, 80),
+            where: world.interrupts.filter(i => Number(i.run) === Number(o.target_run_id)).map(i => i.where) })
+        }
+      }
       for (const c of campaigns.filter(x => x.timeline)) {
         const posts = world.sends.filter(s => s.kind === 'post' && s.campaign === c.campaign)
         const bySlot = new Map()
@@ -411,12 +552,14 @@ async function main() {
         for (const [slot, n] of bySlot) if (n > 1) fail('B7 một mốc đăng nhiều bài', { campaign: c.campaign, slot, n })
       }
       const summary = { seed, sends: world.sends.length, faults: world.faults, dbFaults, campaigns: campaigns.map(c => ({ id: c.campaign,
-        type: c.timeline ? 'timeline' : c.share ? 'group+share' : 'group', units: c.units.length, pauses: c.pauses, restarts: c.restarts,
-        reasons: [...new Set(c.units)] })), violations: violations.length }
+        type: c.page ? 'page-message' : c.timeline ? 'timeline' : c.share ? 'group+share' : 'group', units: c.units.length, pauses: c.pauses,
+        restarts: c.restarts, interrupts: c.interrupts, reasons: [...new Set(c.units)] })), interrupts: world.interrupts.length,
+        violations: violations.length }
       report.seeds.push(summary)
       report.violations.push(...violations)
       console.log(`hạt giống ${seed}: ${world.sends.length} cú gửi, lỗi trang ${JSON.stringify(world.faults)}, lỗi DB ${JSON.stringify(dbFaults)}, ` +
-        `khởi động lại ${campaigns.reduce((n, c) => n + c.restarts, 0)}, tạm dừng ${campaigns.reduce((n, c) => n + c.pauses, 0)}, vi phạm ${violations.length}`)
+        `khởi động lại ${campaigns.reduce((n, c) => n + c.restarts, 0)}, dừng app ${world.interrupts.length}, ` +
+        `tạm dừng ${campaigns.reduce((n, c) => n + c.pauses, 0)}, vi phạm ${violations.length}`)
       for (const v of violations.slice(0, 20)) console.log('   ✗', JSON.stringify(v))
     }
   } finally {

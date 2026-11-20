@@ -106,7 +106,7 @@ import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
 import { monotonicNow } from '../../shared/monotonicNow'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
-import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
+import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
 import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, saveErrorScreenshot, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
@@ -452,6 +452,8 @@ interface FacebookEngineStepInfo {
   screenshotId?: string | null
   /** Chữ trên trang đọc ngay sau block lỗi / trả mã lỗi, khi có dấu hiệu `page` cho thao tác (errorSigns.ts). */
   pageTexts?: string[] | null
+  /** Bước lỗi khi tín hiệu huỷ của lượt đã bật (tạm dừng, thoát app, đăng xuất): bị ngắt từ ngoài, không phải lỗi của trang. */
+  interrupted?: boolean
 }
 
 interface FacebookEngineTargetState {
@@ -6218,6 +6220,19 @@ export class CampaignScheduler {
       }
       const marks = new Map<string, { actionCode: string; stepKey: string; level: number }>()
       const realtime = new Set<string>()
+      // Tín hiệu huỷ của lượt workflow: bật khi lượt engine dừng (api.signal) hoặc bộ lập lịch dừng (stop() huỷ activeV2Aborts).
+      const abort = new AbortController()
+      /** Câu lỗi của các bước bị ngắt từ ngoài (bộ dựng lịch sử cũ chép câu này vào dòng "lỗi" của bước khác, vd dòng Đăng bài). */
+      const interruptedErrors = new Set<string>()
+      /**
+       * Dòng "lỗi" của bộ dựng cũ sinh ra từ một bước bị ngắt: bước đang dựng bị ngắt, hoặc câu của dòng chép câu lỗi của bước bị ngắt
+       * (dòng Đăng bài dựng ở bước bấm Đăng nhưng lỗi nằm ở bước chờ xác nhận).
+       */
+      const interruptedRow = (step: RunStepV2 | null, texts: ReadonlyArray<string | null | undefined>): boolean => {
+        if (step?.stepKey && stepsInfo.get(step.stepKey)?.interrupted) return true
+        if (interruptedErrors.size === 0) return false
+        return texts.some(text => !!text && [...interruptedErrors].some(error => text.includes(error)))
+      }
       /** Số dòng đã báo theo khoá bước (dòng thứ hai trở đi của cùng bước có hậu tố :n). */
       const reported = new Map<string, number>()
       /** Bước đã có kết quả (dòng lịch sử hoặc kết quả của dấu): bước lỗi không báo lần nữa ở nhánh "workflow lỗi". */
@@ -6383,6 +6398,12 @@ export class CampaignScheduler {
         if (failed) {
           const message = info.result.error ?? (typeof info.result.output?.error === 'string' ? info.result.output.error : null)
           entry.failure = { ...trace.failureSignal(message ?? ''), threw: !info.result.success, error: message }
+          // Lượt bị ngắt từ ngoài khi block đang chạy (helpers.sleep ném "Block bị huỷ…", block tự ném khi thấy signal): không phải lỗi trang.
+          if (abort.signal.aborted) {
+            entry.interrupted = true
+            const text = String(message ?? '').trim()
+            if (text.length >= 8) interruptedErrors.add(text)
+          }
           entry.pageState = facebookPageStateSignal(safePageUrl(page))
           if (page && !page.isConnected() && !state.browserGone) state.browserGone = 'browser_gone'
           // Ảnh lỗi (mục 12.2): chỉ khi chụp được, trong trần mỗi data / mã lỗi; không chặn lượt quá 5 giây.
@@ -6415,7 +6436,6 @@ export class CampaignScheduler {
         }
       }
 
-      const abort = new AbortController()
       const onAbort = (): void => abort.abort()
       api.signal.addEventListener('abort', onAbort, { once: true })
       this.activeV2Aborts.set(campaign.id, abort)
@@ -6461,6 +6481,13 @@ export class CampaignScheduler {
       // Không chuyển được sang Page: bộ cũ tạm dừng chiến dịch trước khi chạy data (pauseBeforePageIdentityTarget); engine báo FB06.
       if (identity && !identity.targetStarted && state.reportCount === 0) {
         const failure = result.steps.find(step => step.status === 'error')
+        // Lượt bị ngắt từ ngoài (thoát / cập nhật app, đăng xuất) đúng lúc đang chuyển sang Page, chưa chạy data: không phải lỗi chuyển
+        // Page. Báo "đã dừng" (RUN01): data về hàng đợi, không tạm dừng chiến dịch. Bước chuyển Page lỗi thật trước khi bị ngắt vẫn là FB06.
+        const failureEntry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
+        if (abort.signal.aborted && (!failure || failureEntry?.interrupted === true)) {
+          await report('__stopped', firstAction, { ok: false, ...interruptedOutcome('before_send') })
+          return state.stopped ?? { done: true }
+        }
         const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
         await report('__identity', firstAction, { ok: false, phase: 'before_send',
           signal: { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
@@ -6481,7 +6508,7 @@ export class CampaignScheduler {
       // 1. Dòng lịch sử của bộ dựng bộ cũ theo đúng thứ tự bước (bỏ bước newsfeed đã báo ngay).
       const skippedNote = await this.reportFacebookEngineRows(campaign, detail, account.id,
         result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
-        result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
+        result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow, interruptedRow })
       for (const log of screenshotLogs) {
         await this.logCampaignProgress(campaign, log.storedMessage, { realtimeMessage: log.realtimeMessage, realtimeAction: log.action, engine: true })
       }
@@ -6495,6 +6522,8 @@ export class CampaignScheduler {
         const entry = stepsInfo.get(mark.stepKey)
         const step = [...result.steps].reverse().find(item => item.stepKey === mark.stepKey)
         const failed = !step || step.status !== 'success' || step.output?.ok === false || !!entry?.failure
+        // Bước của mốc bị ngắt từ ngoài (hoặc chưa kịp kết thúc khi lượt bị huỷ): SYS02 / RUN01 theo pha, không thành lỗi chung.
+        const interrupted = !!entry?.interrupted || (!step && abort.signal.aborted)
         resolvedSteps.add(mark.stepKey)
         if (!failed) {
           const notSent = mark.level === 2 && entry?.sendAttempted === false
@@ -6504,7 +6533,7 @@ export class CampaignScheduler {
         }
         const out = blockFailureOutcome({ error: entry?.failure?.error ?? step?.error ?? null, threw: entry?.failure?.threw ?? true,
           traced: entry?.failure ?? null, marked: true, sendAttempted: mark.level === 2 ? entry?.sendAttempted ?? null : null,
-          pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+          pageState: entry?.pageState ?? null, browserGone: state.browserGone, interrupted,
           signFor: phase => signOf(step, mark.actionCode, phase, null, [step?.error ?? null, entry?.failure?.message ?? null]) })
         await report(key, mark.actionCode, { ok: false, phase: out.phase,
           signal: entry?.screenshotId ? { ...out.signal, screenshotId: entry.screenshotId } : out.signal })
@@ -6525,6 +6554,7 @@ export class CampaignScheduler {
           const entry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
           const out = blockFailureOutcome({ error: entry?.failure?.error ?? failure?.error ?? result.error ?? null, threw: true,
             traced: entry?.failure ?? null, marked: false, sendAttempted: null, pageState: entry?.pageState ?? null, browserGone: state.browserGone,
+            interrupted: !!entry?.interrupted,
             signFor: phase => signOf(failure, entry?.step.actionCode || firstAction, phase, null,
               [failure?.error ?? result.error ?? null, entry?.failure?.message ?? null]) })
           await report(`${key}:error`, entry?.step.actionCode || firstAction, { ok: false, phase: out.phase,
@@ -6647,6 +6677,8 @@ export class CampaignScheduler {
       firstAction: string
       /** Dòng của data khác data chính (nhóm chia sẻ kèm): báo lên lượt data của nhóm đó; undefined = dòng của data chính. */
       extraRow?: (action: CreateCampaignDetailInput, outcome: MilestoneOutcome) => Promise<CampaignDetail | null | undefined>
+      /** Dòng "lỗi" này sinh ra từ một bước bị ngắt từ ngoài (tạm dừng, thoát app…) chứ không phải lỗi của trang. */
+      interruptedRow?: (step: RunStepV2 | null, texts: ReadonlyArray<string | null | undefined>) => boolean
     }): Promise<string | null> {
     const allSteps = context ?? steps
     let current: RunStepV2 | null = null
@@ -6660,8 +6692,18 @@ export class CampaignScheduler {
       if (routed !== undefined) return routed
       const place = ctx.placeRow(current, outcome.actionCode, action.resultOutput?.operationState ? null : String(action.status ?? ''))
       if (!outcome.raw.ok && place.phase) outcome.raw = { ...outcome.raw, phase: place.phase }
+      // Dòng "lỗi" kiểu cũ (mã chung) của một bước bị ngắt từ ngoài: không phải lỗi của trang. Chưa gửi → "đã dừng" (RUN01, về hàng đợi);
+      // sau dấu gửi → "bị ngắt khi đang gửi" (SYS02, đóng data, không gửi lại). Không cộng chuỗi data lỗi, không dừng chiến dịch.
+      let interrupted = false
+      if (!outcome.raw.ok && ctx.interruptedRow && String(action.status ?? '') === 'lỗi'
+        && (!outcome.raw.signal.errorCode || outcome.raw.signal.errorCode === 'err_undefined')
+        && ctx.interruptedRow(current, [outcome.raw.signal.message ?? null, action.log ?? null])) {
+        const out = interruptedOutcome(outcome.raw.phase === 'before_send' ? 'before_send' : 'in_flight', outcome.raw.signal.message ?? action.log ?? null)
+        outcome.raw = { ok: false, phase: out.phase, signal: out.signal, ...(outcome.raw.data ? { data: outcome.raw.data } : {}) }
+        interrupted = true
+      }
       // Dấu hiệu có mặt: mã cụ thể thay mã chung / dòng chưa có mã; chính sách của mã đó giữ cách xử lý như hôm nay (V559), chỉ đổi câu.
-      if (!outcome.raw.ok && ctx.signOf) {
+      if (!outcome.raw.ok && ctx.signOf && !interrupted) {
         const raw = outcome.raw
         const sign = ctx.signOf(current, outcome.actionCode, raw.phase, raw.signal.errorCode ?? null, [raw.signal.message ?? null, action.log ?? null])
         if (sign) {

@@ -103,6 +103,8 @@ export interface BlockFailureInput {
   pageState: Signal | null
   /** Cửa sổ ẩn đã chết / bị huỷ vì block treo. */
   browserGone?: 'browser_gone' | 'block_hang' | null
+  /** Block lỗi vì lượt bị ngắt từ ngoài khi block đang chạy (tín hiệu huỷ đã bật): kết quả theo interruptedOutcome, không theo câu lỗi. */
+  interrupted?: boolean
   /**
    * Dấu hiệu có mặt của một lỗi cụ thể ở pha này (errorSigns.ts: chữ trên trang lúc block lỗi, câu lỗi do chính block viết); null = không có,
    * kết quả như hôm nay.
@@ -111,11 +113,26 @@ export interface BlockFailureInput {
 }
 
 /**
+ * Bước bị ngắt từ ngoài khi đang chạy (tạm dừng, thoát / cập nhật app, đăng xuất): tín hiệu huỷ làm block ném lỗi ("Block bị huỷ trong khi
+ * sleep"…), không phải lỗi của trang Facebook. Chưa gửi → "đã dừng" (RUN01: data về hàng đợi, không ghi lịch sử); đã ghi dấu mà không
+ * biết cú bấm gửi đã chạy chưa → "bị ngắt khi đang gửi" (SYS02: đóng data, không gửi lại). Hai mã và chính sách có sẵn (bảng anh duyệt
+ * 17/11: dừng / thoát app sau mốc ghi dấu là SYS02, trước mốc là RUN01), không cộng chuỗi data lỗi, không tạm dừng chiến dịch. Trước bản
+ * sửa 20/11/2026 các lượt này thành lỗi chung SYS99, cộng chuỗi và làm dừng chiến dịch (ca kiểm lỗi 565, 566).
+ */
+export function interruptedOutcome(phase: Phase, message?: string | null): { phase: Phase; signal: Signal } {
+  if (phase === 'before_send') return { phase, signal: { kind: 'engine', code: 'cancelled', errorCode: 'err_engine_cancelled' } }
+  const text = String(message ?? '').trim().slice(0, 500)
+  return { phase: 'in_flight', signal: { kind: 'engine', code: 'interrupted_while_sending', errorCode: 'err_engine_interrupted_while_sending',
+    ...(text ? { message: text } : {}) } }
+}
+
+/**
  * Block lỗi mà không có dòng lịch sử nào (mốc đã ghi dấu, hoặc block lỗi trước mốc). Pha: chưa ghi dấu → before_send; đã ghi dấu mà vết
  * cho thấy cú bấm gửi chưa chạy (mức 2) → before_send; còn lại không rõ kết quả (in_flight, đóng data, không gửi lại).
  */
 export function blockFailureOutcome(input: BlockFailureInput): { phase: Phase; signal: Signal } {
   const phase: Phase = !input.marked ? 'before_send' : input.sendAttempted === false ? 'before_send' : 'in_flight'
+  if (input.interrupted) return interruptedOutcome(phase, input.error ?? input.traced?.message ?? null)
   if (input.browserGone) {
     return { phase, signal: { kind: 'engine', code: input.browserGone, message: input.browserGone === 'block_hang'
       ? 'Block không có thao tác nào quá lâu, đã đóng cửa sổ chạy ngầm' : 'Cửa sổ chạy ngầm đã đóng' } }
