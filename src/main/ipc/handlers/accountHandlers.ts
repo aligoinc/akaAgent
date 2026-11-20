@@ -482,6 +482,17 @@ export function registerAccountHandlers(
     return { success: true }
   })
 
+  // Read-only readiness probe for secondary webviews (Tin nhắn Facebook). It never
+  // re-applies the proxy: re-applying closes every connection in the shared
+  // partition, including the campaign tab's in-flight requests.
+  ipcMain.handle(IPC_EVENTS.ACCOUNT_BROWSER_SESSION_READY, (_, accountId: unknown, proxyId: unknown) => {
+    const id = Number(accountId)
+    if (!Number.isSafeInteger(id) || id <= 0) return false
+    const proxy = proxyId === null || proxyId === undefined ? null : Number(proxyId)
+    if (proxy !== null && (!Number.isSafeInteger(proxy) || proxy <= 0)) return false
+    return proxyRuntime.isAccountSessionPrepared({ id, proxyId: proxy })
+  })
+
   ipcMain.handle(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, async (_, flatformType?: string, includeRestricted?: boolean) => {
     return supabase.listAccountActions(flatformType, includeRestricted)
   })

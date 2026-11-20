@@ -27330,3 +27330,336 @@ body.theme-light .campaign-table-row:not(.is-draft) .col-actions { --cell-action
   word-break: break-word;
   user-select: text;
 }
+
+/* Tin nhắn Facebook: danh sách tài khoản đã chọn + Messenger của từng tài khoản. */
+.fb-messages-page {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.fb-messages-accounts {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-default);
+}
+
+.fb-messages-accounts-header {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fb-messages-accounts-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fb-messages-accounts-meta {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-pick-button,
+.fb-messages-home-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.fb-messages-account-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.fb-messages-account-empty {
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-account-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: none;
+  border-bottom: 1px solid var(--border-default);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.fb-messages-account-row:hover {
+  background: var(--bg-hover);
+}
+
+.fb-messages-account-row.active {
+  background: var(--bg-accent-subtle);
+}
+
+.fb-messages-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-accent-subtle);
+  color: var(--accent-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.fb-messages-avatar.is-small {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+
+.fb-messages-account-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
+.fb-messages-account-name {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-messages-account-row.has-unread .fb-messages-account-name {
+  font-weight: 600;
+}
+
+.fb-messages-account-status {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-account-status.is-warning {
+  color: var(--accent-warning);
+}
+
+.fb-messages-unread-badge {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-error);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.fb-messages-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fb-messages-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 10px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-default);
+  flex-shrink: 0;
+}
+
+.fb-messages-home-button {
+  height: 28px;
+  padding: 0 10px;
+}
+
+.fb-messages-toolbar-name {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-messages-webview-container {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.fb-messages-webview {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.fb-messages-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 24px;
+  background: var(--bg-primary);
+  text-align: center;
+}
+
+.fb-messages-overlay-text {
+  max-width: 380px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.fb-messages-overlay-icon {
+  color: var(--accent-warning);
+}
+
+.fb-messages-picker {
+  width: 440px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.fb-messages-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 6px;
+}
+
+.fb-messages-picker-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.fb-messages-picker-note {
+  padding: 0 20px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-picker-search {
+  position: relative;
+  padding: 0 20px 10px;
+}
+
+.fb-messages-picker-search input {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.fb-messages-picker-search-icon {
+  position: absolute;
+  left: 32px;
+  top: 10px;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-picker-list {
+  flex: 1;
+  min-height: 160px;
+  max-height: 380px;
+  overflow-y: auto;
+  margin: 0 20px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.fb-messages-picker-empty {
+  padding: 32px 16px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.fb-messages-picker-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border-default);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.fb-messages-picker-row:last-child {
+  border-bottom: none;
+}
+
+.fb-messages-picker-row.is-selected {
+  background: var(--bg-accent-subtle);
+}
+
+.fb-messages-picker-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fb-messages-picker-status {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+}
+
+.fb-messages-picker-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  margin-top: 12px;
+  border-top: 1px solid var(--border-default);
+}
+
+.fb-messages-picker-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}

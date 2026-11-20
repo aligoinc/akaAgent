@@ -42,6 +42,8 @@ import { useNotificationUnreadSync } from './stores/notificationCenterStore'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 import { canAccessAdmin } from '../../shared/admin'
 import { canManageStaff } from '../../shared/staffManagement'
+import FacebookMessagesPage from './pages/FacebookMessagesPage'
+import { canUsePlatform } from './utils/entitlements'
 
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const CrmPage = lazy(() => import('./pages/CrmPage'))
@@ -91,6 +93,8 @@ export default function App() {
   const [crmOpenedStaffKey, setCrmOpenedStaffKey] = useState<string | null>(null)
   const chatSessionId = user?.chatWebEnabledAtLogin ? user.chatWebSessionId : undefined
   const crmStaffKey = user?.organizationId === 1 ? `${user.organizationId}:${user.staffId}` : undefined
+  // Trang Tin nhắn Facebook giữ webview Messenger chạy ngầm để đếm tin chưa đọc; dựng lại theo nhân viên.
+  const facebookMessagesKey = user && canUsePlatform('facebook', user.entitlements) ? `${user.organizationId}:${user.staffId}` : undefined
   const handlePageChange = useCallback((page: AppPage) => {
     if (page === 'admin' && !canOpenAdmin) return
     if (page === 'staff-management' && !canOpenStaffManagement) return
@@ -261,6 +265,10 @@ export default function App() {
   const runtimeRestartModal = zaloRuntimeRestartRequired
     ? <ZaloRuntimeRestartRequiredModal payload={zaloRuntimeRestartRequired} />
     : null
+
+  useEffect(() => {
+    if (!facebookMessagesKey && activePage === 'fb-messages') setActivePage('campaigns')
+  }, [facebookMessagesKey, activePage])
 
   // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {
@@ -557,6 +565,19 @@ export default function App() {
               }}
             />
           </div>
+
+          {facebookMessagesKey && (
+            <div style={activePage === 'fb-messages'
+              ? { display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }
+              : { visibility: 'hidden', position: 'absolute', width: '100%', height: '100%', top: 0, left: 0, pointerEvents: 'none' }
+            }>
+              <FacebookMessagesPage
+                key={facebookMessagesKey}
+                isActive={activePage === 'fb-messages'}
+                onOpenInBrowser={(accountId) => requestOpenBrowser({ accountId })}
+              />
+            </div>
+          )}
 
           <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <EffectivenessReportsHub isActive={activePage === 'reports'} onNavigate={navigateFromReport} />

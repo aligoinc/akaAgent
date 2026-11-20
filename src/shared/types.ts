@@ -3482,6 +3482,8 @@ export const IPC_EVENTS = {
   DB_DELETE_PROXY: 'db:delete-proxy',
   PROXY_TEST: 'proxy:test',
   ACCOUNT_PREPARE_BROWSER_SESSION: 'account:prepare-browser-session',
+  /** Read-only: true when main has applied the account's proxy to its browser partition. */
+  ACCOUNT_BROWSER_SESSION_READY: 'account:browser-session-ready',
 
   // Database Campaign Actions
   DB_LIST_CAMPAIGN_ACTIONS: 'db:list-campaign-actions',
