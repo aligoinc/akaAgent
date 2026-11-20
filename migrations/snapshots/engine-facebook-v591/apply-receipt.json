@@ -1,0 +1,43 @@
+{
+  "migration": "migration_v591_engine_facebook_page_inbox_signs",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply luôn (20/11/2026, sau khi duyệt mã / câu / cách xử lý qua hộp chọn)",
+  "applied_at_vn": "2026-11-20 10:27:33",
+  "ledger_version": "20261120032733",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây, rc 0",
+  "file_md5": "8f277af0e100e7246d7504d81faf629b",
+  "ledger_statements_md5": "8f277af0e100e7246d7504d81faf629b",
+  "preflight_live_10_27_26": {
+    "ledger_v591_rows": 0,
+    "block_2885_md5": "86217720edd3c1c04495c7c061d26bea",
+    "step_20": { "reviewed_code_md5": "86217720edd3c1c04495c7c061d26bea", "commit_level": 1, "send_ops": [] },
+    "facebook_error_signs_md5": "797af9742857b712e1144f5d230b2137",
+    "fb26_customer_title": "Khách không nhận tin nhắn từ Page",
+    "fb47_rows": 0,
+    "new_elements": 0
+  },
+  "postflight_live": {
+    "block_2885_md5": "d7657b8e27bd1ea4fa2671a99c08101d",
+    "legacy_block_2679_md5_unchanged": "86217720edd3c1c04495c7c061d26bea",
+    "step_20_reviewed_code_md5": "d7657b8e27bd1ea4fa2671a99c08101d",
+    "facebook_error_signs_md5": "aa197aea7d2dc397545a8f8e5a8a5a5c",
+    "elements": { "FbPageInboxCannotSendNotice": 1806, "FbPageInboxIdentityRequiredNotice": 1807 },
+    "fb26_customer_title": "Page không gửi được tin cho người này nữa",
+    "fb47": { "auto_error_id": 173, "public_code": "FB47", "error_class": "account_restricted", "customer_help": "Vui lòng kiểm tra hộp thư page" },
+    "policies": { "430": "FB26 hộp thư Page: complete / ignore / none / thất bại", "431": "FB47 hộp thư Page: complete / ignore / pause / thất bại" },
+    "resolve_policy_in_flight": {
+      "FB26": "target complete, streak ignore, campaign none, quota no_count, run continue",
+      "FB47": "target complete, streak ignore, campaign pause (không ngưỡng), quota no_count, run end_unit",
+      "FB46": "ngưỡng 8 như V575"
+    }
+  },
+  "edge_logs_rest_per_minute_utc": { "03:22": "47.853 req, 0 lỗi 5xx", "03:24": "48.200 req, 1 lỗi 5xx", "03:26": "45.962 req, 0", "03:27 (phút apply, tới lúc đọc)": "34.175 req, 0" },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "CHROMIUM_PATH=<Chrome> LC_ALL=C node scripts/engine-v2-facebook/v591-smoke.cjs: 12/12",
+  "rollback": "migrations/rollback_v591_engine_facebook_page_inbox_signs.sql (chỉ chạy khi block 2885 còn đúng bản V591)",
+  "not_verified": [
+    "Chưa có lượt thật nào ra FB26 / FB47 (tổ chức 441 đang tạm dừng các chiến dịch inbox Page).",
+    "Câu FB47 chưa thử trên trang Facebook thật (Page của anh không bị hạn chế), làm theo ảnh lỗi.",
+    "Chưa có bản tiếng Anh của hai câu."
+  ]
+}
