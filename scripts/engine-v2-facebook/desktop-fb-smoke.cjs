@@ -22,6 +22,7 @@ const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATION
 const V563 = require('../build-v563-sql.cjs')
 const V575 = require('../build-v575-sql.cjs')
 const V597 = require('../build-v597-sql.cjs')
+const V603 = require('../build-v603-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 // FB_DESKTOP_ONLY=<chữ trong tên ca>: chỉ chạy các ca có tên chứa chữ đó (soạn / dò một ca); để trống thì chạy hết.
@@ -387,6 +388,11 @@ const suggestWorkflow = () => ({ id: SUGGEST_WORKFLOW_ID, name: 'Nhắn tin UID'
   nodes: [{ id: 'collect', blockId: 9651, blockName: 'fb_collect_suggested_friends_test', config: {} }] })
 const uidWorkflow = () => ({ id: UID_WORKFLOW_ID, name: '[engine] Nhắn tin UID', defaultVariables: {}, edges: [],
   nodes: [{ id: 'send', blockId: 9652, blockName: 'fb_send_message', config: {} }] })
+// Nhắn tin bạn bè (V603, câu 570: chiến dịch 45597 là loại này): workflow "[engine]" riêng dùng chung block gửi tin; danh mục bước theo workflow
+// ghi thao tác fb_message_friend, mức cam kết 2, gửi bằng Enter như production (bước 15 / workflow 323).
+const FRIEND_WORKFLOW_ID = 5008
+const friendWorkflow = () => ({ id: FRIEND_WORKFLOW_ID, name: '[engine] Nhắn tin bạn bè', defaultVariables: {}, edges: [],
+  nodes: [{ id: 'send', blockId: 9652, blockName: 'fb_send_message', config: {} }] })
 
 // Đăng trang cá nhân: loại không có dòng data, mỗi mốc lịch một lượt (V558 campaign_slot). Dòng lịch sử "Đăng bài" của bộ cũ lấy từ
 // bước fb_click_post_button thành công (posted: true).
@@ -445,6 +451,10 @@ async function main() {
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_message_uid', $1)`, [UID_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, step_kind, action_code, commit_level, send_ops)
       VALUES (9652, 'delivery', 'fb_message_stranger', 1, '[]')`)
+    await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Nhắn tin bạn bè', '[]', '[]')`, [FRIEND_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_message_friend', $1)`, [FRIEND_WORKFLOW_ID])
+    await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, workflow_id, step_kind, action_code, commit_level, send_ops)
+      VALUES (9652, $1, 'delivery', 'fb_message_friend', 2, '["press:Enter"]')`, [FRIEND_WORKFLOW_ID])
     // Cùng block nút Đăng, riêng workflow trang cá nhân: thao tác của mốc là fb_post_my_profile (dòng ghi đè theo workflow).
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, workflow_id, step_kind, action_code, commit_level, send_ops)
       VALUES (30, $1, 'delivery', 'fb_post_my_profile', 2, '["click:fb_post_button"]')`, [TIMELINE_WORKFLOW_ID])
@@ -458,7 +468,7 @@ async function main() {
         .map(b => [b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false }])),
       workflows: new Map([[WORKFLOW_ID, workflow()], [TIMELINE_WORKFLOW_ID, timelineWorkflow()], [INVITE_WORKFLOW_ID, inviteWorkflow()],
         [FIND_WORKFLOW_ID, findWorkflow()], [NEWSFEED_WORKFLOW_ID, newsfeedWorkflow()], [SUGGEST_WORKFLOW_ID, suggestWorkflow()],
-        [UID_WORKFLOW_ID, uidWorkflow()]]),
+        [UID_WORKFLOW_ID, uidWorkflow()], [FRIEND_WORKFLOW_ID, friendWorkflow()]]),
       runtimeSettings: null
     }
     const progress = []
@@ -1441,6 +1451,98 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
       assert.ok(String(r.campaign.note).includes(`${V597.FB50.title} (FB50).`), r.campaign.note)
       assert.ok(!/Tiếp tục/.test(String(r.campaign.note)), `không có bước tiếp theo: ${r.campaign.note}`)
       assert.equal(r.quota, 0); assert.equal(r.streak, 0); assert.equal(r.clicks, 1)
+    })
+
+    // V603 (anh chốt 20/11/2026, câu 570): nhắn tin hết giờ chờ ô nhập tin Messenger, block 2855 trả câu riêng khi thấy chữ Facebook ở chỗ ô
+    // nhập tin; dấu hiệu "message" đổi dòng lịch sử không mã ra FB19 (hai mã nội bộ), chính sách như FB26 hộp thư Page. Chạy bằng workflow nhắn
+    // theo UID của bài này (block dùng chung với nhắn tin bạn bè; dấu hiệu và chính sách khai cho cả hai thao tác).
+    await db.query(`BEGIN;\n${V603.CODES_POLICIES_SQL}\nCOMMIT;`)
+    const v603Signs = [...v597Signs, ...normalizeSigns(V603.NEW_SIGNS)]
+    const TIMEOUT_MESSAGE = 'waitForSelector timeout: [role="textbox"][contenteditable="true"]'
+    const v603Run = async ({ sendError = TIMEOUT_MESSAGE, targets = 1, signs = v603Signs, actionId = 'facebook_message_uid',
+      actionCode = 'fb_message_stranger' } = {}) => {
+      const blocks = globalThis.__fbTest.blocks
+      const original = blocks.get(SEND_BLOCK.id)
+      // Như block 2855 production: không thấy ô nhập tin thì trả ok:false kèm câu (không ném), bộ dựng cũ ghi dòng "thất bại" không mã.
+      blocks.set(SEND_BLOCK.id, { ...original, code: `return { ok: false, error: ${JSON.stringify(sendError)} }` })
+      globalThis.__fbTest.runtimeSettings = { errorSigns: signs }
+      try {
+        const entry = await makeCampaign({ targets, actionId })
+        await run(entry)
+        const campaign = await one(`SELECT status, note FROM public.auto_campaigns WHERE id = $1`, [entry.campaign.id])
+        const streak = await one(`SELECT coalesce(max(count_consecutive_bad_targets), 0)::int AS n FROM public.auto_campaign_error_state
+          WHERE campaign_id = $1`, [entry.campaign.id])
+        const quota = await one(`SELECT coalesce(max(count_action_in_day), 0)::int AS n FROM public.auto_account_action_status
+          WHERE account_id = $1 AND action_code = $2`, [entry.account.id, actionCode])
+        return { rows: (await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]),
+          out: (await outcomes(entry.campaign.id)).map(o => [o.action_code, o.error_code, o.delivery_state]),
+          inputs: (await inputs(entry.campaign.id)).map(r => r.status), campaign, streak: streak.n, quota: quota.n }
+      } finally {
+        blocks.set(SEND_BLOCK.id, original)
+        globalThis.__fbTest.runtimeSettings = null
+      }
+    }
+
+    await check('V603: không thấy chữ Facebook nào (câu hết giờ chờ ô nhập tin) → vẫn FB42 như hôm nay (thất bại, tính lượt, cộng chuỗi, data đóng)', async () => {
+      const r = await v603Run()
+      assert.deepEqual(r.out, [['fb_message_stranger', 'err_engine_fb_action_failed', 'not_delivered']])
+      assert.deepEqual(r.rows, [['fb_message_stranger', 'thất bại', `Lỗi nhắn tin đến Nhóm 1: ${TIMEOUT_MESSAGE} (FB42)`]])
+      assert.deepEqual(r.inputs, ['hoàn thành'])
+      assert.equal(r.quota, 1); assert.equal(r.streak, 1)
+      assert.notEqual(r.campaign.status, 'tạm dừng')
+    })
+
+    for (const c of V603.CODES) {
+      await check(`V603: "${c.title}" → FB19 (${c.code}): ghi thất bại, data đóng, không tính lượt, không cộng chuỗi; trước V603 cùng câu ra FB42`, async () => {
+        const r = await v603Run({ sendError: c.title })
+        assert.deepEqual(r.out, [['fb_message_stranger', c.code, 'not_delivered']])
+        assert.deepEqual(r.rows, [['fb_message_stranger', 'thất bại', `${c.title} (FB19)`]])
+        assert.deepEqual(r.inputs, ['hoàn thành'])
+        assert.equal(r.quota, 0, 'không tính lượt'); assert.equal(r.streak, 0, 'không cộng chuỗi')
+        assert.notEqual(r.campaign.status, 'tạm dừng')
+        const before = await v603Run({ sendError: c.title, signs: v597Signs })
+        assert.deepEqual(before.out, [['fb_message_stranger', 'err_engine_fb_action_failed', 'not_delivered']])
+        assert.deepEqual(before.rows, [['fb_message_stranger', 'thất bại', `Lỗi nhắn tin đến Nhóm 1: ${c.title} (FB42)`]])
+      })
+    }
+
+    // Chiến dịch nhắn tin bạn bè (loại của chiến dịch 45597): cùng block, danh mục bước riêng của workflow (thao tác fb_message_friend, mức 2).
+    const friend = { actionId: 'facebook_message_friend', actionCode: 'fb_message_friend' }
+    await check('V603 nhắn tin bạn bè: không thấy chữ Facebook nào → vẫn FB42 như hôm nay (thất bại, tính lượt, cộng chuỗi, data đóng)', async () => {
+      const r = await v603Run(friend)
+      assert.deepEqual(r.out, [['fb_message_friend', 'err_engine_fb_action_failed', 'not_delivered']])
+      assert.deepEqual(r.rows, [['fb_message_friend', 'thất bại', `Lỗi nhắn tin đến Nhóm 1: ${TIMEOUT_MESSAGE} (FB42)`]])
+      assert.deepEqual(r.inputs, ['hoàn thành'])
+      assert.equal(r.quota, 1); assert.equal(r.streak, 1)
+      assert.notEqual(r.campaign.status, 'tạm dừng')
+    })
+    for (const c of V603.CODES) {
+      await check(`V603 nhắn tin bạn bè: "${c.title}" → FB19 (${c.code}), như nhắn theo UID; trước V603 cùng câu ra FB42`, async () => {
+        const r = await v603Run({ ...friend, sendError: c.title })
+        assert.deepEqual(r.out, [['fb_message_friend', c.code, 'not_delivered']])
+        assert.deepEqual(r.rows, [['fb_message_friend', 'thất bại', `${c.title} (FB19)`]])
+        assert.deepEqual(r.inputs, ['hoàn thành'])
+        assert.equal(r.quota, 0, 'không tính lượt'); assert.equal(r.streak, 0, 'không cộng chuỗi')
+        assert.notEqual(r.campaign.status, 'tạm dừng')
+        const before = await v603Run({ ...friend, sendError: c.title, signs: v597Signs })
+        assert.deepEqual(before.out, [['fb_message_friend', 'err_engine_fb_action_failed', 'not_delivered']])
+        assert.deepEqual(before.rows, [['fb_message_friend', 'thất bại', `Lỗi nhắn tin đến Nhóm 1: ${c.title} (FB42)`]])
+      })
+    }
+    await check('V603 nhắn tin bạn bè: 4 data liền FB19 (bằng ngưỡng chuỗi chung 4) → chạy hết, không tạm dừng chiến dịch, không tính lượt', async () => {
+      const r = await v603Run({ ...friend, sendError: V603.NOT_ON_MESSENGER_MESSAGE, targets: 4 })
+      assert.deepEqual(r.out, Array.from({ length: 4 }, () => ['fb_message_friend', V603.NOT_ON_MESSENGER.code, 'not_delivered']))
+      assert.deepEqual(r.inputs, ['hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành'])
+      assert.equal(r.streak, 0); assert.equal(r.quota, 0)
+      assert.notEqual(r.campaign.status, 'tạm dừng')
+    })
+
+    await check('V603: 5 data liền ra FB19 → chạy hết cả 5, không tạm dừng chiến dịch, không tính lượt', async () => {
+      const r = await v603Run({ sendError: V603.FRIENDS_ONLY_MESSAGE, targets: 5 })
+      assert.deepEqual(r.out, Array.from({ length: 5 }, () => ['fb_message_stranger', V603.FB19.code, 'not_delivered']))
+      assert.deepEqual(r.inputs, ['hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành'])
+      assert.equal(r.streak, 0); assert.equal(r.quota, 0)
+      assert.notEqual(r.campaign.status, 'tạm dừng')
     })
   } finally {
     await db.end().catch(() => {})
