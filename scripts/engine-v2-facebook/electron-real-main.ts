@@ -11,6 +11,8 @@ import { PageController } from '../../src/main/v2/runtime/pageController'
 import { BlockExecutor } from '../../src/main/v2/runtime/blockExecutor'
 import { PageTrace, isNotDispatchedError, tracePage } from '../../src/main/engineAdapters/facebook/pageTrace'
 import { matchPageSign, parseFacebookErrorSigns, PAGE_SIGN_TEXTS_SCRIPT } from '../../src/main/engineAdapters/facebook/errorSigns'
+import { gzipErrorDom, PAGE_DOM_SCRIPT } from '../../src/main/engineAdapters/facebook/errorScreenshots'
+import { gunzipSync } from 'node:zlib'
 
 interface Fixture { elements: Record<string, string>; blocks: Array<{ id: number; name: string; md5: string; code: string }> }
 const fixture = JSON.parse(fs.readFileSync(String(process.env.FB_ELECTRON_FIXTURE), 'utf8')) as Fixture
@@ -44,7 +46,15 @@ const GROUP_UNAVAILABLE = `<!doctype html><html lang="vi"><head><meta charset="u
 <div role="main"><div><h2><span>Bạn hiện không xem được nội dung này</span></h2>
 <span>Lỗi này thường do chủ sở hữu chỉ chia sẻ nội dung với một nhóm nhỏ, thay đổi người được xem hoặc đã xóa nội dung.</span>
 <div role="button" aria-label="Đi đến Bảng feed">Đi đến Bảng feed</div></div></div></body></html>`
-const PAGES: Record<string, string> = { '/groups/ok': GROUP_OK, '/groups/unavailable': GROUP_UNAVAILABLE, '/blank': '<!doctype html><html><body>trống</body></html>' }
+// Trang có mã phiên giả ở các chỗ Facebook thật để: script (cả JSON), ô ẩn trong form đăng xuất (đo 20/11: `h`), và style.
+const GROUP_TOKENS = `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Nhóm thử</title><style>.x1{color:red}</style>
+<script>window.__s = {"fb_dtsg":"AQH_FAKE_DTSG_TOKEN","token":"EAAGFAKEACCESSTOKEN1234567890"}</script></head><body>${SIDEBAR}
+<div role="main"><h1>Nhóm thử</h1><a href="/groups/1/posts/2/?__cft__[0]=abc">Bài viết</a>
+<div contenteditable="true" role="textbox" aria-label="Viết bình luận">khách đang gõ</div></div>
+<form action="/logout.php" method="post"><input type="hidden" name="h" value="AfXFAKELOGOUTHASH"><input type="hidden" name="fb_dtsg" value="AQH_FAKE_FORM_DTSG"></form>
+<script type="application/json">{"accessToken":"EAAGFAKEJSONTOKEN0987654321"}</script></body></html>`
+const PAGES: Record<string, string> = { '/groups/ok': GROUP_OK, '/groups/unavailable': GROUP_UNAVAILABLE, '/groups/tokens': GROUP_TOKENS,
+  '/blank': '<!doctype html><html><body>trống</body></html>' }
 // /never: máy chủ giữ kết nối, không trả lời (điều hướng treo).
 
 /** Cửa sổ chạy ngầm cấu hình y như BackgroundPageManager.getOrCreate (ẩn, offscreen, không giảm tốc khi ẩn). */
@@ -127,6 +137,21 @@ async function main(): Promise<void> {
   await check('ảnh lỗi chụp được trên cửa sổ chạy ngầm đang ẩn (offscreen), là JPEG', async () => {
     const jpeg = await page.captureJpeg(70, 1280)
     assert(Buffer.isBuffer(jpeg) && jpeg.length > 1000 && jpeg[0] === 0xff && jpeg[1] === 0xd8, `ảnh ${jpeg?.length ?? 0} byte`)
+  })
+
+  await check('DOM cả trang lúc lỗi (anh chốt 20/11): bỏ script, style, giá trị ô ẩn; còn đủ phần còn lại của trang; nén gzip đọc lại đúng', async () => {
+    await page.navigate(`${base}/groups/tokens`)
+    const html = await page.evaluate<string>(PAGE_DOM_SCRIPT)
+    assert(typeof html === 'string' && html.startsWith('<!DOCTYPE html>'), `đầu DOM: ${String(html).slice(0, 40)}`)
+    for (const bad of ['<script', '<style', 'AQH_FAKE_DTSG_TOKEN', 'EAAGFAKEACCESSTOKEN', 'EAAGFAKEJSONTOKEN', 'AfXFAKELOGOUTHASH', 'AQH_FAKE_FORM_DTSG']) {
+      assert(!html.includes(bad), `DOM còn ${bad}`)
+    }
+    for (const kept of ['role="main"', 'Nhóm thử', 'Lối tắt của bạn', 'name="h"', 'action="/logout.php"', 'khách đang gõ', '__cft__']) {
+      assert(html.includes(kept), `DOM thiếu ${kept}`)
+    }
+    assert(await page.evaluate<number>('return document.querySelectorAll("script").length') === 2, 'trang thật không bị đổi (chỉ đọc bản sao)')
+    const gz = await gzipErrorDom(html)
+    assert(gz && gz[0] === 0x1f && gz[1] === 0x8b && gunzipSync(gz).toString('utf8') === html, 'gzip đọc lại phải đúng từng chữ')
   })
 
   await check('block treo (Q20): huỷ cửa sổ KHÔNG làm lời gọi đang chờ kết thúc; vết thao tác của engine kết thúc chúng (abandonPending) như bộ lập lịch làm', async () => {

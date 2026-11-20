@@ -131,6 +131,8 @@ function fakeClient(db) {
   }
 }
 
+const FAKE_PAGE_DOM = '<!DOCTYPE html>\n<html lang="vi"><body><div role="main"><h1>Nhóm thử</h1><div role="button">Bạn viết gì đi...</div></div></body></html>'
+
 class FakePage {
   constructor(scenario) {
     this.scenario = scenario
@@ -172,6 +174,13 @@ class FakePage {
     if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
     if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
+    // DOM cả trang đọc cùng lúc với ảnh lỗi (errorScreenshots.ts PAGE_DOM_SCRIPT).
+    if (String(code).includes('aka:page-dom')) {
+      this.domReads = (this.domReads ?? 0) + 1
+      if (this.scenario.domError) throw new Error(this.scenario.domError)
+      if (this.scenario.domHang) return this.hang()
+      return this.scenario.pageDom === undefined ? FAKE_PAGE_DOM : this.scenario.pageDom
+    }
     return null
   }
 }
@@ -730,6 +739,11 @@ async function main() {
       const day = new Date().toISOString().slice(0, 10)
       const meta = JSON.parse(fs.readFileSync(path.join(userData, 'local-data', 'engine-screenshots', day, `${post.signal.screenshotId}.json`), 'utf8'))
       assert.equal(meta.code, 'click:fb_post_button'); assert.equal(meta.campaignId, entry.campaign.id)
+      // DOM cả trang lưu cùng lúc, cùng mã với ảnh (anh chốt 20/11/2026).
+      assert.equal(meta.hasJpeg, true)
+      assert.deepEqual(meta.dom, { chars: FAKE_PAGE_DOM.length, gzipBytes: meta.dom?.gzipBytes })
+      const domFile = path.join(userData, 'local-data', 'engine-screenshots', day, `${post.signal.screenshotId}.dom.html.gz`)
+      assert.equal(require('node:zlib').gunzipSync(fs.readFileSync(domFile)).toString('utf8'), FAKE_PAGE_DOM, 'DOM đọc lại đúng từng chữ')
       const detail = (await details(entry.campaign.id)).find(r => r.action_code === 'fb_post_group')
       // V559: FB44 như lỗi không xác định của bộ cũ: ghi "lỗi" (câu có mã), data hoàn thành; vết thao tác không vào lịch sử khách xem.
       assert.equal((await one(`SELECT error_code FROM public.auto_engine_outcomes WHERE campaign_id = $1 AND NOT ok`, [entry.campaign.id])).error_code,
@@ -738,6 +752,38 @@ async function main() {
       assert.equal(detail.data?.signal?.trace, undefined, 'vết không vào lịch sử khách xem')
       assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
       assert.ok((await marks(entry.campaign.id)).every(m => m.state === 'not_delivered'))
+    })
+
+    await check('đọc DOM lỗi thì vẫn có ảnh lỗi như trước, tệp mô tả ghi không có DOM, kết quả lỗi không đổi', async () => {
+      const entry = await makeCampaign()
+      await run(entry, { notFound: [ELEMENTS.fb_post_button], domError: 'Script failed to execute' })
+      const post = (await outcomes(entry.campaign.id)).find(o => o.action_code === 'fb_post_group')
+      assert.ok(post, 'có kết quả bước đăng')
+      assert.equal(post.signal.code, 'click:fb_post_button')
+      assert.match(String(post.signal.screenshotId), /^[0-9a-f-]{36}$/, 'vẫn có mã ảnh lỗi')
+      const day = new Date().toISOString().slice(0, 10)
+      const dir = path.join(userData, 'local-data', 'engine-screenshots', day)
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, `${post.signal.screenshotId}.json`), 'utf8'))
+      assert.equal(meta.hasJpeg, true); assert.equal(meta.dom, null)
+      assert.equal(fs.existsSync(path.join(dir, `${post.signal.screenshotId}.jpg`)), true)
+      assert.equal(fs.existsSync(path.join(dir, `${post.signal.screenshotId}.dom.html.gz`)), false)
+    })
+
+    await check('trang treo đúng lúc đọc DOM: bỏ DOM sau 2 giây, vẫn có ảnh lỗi, lượt chạy xong và kết quả lỗi như trước', async () => {
+      const entry = await makeCampaign()
+      const startedAt = Date.now()
+      await run(entry, { notFound: [ELEMENTS.fb_post_button], domHang: true })
+      const elapsed = Date.now() - startedAt
+      const post = (await outcomes(entry.campaign.id)).find(o => o.action_code === 'fb_post_group')
+      assert.ok(post, 'có kết quả bước đăng')
+      assert.equal(post.signal.code, 'click:fb_post_button'); assert.equal(post.phase, 'before_send')
+      const day = new Date().toISOString().slice(0, 10)
+      const dir = path.join(userData, 'local-data', 'engine-screenshots', day)
+      const meta = JSON.parse(fs.readFileSync(path.join(dir, `${post.signal.screenshotId}.json`), 'utf8'))
+      assert.equal(meta.hasJpeg, true); assert.equal(meta.dom, null)
+      assert.equal(fs.existsSync(path.join(dir, `${post.signal.screenshotId}.dom.html.gz`)), false)
+      assert.ok(elapsed >= 2_000 && elapsed < 30_000, `lượt chạy mất ${elapsed} ms (đọc DOM phải bị bỏ sau 2 giây)`)
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
     })
 
     await check('bấm đăng rồi script lỗi (mức 2): không rõ kết quả, data đóng, không gửi lại', async () => {
