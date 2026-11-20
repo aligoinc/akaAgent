@@ -104,6 +104,32 @@ async function applyV575(db) {
   await db.query(readMigration(V575_MIGRATION))
 }
 
+/**
+ * V591 (FB26 / FB47 hộp thư Page; anh chốt 20/11/2026): dựng đúng phần production mà V591 đọc (bảng auto_elements với 12 element FbPageInbox*,
+ * block 2679 / 2885, sổ chép, dòng danh mục bước 20; đọc 20/11) rồi chạy nguyên văn migration. Cần V559 + V563 + V575 như production. Dùng cho
+ * bài kiểm migration viết sau V591 (dòng facebook.error_signs sau V591 là bản production đang chạy).
+ */
+const V591_MIGRATION = 'migration_v591_engine_facebook_page_inbox_signs.sql'
+async function applyV591(db) {
+  const V591 = require('../build-v591-sql.cjs')
+  const live = V591.LIVE
+  await db.query(`CREATE TABLE IF NOT EXISTS public.auto_elements (id bigserial PRIMARY KEY, name text NOT NULL UNIQUE, xpath text NOT NULL, description text,
+    category text, is_builtin boolean NOT NULL DEFAULT false, staff_id bigint, organization_id bigint, created_at timestamptz DEFAULT now(),
+    updated_at timestamptz DEFAULT now())`)
+  for (const e of live.elements) {
+    await db.query(`INSERT INTO public.auto_elements (id, name, xpath, description, category, is_builtin) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [e.id, e.name, e.xpath, e.description, e.category, e.is_builtin])
+  }
+  await db.query(`SELECT setval(pg_get_serial_sequence('public.auto_elements', 'id'), 2000)`)
+  await db.query(`INSERT INTO public.auto_blocks (id, name, code, category) VALUES ($1, 'fb_send_page_inbox_message', $3, 'facebook'), ($2, $4, $3, 'facebook')`,
+    [V591.BLOCK.sourceId, V591.BLOCK.id, live.block.code, V591.BLOCK.name])
+  await db.query(`INSERT INTO public.auto_engine_block_copies (engine_block_id, source_block_id, source_md5_at_copy, engine_md5_at_copy) VALUES ($1, $2, $3, $3)`,
+    [V591.BLOCK.id, V591.BLOCK.sourceId, V591.BLOCK.oldMd5])
+  await db.query(`INSERT INTO public.auto_engine_block_steps (id, block_id, step_kind, action_code, commit_level, send_ops, result_mode, reviewed_code_md5, note)
+    VALUES ($1, $2, 'delivery', $3, 1, '[]'::jsonb, 'action_result', $4, $5)`, [V591.STEP.id, V591.BLOCK.id, V591.ACTION, V591.BLOCK.oldMd5, live.step.note])
+  await db.query(readMigration(V591_MIGRATION))
+}
+
 /** Dựng DB engine như production rồi thêm phần tối thiểu cho Facebook. notes: ghi chú bootstrap. */
 async function buildFacebookFixture(db, notes = []) {
   await bootstrap(db, notes)
@@ -112,4 +138,4 @@ async function buildFacebookFixture(db, notes = []) {
 }
 
 module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, V564_MIGRATION, readMigration, applyFacebookStubs,
-  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly, V575_MIGRATION, applyV575 }
+  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly, V575_MIGRATION, applyV575, V591_MIGRATION, applyV591 }
