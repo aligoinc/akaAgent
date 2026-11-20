@@ -1,0 +1,38 @@
+{
+  "migration": "migration_v593_engine_error_watch_order_images",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply và merge (20/11/2026)",
+  "applied_at_vn": "2026-11-20 11:21:16",
+  "ledger_version": "20261120042108",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <tệp bọc>; chạy 3 giây, rc 0",
+  "file_md5": "c8c73bec5f34c554bd03fcc9a9e16838",
+  "ledger_statements_md5": "c8c73bec5f34c554bd03fcc9a9e16838",
+  "preflight_11_21_07": {
+    "ledger_v593_rows": 0,
+    "ledger_top": "migration_v592_ai_chat_answer_fire",
+    "tick_body_md5": "b4e8c5008ce2b9c50501c14c66b6c5de"
+  },
+  "postflight_11_21_46": {
+    "tick_body_md5": "88a4fb4b739fe0a87a1421fdb8996fb2",
+    "security_definer": true,
+    "anon_execute": false
+  },
+  "first_tick_after_apply": {
+    "start_vn": "11:22:00",
+    "ms": 199,
+    "status": "succeeded",
+    "result": { "ok": true, "imageRequests": 0, "imageWaiting": 0, "inserted": 0, "tasksToday": 10, "note": "hôm nay đã đủ 10 việc nên chưa chèn câu nào" }
+  },
+  "postgrest": {
+    "reload_message_vn": "11:21:18",
+    "schema_cache_queried_ms": 5028.6,
+    "loaded_vn": "11:21:32",
+    "rest_minute_11_21": { "requests": 39445, "over_1s": 3844, "errors_5xx": 11, "errors_503": 0 },
+    "errors_5xx_detail": "11:21:15–11:21:30: 1 lỗi 500 rpc/aka_agent_engine_report_v1, 1 lỗi 500 rpc/aka_agent_engine_claim_target_v1 (Desktop, trần 3 giây khi schema đang nạp lại); 11:21:45: 10 lỗi 500 contacts (gateway chat cũ)",
+    "recovered_vn": "11:22:15 (p50 49 ms, 0 request quá 1 giây)"
+  },
+  "settings_at_apply": {
+    "engine.error_watch": "imageRequests true, imageWaitMinutes 15 (bật 11:18:14 VN 20/11 theo yêu cầu), fire true, enqueue true, maxPerDay 10, maxPending 2; không đổi lúc apply"
+  },
+  "rollback": "migrations/rollback_v593_engine_error_watch_order_images.sql (trả thân V588); chỉ tắt chờ ảnh: \"imageWaitMinutes\": 0; tắt xin ảnh: \"imageRequests\": false"
+}

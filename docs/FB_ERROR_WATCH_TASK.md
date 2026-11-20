@@ -2,7 +2,9 @@
 
 Mô tả công việc cho phiên Claude Code trên cloud (agent `kiem-loi-chien-dich-facebook`). Câu lệnh của phiên chỉ cần ghi: "đọc `docs/FB_ERROR_WATCH_TASK.md` trong repo akaAgent và làm đúng một lượt". Thiết kế và lý do ở [phương án](FB_ERROR_WATCH_CLAUDE_CODE_PLAN.md); ba báo cáo mẫu ở [kết quả đợt 0](FB_ERROR_WATCH_DOT0_20261118.md).
 
-**Trạng thái 18/11/2026: bản nháp.** Agent nằm trong migration V574 (số tạm, chưa apply), phiên cloud chưa dựng.
+**Trạng thái 20/11/2026:** chạy thật từ 19/11 (V574, V588 đã apply; database đánh thức phiên bằng `/fire` khi có câu mới). Từ V593: ca nào có ảnh lỗi thì
+database xin ảnh từ máy khách và chờ ảnh về (tối đa 15 phút) rồi mới hỏi, nên phần lớn câu có ảnh ngay lượt đầu. Người vận hành xử lý từng ca bằng lệnh
+`/xu-ly-loi <mã câu>` trong Claude Code trên máy, mở từ thông báo của bạn.
 
 ## Bạn làm gì
 
@@ -64,13 +66,18 @@ Câu do hệ thống tạo bắt đầu bằng `[Tự động]`. Với câu hỏ
 
 6. **Đã có kết luận chưa.** Tìm khoá ca, mã lỗi và câu lỗi trong `CLAUDE.md`, `docs/ENGINE_V2_FACEBOOK_*.md`, `docs/CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_*.md`. Đã có kết luận hoặc quyết định của anh thì ghi vào `da_tung_ket_luan` và không đề xuất ngược lại.
 
-7. **Ảnh lỗi**, nếu có mã yêu cầu ảnh và ảnh đã về:
+7. **Ảnh lỗi.** Câu có dòng `anh da ve: N ảnh` thì ảnh đã về: **xem ảnh trước khi kết luận**, đây thường là bằng chứng mạnh nhất cho ca không
+   biết trang đang hiện gì (FB41 không thấy ô bình luận, FB42 form chưa đóng…). Có dòng `yeu cau anh` mà chưa có `anh da ve` thì kiểm lại một lần,
+   ảnh có thể đã về trong lúc bạn làm:
 
    ```sql
    select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>);
    ```
 
-   Mỗi ảnh là JPEG dạng base64; lưu ra thư mục tạm rồi xem. Chỉ mô tả hộp thoại, nút, câu báo của Facebook. Chưa có ảnh thì ghi "chưa có ảnh".
+   Mỗi ảnh là JPEG dạng base64; lưu ra thư mục tạm rồi xem (công cụ đọc tệp mở được ảnh). Ảnh là màn hình Facebook của khách: chỉ mô tả hộp
+   thoại, nút, câu báo của Facebook và bố cục trang; không chép tên người, tên nhóm, nội dung bài hay tin nhắn vào báo cáo; không lưu ảnh ra ngoài
+   thư mục tạm. Ghi trong `bang_chung` ảnh nào cho thấy điều gì (theo `meta` của ảnh: bước, mã lỗi, giờ). Chưa có ảnh thì ghi "chưa có ảnh" và nếu
+   ca cần ảnh mới kết luận được thì ghi vào `de_xuat`.
 
 ## Báo cáo
 
@@ -135,4 +142,21 @@ Hai trường này không bắt buộc. Chỉ ghi khi đã có bằng chứng, k
 
 ## Thông báo
 
-Sau khi nộp, gửi một thông báo tới app Claude của người vận hành (nội dung là `tom_tat`) khi câu là câu đầu của hội thoại (dòng `lich_su: 0`) hoặc ca thuộc loại tăng bất thường, và `ket_luan` khác `do_cau_hinh_cua_khach`. Mỗi ca một thông báo. Câu hỏi tiếp không có gì mới thì không gửi.
+Thông báo để người vận hành biết có việc phải làm, không phải để báo mọi ca. Sau khi nộp, gửi **một** thông báo tới app Claude của người vận hành
+khi và chỉ khi có ít nhất một điều sau:
+
+- `ket_luan` là `loi_app` hoặc `facebook_doi_giao_dien`;
+- có `cau_cho_khach` hoặc `de_xuat_ma_loi` (đang chờ anh duyệt);
+- có `can_anh_quyet`.
+
+Không gửi khi `ket_luan` là `chua_du_du_lieu`, `do_cau_hinh_cua_khach` hay `do_may_khach` mà không có ba điều trên, và khi câu hỏi tiếp không có gì
+mới. Câu hỏi tiếp vì ảnh đã về mà đổi kết luận sang một trong các trường hợp trên thì gửi.
+
+Nội dung đúng một dòng, tối đa 230 ký tự, theo khuôn:
+
+```
+Câu <mã câu> · <việc> · <tom_tat rút gọn> · Xử lý: /xu-ly-loi <mã câu>
+```
+
+`<việc>` là một trong: `Cần sửa app` (`loi_app`), `Facebook đổi giao diện` (`facebook_doi_giao_dien`), `Chờ duyệt câu cho khách` (chỉ có đề xuất),
+`Cần anh quyết` (chỉ có `can_anh_quyet`). Thông báo theo cùng luật dữ liệu như báo cáo: chỉ mã, không tên người, không SĐT, không nội dung tin.

@@ -430,3 +430,26 @@ Tài liệu Anthropic đọc lại 19/11 ([trang tác vụ](https://code.claude.
 - Chưa có báo cáo thật nào mang `cau_cho_khach` / `de_xuat_ma_loi`.
 - Đường `/fire` đã gọi thử một lượt trên production (20:49 VN 19/11, không kèm mã câu) nhưng chưa có ca thật nào đi qua; chưa biết tác vụ tắt lịch có còn nhận `/fire` không; chưa đo token của một lượt trống.
 
+## 13. V593: chọn ca theo mức ảnh hưởng, ảnh lỗi trước khi hỏi, thông báo kèm lệnh xử lý (viết 20/11; V593 đã apply 11:21:16 VN 20/11, [biên nhận](../migrations/snapshots/engine-error-watch-v593/apply-receipt.json))
+
+Vì sao (đo 20/11/2026): sổ có 45 ca `new` và 6 ca `failed`; ba ca nặng nhất (FB46 hộp thư Page 58 lần dừng, FB42 "form đăng bài chưa đóng"
+90 lượt ở 18 tổ chức, FB41 56 lượt) đều `failed` từ lúc tác vụ cũ bên akabiz ngừng nhận việc 19/11. Hàm tick V588 xếp `ORDER BY (k.status =
+'failed'), …` nên ca `failed` chỉ tới lượt khi không còn ca `new` nào, tức gần như không bao giờ. Ca cần ảnh nhất là ca mã chung (FB41, FB42) mà
+V588 chỉ xin ảnh cho ca chưa phân loại, và câu hỏi chèn ngay cùng lúc xin ảnh nên phiên cloud kiểm lần đầu không có ảnh (5/10 ca đêm 19–20/11 kết
+luận "chưa đủ dữ liệu, cần ảnh"). Thông báo gửi cả các ca không có việc gì cho anh làm và không nói phải làm gì tiếp.
+
+Đã làm (nhánh `claude/error-watch-v593`):
+
+- [V593](../migrations/migration_v593_engine_error_watch_order_images.sql), sinh bằng `node scripts/build-v593-sql.cjs`, chỉ thay thân hàm tick:
+  - chọn ca theo `pauses DESC, hits DESC`, trạng thái chỉ để phá hoà; trần gửi lại mỗi ngày (`resendPerDay`) giữ nguyên;
+  - xin ảnh cho mọi loại ca có ảnh (trừ lượt bị bỏ dở), vẫn mỗi ca một yêu cầu, mỗi khách một yêu cầu mỗi ngày, trần `imageMaxTableMb`;
+  - ca đang chờ ảnh (`pending` / `uploading`) chưa hỏi tối đa `imageWaitMinutes` phút (mặc định 15, 0 = như V588), không tốn chỗ trong ngày; ảnh
+    về thì câu hỏi có dòng `anh da ve: N ảnh` và `image_followup_at` đặt luôn; quá hạn thì hỏi không ảnh, ảnh về sau bước 6a hỏi tiếp như cũ;
+  - kết quả tick thêm `imageWaiting`.
+- `engine.error_watch`: `imageRequests: true`, `imageWaitMinutes: 15` (bật 11:18:14 VN 20/11 theo yêu cầu). Tắt xin ảnh: `imageRequests: false`;
+  chỉ tắt việc chờ: `imageWaitMinutes: 0`.
+- [Tệp việc](FB_ERROR_WATCH_TASK.md): ảnh đã về thì xem trước khi kết luận; thông báo chỉ khi có việc cho anh, theo khuôn có mã câu và lệnh xử lý.
+- Lệnh [`/xu-ly-loi`](../.claude/commands/xu-ly-loi.md) cho session Claude Code trên máy.
+
+Chưa kiểm: chưa có yêu cầu ảnh nào do bộ kiểm lỗi tạo trên production (yêu cầu ảnh số 1 ngày 20/11 do phiên khác tạo tay, về sau
+33 giây); lệnh `/xu-ly-loi` chưa chạy thật.
