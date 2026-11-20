@@ -130,6 +130,30 @@ async function applyV591(db) {
   await db.query(readMigration(V591_MIGRATION))
 }
 
+/**
+ * V597 (FB48 / FB49 / FB50 đăng nhóm; anh chốt 20/11/2026): dựng đúng phần production mà V597 đọc (element GroupPost*, block 2624 / 2871, sổ
+ * chép, dòng danh mục bước 4; đọc 20/11) rồi chạy nguyên văn migration. Cần applyV591 trước. Dùng cho bài kiểm migration viết sau V597 (dòng
+ * facebook.error_signs sau V597 là bản production đang chạy).
+ */
+const V597_MIGRATION = 'migration_v597_engine_facebook_group_post_signs.sql'
+async function applyV597(db) {
+  const V597 = require('../build-v597-sql.cjs')
+  const live = V597.LIVE
+  for (const e of live.elements) {
+    await db.query(`INSERT INTO public.auto_elements (id, name, xpath, description, category, is_builtin) VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT (name) DO NOTHING`, [e.id, e.name, e.xpath, e.description, e.category, e.is_builtin])
+  }
+  await db.query(`INSERT INTO public.auto_blocks (id, name, code, category) VALUES ($1, 'fb_verify_group_post_form_closed', $3, 'facebook'), ($2, $4, $3, 'facebook')`,
+    [V597.BLOCK.sourceId, V597.BLOCK.id, live.block.code, V597.BLOCK.name])
+  await db.query(`INSERT INTO public.auto_engine_block_copies (engine_block_id, source_block_id, source_md5_at_copy, engine_md5_at_copy) VALUES ($1, $2, $3, $3)`,
+    [V597.BLOCK.id, V597.BLOCK.sourceId, V597.BLOCK.oldMd5])
+  const s = live.step
+  await db.query(`INSERT INTO public.auto_engine_block_steps (id, block_id, step_kind, action_code, commit_level, send_ops, result_mode, reviewed_code_md5, note)
+    VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8, $9)`,
+    [s.id, s.block_id, s.step_kind, s.action_code, s.commit_level, JSON.stringify(s.send_ops), s.result_mode, s.reviewed_code_md5, s.note])
+  await db.query(readMigration(V597_MIGRATION))
+}
+
 /** Dựng DB engine như production rồi thêm phần tối thiểu cho Facebook. notes: ghi chú bootstrap. */
 async function buildFacebookFixture(db, notes = []) {
   await bootstrap(db, notes)
@@ -138,4 +162,5 @@ async function buildFacebookFixture(db, notes = []) {
 }
 
 module.exports = { ROOT, MIGRATIONS, FACEBOOK_MIGRATIONS, FACEBOOK_POLICY_MIGRATIONS, V563_MIGRATION, V563_ROLLBACK, V564_MIGRATION, readMigration, applyFacebookStubs,
-  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly, V575_MIGRATION, applyV575, V591_MIGRATION, applyV591 }
+  applyFacebookMigrations, buildFacebookFixture, seedV563Blocks, applyV563, applyV563SignsOnly, V575_MIGRATION, applyV575, V591_MIGRATION, applyV591,
+  V597_MIGRATION, applyV597 }

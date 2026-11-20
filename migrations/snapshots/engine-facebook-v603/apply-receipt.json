@@ -1,0 +1,61 @@
+{
+  "migration": "migration_v603_engine_facebook_messenger_signs",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V603 (20/11/2026, sau khi duyệt cách xử lý / phạm vi / câu cho khách qua hộp chọn và mở PR #757)",
+  "applied_at_vn": "2026-11-20 16:39:11",
+  "ledger_version": "20261120093910",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây (09:39:11–09:39:13 UTC), rc 0",
+  "file_md5": "f6193eb4a17d9b5e4284db3f0f548973",
+  "ledger_statements_md5": "f6193eb4a17d9b5e4284db3f0f548973",
+  "preflight_live_16_39_02": {
+    "ledger_v603_rows": 0,
+    "ledger_top": ["migration_v602_engine_error_watch_stale_via", "migration_v600_remarketing_read_single_pass", "migration_v601_engine_share_batch_fail_note"],
+    "block_2855_md5": "fb11e928304d044f50f3a11a93821463",
+    "block_38_md5": "fb11e928304d044f50f3a11a93821463",
+    "steps_of_block_2855": [
+      { "id": 15, "action_code": "fb_message_friend", "reviewed_code_md5": "fb11e928304d044f50f3a11a93821463", "commit_level": 2, "send_ops": ["press:Enter"] },
+      { "id": 16, "action_code": "fb_message_stranger", "reviewed_code_md5": "fb11e928304d044f50f3a11a93821463", "commit_level": 2, "send_ops": ["press:Enter"] }
+    ],
+    "facebook_error_signs_md5": "dc7fd786e225a7ca05c4a3cfa49852d7",
+    "fb19_customer_title": "Người này không nhận tin nhắn từ tài khoản",
+    "new_codes": 0,
+    "new_elements": 0,
+    "v603_policies": 0
+  },
+  "postflight_live": {
+    "block_2855_md5": "9585b3ce37cbda917225069012c8f62c",
+    "legacy_block_38_md5_unchanged": "fb11e928304d044f50f3a11a93821463",
+    "steps_15_16_reviewed_code_md5": "9585b3ce37cbda917225069012c8f62c",
+    "facebook_error_signs_md5": "a8eb20650fc32f7541c6622b7f51caee",
+    "elements": { "FbMessengerCannotAccessChatNotice": 1811, "FbMessengerFriendsOnlyNotice": 1812 },
+    "codes": {
+      "FB19_friends_only": { "auto_error_id": 78, "error_code": "err_fb_messenger_unavailable_target_not_messageable", "error_class": "target_permanent", "customer_title": "Facebook chỉ cho nhắn tin khi đã kết bạn với người này", "customer_help": null },
+      "FB19_cannot_access_chat": { "auto_error_id": 177, "error_code": "err_fb_messenger_recipient_cannot_access_chat", "error_class": "target_permanent", "customer_title": "Người này chưa đăng nhập Messenger nên chưa nhận được tin", "customer_help": null }
+    },
+    "policies": {
+      "435": "err_fb_messenger_recipient_cannot_access_chat / fb_message_friend",
+      "436": "err_fb_messenger_recipient_cannot_access_chat / fb_message_stranger",
+      "437": "err_fb_messenger_unavailable_target_not_messageable / fb_message_friend",
+      "438": "err_fb_messenger_unavailable_target_not_messageable / fb_message_stranger"
+    },
+    "fb19_resolve_both_actions_before_send": "thất bại (21) / write / no_count / ignore / complete / continue / continue / none; log_template = câu của mã",
+    "fb42_resolve_unchanged": "thất bại (21) / inherit / count / increment / complete / continue / continue / none; log_template {message}",
+    "classify_signal": "dòng 'thất bại' không mã 'waitForSelector timeout: [role=\"textbox\"]…' ở fb_message_friend vẫn ra err_engine_fb_action_failed (FB42); postflight trong migration kiểm hai mã mới ở hai thao tác",
+    "public_catalog_fb19_title": "Facebook chỉ cho nhắn tin khi đã kết bạn với người này (view lấy min(customer_title) của hai mã; Desktop không đọc view này)"
+  },
+  "edge_logs_per_minute_utc": {
+    "09:36": "42.679 req, 0 lỗi 5xx",
+    "09:37": "40.231 req, 0",
+    "09:38": "41.011 req, 1 lỗi 5xx (trước apply)",
+    "09:39 (phút apply, tới lúc đọc)": "20.283 req, 0"
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "v603-smoke.cjs 16/16; desktop-fb-smoke.cjs 51/51 (8 ca V603, nhắn theo UID và nhắn tin bạn bè); v597-smoke.cjs 18/18; hai typecheck sạch",
+  "rollback": "migrations/rollback_v603_engine_facebook_messenger_signs.sql (chỉ chạy khi block 2855 còn đúng bản V603)",
+  "not_verified": [
+    "Chưa có lượt thật nào ra FB19 (Desktop nhận block / dấu hiệu mới ở lần nạp danh mục kế tiếp).",
+    "Vị trí thật của hai câu trong trang Messenger: chưa có DOM, element dựng theo ảnh lỗi 20/11 (yêu cầu ảnh 9).",
+    "Chưa có bản tiếng Anh của hai câu; tài khoản giao diện tiếng Anh vẫn ra FB42.",
+    "Đoạn chat cũ trước mã hoá đầu cuối có nút 'Tiếp tục' (13/18 ảnh) chưa làm: anh chốt chờ DOM, vẫn FB42."
+  ]
+}
