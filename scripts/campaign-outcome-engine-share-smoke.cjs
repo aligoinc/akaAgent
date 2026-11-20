@@ -1,5 +1,5 @@
 // Gửi dạng chia sẻ (nhắn bạn bè / group, zaloMessageSendMode 'share') bằng lõi thật (packages/campaign-engine) + cổng Zalo giả, trên
-// PostgreSQL 17 cục bộ có đủ chuỗi V495 → V499 → V500 → V501 → V503. Kỳ vọng là hành vi của bộ chạy Desktop
+// PostgreSQL 17 cục bộ có đủ chuỗi V495 → V499 → V500 → V501 → V503 → V601. Kỳ vọng là hành vi của bộ chạy Desktop
 // (executeZaloShareMessageBatchCampaign + processZaloShareMessageBatch) cộng các thay đổi đã duyệt. Không mạng, không dữ liệu khách.
 // Chạy: node scripts/campaign-outcome-engine-share-smoke.cjs
 'use strict'
@@ -12,6 +12,7 @@ const { ROOT, MIGRATION, buildFixture, startCluster } = require('./fixtures/camp
 const v499 = require('./build-v499-sql.cjs')
 const v501 = require('./build-v501-sql.cjs')
 const v503 = require('./build-v503-sql.cjs')
+const v601 = require('./build-v601-sql.cjs')
 const V500 = fs.readFileSync(path.join(ROOT, 'migrations/migration_v500_zalo_error_policies.sql'), 'utf8')
 const PORT = Number(process.env.SHARE_TEST_PORT || 55504)
 
@@ -77,7 +78,7 @@ async function main() {
   const db = await connect()
   try {
     await buildFixture(db, [])
-    for (const sql of [MIGRATION, v499.migration, V500, v501.migration, v503.migration]) await db.query(sql)
+    for (const sql of [MIGRATION, v499.migration, V500, v501.migration, v503.migration, v601.migration]) await db.query(sql)
     // Mã thử gắn mã Zalo 9001 (lỗi thường, không hiệu ứng phụ) và 9002 (khoá thao tác 30 phút) cho thao tác chia sẻ.
     for (const [code, pub] of [['err_test_share_plain', 'TST21'], ['err_test_share_lock', 'TST22']]) {
       await db.query(`INSERT INTO public.auto_error SELECT (jsonb_populate_record(NULL::public.auto_error,
@@ -223,29 +224,31 @@ async function main() {
     assert.deepEqual((await inputs(s3)).map(i => i.status), ['hoàn thành', 'hoàn thành'], 'đã nhận tệp: không gửi lại')
     pass('giao một phần (đã nhận tệp, chữ lỗi): "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không gửi lại; lô có người nhận được nên không khoá')
 
-    // S4: cả lô không ai nhận được (chỉ chữ, mọi người lỗi thường): tạm dừng chiến dịch đúng câu Desktop, "⏸ Kết thúc batch".
+    // S4: cả lô không ai nhận được (chỉ chữ, mọi người lỗi thường): tạm dừng chiến dịch, ghi chú kèm lý do (V601), "⏸ Dừng gửi".
     const s4 = await make({ targets: [{ name: 'X', uid: '41' }, { name: 'Y', uid: '42' }] })
     const r4 = await run(s4, { forwardCodes: { 41: 9001, 42: 9001 } })
     const c4 = await camp(s4)
     assert.equal(c4.status, 'tạm dừng')
-    assert.equal(c4.note, 'Toàn bộ 2 target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra')
+    assert.equal(c4.note, 'Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.')
     assert.ok(r4.lines.includes('⚠️ Nhắn tin group: Lỗi thử chia sẻ (TST21)'), 'lỗi giống nhau chỉ in một lần')
     assert.equal(r4.lines.filter(l => l.startsWith('⚠️ Nhắn tin group')).length, 1)
     assert.ok(r4.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'))
-    assert.ok(r4.lines.includes('⏸ Kết thúc batch: Toàn bộ 2 target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra'))
+    assert.ok(r4.lines.includes('⏸ Dừng gửi: Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.'), JSON.stringify(r4.lines))
     // Dòng riêng kèm tên sau các dòng của lô (anh chốt 18/11/2026), đúng một lần.
-    const endAt4 = r4.lines.indexOf('⏸ Kết thúc batch: Toàn bộ 2 target trong batch đều thất bại; chiến dịch đã tạm dừng để kiểm tra')
+    const endAt4 = r4.lines.indexOf('⏸ Dừng gửi: Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.')
     assert.equal(r4.lines.indexOf('⏸ Chiến dịch "Chia sẻ" đã được tạm dừng.'), endAt4 + 1, JSON.stringify(r4.lines))
     assert.equal(r4.lines.filter(l => l.includes('đã được tạm dừng')).length, 1)
     assert.equal(r4.result.reason, 'stop_campaign')
-    pass('cả lô không ai nhận được: tạm dừng chiến dịch "Toàn bộ N target…", mỗi lỗi khác nhau in một lần, "⏸ Kết thúc batch: …", rồi "⏸ Chiến dịch … đã được tạm dừng."')
+    pass('cả lô không ai nhận được: tạm dừng chiến dịch "Cả N nhóm đều gửi không thành công: <lý do>…", mỗi lỗi khác nhau in một lần, "⏸ Dừng gửi: …", rồi "⏸ Chiến dịch … đã được tạm dừng."')
 
     // S5: không ai nhận được, người thứ hai có lỗi khoá: chỉ người đó áp đủ chính sách (khoá), rồi vẫn tạm dừng "toàn bộ thất bại".
     const s5 = await make({ targets: [{ name: 'X', uid: '51' }, { name: 'Y', uid: '52' }] })
     await run(s5, { forwardCodes: { 51: 9001, 52: 9002 } })
     assert.deepEqual((await locks(s5)).map(l => l.action_code).sort(), ['zalo_message_friend', 'zalo_message_group'], 'người có hiệu ứng mạnh nhất áp khoá')
     assert.equal((await camp(s5)).status, 'tạm dừng')
-    pass('không ai nhận được: người có hiệu ứng mạnh nhất (khoá) áp đủ chính sách, chiến dịch tạm dừng "toàn bộ thất bại"')
+    assert.equal((await camp(s5)).note, 'Cả 2 nhóm đều gửi không thành công, phần lớn do: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.',
+      'khác lý do: "phần lớn do", bằng nhau lấy lý do của data đầu (V601)')
+    pass('không ai nhận được: người có hiệu ứng mạnh nhất (khoá) áp đủ chính sách, chiến dịch tạm dừng "phần lớn do: …"')
 
     // S6: bạn bè đã từ chối nhận tin: báo riêng (OPT01, tạm dừng data), không vào lô; người khác vẫn chia sẻ.
     const s6 = await make({ actionId: FRIEND, targets: [{ name: 'Mai', uid: '61', phone: '0912000061' }, { name: 'Đào', uid: '62' }] })

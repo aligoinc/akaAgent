@@ -268,7 +268,7 @@ export interface BatchReportSuccess {
   next: NextDirective
   items: Array<{ targetRunId: number; scope: BatchScope; response: ReportSuccess }>
   summary: { items: number; succeeded: number; anyDelivered: boolean; paused: boolean }
-  /** Câu dừng sau lô ("⏸ Kết thúc batch: …"): ghi chú chiến dịch của chính sách dừng, hoặc câu "Toàn bộ N target…". */
+  /** Câu dừng sau lô ("⏸ Dừng gửi: …"): ghi chú chiến dịch của chính sách dừng, hoặc câu "Cả N nhóm đều gửi không thành công…" (V601). */
   stopNote: string | null
   /** Còn data đến hạn chưa thử trong lượt: nghỉ giữa hai lô chỉ khi còn. */
   morePending: boolean

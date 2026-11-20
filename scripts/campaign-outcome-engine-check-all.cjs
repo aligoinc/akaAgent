@@ -30,6 +30,7 @@ const steps = [
   ['Smoke V517 (dọn bảng vận hành engine v2 giữ 30 ngày, decision gọn)', ['scripts/campaign-outcome-engine-v517-smoke.cjs']],
   ['Smoke V527 (claim bỏ qua claim token bộ cũ treo trên chiến dịch đã xoá / tạm dừng)', ['scripts/campaign-outcome-engine-v527-smoke.cjs']],
   ['Smoke V532 (lỗi có ngưỡng ở bước phụ không tạm dừng chiến dịch ngay; câu nhận data không quét khoá chính)', ['scripts/campaign-outcome-engine-v532-smoke.cjs']],
+  ['Smoke V601 (ghi chú khi cả lô gửi dạng chia sẻ không ai nhận được: kèm lý do, câu anh duyệt 20/11)', ['scripts/campaign-outcome-engine-v601-smoke.cjs']],
   ['Smoke V581 (tách Z114: tag đầy TAG01, SĐT ở cột UID DAT02, gửi cho chính mình DAT03, UID của tài khoản khác DAT04)', ['scripts/campaign-outcome-engine-v581-smoke.cjs']],
   ['Smoke lõi: Fly ra cùng kết quả với Desktop (đọc hồ sơ treo, câu lỗi rỗng)', ['scripts/campaign-engine-fly-parity-smoke.cjs']],
   ['Smoke theo dõi tương tác (nguồn, cờ chờ đăng ký, đăng ký đúng dòng, kết bạn, group không theo dõi)', ['scripts/campaign-outcome-engine-engagement-smoke.cjs']],
