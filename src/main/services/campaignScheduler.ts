@@ -109,7 +109,8 @@ import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/fa
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
-import { cleanupScreenshots, findErrorScreenshots, readErrorScreenshotDataUrl, saveErrorScreenshot, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
+import { cleanupScreenshots, findErrorScreenshots, gzipErrorDom, PAGE_DOM_MAX_CHARS, PAGE_DOM_SCRIPT, PAGE_DOM_TIMEOUT_MS, readErrorScreenshotDataUrl,
+  saveErrorEvidence, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
 import { mapCampaignInputDataFromDB } from '../data/mappers'
 import type { ConfigIssue, DeliveryState, Phase, PrepareTargetsApi, PrepareTargetsResult, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop,
@@ -436,6 +437,20 @@ async function readFacebookPageSignTexts(page: PageController): Promise<string[]
     const texts = await Promise.race([page.evaluate<unknown>(PAGE_SIGN_TEXTS_SCRIPT),
       new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), PAGE_SIGN_TIMEOUT_MS) })])
     return Array.isArray(texts) ? texts.filter((text): text is string => typeof text === 'string').slice(0, 300) : null
+  } catch {
+    return null
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/** DOM cả trang lúc block lỗi, đọc cùng lúc với ảnh lỗi (anh chốt 20/11/2026); đọc lỗi / quá 2 giây / quá dài thì null, chỉ còn ảnh. */
+async function readFacebookPageDom(page: PageController): Promise<string | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    const html = await Promise.race([page.evaluate<unknown>(PAGE_DOM_SCRIPT),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), PAGE_DOM_TIMEOUT_MS) })])
+    return typeof html === 'string' && html.length > 0 && html.length <= PAGE_DOM_MAX_CHARS ? html : null
   } catch {
     return null
   } finally {
@@ -6406,15 +6421,18 @@ export class CampaignScheduler {
           }
           entry.pageState = facebookPageStateSignal(safePageUrl(page))
           if (page && !page.isConnected() && !state.browserGone) state.browserGone = 'browser_gone'
-          // Ảnh lỗi (mục 12.2): chỉ khi chụp được, trong trần mỗi data / mã lỗi; không chặn lượt quá 5 giây.
+          // Ảnh lỗi (mục 12.2) và DOM cả trang lúc đó (anh chốt 20/11/2026: khi tìm nguyên nhân thì lấy cả hai): chỉ khi lấy được, trong
+          // trần mỗi data / mã lỗi, cùng một mã; ảnh chờ tối đa 5 giây, DOM tối đa 2 giây.
           const code = entry.pageState?.code ?? entry.failure.code
           if (page?.isConnected() && typeof page.captureJpeg === 'function' && screenshotAllowed(api.targetRunId, campaign.id, code)) {
             const capture = page.captureJpeg(70, 1280)
             const jpeg = await Promise.race([capture, new Promise<null>(resolve => setTimeout(() => resolve(null), 5_000))]).catch(() => null)
-            if (jpeg) {
-              entry.screenshotId = saveErrorScreenshot(jpeg, { campaignId: campaign.id, accountId: account.id, inputDataId: detail?.id ?? null,
-                targetRunId: api.targetRunId, stepKey: info.stepKey, blockName: info.blockName, url: safePageUrl(page), code,
-                message: entry.failure.message })
+            const dom = page.isConnected() ? await readFacebookPageDom(page) : null
+            const domGzip = dom ? await gzipErrorDom(dom) : null
+            if (jpeg || domGzip) {
+              entry.screenshotId = saveErrorEvidence({ jpeg, domGzip, domChars: dom?.length ?? null }, { campaignId: campaign.id,
+                accountId: account.id, inputDataId: detail?.id ?? null, targetRunId: api.targetRunId, stepKey: info.stepKey,
+                blockName: info.blockName, url: safePageUrl(page), code, message: entry.failure.message })
             }
           }
         }

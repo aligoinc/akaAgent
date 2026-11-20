@@ -80,6 +80,19 @@ Câu do hệ thống tạo bắt đầu bằng `[Tự động]`. Với câu hỏ
    thư mục tạm. Ghi trong `bang_chung` ảnh nào cho thấy điều gì (theo `meta` của ảnh: bước, mã lỗi, giờ). Chưa có ảnh thì ghi "chưa có ảnh" và nếu
    ca cần ảnh mới kết luận được thì ghi vào `de_xuat`.
 
+   **DOM cả trang** (từ V595; máy khách bản Desktop mới gửi kèm ảnh, cùng `image_id`): HTML lúc block lỗi, đã bỏ script, style và giá trị ô ẩn,
+   nén gzip như ảnh:
+
+   ```sql
+   select public.aka_agent_desktop_diagnostic_doms_v1(<mã yêu cầu>);
+   ```
+
+   Mỗi DOM là `gzipBase64` (gzip mã base64, khoảng 70–110 KB chữ). Lưu ra thư mục tạm, giải nén (`base64 -d dom.b64 | gunzip > dom.html`, mỗi
+   trang khoảng 0,3–0,5 MB), rồi tìm bằng `grep` / script trong tệp. Đừng in cả trang vào câu trả lời.
+
+   DOM dùng để biết phần tử block chờ có trên trang không (ô bình luận, nút Đăng, hộp thoại đang mở…) và Facebook đang hiện câu gì. DOM có cả thanh
+   bên, tin nhắn riêng, thông báo của khách: áp dụng đúng quy tắc như ảnh, không chép tên người, tên nhóm, nội dung bài hay tin nhắn vào báo cáo.
+
 ## Báo cáo
 
 Viết một tệp JSON trong thư mục tạm rồi nộp bằng `answer`:
