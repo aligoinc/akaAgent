@@ -487,7 +487,7 @@ Kiểm: `LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs` (7
 đặt `"maxPerHour": 2, "skipReopenHits24h": 30` lúc 12:12 VN. Chưa làm: gỡ lịch mỗi giờ của tác vụ cloud (lịch chỉ còn là lưới đỡ; mỗi lượt
 trống vẫn mở một session; gỡ ở trang sửa tác vụ trên claude.ai, giữ trigger API).
 
-## 15. Đánh giá sau ba ca đầu qua hộp thư, V599 xin ảnh từ nhiều lượt (viết 20/11; merge `dev_3` qua #747, V599 apply ngay sau merge)
+## 15. Đánh giá sau ba ca đầu qua hộp thư, V599 xin ảnh từ nhiều lượt (viết 20/11; merge `dev_3` qua #747 lúc 14:47 VN, V599 đã apply 14:48:13 VN 20/11, [biên nhận](../migrations/snapshots/engine-error-watch-v599/apply-receipt.json))
 
 Anh thử ba ca qua hộp thư ngày 20/11: câu 572, 584, 585. Phần trên máy chạy đúng. Hộp thư mở mỗi ca một session con và đánh dấu ca đang sửa. Session
 con chỉ đọc production cho tới khi anh duyệt. Kết quả: 584 sửa bằng V598, 585 bằng V597, 572 bỏ qua.

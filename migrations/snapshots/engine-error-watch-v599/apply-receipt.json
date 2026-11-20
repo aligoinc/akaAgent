@@ -1,0 +1,56 @@
+{
+  "migration": "migration_v599_engine_error_watch_multi_images",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "Anh thử ba ca 572 / 584 / 585 qua hộp thư lỗi rồi chọn \"Sửa cả tick xin ảnh\", \"Commit + PR\", \"Merge rồi apply\" (20/11/2026)",
+  "merged": {
+    "pr": 747,
+    "merged_at_vn": "2026-11-20 14:47:06",
+    "merge_commit": "4e8e5cb535dfb3a64c80ff2326f19a58cd5c2f21"
+  },
+  "applied_at_vn": "2026-11-20 14:48:11–14:48:13",
+  "ledger": {
+    "version": "20261120074734",
+    "name": "migration_v599_engine_error_watch_multi_images",
+    "statements_md5": "56f64621c066ae515aa43c8f5b5949b3",
+    "file_md5": "56f64621c066ae515aa43c8f5b5949b3",
+    "created_by": null
+  },
+  "method": "supabase db query --linked -f (tệp sinh bằng scripts/make-migration-ledger-apply.cjs, dòng sổ trong cùng giao dịch)",
+  "preflight": {
+    "ledger_max_before": "migration_v597_engine_facebook_group_post_signs (20261120065809)",
+    "v599_in_other_repos": "không (akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard, mọi nhánh)",
+    "tick_body_md5_before": "022dfb368b5e71c4a38e87d0ef8f6bd9",
+    "file_md5_on_dev_3": "56f64621c066ae515aa43c8f5b5949b3",
+    "trial_rollback_vn": "14:47:49: migration + dòng sổ + một lượt tick trong giao dịch rồi ROLLBACK, 2,3 giây; tick ok, cột mới chép đúng mã yêu cầu cũ (ca có yêu cầu 3 → [3]); kiểm lại sau ROLLBACK: chưa có cột, sổ chưa có V599, thân tick vẫn 022dfb36…"
+  },
+  "postflight": {
+    "tick_body_md5": "2cade73e5b5acb82f76d452bcc3e21da",
+    "tick_security_definer": true,
+    "execute_anon_desktop": false,
+    "column": "private.auto_engine_error_cases.image_request_ids bigint[] NOT NULL DEFAULT '{}'",
+    "backfill": "1 ca có image_request_id (3) → image_request_ids [3]",
+    "ticks_after_apply": "pg_cron 14:48:00 VN (trước apply 11 giây, bản V594) 152 ms; 14:50:00 VN lượt đầu bằng thân V599: 363 ms, succeeded, state ok, last_error null, tasksToday 12 (đã đủ 10 việc của ngày nên hôm nay chưa chèn câu nào)"
+  },
+  "postgrest": {
+    "schema_reload": "Received reload 14:48:12 VN; Schema cache queried in 8404.0 ms (14:48:28 VN), giữa giờ cao điểm chiều",
+    "minute_14_48_vn": {
+      "rest_requests": 37244,
+      "over_1s": 3616,
+      "p50_ms": 386,
+      "p99_ms": 3704,
+      "http_5xx": 1,
+      "http_503": 0,
+      "5xx_detail": "1 PATCH /rest/v1/contacts (gateway chat cũ)"
+    },
+    "minute_14_49_vn": {
+      "rest_requests_partial": 12506,
+      "over_1s": 2,
+      "p50_ms": 56,
+      "http_5xx": 0
+    }
+  },
+  "settings_change": "không đổi engine.error_watch; imageRunsPerCase dùng mặc định 5",
+  "first_real_use": "chưa: hôm nay đã đủ maxPerDay 10, ca mới đầu tiên được hỏi từ 00:00 VN 21/11 (kèm xin ảnh từ tối đa 5 lượt)",
+  "verification_local": "CHAT_REPO=… LC_ALL=C node scripts/engine-v2-facebook/error-watch-v599-smoke.cjs: 10 nhóm đạt; node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs: 10 nhóm đạt",
+  "rollback": "migrations/rollback_v599_engine_error_watch_multi_images.sql (trả thân V594, bỏ cột); chỉ xin một lượt mà không gỡ: \"imageRunsPerCase\": 1 trong engine.error_watch"
+}
