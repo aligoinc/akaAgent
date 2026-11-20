@@ -10,6 +10,7 @@ import {
 import type { ZaloRuntimeService } from '../../services/zaloRuntimeService'
 import type { FacebookLoginService } from '../../services/facebookLoginService'
 import { accountOperationRegistry } from '../../services/accountOperationRegistry'
+import { FACEBOOK_TAB_LOGIN_PROBE, facebookTabLoginStatus } from './facebookTabLoginProbe'
 
 const AUTO_CHECK_INTERVAL = 30_000
 /** Q6: tài khoản đang checkpoint hỏi thẳng Facebook tối đa 5 phút một lần (không theo cookie). */
@@ -28,20 +29,8 @@ async function checkAccountLogin(accountId: number, wcId: number): Promise<strin
     const url = wc.getURL()
 
     if (url.includes('facebook.com')) {
-      const result = await wc.executeJavaScript(`
-        (function() {
-          try {
-            const cookies = document.cookie;
-            if (cookies.includes('c_user=')) return { loggedIn: true };
-            if (document.querySelector('#checkpoint_title') || window.location.href.includes('checkpoint'))
-              return { loggedIn: false, checkpoint: true };
-            return { loggedIn: false };
-          } catch(e) { return { loggedIn: false }; }
-        })()
-      `)
-      if (result.loggedIn) return 'đã đăng nhập'
-      if (result.checkpoint) return 'checkpoint'
-      return 'chưa đăng nhập'
+      // Trang lỗi (không tải được) vẫn có getURL là địa chỉ facebook.com vừa lỗi: đoạn JS tự xét trang đang hiển thị.
+      return facebookTabLoginStatus(await wc.executeJavaScript(FACEBOOK_TAB_LOGIN_PROBE))
     }
 
     return null
