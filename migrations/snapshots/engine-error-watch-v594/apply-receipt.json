@@ -1,0 +1,41 @@
+{
+  "migration": "migration_v594_engine_error_watch_hourly_skip",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "Anh chốt thiết kế hộp thư lỗi 20/11/2026 (bỏ thông báo, bỏ qua tạm thời mở lại khi ≥ 30 lượt/24 giờ, 2 ca/giờ, 10 ca/ngày), rồi chọn \"Làm hết\" (apply V594, bật 2 ca/giờ, cập nhật PR #738)",
+  "applied_at_vn": "2026-11-20 12:11:01–12:11:07",
+  "ledger": { "version": "20261120051040", "name": "migration_v594_engine_error_watch_hourly_skip", "statements_md5": "1f8edc2c1aebab6c832907f239a4a4bb", "file_md5": "1f8edc2c1aebab6c832907f239a4a4bb", "created_by": null },
+  "method": "supabase db query --linked -f (tệp sinh bằng scripts/make-migration-ledger-apply.cjs, dòng sổ trong cùng giao dịch)",
+  "preflight": {
+    "ledger_max_before": "migration_v593_engine_error_watch_order_images (20261120042108)",
+    "v594_in_other_repos": "không (akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard, mọi nhánh)",
+    "tick_body_md5_before": "88a4fb4b739fe0a87a1421fdb8996fb2",
+    "active_client_backends": 5
+  },
+  "postflight": {
+    "tick_body_md5": "022dfb368b5e71c4a38e87d0ef8f6bd9",
+    "tick_security_definer": true,
+    "skip_function": "private.aka_agent_engine_error_case_skip_v1(bigint,boolean)",
+    "skip_function_acl": "{postgres=X/postgres}",
+    "execute_anon_authenticated_desktop_chat_api": false,
+    "first_tick": { "at_vn": "12:12:00", "ms": 107, "result": "ok, tasksToday 12, tasksHour 0, reopened 0, inserted 0" }
+  },
+  "postgrest": {
+    "schema_reload": "Schema cache queried in 5126.9 ms (12:11:19 VN)",
+    "minute_12_11_vn": { "rest_requests": 37821, "over_1s": 2048, "p99_ms": 3818, "http_5xx": 3, "http_503": 0, "5xx_detail": "aka_agent_desktop: 2 PATCH auto_run_steps, 1 POST rpc/aka_agent_engine_claim_target_v1 (57014)" },
+    "minute_12_12_vn": { "rest_requests_partial": 25088, "over_1s": 1, "p50_ms": 58, "http_5xx": 0 }
+  },
+  "settings_change": {
+    "key": "engine.error_watch",
+    "at_vn": "12:12:00",
+    "added": { "maxPerHour": 2, "skipReopenHits24h": 30 },
+    "unchanged": "fire true, enqueue true, maxPerDay 10, maxPending 2, imageRequests true, imageWaitMinutes 15"
+  },
+  "routine_change": {
+    "routine": "trig_01SVrvfyyrHvxoRHihkkeovq",
+    "at_vn": "11:59",
+    "change": "Câu kết của câu lệnh: không gửi thông báo nào (kể cả thông báo đẩy về điện thoại), kể cả khi tệp công việc còn ghi bước thông báo",
+    "unchanged": "cron 1 * * * *, mã /fire, connector Supabase execute_sql, mô hình claude-fable-5-2"
+  },
+  "verification_local": "LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs: 7 nhóm đạt (có đối chứng V593 tái hiện câu 585)",
+  "rollback": "migrations/rollback_v594_engine_error_watch_hourly_skip.sql (trả thân V593, bỏ hàm bỏ qua ca); chỉ tắt trần giờ: bỏ maxPerHour khỏi engine.error_watch"
+}

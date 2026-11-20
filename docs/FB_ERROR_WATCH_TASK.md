@@ -3,8 +3,9 @@
 Mô tả công việc cho phiên Claude Code trên cloud (agent `kiem-loi-chien-dich-facebook`). Câu lệnh của phiên chỉ cần ghi: "đọc `docs/FB_ERROR_WATCH_TASK.md` trong repo akaAgent và làm đúng một lượt". Thiết kế và lý do ở [phương án](FB_ERROR_WATCH_CLAUDE_CODE_PLAN.md); ba báo cáo mẫu ở [kết quả đợt 0](FB_ERROR_WATCH_DOT0_20261118.md).
 
 **Trạng thái 20/11/2026:** chạy thật từ 19/11 (V574, V588 đã apply; database đánh thức phiên bằng `/fire` khi có câu mới). Từ V593: ca nào có ảnh lỗi thì
-database xin ảnh từ máy khách và chờ ảnh về (tối đa 15 phút) rồi mới hỏi, nên phần lớn câu có ảnh ngay lượt đầu. Người vận hành xử lý từng ca bằng lệnh
-`/xu-ly-loi <mã câu>` trong Claude Code trên máy, mở từ thông báo của bạn.
+database xin ảnh từ máy khách và chờ ảnh về (tối đa 15 phút) rồi mới hỏi, nên phần lớn câu có ảnh ngay lượt đầu. **Không gửi thông báo** (anh chốt
+20/11): người vận hành xem báo cáo trong hộp thư lỗi (lệnh `/hop-thu-loi` trên máy), rồi quyết từng ca: sửa (mở session chạy `/xu-ly-loi <mã câu>`)
+hoặc bỏ qua. Ca bị bỏ qua mà xuất hiện lại nhiều thì database mở lại và bạn nhận câu hỏi có dòng `ghi chu: Mở lại sau khi bỏ qua…`.
 
 ## Bạn làm gì
 
@@ -142,21 +143,7 @@ Hai trường này không bắt buộc. Chỉ ghi khi đã có bằng chứng, k
 
 ## Thông báo
 
-Thông báo để người vận hành biết có việc phải làm, không phải để báo mọi ca. Sau khi nộp, gửi **một** thông báo tới app Claude của người vận hành
-khi và chỉ khi có ít nhất một điều sau:
+Không gửi thông báo nào (kể cả thông báo đẩy về điện thoại). Báo cáo nộp bằng `answer` là đủ: hộp thư lỗi của người vận hành đọc báo cáo từ database.
 
-- `ket_luan` là `loi_app` hoặc `facebook_doi_giao_dien`;
-- có `cau_cho_khach` hoặc `de_xuat_ma_loi` (đang chờ anh duyệt);
-- có `can_anh_quyet`.
-
-Không gửi khi `ket_luan` là `chua_du_du_lieu`, `do_cau_hinh_cua_khach` hay `do_may_khach` mà không có ba điều trên, và khi câu hỏi tiếp không có gì
-mới. Câu hỏi tiếp vì ảnh đã về mà đổi kết luận sang một trong các trường hợp trên thì gửi.
-
-Nội dung đúng một dòng, tối đa 230 ký tự, theo khuôn:
-
-```
-Câu <mã câu> · <việc> · <tom_tat rút gọn> · Xử lý: /xu-ly-loi <mã câu>
-```
-
-`<việc>` là một trong: `Cần sửa app` (`loi_app`), `Facebook đổi giao diện` (`facebook_doi_giao_dien`), `Chờ duyệt câu cho khách` (chỉ có đề xuất),
-`Cần anh quyết` (chỉ có `can_anh_quyet`). Thông báo theo cùng luật dữ liệu như báo cáo: chỉ mã, không tên người, không SĐT, không nội dung tin.
+Câu hỏi có dòng `ghi chu: Mở lại sau khi bỏ qua…` là ca người vận hành đã bỏ qua trước đó, nay xuất hiện lại nhiều: kiểm như ca hỏi tiếp (chỉ báo điều
+mới so với báo cáo trước, nhất là số lượt và chiến dịch / tổ chức mới bị ảnh hưởng), và ghi trong `tom_tat` vì sao ca đáng xem lại hay vẫn nên bỏ qua.
