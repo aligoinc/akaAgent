@@ -5,7 +5,7 @@ Câu 570 của hộp thư lỗi (bộ kiểm lỗi chiến dịch Facebook, engi
 (nguồn kiểm [`v603-live-20261120.json`](../scripts/fixtures/engine-v2-facebook/v603-live-20261120.json), đọc 16:20 VN 20/11), gỡ bằng
 [rollback](../migrations/rollback_v603_engine_facebook_messenger_signs.sql).
 
-**Đã apply akachat 16:39:11 VN 20/11/2026** theo yêu cầu ("Apply V603"): sổ `20261120093910`, md5 sổ = file `f6193eb4…`, 2 giây, chỉ dữ liệu; block 2855 `fb11e928…` → `9585b3ce…` (bộ cũ 38 giữ nguyên), dấu hiệu `dc7fd786…` → `a8eb2065…`, element 1811–1812, mã FB19 `auto_error` 78 (đổi câu) + 177 (mới), chính sách 435–438; phút apply 0 lỗi 5xx. [Biên nhận](../migrations/snapshots/engine-facebook-v603/apply-receipt.json). Code ở PR [#757](https://github.com/aligoinc/akaAgent/pull/757) vào `dev_3`, chưa merge (nhánh `claude/fb-error-570-messenger-signs`). Chỉ dữ liệu, không DDL, không phát hành app.
+**Đã apply akachat 16:39:11 VN 20/11/2026** theo yêu cầu ("Apply V603"): sổ `20261120093910`, md5 sổ = file `f6193eb4…`, 2 giây, chỉ dữ liệu; block 2855 `fb11e928…` → `9585b3ce…` (bộ cũ 38 giữ nguyên), dấu hiệu `dc7fd786…` → `a8eb2065…`, element 1811–1812, mã FB19 `auto_error` 78 (đổi câu) + 177 (mới), chính sách 435–438; phút apply 0 lỗi 5xx. [Biên nhận](../migrations/snapshots/engine-facebook-v603/apply-receipt.json). Code đã merge `dev_3` qua PR [#757](https://github.com/aligoinc/akaAgent/pull/757) ngày 20/11 theo yêu cầu ("Merge PR #757"; nhánh `claude/fb-error-570-messenger-signs`). Chỉ dữ liệu, không DDL, không phát hành app.
 
 ## Ca lỗi
 
