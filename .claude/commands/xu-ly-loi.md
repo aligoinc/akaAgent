@@ -1,6 +1,6 @@
 ---
 description: Xử lý một ca của bộ kiểm lỗi chiến dịch Facebook từ báo cáo của phiên cloud (đọc báo cáo, xem còn đúng không, đề xuất bản sửa rồi chờ duyệt). Không kèm mã câu thì liệt kê các ca cần xử lý.
-argument-hint: "[mã câu trong thông báo, ví dụ 566]"
+argument-hint: "[mã câu trong hộp thư lỗi, ví dụ 566]"
 ---
 
 Bạn đang xử lý ca lỗi do bộ kiểm lỗi chiến dịch Facebook báo (tác vụ cloud "Kiểm lỗi chiến dịch Facebook (engine v2)", tab "Lỗi không xác định" của
