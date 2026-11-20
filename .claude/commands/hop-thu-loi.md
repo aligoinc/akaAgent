@@ -42,10 +42,11 @@ Không có tệp này hoặc tệp chưa có lệnh `skip` (checkout cũ hơn `d
 
 ## Khi anh bảo
 
-**"Sửa câu N"** (hoặc "mở session câu N"):
+**"Sửa câu N"** (hoặc "mở session câu N", hoặc anh gõ `/xu-ly-loi N` trong session này):
 
-1. Mở **một session con cho mỗi ca** bằng công cụ bắt đầu session (`mcp__ccd_session__start_session`): khởi tạo theo yêu cầu của anh
-   (`user_asked`), `context` = `fresh`, worktree riêng, tiêu đề `Sửa ca lỗi câu <mã> (<mã lỗi>)`.
+1. Mở **một session con cho mỗi ca** bằng công cụ bắt đầu session (`mcp__ccd_session__start_session`; chưa nạp thì nạp bằng ToolSearch
+   `select:mcp__ccd_session__start_session`): khởi tạo theo yêu cầu của anh (`user_asked`), `context` = `fresh`, worktree riêng, tiêu đề
+   `Sửa ca lỗi câu <mã> (<mã lỗi>)`. Không tự điều tra ca trong session này, kể cả khi lệnh `/xu-ly-loi` đã mở ra hướng dẫn điều tra.
 2. Lời giao việc cho session con, đủ để nó làm một mình:
    - "Chạy `/xu-ly-loi <mã>`. Nếu chưa có lệnh này, đọc `git show origin/dev_3:.claude/commands/xu-ly-loi.md` rồi làm theo với mã câu <mã>."
    - Tóm tắt báo cáo và câu hỏi cho anh (chép từ `list`, chỉ mã, không tên người, không SĐT).

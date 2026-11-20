@@ -9,6 +9,16 @@ Desktop). Phiên cloud đã điều tra và viết báo cáo; việc của bạn
 
 Mã câu: `$ARGUMENTS` (là `ai_message.id`; để trống thì làm phần "Không có mã câu").
 
+## Trước tiên: session này có phải hộp thư lỗi không
+
+Nếu trong session này đã chạy `/hop-thu-loi` (session là hộp thư lỗi) và có mã câu, **không xử lý ca ở đây**: hộp thư phải giữ nhẹ để chạy lâu.
+Làm đúng mục "Sửa câu N" của `/hop-thu-loi` (`.claude/commands/hop-thu-loi.md`): mở một session con cho ca này bằng `mcp__ccd_session__start_session`
+(`user_asked`, `fresh`, worktree riêng; công cụ chưa nạp thì nạp bằng ToolSearch `select:mcp__ccd_session__start_session`), giao cho session con
+chạy `/xu-ly-loi <mã câu>`, chạy `node scripts/engine-v2-facebook/error-watch-inbox.cjs fixing <mã câu>`, báo anh một dòng kèm đường dẫn session con
+rồi dừng. Không có mã câu thì chạy `list` của hộp thư thay cho phần "Không có mã câu" bên dưới.
+
+Session không phải hộp thư (session con, hay session anh mở riêng để sửa) thì làm tiếp như dưới đây.
+
 ## Luật
 
 - **Chỉ đọc production cho tới khi anh duyệt.** Không ghi database, không sửa code trên `dev_3`, không commit, không bật công tắc. Duyệt rồi mới làm
