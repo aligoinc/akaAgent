@@ -1,0 +1,48 @@
+{
+  "migration": "migration_v601_engine_share_batch_fail_note",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "apply luôn đi (20/11/2026, sau khi merge PR #750; anh được báo trước nên apply buổi tối vì PostgREST nạp lại schema)",
+  "applied_at_vn": "2026-11-20 16:01:41–16:01:43",
+  "ledger_version": "20261120090137",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây, rc 0",
+  "source_commit": "b6bec7e0 (dev_3, merge PR #750)",
+  "file_md5": "4632018304092e188597a64450b90dad",
+  "ledger_statements_md5": "4632018304092e188597a64450b90dad",
+  "preflight_live_16_01_31": {
+    "ledger_v60x_rows": 0,
+    "report_batch_v1_prosrc_md5": "90994a3cbe67f6f9c1f7d5dd8f0c4c79",
+    "report_batch_v1_functiondef_md5": "0452e5ff91536f9f9ac1504eac5a3d54"
+  },
+  "postflight_live": {
+    "report_batch_v1_prosrc_md5": "1a2a5099f6ce44758474d6af2f6ab8c0",
+    "report_batch_v1_functiondef_md5": "a845aed50b7b18f3b65cb5377d653e6d",
+    "owner": "postgres",
+    "security_definer": true,
+    "proconfig": ["search_path=\"\""],
+    "acl": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}",
+    "anon_execute": false,
+    "authenticated_execute": false
+  },
+  "postgrest": {
+    "reload_message_utc": "2026-11-20T09:01:42.70",
+    "schema_cache_queried_ms": 9086.6,
+    "schema_cache_loaded_utc": "2026-11-20T09:01:52.99",
+    "pgrst002_or_503": 0
+  },
+  "edge_logs_rest_v1": {
+    "minute_16_00_vn": { "requests": 37321, "over_1s": 7, "e5xx": 0, "p50_ms": 51 },
+    "minute_16_01_vn": { "requests": 35295, "over_1s": 1550, "e5xx": 1, "e503": 0, "p50_ms": 59, "max_ms": 6060 },
+    "minute_16_02_vn_partial": { "requests": 7223, "over_1s": 1, "e5xx": 1, "p50_ms": 61 },
+    "e5xx_detail": [
+      "09:01:42 UTC POST rpc/aka_agent_engine_claim_target_v1 500 (Desktop, 57014 statement timeout 3 s lúc PostgREST nạp lại schema)",
+      "09:02:08 UTC /rest/v1/contacts 500 (gateway chat cũ, mức nền ~1 lỗi/phút trước apply)"
+    ]
+  },
+  "behavior": "Chỉ đổi chữ ghi chú khi cả lô gửi dạng chia sẻ (engine v2 Zalo) không ai nhận được; khi nào tạm dừng, khoá, chuỗi data lỗi, data đi đâu không đổi. Ghi chú đã ghi trước apply giữ nguyên.",
+  "not_done": [
+    "Dòng tiến trình '⏸ Dừng gửi: …' của lõi: Desktop chờ bản build kế tiếp; Fly chờ chép lõi sang ChatApi (scripts/sync-campaign-engine.cjs) rồi deploy worker",
+    "Bộ chạy cũ (Desktop campaignScheduler.ts, ChatApi zaloCampaignExecutor.ts) giữ câu cũ",
+    "Chưa có lượt thật nào ra câu mới lúc ghi biên nhận"
+  ],
+  "rollback": "migrations/rollback_v601_engine_share_batch_fail_note.sql (DDL, cũng làm PostgREST nạp lại schema)"
+}
