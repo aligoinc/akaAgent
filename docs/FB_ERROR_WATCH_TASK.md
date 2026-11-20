@@ -96,6 +96,13 @@ Câu do hệ thống tạo bắt đầu bằng `[Tự động]`. Với câu hỏ
    Lỗi đã hết sau khi khách lên bản mới thì nói rõ trong `tom_tat` ("chỉ còn ở bản 9.9.0, lên 10.0.0 thì 168 lần không lỗi"), đề xuất bỏ qua ca,
    không đề xuất xin ảnh (câu 572 ngày 20/11/2026).
 
+   **Ca lượt bị bỏ dở** (khoá bắt đầu bằng `stale|`): đọc đường đóng lượt trước ở `auto_engine_target_events` (`kind = 'interrupted'`,
+   `data->>'via'`): `stale` = lease hết hạn (máy ngủ / app đứng), `orphan` = lượt mồ côi (khoá có `|orphan`: app nhận data kế tiếp cùng lease
+   khi chưa báo xong); từ V602 lượt `desktop_reset` (app khởi động lại dọn lượt cũ) không vào sổ ca. Với lượt `stale`, phân biệt "máy ngủ giữa
+   lúc đang chạy" (lượt trước của nhân viên vừa chốt, `edge_logs` thấy máy thức liền trước đó) với "nhận data lúc máy vừa thức" (lượt trước cách
+   xa, nhiều tài khoản cùng giây, `edge_logs` thấy đợt request vài giây giữa các khoảng im) trước khi đề xuất bộ giữ khi máy ngủ: bộ giữ chỉ chặn
+   kiểu sau (câu 571 ngày 20/11/2026).
+
 4. **Vì sao ra mã này.** `auto_outcome_signal_rules` (luật nào khớp tín hiệu), `auto_outcome_policies` (mọi dòng có `error_code` đó, kể cả dòng theo thao tác).
 
 5. **Code.** Bước lỗi là block nào. Tra theo số, đừng theo tên: bước trong vết (`workflowRuns[].steps`) chỉ có `nodeId` và `blockName`, mà

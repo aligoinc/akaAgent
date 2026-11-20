@@ -111,7 +111,7 @@ Kiểm cục bộ (PostgreSQL 17, không chạm database thật): `CHAT_REPO=<ak
 | Lỗi chưa phân loại | Kết quả SYS99 mà chưa thuộc ca nào | thao tác + bước lỗi + câu lỗi đã chuẩn hoá |
 | Chiến dịch bị engine tạm dừng | Dừng theo chính sách vì SYS99, FB42, FB44, FB45 hoặc mã chưa có trong danh sách "đã biết" | mã + thao tác + bước lỗi |
 | Mã lỗi tăng bất thường | Số lượt 60 phút gần nhất gấp 3 lần trung bình cùng giờ 7 ngày và từ 20 lượt trở lên | mã + thao tác |
-| Lượt bị bỏ dở | Lượt đóng `stale` khi máy vẫn mở (presence còn mới) | lý do đóng + thao tác |
+| Lượt bị bỏ dở | Lượt đóng `stale` khi máy vẫn mở (presence còn mới). Từ V602: bỏ lượt `data.via = desktop_reset` (app khởi động lại); lượt `orphan` thành ca riêng | lý do đóng + thao tác (+ `\|orphan` với lượt mồ côi) |
 
 Các mã đã có kết luận (FB40, FB02, FB11, FB22, FB23, FB14…) nằm trong danh sách "đã biết": chỉ thành việc khi tăng bất thường.
 
