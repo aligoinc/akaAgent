@@ -1,6 +1,6 @@
 # V598: comment vào link bài, khách nhập link bài chờ duyệt (/pending_posts/) (20/11/2026)
 
-Trạng thái: **[PR #744](https://github.com/aligoinc/akaAgent/pull/744) vào `dev_3`, chưa merge; V598 chưa apply** (nhánh `claude/fb-584-pending-posts`). Đổi số V596 → V598 lúc ~14:00 VN 20/11: V596 đã có ở nhánh chat (`migration_v596_chat_facebook_page_access.sql`, worktree `akaAgent-fb-page-access`), V597 do session câu 585 giữ (FB48–FB50). Lúc đổi, sổ production tới V595 và `git log --all` / các worktree / akaAgentChatApi / SqlServerDashboard chưa có V598; kiểm lại ngay trước khi apply. Chú thích trong code block không ghi số migration, nên đổi số không đổi md5 code.
+Trạng thái: **V598 đã apply akachat 13:52:01 VN 20/11/2026** theo yêu cầu ("Apply V598"; sổ `20261120065200`, md5 sổ = file `c510072b…`, không apply lại; chạy thử nguyên file rồi ROLLBACK trước khi apply; [biên nhận](../migrations/snapshots/engine-facebook-v598/apply-receipt.json)). **[PR #744](https://github.com/aligoinc/akaAgent/pull/744) vào `dev_3`, chưa merge** (nhánh `claude/fb-584-pending-posts`). Đổi số V596 → V598 lúc ~14:00 VN 20/11: V596 đã có ở nhánh chat (`migration_v596_chat_facebook_page_access.sql`, worktree `akaAgent-fb-page-access`), V597 do session câu 585 giữ (FB48–FB50). Lúc đổi, sổ production tới V595 và `git log --all` / các worktree / akaAgentChatApi / SqlServerDashboard chưa có V598; kiểm lại ngay trước khi apply. Chú thích trong code block không ghi số migration, nên đổi số không đổi md5 code.
 
 ## Vì sao (câu 584 của bộ kiểm lỗi)
 
