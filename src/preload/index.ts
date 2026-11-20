@@ -374,6 +374,9 @@ const electronAPI = {
   prepareAccountBrowserSession: (accountId: number): Promise<{ success: boolean; reason?: string }> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_PREPARE_BROWSER_SESSION, accountId),
 
+  isAccountBrowserSessionReady: (accountId: number, proxyId: number | null): Promise<boolean> =>
+    ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_BROWSER_SESSION_READY, accountId, proxyId),
+
   listAccountActions: (flatformType?: string, includeRestricted?: boolean): Promise<AutoAccountAction[]> =>
     ipcRenderer.invoke(IPC_EVENTS.DB_LIST_ACCOUNT_ACTIONS, flatformType, includeRestricted),
 

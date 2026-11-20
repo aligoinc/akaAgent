@@ -17,6 +17,7 @@ import {
   Layers,
   LogOut,
   Monitor,
+  MessageCircle,
   MessageSquare,
   Moon,
   PackagePlus,
@@ -38,6 +39,7 @@ import { DEVICE_CHANGE_WARNING, deviceChangeMessage } from '../../../../shared/d
 import { canAccessAdmin } from '../../../../shared/admin'
 import { canManageStaff } from '../../../../shared/staffManagement'
 import NotificationBell from '../Notifications/NotificationBell'
+import { canUsePlatform } from '../../utils/entitlements'
 import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
 import { UPGRADE_PORTAL_MENU_CAPTION, UPGRADE_PORTAL_MENU_LABEL } from '../../../../shared/upgradePortal'
 import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
@@ -45,7 +47,7 @@ import { ENGINE_ERROR_REVIEW_MENU_LABEL } from '../../../../shared/engineErrorRe
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'fb-messages' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
 
 interface TopBarProps {
   activePage: AppPage
@@ -113,6 +115,7 @@ export default function TopBar({
   const canOpenChat = user?.chatWebEnabledAtLogin === true
   const canOpenCrm = user?.organizationId === 1
   const canOpenAdmin = canAccessAdmin(user)
+  const canOpenFacebookMessages = canUsePlatform('facebook', user?.entitlements)
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -155,6 +158,13 @@ export default function TopBar({
         active: activePage === 'browsers',
         onClick: () => onPageChange('browsers')
       },
+      ...(canOpenFacebookMessages ? [{
+        key: 'fb-messages',
+        label: 'Tin nhắn Facebook',
+        icon: <MessageCircle size={18} />,
+        active: activePage === 'fb-messages',
+        onClick: () => onPageChange('fb-messages')
+      }] : []),
       {
         key: 'data-scan',
         label: 'Quét data',
@@ -202,15 +212,16 @@ export default function TopBar({
       }
     ]
 
+    const afterBrowserIndex = canOpenFacebookMessages ? 3 : 2
     if (canOpenChat) {
-      items.splice(2, 0, {
+      items.splice(afterBrowserIndex, 0, {
         key: 'chat', label: 'akaChat', icon: <MessageSquare size={18} />,
         active: activePage === 'chat', onClick: () => onPageChange('chat')
       })
     }
 
     if (canOpenCrm) {
-      items.splice(canOpenChat ? 3 : 2, 0, {
+      items.splice(canOpenChat ? afterBrowserIndex + 1 : afterBrowserIndex, 0, {
         key: 'crm', label: 'CRM', icon: <ContactRound size={18} />,
         active: activePage === 'crm', onClick: () => onPageChange('crm')
       })
@@ -234,6 +245,7 @@ export default function TopBar({
   }, [
     activePage,
     canOpenAdmin,
+    canOpenFacebookMessages,
     canOpenWorkflowEditor,
     canOpenChat,
     canOpenCrm,

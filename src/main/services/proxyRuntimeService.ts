@@ -47,7 +47,7 @@ export class ProxyRuntimeService {
     if (revision === this.preparationRevision) this.preparedAccounts.set(account.id, account.proxyId ?? null)
   }
 
-  isAccountSessionPrepared(account: AutoAccount): boolean {
+  isAccountSessionPrepared(account: Pick<AutoAccount, 'id' | 'proxyId'>): boolean {
     if (!this.preparedAccounts.has(account.id) || this.preparedAccounts.get(account.id) !== (account.proxyId ?? null)) return false
     const state = this.proxyStateBySession.get(session.fromPartition(this.getAccountPartition(account.id)))
     return !!state?.applied && state.pending === 0
