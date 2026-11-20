@@ -1,6 +1,6 @@
 # V591: tách FB46 hộp thư Page thành FB26 / FB47 (20/11/2026)
 
-Trạng thái: **đã apply akachat 10:27:33 VN 20/11/2026** theo yêu cầu ("Apply luôn"; sổ `20261120032733`, md5 sổ = file `8f277af0…`, không apply lại; [biên nhận](../migrations/snapshots/engine-facebook-v591/apply-receipt.json)). Nhánh `claude/fb-page-inbox-v591`, chưa commit.
+Trạng thái: **đã apply akachat 10:27:33 VN 20/11/2026** theo yêu cầu ("Apply luôn"; sổ `20261120032733`, md5 sổ = file `8f277af0…`, không apply lại; [biên nhận](../migrations/snapshots/engine-facebook-v591/apply-receipt.json)). Code đã merge `dev_3` qua [#733](https://github.com/aligoinc/akaAgent/pull/733) ngày 20/11 theo yêu cầu ("commit rồi tạo pr merge đi").
 
 ## Vì sao
 
