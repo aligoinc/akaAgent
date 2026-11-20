@@ -1,0 +1,66 @@
+{
+  "migration": "migration_v595_desktop_diagnostic_dom",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "Anh chốt 20/11/2026 \"đơn giản như phần chụp ảnh\" (block lỗi chụp ảnh thì lưu thêm DOM cả trang, khi tìm nguyên nhân lấy cả DOM lẫn ảnh), code merge dev_3 qua PR #739 (\"Merge PR #739\"), rồi chọn \"Apply ngay\"",
+  "applied_at_vn": "2026-11-20 12:35:34–12:35:36",
+  "ledger": {
+    "version": "20261120053534",
+    "name": "migration_v595_desktop_diagnostic_dom",
+    "statements_md5": "52f348489ff650a1acf398252b0fc15c",
+    "file_md5": "52f348489ff650a1acf398252b0fc15c",
+    "created_by": null
+  },
+  "method": "node scripts/make-migration-ledger-apply.cjs (dòng sổ chèn trước COMMIT, cùng giao dịch) rồi supabase db query --linked --workdir <repo akaAgent> -f <file sinh ra>; exit 0",
+  "preflight_12_35_24_vn": {
+    "ledger_max": "migration_v594_engine_error_watch_hourly_skip",
+    "ledger_v595": 0,
+    "requests_and_files_tables": true,
+    "doms_table": false,
+    "aka_agent_engine_desktop_staff": true,
+    "new_functions_exist": false,
+    "roles": ["aka_agent_chat_api", "aka_agent_desktop", "anon", "authenticated", "service_role"],
+    "active_client_backends": 3,
+    "open_diagnostic_requests": 0
+  },
+  "postflight": {
+    "table_auto_desktop_diagnostic_doms": { "rls": true, "columns": ["request_id", "image_id", "meta", "content", "sha256", "created_at"], "policies": ["auto_desktop_diagnostic_doms_service_v595"], "rows": 0 },
+    "fn_dom_upload_v1": { "prosrc_md5": "09852d5b1af1496a65253c994b121e1b", "security_definer": true, "config": ["search_path=\"\"", "lock_timeout=3s", "statement_timeout=30s"] },
+    "fn_doms_v1": { "prosrc_md5": "39dfefcaa105f24f98b773849a495b89", "security_definer": true, "config": ["search_path=\"\""] },
+    "grants": {
+      "aka_agent_desktop_execute_upload": true,
+      "aka_agent_desktop_execute_doms_v1": false,
+      "aka_agent_desktop_select_table": false,
+      "service_role_execute_doms_v1": true,
+      "service_role_table": true,
+      "anon_execute_upload": false,
+      "anon_execute_doms_v1": false,
+      "authenticated_execute_upload": false,
+      "aka_agent_chat_api_select_table": false,
+      "anon_select_table": false
+    },
+    "unchanged_for_reference": {
+      "aka_agent_desktop_diagnostic_upload_v1_prosrc_md5": "004c1ebad489244e1a1a30baf64136fe",
+      "aka_agent_engine_error_watch_tick_v1_prosrc_md5": "022dfb368b5e71c4a38e87d0ef8f6bd9"
+    },
+    "rest_smoke_with_publishable_key": "dom_upload_v1 và doms_v1 đều trả HTTP 401, 42501 permission denied (PostgREST đã thấy hàm, khoá công khai bị chặn)"
+  },
+  "postgrest_reload": {
+    "message_received_utc": "2026-11-20T05:35:36.142Z",
+    "schema_cache_queried_ms": 4226.4,
+    "schema_cache_loaded_utc": "2026-11-20T05:35:46.849Z",
+    "loaded": "537 Relations, 334 Relationships, 870 Functions"
+  },
+  "edge_logs_rest_30s": [
+    { "t_utc": "05:35:00", "requests": 18311, "e5xx": 0, "e503": 0, "p50_ms": 49, "p99_ms": 300, "over_1s": 1 },
+    { "t_utc": "05:35:30", "requests": 17970, "e5xx": 0, "e503": 0, "p50_ms": 71, "p99_ms": 3641, "over_1s": 1829 },
+    { "t_utc": "05:36:00", "requests_partial": 5176, "e5xx": 0, "e503": 0, "p50_ms": 52, "p99_ms": 284, "over_1s": 0 }
+  ],
+  "notes": [
+    "Chỉ thêm đối tượng mới; không đổi bảng / hàm V556, không đổi hàm tick V593 / V594.",
+    "DOM chỉ bắt đầu về khi máy khách chạy bản Desktop có PR #739 (chưa build); bản Desktop cũ không gọi hàm mới.",
+    "Bộ kiểm lỗi không cần biến mới: engine.error_watch.imageRequests đang bật (đọc 20/11), mỗi lần xin ảnh sẽ có DOM đi kèm.",
+    "Số V594 trong sổ là engine_error_watch_hourly_skip (phiên khác, 12:11 VN 20/11)."
+  ],
+  "rollback": "migrations/rollback_v595_desktop_diagnostic_dom.sql (xoá bảng và hai hàm, mất mọi DOM đã gửi; dòng sổ giữ nguyên)",
+  "do_not_reapply": true
+}
