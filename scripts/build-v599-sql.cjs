@@ -237,8 +237,9 @@ BEGIN
               WHERE table_schema = 'private' AND table_name = 'auto_engine_error_cases' AND column_name = 'image_request_ids') THEN
     RAISE EXCEPTION 'V599: sổ ca đã có cột image_request_ids';
   END IF;
-  IF to_regclass('public.auto_staff_device_presence') IS NULL OR to_regclass('private.auto_engine_error_items') IS NULL THEN
-    RAISE EXCEPTION 'V599: thiếu bảng presence hoặc bảng lượt lỗi';
+  IF to_regclass('private.auto_engine_error_items') IS NULL OR NOT EXISTS (SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'auto_staff_device_presence' AND column_name = 'ended_at') THEN
+    RAISE EXCEPTION 'V599: thiếu bảng lượt lỗi hoặc cột auto_staff_device_presence.ended_at';
   END IF;
 END $pre$;
 

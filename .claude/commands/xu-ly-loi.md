@@ -51,8 +51,8 @@ Session không phải hộp thư (session con, hay session anh mở riêng để
    - Đã có ai sửa chưa: `git fetch -q origin dev_3`, tìm mã lỗi / câu lỗi / tên block trong `git log origin/dev_3`, `CLAUDE.md`, `docs/ENGINE_V2_FACEBOOK_*.md`
      và sổ migration (`supabase_migrations.schema_migrations` mới nhất). Đã sửa mà chưa phát hành thì nói rõ bản nào sẽ có.
 
-3. **Ảnh lỗi và DOM.** Ca có `image_request_id`: `select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>)`, lưu từng ảnh JPEG (base64)
-   vào scratchpad rồi mở bằng công cụ đọc tệp. Chỉ mô tả hộp thoại, nút, câu báo của Facebook. Chưa có ảnh mà ca cần ảnh thì đề xuất xin ảnh
+3. **Ảnh lỗi và DOM.** Ca có `image_request_id` (từ V599 có thể nhiều mã ở `image_request_ids`, mỗi máy khách một yêu cầu; xem mọi mã):
+   `select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>)`, lưu từng ảnh JPEG (base64) vào scratchpad rồi mở bằng công cụ đọc tệp. Chỉ mô tả hộp thoại, nút, câu báo của Facebook. Chưa có ảnh mà ca cần ảnh thì đề xuất xin ảnh
    (`public.aka_agent_desktop_diagnostic_request_v1`), không tự tạo yêu cầu.
 
    DOM cả trang (V595, chỉ có khi máy khách chạy bản Desktop có #739) nằm cùng yêu cầu, cùng `image_id` với ảnh. Xem có DOM nào trước, không kéo nội
@@ -72,7 +72,9 @@ Session không phải hộp thư (session con, hay session anh mở riêng để
    - cách sửa: sửa ở đâu (code Desktop cần build; block / luật / chính sách là migration dữ liệu, có hiệu lực cho mọi bản app), cái giá, rủi ro;
    - việc anh cần quyết (hộp chọn).
 
-   Ca không cần sửa (đúng thiết kế, do cấu hình của khách) thì nói vậy và đề nghị anh đánh dấu "Đã biết" trong tab.
+   Ca không cần sửa (đúng thiết kế, do cấu hình của khách, lỗi đã hết sau khi khách lên bản app mới) thì nói vậy và đề nghị anh **bỏ qua** ca
+   (lệnh hộp thư "bỏ qua câu N"; tự mở lại khi loại lỗi đó có từ 30 lượt trong 24 giờ). Chỉ đề nghị "Đã biết" trong tab khi chắc ca không bao giờ cần
+   xem lại: ca "Đã biết" không tự mở lại kể cả khi lỗi tăng.
 
 ## Sau khi anh duyệt
 
@@ -82,9 +84,13 @@ Session không phải hộp thư (session con, hay session anh mở riêng để
    `CHAT_REPO=<akaAgentChatApi> LC_ALL=C`): `scripts/engine-v2-facebook/desktop-fb-smoke.cjs` (`FB_DESKTOP_ONLY=<chữ trong tên ca>`),
    `scenarios.cjs` (`--interrupt`, `--pages` cho lượt bị ngắt / chạy bằng Page), `core-smoke.cjs`, `workflow-hooks-smoke.cjs`; migration dữ liệu theo
    mẫu `scripts/build-v5xx-sql.cjs` (kiểm md5 trước / sau, có bản gỡ) và smoke riêng.
-3. Hai typecheck (`npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`). Số migration lấy theo sổ production và `git log --all` ngay
-   trước khi viết.
+3. Hai typecheck (`npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`). Số migration lấy theo sổ production và tên tệp trên mọi
+   nhánh (`git fetch -q --all && git log --all --name-only --format= | grep -oE 'migration_v[0-9]+' | sort -u | tail`; tìm theo câu commit thì sót)
+   ngay trước khi viết. Chọn số xong thì ghi ngay một dòng vào thư mục ghi chú chung của nhóm session (nếu có: số, nhánh, việc) và đẩy nhánh sớm:
+   các session con chạy song song (ngày 20/11 hai session cùng định lấy V596 mà số đó đã có nhánh khác dùng).
 4. Commit, mở PR vào `dev_3` khi anh bảo; merge, apply, bật công tắc chỉ khi anh bảo. Ghi `CLAUDE.md` theo mục Maintenance.
+5. Bản sửa đã có hiệu lực (apply hoặc phát hành) thì báo anh ca còn bao nhiêu lượt rơi vào khoá cũ và đề nghị đóng ca: phần còn lại ít thì "bỏ qua
+   câu N" ở hộp thư (tự mở lại nếu lại nhiều); còn phần chưa sửa (chờ ảnh, DOM, bản app) thì để ca như cũ và nói rõ chờ gì.
 
 ## Không có mã câu
 

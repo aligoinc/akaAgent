@@ -54,7 +54,8 @@ Không có tệp này hoặc tệp chưa có lệnh `skip` (checkout cũ hơn `d
 3. Chạy `fixing <mã>`, rồi báo anh một dòng kèm đường dẫn tới session con. Không làm việc của ca đó ở session này.
 
 Session con báo lại (khi xong một lượt) thì tóm tắt một hai dòng: đã tìm ra gì, đang chờ anh quyết gì. Anh bảo ca đó xong hoặc thôi sửa thì chạy
-`unfixing <mã>` nếu anh muốn ca hiện lại trong hộp thư.
+`unfixing <mã>` nếu anh muốn ca hiện lại trong hộp thư. Ca đã sửa xong hoặc không cần sửa thì nhắc anh có thể "bỏ qua câu N" (tự mở lại khi lỗi
+nhiều trở lại); đừng đề nghị "Đã biết" trong tab, vì ca "Đã biết" không bao giờ tự mở lại.
 
 **"Bỏ qua câu N"**: chạy `skip <mã>`, báo lại đúng dòng kết quả (số lượt 24 giờ hiện tại, ngưỡng mở lại). Bỏ qua là tạm thời: khi loại lỗi đó có từ
 30 lượt trong 24 giờ trên toàn hệ thống (`skipReopenHits24h` trong `engine.error_watch`), database tự mở lại ca, phiên cloud nghiên cứu lại và

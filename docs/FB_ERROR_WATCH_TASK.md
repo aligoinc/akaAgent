@@ -59,20 +59,68 @@ Câu do hệ thống tạo bắt đầu bằng `[Tự động]`. Với câu hỏ
 
 2. **Quy mô và nhịp.** Đếm các kết quả cùng khoá ca trong 3 ngày theo giờ, tài khoản, chiến dịch, tổ chức, nhân viên. Mẫu câu đọc ở `scripts/engine-v2-facebook/error-watch-dryrun.sql`.
 
+   **Data kế tiếp có chạy được không** (anh yêu cầu 20/11/2026, bắt buộc khi đề xuất cách xử lý): với mỗi lượt lỗi, lấy lượt kế tiếp của cùng
+   tài khoản (`auto_engine_target_runs` cùng `account_id`, `started_at` lớn hơn) và xem nó thành công hay lỗi gì; nếu có thể thì xem thêm trong 5
+   lượt kế tiếp có lượt nào thành công không. Ghi trong `so_lieu` / `bang_chung`, ví dụ "101 lần lỗi: data kế tiếp thành công 65 lần; trong 5 data
+   kế tiếp có lượt thành công ở 92 lần; tài khoản 8105 hỏng liền 2 ngày". Đây là căn cứ để chọn giữa chạy tiếp, cho data về hàng đợi hay dừng
+   chiến dịch. `auto_engine_target_runs` không có chỉ mục theo tài khoản cho lượt đã đóng, nên đọc theo khoảng `started_at` rồi lọc tài khoản
+   (ca 585, 118 lượt: khoảng 5 giây):
+
+   ```sql
+   with err as materialized (
+     select i.target_run_id, i.account_id, r.started_at
+       from private.auto_engine_error_items i join public.auto_engine_target_runs r on r.id = i.target_run_id
+      where i.case_key = '<khoa>' and i.occurred_at > now() - interval '3 days'),
+   runs as materialized (
+     select r.account_id, r.started_at, r.final_error_code
+       from public.auto_engine_target_runs r
+      where r.started_at between (select min(started_at) from err) and (select max(started_at) from err) + interval '1 day'
+        and r.account_id in (select account_id from err)),
+   nx as (
+     select e.target_run_id,
+            (select n.final_error_code is null from runs n where n.account_id = e.account_id and n.started_at > e.started_at
+              order by n.started_at limit 1) as next_ok,
+            (select bool_or(x.final_error_code is null) from (select n.final_error_code from runs n
+              where n.account_id = e.account_id and n.started_at > e.started_at order by n.started_at limit 5) x) as ok_in_5
+       from err e)
+   select count(*) as loi, count(*) filter (where next_ok) as ke_tiep_thanh_cong, count(*) filter (where next_ok is null) as chua_co_luot_sau,
+          count(*) filter (where ok_in_5) as co_thanh_cong_trong_5 from nx;
+   ```
+
+   `final_error_code` trống là lượt thành công. Muốn biết lỗi của lượt kế tiếp thì lấy thêm `final_error_code` thay cho `is null`.
+
 3. **Máy khách.** `auto_staff_device_presence` của nhân viên trong lượt: hệ điều hành, bản app, phiên mở từ lúc nào, `runtime_state`.
+
+   **Lỗi còn xảy ra không.** 24 giờ qua 0 lượt, hoặc lỗi chỉ có ở một bản app, thì kiểm theo bản app: ghép lượt lỗi với dòng presence có
+   `started_at` gần nhất trước đó, rồi xem cùng tổ chức và cùng bước trên bản app mới hơn có chạy thành công không (đếm kết quả `ok` của bước đó).
+   Lỗi đã hết sau khi khách lên bản mới thì nói rõ trong `tom_tat` ("chỉ còn ở bản 9.9.0, lên 10.0.0 thì 168 lần không lỗi"), đề xuất bỏ qua ca,
+   không đề xuất xin ảnh (câu 572 ngày 20/11/2026).
 
 4. **Vì sao ra mã này.** `auto_outcome_signal_rules` (luật nào khớp tín hiệu), `auto_outcome_policies` (mọi dòng có `error_code` đó, kể cả dòng theo thao tác).
 
-5. **Code.** Bước lỗi là block nào: `auto_blocks` (bản "[engine] …"), workflow trong `auto_workflows`. Trong repo: `src/main/v2/runtime/`, `src/main/engineAdapters/facebook/`, `packages/campaign-engine/src/facebook/`, `src/main/services/`.
+5. **Code.** Bước lỗi là block nào. Tra theo số, đừng theo tên: bước trong vết (`workflowRuns[].steps`) chỉ có `nodeId` và `blockName`, mà
+   `blockName` là tên của bộ cũ (không có tiền tố "[engine]"). Lấy `workflowId` của lượt rồi đọc `blockId` của node:
+
+   ```sql
+   select n->>'blockId' as block_id, n->>'blockName' as ten, n->>'label' as nhan
+     from public.auto_workflows w, jsonb_array_elements(w.nodes) n
+    where w.id = <workflowId> and n->>'id' = '<nodeId>';
+   ```
+
+   Đọc code block đó ở `auto_blocks` (bản "[engine] …" mới là bản engine đang chạy). Đừng tra số block theo tên trong `CLAUDE.md` hay tài liệu:
+   báo cáo câu 585 ghi block 2624 (bộ cũ) trong khi engine chạy 2871, câu 567 ghi block 34 trong khi engine chạy 2851. Bước lỗi (`buoc` trong câu
+   hỏi) là bước của danh mục, có thể khác node hỏng thật (`click_post` mà node hỏng là `verify_submit`). Trong repo: `src/main/v2/runtime/`,
+   `src/main/engineAdapters/facebook/`, `packages/campaign-engine/src/facebook/`, `src/main/services/`.
 
 6. **Đã có kết luận chưa.** Tìm khoá ca, mã lỗi và câu lỗi trong `CLAUDE.md`, `docs/ENGINE_V2_FACEBOOK_*.md`, `docs/CAMPAIGN_OUTCOME_ENGINE_FACEBOOK_*.md`. Đã có kết luận hoặc quyết định của anh thì ghi vào `da_tung_ket_luan` và không đề xuất ngược lại.
 
 7. **Ảnh lỗi.** Câu có dòng `anh da ve: N ảnh` thì ảnh đã về: **xem ảnh trước khi kết luận**, đây thường là bằng chứng mạnh nhất cho ca không
-   biết trang đang hiện gì (FB41 không thấy ô bình luận, FB42 form chưa đóng…). Có dòng `yeu cau anh` mà chưa có `anh da ve` thì kiểm lại một lần,
-   ảnh có thể đã về trong lúc bạn làm:
+   biết trang đang hiện gì (FB41 không thấy ô bình luận, FB42 form chưa đóng…). Từ V599 dòng `yeu cau anh` có thể có nhiều mã (mỗi máy khách
+   một yêu cầu, tối đa 5): xem **mọi** ảnh của mọi mã, mỗi ảnh có thể là một tình huống khác nhau (câu 585: 6 ảnh, 4 tình huống). Có dòng
+   `yeu cau anh` mà chưa có `anh da ve` thì kiểm lại một lần, ảnh có thể đã về trong lúc bạn làm:
 
    ```sql
-   select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>);
+   select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>);   -- từng mã ở dòng yeu cau anh
    ```
 
    Mỗi ảnh là JPEG dạng base64; lưu ra thư mục tạm rồi xem (công cụ đọc tệp mở được ảnh). Ảnh là màn hình Facebook của khách: chỉ mô tả hộp
@@ -145,6 +193,12 @@ Bắt buộc: `tom_tat`, `ket_luan`, `do_chac`, `nen_sua_app`. Kết luận khá
 Nguyên tắc:
 
 - Mỗi kết luận phải có bằng chứng đã đọc được: mã lượt data, bước lỗi, số liệu, tên tệp code. Không đoán nguyên nhân.
+- **Chia ca theo bằng chứng trước khi đề xuất.** Một khoá ca có thể gồm nhiều tình huống: chia các lượt theo bằng chứng đã có (chữ trên trang mà
+  block lưu trong `signal` / vết, lần chờ nào hỏng, từng ảnh), đếm từng nhóm, rồi đề xuất cho từng nhóm. Câu 584: 59 lượt trang "Bài viết đang
+  chờ", 17 lượt "Chưa có bài viết nào để xem xét" (cho cả hai ra "đang chờ duyệt" là sai với nhóm sau). Hai ca cùng mã chỉ là một lỗi khi hỏng ở
+  cùng chỗ (cùng lần chờ, cùng phần tử), không phải chỉ vì cùng câu lỗi (câu 572 và 567).
+- Chỉ có một ảnh cho cả ca nhiều lượt thì kết luận chỉ đúng cho lượt đó: ghi `do_chac` không quá `trung_binh` và ghi trong `de_xuat` cần ảnh của
+  các lượt khác.
 - Đề xuất là việc cụ thể cho người sửa: đổi luật nào, chính sách nào, tệp code nào, có cần build Desktop không. Bạn không tự làm các việc đó.
 - Câu chữ cho khách hàng (`cau_cho_khach`, `de_xuat_ma_loi`) chỉ là đề xuất. Database giữ ở trạng thái chờ duyệt; anh duyệt trong app thì câu mới được ghi cho khách, mã mới được thêm vào bảng mã lỗi. Bạn không tự ghi gì.
 - Ca hỏi tiếp: chỉ báo điều mới so với báo cáo trước (số liệu đổi, ảnh mới về, bằng chứng mới). Không có gì mới thì nói vậy trong một hai câu và vẫn nộp.

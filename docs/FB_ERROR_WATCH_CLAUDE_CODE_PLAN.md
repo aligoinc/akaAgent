@@ -486,3 +486,48 @@ Một session cloud lâu dài vừa nghiên cứu vừa làm hộp thư thì kh�
 Kiểm: `LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs` (7 nhóm, có đối chứng V593 cho câu 585). Đã apply 12:11 VN 20/11 và
 đặt `"maxPerHour": 2, "skipReopenHits24h": 30` lúc 12:12 VN. Chưa làm: gỡ lịch mỗi giờ của tác vụ cloud (lịch chỉ còn là lưới đỡ; mỗi lượt
 trống vẫn mở một session; gỡ ở trang sửa tác vụ trên claude.ai, giữ trigger API).
+
+## 15. Đánh giá sau ba ca đầu qua hộp thư, V599 xin ảnh từ nhiều lượt (viết 20/11; V599 chưa apply)
+
+Anh thử ba ca qua hộp thư ngày 20/11: câu 572, 584, 585. Phần trên máy chạy đúng. Hộp thư mở mỗi ca một session con và đánh dấu ca đang sửa. Session
+con chỉ đọc production cho tới khi anh duyệt. Kết quả: 584 sửa bằng V598, 585 bằng V597, 572 bỏ qua.
+
+Báo cáo của phiên cloud sai hoặc thiếu ở cả ba ca, nên session con phải làm lại:
+
+| Ca | Báo cáo cloud | Session con tìm ra |
+|---|---|---|
+| 585 | block 2624; 1 ảnh, một mã đề xuất | engine chạy 2871; 6 ảnh, 4 tình huống |
+| 584 | mọi link chờ duyệt ra FB15 | 17/78 lượt là trang "Chưa có bài viết nào để xem xét", ra FB15 là sai |
+| 572 | cần ảnh; cùng lỗi với 567 | chỉ có ở 9.9.0, lên 10.0.0 thì 168 lần không lỗi; hỏng ở lần chờ khác với 567 |
+
+Sửa:
+
+- **Tệp việc** (`FB_ERROR_WATCH_TASK.md`):
+  - tra block bằng `blockId` của node trong `auto_workflows.nodes`, không theo tên;
+  - đếm data kế tiếp trên cùng tài khoản có chạy được không, có câu mẫu (anh yêu cầu ở câu 585);
+  - kiểm lỗi đã hết sau khi khách lên bản app mới chưa;
+  - chia ca theo bằng chứng trước khi đề xuất;
+  - chỉ có một ảnh thì độ chắc không quá trung bình.
+- **`/xu-ly-loi`**:
+  - ca không cần sửa thì đề nghị "bỏ qua", không đề nghị "Đã biết" (ca "Đã biết" không tự mở lại);
+  - tìm số migration theo tên tệp, và ghi số vừa giữ vào thư mục ghi chú chung;
+  - bản sửa có hiệu lực thì đề nghị đóng ca.
+- **V599** (`migrations/migration_v599_engine_error_watch_multi_images.sql`, sinh bằng `node scripts/build-v599-sql.cjs`; thân tick
+  `022dfb36…` → `2cade73e…`):
+  - Ca được hỏi lần đầu: xin ảnh từ tối đa `imageRunsPerCase` lượt (mặc định 5, 1–10), mỗi lượt của một nhân viên khác nhau, ưu tiên nhân viên
+    đang mở app.
+    - Mỗi nhân viên khách vẫn một yêu cầu mỗi ngày.
+    - Lấy trong 300 lượt gần nhất của ca trong 3 ngày, cộng lượt `screenshot_run`.
+    - Đo chỉ đọc trên ca 585: 172 ms, 21 nhân viên có ảnh.
+  - Cột mới `image_request_ids`; `image_request_id` vẫn là mã đầu tiên.
+  - Chờ mọi yêu cầu xong, hoặc quá `imageWaitMinutes` phút, rồi mới hỏi. Câu hỏi ghi mọi mã ở dòng `yeu cau anh`.
+  - Lệnh `next` của phiên cloud đọc được danh sách mã.
+  - Hỏi tiếp vì ảnh: hỏi khi đã có ảnh và không còn yêu cầu nào chờ dưới 60 phút.
+  - Gỡ: bản gỡ, hoặc đặt `"imageRunsPerCase": 1`.
+  - Kiểm: `CHAT_REPO=… LC_ALL=C node scripts/engine-v2-facebook/error-watch-v599-smoke.cjs` (10 nhóm).
+
+Thứ tự đưa vào dùng:
+1. Merge PR (tệp việc và lệnh `next` mới có hiệu lực từ lượt cloud kế tiếp; `next` đọc được cả câu một mã lẫn nhiều mã).
+2. Apply V599 vào phút lẻ, ngoài giờ cao điểm.
+
+Chưa làm: tick vẫn coi yêu cầu chỉ có DOM (không ảnh) là chưa có ảnh, và câu hỏi chưa báo DOM đã về (để sau khi phát hành bản Desktop có #739).
