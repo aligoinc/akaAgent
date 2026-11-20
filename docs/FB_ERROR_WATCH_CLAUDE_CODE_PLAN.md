@@ -430,7 +430,7 @@ Tài liệu Anthropic đọc lại 19/11 ([trang tác vụ](https://code.claude.
 - Chưa có báo cáo thật nào mang `cau_cho_khach` / `de_xuat_ma_loi`.
 - Đường `/fire` đã gọi thử một lượt trên production (20:49 VN 19/11, không kèm mã câu) nhưng chưa có ca thật nào đi qua; chưa biết tác vụ tắt lịch có còn nhận `/fire` không; chưa đo token của một lượt trống.
 
-## 13. V593: chọn ca theo mức ảnh hưởng, ảnh lỗi trước khi hỏi, thông báo kèm lệnh xử lý (viết 20/11)
+## 13. V593: chọn ca theo mức ảnh hưởng, ảnh lỗi trước khi hỏi, thông báo kèm lệnh xử lý (viết 20/11; V593 đã apply 11:21:16 VN 20/11, [biên nhận](../migrations/snapshots/engine-error-watch-v593/apply-receipt.json))
 
 Vì sao (đo 20/11/2026): sổ có 45 ca `new` và 6 ca `failed`; ba ca nặng nhất (FB46 hộp thư Page 58 lần dừng, FB42 "form đăng bài chưa đóng"
 90 lượt ở 18 tổ chức, FB41 56 lượt) đều `failed` từ lúc tác vụ cũ bên akabiz ngừng nhận việc 19/11. Hàm tick V588 xếp `ORDER BY (k.status =
@@ -451,5 +451,5 @@ luận "chưa đủ dữ liệu, cần ảnh"). Thông báo gửi cả các ca k
 - [Tệp việc](FB_ERROR_WATCH_TASK.md): ảnh đã về thì xem trước khi kết luận; thông báo chỉ khi có việc cho anh, theo khuôn có mã câu và lệnh xử lý.
 - Lệnh [`/xu-ly-loi`](../.claude/commands/xu-ly-loi.md) cho session Claude Code trên máy.
 
-Chưa kiểm: V593 chưa apply; chưa có yêu cầu ảnh nào do bộ kiểm lỗi tạo trên production (yêu cầu ảnh số 1 ngày 20/11 do phiên khác tạo tay, về sau
+Chưa kiểm: chưa có yêu cầu ảnh nào do bộ kiểm lỗi tạo trên production (yêu cầu ảnh số 1 ngày 20/11 do phiên khác tạo tay, về sau
 33 giây); lệnh `/xu-ly-loi` chưa chạy thật.
