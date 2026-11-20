@@ -27,11 +27,21 @@ export interface DesktopSleepHoldPayload {
   reason: string
 }
 
+/** Lần bộ giữ thôi giữ gần nhất (lý do, đã thức liền mạch bao lâu): để tra vì sao máy nhận việc sau khi ngủ; Web bỏ qua khoá lạ. */
+export interface DesktopSleepReleasePayload {
+  at: string
+  reason: string
+  heldSince: string
+  awakeSeconds: number
+}
+
 export interface DesktopRuntimeSnapshotPayload {
   v: 1
   scheduler: { state: DesktopSchedulerState; since: string }
   /** Chỉ có khi đang giữ, để quét presence biết máy đang đứng chờ người dùng sau khi ngủ. */
   sleepHold?: DesktopSleepHoldPayload
+  /** Lần thôi giữ gần nhất của phiên app này (không có khi chưa từng giữ). */
+  sleepRelease?: DesktopSleepReleasePayload
   accounts: Array<{
     id: number
     ready: boolean
@@ -75,6 +85,7 @@ export function desktopRuntimeAccounts(accounts: readonly AutoAccount[]): AutoAc
 export class DesktopRuntimeSnapshot {
   private source: (() => DesktopRuntimeSnapshotSource | null) | null = null
   private sleepHoldSource: (() => DesktopSleepHoldPayload | null) | null = null
+  private sleepReleaseSource: (() => DesktopSleepReleasePayload | null) | null = null
   private maintenanceWaitingSince: string | null = null
   private lastState: DesktopSchedulerState | null = null
   private lastStateSince: string | null = null
@@ -88,6 +99,11 @@ export class DesktopRuntimeSnapshot {
   /** Trạng thái giữ việc mới sau khi máy ngủ (systemSleepGuard.snapshot); lỗi thì coi như không giữ. */
   attachSleepHold(source: () => DesktopSleepHoldPayload | null): void {
     this.sleepHoldSource = source
+  }
+
+  /** Lần thôi giữ gần nhất (systemSleepGuard.releaseSnapshot); lỗi thì bỏ qua. */
+  attachSleepRelease(source: () => DesktopSleepReleasePayload | null): void {
+    this.sleepReleaseSource = source
   }
 
   /** Cổng bảo trì ngày mới đang chờ lượt chạy hôm trước settle. */
@@ -119,10 +135,14 @@ export class DesktopRuntimeSnapshot {
     const accounts = source.running ? desktopRuntimeAccounts(source.accounts) : []
     let sleepHold: DesktopSleepHoldPayload | null = null
     try { sleepHold = this.sleepHoldSource?.() ?? null } catch { sleepHold = null }
+    let sleepRelease: DesktopSleepReleasePayload | null = null
+    try { sleepRelease = this.sleepReleaseSource?.() ?? null } catch { sleepRelease = null }
     return {
       v: 1,
       scheduler: { state, since: this.lastStateSince || this.now().toISOString() },
       ...(sleepHold ? { sleepHold: { since: sleepHold.since, reason: sleepHold.reason } } : {}),
+      ...(sleepRelease ? { sleepRelease: { at: sleepRelease.at, reason: sleepRelease.reason, heldSince: sleepRelease.heldSince,
+        awakeSeconds: sleepRelease.awakeSeconds } } : {}),
       accounts: accounts.map(account => {
         const reason = desktopAccountReadiness(account, id => source!.isBrowserTabOpen(id))
         return {

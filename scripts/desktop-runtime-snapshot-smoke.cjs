@@ -188,6 +188,17 @@ pass('readiness helper')
   snapshot.attachSleepHold(() => { throw new Error('boom') })
   assert.equal('sleepHold' in snapshot.build(), false)
   pass('sleepHold appears only while the sleep guard holds')
+  // Lần thôi giữ gần nhất (20/11/2026): có khi bộ giữ đã từng thôi giữ, chỉ bốn trường; nguồn lỗi = không gửi.
+  assert.equal('sleepRelease' in snapshot.build(), false)
+  let released = null
+  snapshot.attachSleepRelease(() => released)
+  assert.equal('sleepRelease' in snapshot.build(), false)
+  released = { at: '2026-11-19T07:48:57.000Z', reason: 'user_active', heldSince: '2026-11-19T04:31:36.000Z', awakeSeconds: 61, extra: 'dropped' }
+  assert.deepEqual(snapshot.build().sleepRelease,
+    { at: '2026-11-19T07:48:57.000Z', reason: 'user_active', heldSince: '2026-11-19T04:31:36.000Z', awakeSeconds: 61 })
+  snapshot.attachSleepRelease(() => { throw new Error('boom') })
+  assert.equal('sleepRelease' in snapshot.build(), false)
+  pass('sleepRelease reports the last release of the sleep guard')
 }
 
 console.log(`OK ${checks} checks`)

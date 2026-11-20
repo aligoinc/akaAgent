@@ -48,16 +48,47 @@ Chưa phủ (cố ý, để đợt sau):
 - Data đang ở giữa bước nhận và bước ghi dấu đúng lúc máy chuyển sang ngủ vẫn có thể bị gửi ở lần thức tạm sau. Chỉ có
   1 data mỗi tài khoản mỗi lần ngủ, thay vì cứ 16 phút một lần như trước.
 
+## Sửa 20/11/2026: máy phải thức liền mạch 60 giây mới nhận việc
+
+Trạng thái: nhánh `claude/sleep-guard-settle`, PR [#735](https://github.com/aligoinc/akaAgent/pull/735) vào `dev_3` mở 20/11/2026, **chưa merge, chưa build Desktop**. Không migration.
+
+Đo trên một máy Mac chạy 10.0.0 (đã có bộ giữ) ngày 19/11, bằng `edge_logs` lọc theo
+`request.sb.jwt.authorization.payload.subject` = `auth_user_id` của nhân viên (`private.aka_agent_desktop_users`):
+
+- Máy ngủ từ 11:31 VN, tới 17:30 thức tạm 22 lần. Bộ giữ chặn đúng 17 lần: mỗi đợt 1–4 giây, 8–16 request, không có
+  `rpc/aka_agent_get_runtime_clock` (tức `tick()` không chạy).
+- Lọt 5 lần (11:40:20, 14:47:55, 16:06:42, 16:34:31, 17:27:31): đợt dài hơn, 4–15 giây, có `get_runtime_clock` rồi
+  `rpc/aka_agent_engine_claim_target_v1` trong khoảng 3 giây đầu, rồi máy ngủ lại. 9 lượt data bị đóng `stale` sau 14 phút,
+  không lượt nào đã ghi dấu gửi nên data đều về hàng đợi.
+- Không biết bộ giữ đã thôi giữ vì lý do nào: câu `[SleepGuard] release` chỉ nằm ở console máy khách. Đọc code thì cả ba
+  đường thôi giữ đều không đòi máy thức đủ lâu: sự kiện mở khoá thôi giữ ngay; quy tắc "có thao tác sau lần thức" tin vào
+  bộ đếm "không thao tác" của hệ điều hành (có thể bị đặt lại lúc máy bị đánh thức mà không có người); máy đứng dưới 60 giây
+  giữa một lần thức thì thời gian đứng được tính là "đã thức".
+
+Bản sửa ([systemSleepGuard.ts](../src/main/services/systemSleepGuard.ts)):
+
+- Thêm khoá `settleSeconds` (mặc định 60, hợp lệ 0–600). Thao tác bàn phím / chuột và sự kiện mở khoá chỉ làm thôi giữ khi
+  máy đã thức liền mạch đủ số giây này. `0` = thôi giữ ngay như bản 10.0.0 / 10.1.0.
+- "Liền mạch" đo bằng nhịp đếm 1 giây: trong lúc giữ, nhịp trễ từ 5 giây (`SLEEP_GUARD_STALL_MS`) là máy vừa đứng, thời
+  gian thức đếm lại từ đầu. Quy tắc "thức đủ `awakeMinutes`" cũng đếm theo cách này.
+- Thao tác trong 5 giây đầu sau khi thức không tính là có người (`SLEEP_GUARD_WAKE_NOISE_MS`).
+- Cái giá: khi người dùng thật mở máy, chiến dịch chạy tiếp chậm hơn tối đa `settleSeconds`.
+- Presence có thêm khoá `sleepRelease` (`at`, `reason`, `heldSince`, `awakeSeconds`): lần thôi giữ gần nhất của phiên app,
+  để lần sau tra được lý do từ máy chủ. Bảng presence chỉ giữ trạng thái mới nhất, nên đọc ngay sau lần lọt.
+
+Ca kiểm 5b của `desktop-sleep-guard-smoke.cjs` dựng lại 22 lần thức của máy đó với cả ba đường nghi ngờ cùng lúc: bản sửa
+không nhận việc lần nào, `settleSeconds: 0` thì lọt ngay lần thức đầu. Chưa chạy trên máy Mac thật.
+
 ## Bật, tắt
 
 Khoá `desktop.sleep_guard` (đọc cùng điều kiện `is_active = true`, `is_secret = false`), giá trị JSON:
 
 ```json
-{"mac": true, "win": false, "awakeMinutes": 10}
+{"mac": true, "win": false, "awakeMinutes": 10, "settleSeconds": 60}
 ```
 
 - Thiếu dòng, JSON sai, hay thiếu / sai từng khoá thì khoá đó lấy mặc định (`mac` true, `win` false, `awakeMinutes` 10;
-  `awakeMinutes` hợp lệ từ 1 tới 120).
+  `awakeMinutes` hợp lệ từ 1 tới 120; `settleSeconds` 60, hợp lệ từ 0 tới 600, chỉ bản Desktop có bản sửa 20/11 mới đọc).
 - Desktop đọc lúc đăng nhập và đọc lại mỗi 10 phút, kể cả khi đang giữ. Tắt công tắc khi máy đang giữ thì máy thôi
   giữ ngay ở lần đọc kế tiếp, không cần build lại hay mở lại app.
 - Ghi dòng này là ghi vào production, phải được anh duyệt từng lần. Ví dụ tắt khẩn cấp trên Mac:
