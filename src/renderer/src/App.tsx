@@ -382,7 +382,7 @@ export default function App() {
     setShowProxyManager(true)
   }
 
-  const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean; openUrl?: string }) => {
+  const requestOpenBrowser = useCallback((request: { accountId: number; reloadAfterOpen?: boolean; openUrl?: string; showPage?: boolean }) => {
     browserOpenRequestSeq.current += 1
     setBrowserOpenRequest({
       requestId: browserOpenRequestSeq.current,
@@ -390,12 +390,13 @@ export default function App() {
       reloadAfterOpen: request.reloadAfterOpen === true,
       openUrl: request.openUrl
     })
-    setActivePage('browsers')
+    // showPage false: trang Trình duyệt (đang ẩn bằng visibility) vẫn xử lý yêu cầu, tab tải trang ở phía sau.
+    if (request.showPage !== false) setActivePage('browsers')
   }, [])
 
   // Cửa sổ con (Quét data trong form chiến dịch, Nhóm data) mở tab trình duyệt của tài khoản qua store này.
   useEffect(() => {
-    useBrowserOpenStore.getState().setHandler(requestOpenBrowser)
+    useBrowserOpenStore.getState().setHandler({ open: requestOpenBrowser, showPage: () => setActivePage('browsers') })
     return () => useBrowserOpenStore.getState().setHandler(null)
   }, [requestOpenBrowser])
 

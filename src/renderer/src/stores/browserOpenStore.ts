@@ -5,15 +5,22 @@ export interface AccountBrowserOpenRequest {
   /** Trang https mở trong tab của tài khoản; bỏ trống thì mở trang chủ của nền tảng. */
   openUrl?: string
   reloadAfterOpen?: boolean
+  /** false: chỉ cho tab tải trang ở phía sau, chưa chuyển sang trang Trình duyệt (gọi `showPage` sau). Mặc định true. */
+  showPage?: boolean
 }
 
-type AccountBrowserOpenHandler = (request: AccountBrowserOpenRequest) => void
+export interface AccountBrowserOpenHandler {
+  /** App đăng ký: chọn tab của tài khoản, tải trang, và (mặc định) chuyển sang trang Trình duyệt. */
+  open: (request: AccountBrowserOpenRequest) => void
+  /** Chuyển sang trang Trình duyệt. */
+  showPage: () => void
+}
 
 interface BrowserOpenState {
-  /** App đăng ký: chuyển sang trang Trình duyệt và mở tab của tài khoản. */
   handler: AccountBrowserOpenHandler | null
   setHandler: (handler: AccountBrowserOpenHandler | null) => void
   open: (request: AccountBrowserOpenRequest) => boolean
+  showPage: () => boolean
 }
 
 export const useBrowserOpenStore = create<BrowserOpenState>((set, get) => ({
@@ -22,7 +29,13 @@ export const useBrowserOpenStore = create<BrowserOpenState>((set, get) => ({
   open: request => {
     const handler = get().handler
     if (!handler) return false
-    handler(request)
+    handler.open(request)
+    return true
+  },
+  showPage: () => {
+    const handler = get().handler
+    if (!handler) return false
+    handler.showPage()
     return true
   }
 }))

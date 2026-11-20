@@ -94,7 +94,7 @@ const accounts=[
  {id:15,name:'FB proxy',flatformType:'facebook',loginStatus:'đã đăng nhập',status:'chờ xử lý',isActive:true,isDelete:false,proxyId:7},
  {id:16,name:'Zalo trình duyệt',flatformType:'zalo',isZaloShowWeb:true,isZaloServer:false,loginStatus:'đã đăng nhập',status:'chờ xử lý',isActive:true,isDelete:false}
 ];
-window.results={};window.opened=[];window.sequence=0;
+window.results={};window.opened=[];window.shown=0;window.sequence=0;
 const known={
  listAccounts:async()=>accounts,listDataGroups:async()=>({groups:[],total:0}),listDataTypeCategoryItems:async()=>[],
  listContactDatasets:async()=>[],getAkaBizContactTags:async()=>[],listAkaBizContactTags:async()=>[],getZaloServerOperationStates:async()=>[],
@@ -106,8 +106,11 @@ window.electronAPI=new Proxy(known,{get(t,name){if(name in t)return t[name];if(t
 // Gán người dùng trước: đổi phiên thì kho chiến dịch xoá danh sách tài khoản.
 useAuthStore.setState({user:{staffId:1,organizationId:1,entitlements:{facebookCore:true,facebookFanpage:true,zalo:true}}});
 useCampaignStore.setState({accounts,loadAccounts:async()=>{}});
-// Như App: chuyển sang trang Trình duyệt.
-useBrowserOpenStore.getState().setHandler(request=>{window.opened.push(request);document.body.dataset.activePage='browsers'});
+// Như App: open() chỉ cho tab tải trang khi showPage false; showPage() chuyển sang trang Trình duyệt.
+useBrowserOpenStore.getState().setHandler({
+ open:request=>{window.opened.push(request);if(request.showPage!==false)document.body.dataset.activePage='browsers'},
+ showPage:()=>{window.shown++;document.body.dataset.activePage='browsers'}
+});
 const view=createRoot(document.getElementById('root'));
 window.openScan=(action,accountId,nested)=>{
  document.body.dataset.activePage='campaigns';
@@ -146,21 +149,63 @@ async function uiChecks() {
       return (await alertBox.locator('.campaign-modal-body').innerText()).trim()
     }
     const buttons = async () => (await alertBox.locator('.modal-footer button').allInnerTexts()).map(t => t.trim())
+    const activePage = () => page.evaluate(() => document.body.dataset.activePage)
+    // Bấm "Mở trình duyệt": nút khoá, hiện "Đang mở…"; tab được yêu cầu tải trang ngay nhưng chưa chuyển trang.
+    const clickOpen = async expected => {
+      const shownBefore = await page.evaluate(() => window.shown)
+      const started = Date.now()
+      await alertBox.getByRole('button', { name: 'Mở trình duyệt' }).click()
+      const pending = alertBox.locator('.modal-footer button.btn-primary')
+      assert.equal((await pending.innerText()).trim(), 'Đang mở…')
+      assert.equal(await pending.isDisabled(), true)
+      assert.equal(await pending.locator('svg.spin').count(), 1, 'có vòng xoay')
+      assert.deepEqual(await page.evaluate(() => window.opened.at(-1)), { ...expected, showPage: false })
+      assert.equal(await activePage(), 'campaigns', 'chưa chuyển trang khi đang chờ')
+      return { shownBefore, started }
+    }
+    const waitSwitched = async ({ shownBefore, started }) => {
+      await alertBox.waitFor({ state: 'detached', timeout: 8000 })
+      const waited = Date.now() - started
+      assert.ok(waited >= 2800, `chờ đủ khoảng 3 giây trước khi chuyển (${waited} ms)`)
+      assert.equal(await page.evaluate(() => window.shown), shownBefore + 1)
+      assert.equal(await activePage(), 'browsers')
+      return waited
+    }
 
     // 1. Lỗi mở trang (cửa sổ đứng riêng): câu ngắn, hai nút; bấm mở tab đúng trang, cửa sổ thu nhỏ có nút Mở rộng form.
     let text = await scanWith('facebook_friends', 13, "ERR_CONNECTION_TIMED_OUT (-118) loading 'https://www.facebook.com/friends/list'. Đã lưu 0 data.")
     assert.equal(text, 'Không mở được trang Facebook. Bấm "Mở trình duyệt" để kiểm tra.')
     assert.deepEqual(await buttons(), ['Đóng', 'Mở trình duyệt'])
     await shot('1-loi-mo-trang')
-    await alertBox.getByRole('button', { name: 'Mở trình duyệt' }).click()
-    await alertBox.waitFor({ state: 'detached' })
-    assert.deepEqual(await page.evaluate(() => window.opened.at(-1)), { accountId: 13, openUrl: 'https://www.facebook.com/friends/list' })
+    let pending = await clickOpen({ accountId: 13, openUrl: 'https://www.facebook.com/friends/list' })
+    assert.equal(await page.locator('.data-scan-modal.minimized').count(), 0, 'chưa thu nhỏ khi đang chờ')
+    await shot('1-dang-mo')
+    const waited = await waitSwitched(pending)
     await page.locator('.data-scan-modal.minimized').waitFor()
     assert.equal(await page.locator('.data-scan-minimized-title').count(), 0, 'không hiện "Đang tải data" khi không quét')
     await shot('1-thu-nho')
     await page.locator('.data-scan-minimized-body').getByRole('button', { name: 'Mở rộng form' }).click()
     await page.locator('.data-scan-load-button').waitFor()
-    ok('lỗi mở trang: câu ngắn, nút mở đúng trang, cửa sổ thu nhỏ rồi mở rộng lại được')
+    ok(`lỗi mở trang: câu ngắn; bấm nút thì "Đang mở…" + vòng xoay, tab tải trang, ${waited} ms sau mới chuyển; cửa sổ thu nhỏ rồi mở rộng lại được`)
+
+    // 1b. Đóng trong lúc chờ: huỷ việc chuyển trang, cửa sổ quét giữ nguyên.
+    await scanWith('facebook_friends', 13, "ERR_CONNECTION_TIMED_OUT (-118) loading 'https://www.facebook.com/friends/list'")
+    pending = await clickOpen({ accountId: 13, openUrl: 'https://www.facebook.com/friends/list' })
+    assert.equal(await alertBox.getByRole('button', { name: 'Đóng' }).isDisabled(), false, 'Đóng vẫn bấm được khi đang chờ')
+    await alertBox.getByRole('button', { name: 'Đóng' }).click()
+    await alertBox.waitFor({ state: 'detached', timeout: 1000 })
+    await page.waitForTimeout(3600)
+    assert.equal(await page.evaluate(() => window.shown), pending.shownBefore, 'không chuyển trang sau khi Đóng')
+    assert.equal(await activePage(), 'campaigns')
+    assert.equal(await page.locator('.data-scan-modal.minimized').count(), 0)
+    // X cũng huỷ.
+    await scanWith('facebook_friends', 13, "ERR_CONNECTION_TIMED_OUT (-118) loading 'https://www.facebook.com/friends/list'")
+    pending = await clickOpen({ accountId: 13, openUrl: 'https://www.facebook.com/friends/list' })
+    await alertBox.locator('.campaign-modal-top .btn-icon').click()
+    await alertBox.waitFor({ state: 'detached', timeout: 1000 })
+    await page.waitForTimeout(3600)
+    assert.equal(await page.evaluate(() => window.shown), pending.shownBefore, 'không chuyển trang sau khi bấm X')
+    ok('Đóng / X trong lúc chờ: huỷ chuyển trang, cửa sổ quét giữ nguyên')
 
     // 2. Đóng: không mở tab.
     const before = await page.evaluate(() => window.opened.length)
@@ -175,8 +220,7 @@ async function uiChecks() {
     // 3. Checkpoint.
     text = await scanWith('facebook_friends', 14, 'Tài khoản chưa đăng nhập Facebook')
     assert.equal(text, 'Facebook đang yêu cầu xác minh tài khoản này. Bấm "Mở trình duyệt" để xử lý, rồi quét lại.')
-    await alertBox.getByRole('button', { name: 'Mở trình duyệt' }).click()
-    assert.deepEqual(await page.evaluate(() => window.opened.at(-1)), { accountId: 14, openUrl: 'https://www.facebook.com/' })
+    await waitSwitched(await clickOpen({ accountId: 14, openUrl: 'https://www.facebook.com/' }))
     ok('checkpoint: câu riêng, nút mở facebook.com')
 
     // 4. Proxy: chỉ nút Đóng.
@@ -190,8 +234,7 @@ async function uiChecks() {
     text = await scanWith('zalo_friends', 16, 'Chưa xác minh được phiên Zalo Web: Chưa xác minh được phiên Zalo Web; hãy bấm Kiểm tra đăng nhập để thử lại')
     assert.equal(text, 'Zalo trên trình duyệt của tài khoản này chưa sẵn sàng. Bấm "Mở trình duyệt" để tải lại trang Zalo, rồi quét lại.')
     await shot('5-zalo-web')
-    await alertBox.getByRole('button', { name: 'Mở trình duyệt' }).click()
-    assert.deepEqual(await page.evaluate(() => window.opened.at(-1)), { accountId: 16, openUrl: 'https://chat.zalo.me/' })
+    await waitSwitched(await clickOpen({ accountId: 16, openUrl: 'https://chat.zalo.me/' }))
     ok('Zalo trình duyệt: câu mới, nút tải lại chat.zalo.me')
 
     // 6. Lỗi khác: giữ câu, chỉ nút Đóng.
@@ -205,8 +248,9 @@ async function uiChecks() {
     text = await scanWith('facebook_friends', 13, 'Facebook đang yêu cầu nhập mã xác minh cho tài khoản này. Bấm chuột phải vào tài khoản, chọn "Kiểm tra nhập mã xác minh Fanpage", nhập mã rồi tìm data lại.', true)
     assert.equal(text, 'Facebook đang yêu cầu nhập mã xác minh cho tài khoản này. Bấm "Mở trình duyệt", nhập mã rồi quét lại.')
     await shot('7-ma-xac-minh')
-    await alertBox.getByRole('button', { name: 'Mở trình duyệt' }).click()
-    assert.deepEqual(await page.evaluate(() => window.opened.at(-1)), { accountId: 13, openUrl: 'https://business.facebook.com/content_management' })
+    pending = await clickOpen({ accountId: 13, openUrl: 'https://business.facebook.com/content_management' })
+    assert.notEqual(await page.locator('#host-form').evaluate(el => getComputedStyle(el).display), 'none', 'form còn hiện khi đang chờ')
+    await waitSwitched(pending)
     assert.equal(await page.locator('#host-form').evaluate(el => getComputedStyle(el).display), 'none')
     assert.equal(await page.locator('.data-scan-modal.minimized').count(), 0)
     await page.evaluate(() => { document.body.dataset.activePage = 'campaigns' })
