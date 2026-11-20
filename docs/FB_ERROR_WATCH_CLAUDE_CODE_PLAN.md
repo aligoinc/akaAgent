@@ -453,3 +453,36 @@ luận "chưa đủ dữ liệu, cần ảnh"). Thông báo gửi cả các ca k
 
 Chưa kiểm: chưa có yêu cầu ảnh nào do bộ kiểm lỗi tạo trên production (yêu cầu ảnh số 1 ngày 20/11 do phiên khác tạo tay, về sau
 33 giây); lệnh `/xu-ly-loi` chưa chạy thật.
+
+## 14. Hộp thư lỗi, không thông báo, bỏ qua tạm thời (viết 20/11; V594 đã apply 12:11:07 VN 20/11, [biên nhận](../migrations/snapshots/engine-error-watch-v594/apply-receipt.json))
+
+Anh chốt 20/11/2026: "ko cần đẩy thông báo lên điện thoại hay lên đâu gì nữa cả… chỉ cần 1 session hộp thư lỗi, cứ 1 tiếng check db 1 lần, nếu có
+lỗi đem ra nghiên cứu tìm nguyên nhân luôn… thấy lỗi nào cần fix thì sẽ mở session con để fix, lỗi nào cần bỏ qua thì tôi kêu bỏ qua… nhưng bỏ qua
+đó là tạm thời nếu loại đó xuất hiện quá nhiều trên toàn hệ thống vẫn phải đưa vào"; qua hộp chọn: nghiên cứu chạy trên cloud để máy tắt vẫn chạy,
+bỏ qua mở lại khi từ 30 lượt / 24 giờ, tối đa 2 ca mỗi giờ và 10 ca mỗi ngày.
+
+Một session cloud lâu dài vừa nghiên cứu vừa làm hộp thư thì không làm được (tài liệu Anthropic đọc 20/11): mỗi lượt của tác vụ cloud (theo lịch hay
+`/fire`) là một session mới, session cloud tự dừng khi không hoạt động (nên phiên Hỏi đáp tự hẹn giờ ngừng hẳn 19/11), và session cloud không mở
+được session trên máy hay gửi tin vào đó. Nên chia hai chỗ:
+
+- **Nghiên cứu ở cloud** (như hiện nay, chạy cả khi máy tắt): job database kiểm mỗi 2 phút, mỗi giờ đưa tối đa `maxPerHour` ca (10 ca mỗi ngày) và
+  gọi `/fire`; phiên cloud nộp báo cáo vào database. Câu lệnh của tác vụ và [tệp việc](FB_ERROR_WATCH_TASK.md) cấm gửi thông báo (câu lệnh sửa
+  12:00 VN 20/11 theo yêu cầu, có hiệu lực ngay; tệp việc có hiệu lực khi vào `dev_3`).
+- **Hộp thư trên máy** ([`/hop-thu-loi`](../.claude/commands/hop-thu-loi.md), [script](../scripts/engine-v2-facebook/error-watch-inbox.cjs)): hiện các
+  ca đã có báo cáo đang chờ quyết (đọc thẳng sổ ca, nên máy tắt không mất gì), tự xem lại mỗi giờ khi máy mở; "sửa câu N" mở session con chạy
+  `/xu-ly-loi N` và ẩn ca khỏi hộp thư (ghi trên máy) tới khi có báo cáo mới; "bỏ qua câu N" ghi ca sang `muted`.
+
+[V594](../migrations/migration_v594_engine_error_watch_hourly_skip.sql), sinh bằng `node scripts/build-v594-sql.cjs` từ thân V593
+(md5 `88a4fb4b…` → `022dfb36…`):
+
+- `maxPerHour`: tối đa N câu mỗi giờ đồng hồ (đếm câu của agent trong giờ, cả câu hỏi tiếp khi ảnh về); bỏ trống = như V593. Bật: `"maxPerHour": 2`.
+- Bước 5b: ca `muted` có từ `skipReopenHits24h` (mặc định 30) lượt lỗi trong 24 giờ (đếm `auto_engine_error_items`) thì về `new` với ghi chú
+  "Mở lại sau khi bỏ qua: từ N lượt trong 24 giờ", được hỏi trong hội thoại cũ của ca, câu hỏi có dòng `ghi chu:`. Ca "tăng bất thường" có ngày
+  trong khoá nên bỏ qua chỉ có tác dụng trong ngày.
+- Bước 6a (hỏi tiếp khi ảnh về) chỉ nhận ca `reported`; ca `failed` để bước 6b hỏi bằng câu đầy đủ kèm `anh da ve` (sửa chỗ lệch của V593, câu 585).
+- Hàm `private.aka_agent_engine_error_case_skip_v1(câu, bỏ qua?)` cho lệnh `skip` / `unskip` của hộp thư: chỉ role postgres; từ chối ca đang
+  được nghiên cứu (`queued`) vì bước chép báo cáo chỉ nhận ca `queued`.
+
+Kiểm: `LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs` (7 nhóm, có đối chứng V593 cho câu 585). Đã apply 12:11 VN 20/11 và
+đặt `"maxPerHour": 2, "skipReopenHits24h": 30` lúc 12:12 VN. Chưa làm: gỡ lịch mỗi giờ của tác vụ cloud (lịch chỉ còn là lưới đỡ; mỗi lượt
+trống vẫn mở một session; gỡ ở trang sửa tác vụ trên claude.ai, giữ trigger API).
