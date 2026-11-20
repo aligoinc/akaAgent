@@ -9,7 +9,10 @@ export interface AlertAction {
 }
 
 export interface AlertOptions {
+  /** Thay nút Đóng bằng nút này. */
   action?: AlertAction | null
+  /** Nút thêm bên cạnh nút Đóng. */
+  extraAction?: AlertAction | null
 }
 
 export interface ConfirmOptions {
@@ -25,6 +28,7 @@ interface UiState {
     type: AlertType
     message: string
     action?: AlertAction | null
+    extraAction?: AlertAction | null
   }
   showAlert: (message: string, type?: AlertType, options?: AlertOptions) => void
   closeAlert: () => void
@@ -43,9 +47,11 @@ interface UiState {
 }
 
 export const useUiStore = create<UiState>((set) => ({
-  alert: { isOpen: false, type: 'info', message: '', action: null },
-  showAlert: (message, type = 'info', options) => set({ alert: { isOpen: true, type, message, action: options?.action ?? null } }),
-  closeAlert: () => set((state) => ({ alert: { ...state.alert, isOpen: false, action: null } })),
+  alert: { isOpen: false, type: 'info', message: '', action: null, extraAction: null },
+  showAlert: (message, type = 'info', options) => set({ alert: {
+    isOpen: true, type, message, action: options?.action ?? null, extraAction: options?.extraAction ?? null
+  } }),
+  closeAlert: () => set((state) => ({ alert: { ...state.alert, isOpen: false, action: null, extraAction: null } })),
 
   confirm: {
     isOpen: false,

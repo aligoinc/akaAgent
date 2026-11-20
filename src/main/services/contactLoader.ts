@@ -735,7 +735,7 @@ export class ContactLoader {
       const cookieHeader = await read(() => this.getFacebookCookieHeader(page))
       const pageAccessToken = await this.getPageAccessToken(normalizedPageUid, userAccessToken, cookieHeader, loadState.controller.signal)
       if (!pageAccessToken) {
-        throw new Error('Không lấy được Page access token. Tài khoản cần có quyền nhắn tin trên page này.')
+        throw new Error(`Không đọc được tin nhắn của page "${normalizedPageName || normalizedPageUid}" bằng tài khoản này.`)
       }
       if (isCancelled()) throw new Error('Đã dừng quét.')
 

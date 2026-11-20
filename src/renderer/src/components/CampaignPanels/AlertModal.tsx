@@ -12,7 +12,7 @@ export default function AlertModal() {
 
   // "Tính năng … chưa được kích hoạt hoặc đã hết hạn.": thêm lối mua / dùng thử ngay trong thông báo (form "Nâng cấp và mua
   // gói"). Chỉ áp dụng cho thông báo lỗi chưa có nút riêng và khi đang đăng nhập; nút "Đóng" giữ nguyên.
-  const offerUpgrade = loggedIn && alert.type === 'error' && !alert.action && isUpgradePortalFeatureMessage(alert.message)
+  const offerUpgrade = loggedIn && alert.type === 'error' && !alert.action && !alert.extraAction && isUpgradePortalFeatureMessage(alert.message)
   const handleUpgrade = () => {
     closeAlert()
     useUpgradePortalStore.getState().open({ from: 'feature' })
@@ -20,6 +20,14 @@ export default function AlertModal() {
 
   const handleAction = () => {
     const action = alert.action
+    closeAlert()
+    if (action) {
+      void action.onClick()
+    }
+  }
+
+  const handleExtraAction = () => {
+    const action = alert.extraAction
     closeAlert()
     if (action) {
       void action.onClick()
@@ -42,7 +50,14 @@ export default function AlertModal() {
           {alert.message}
         </div>
         <div className="modal-footer" style={{ justifyContent: 'center', gap: '8px', borderTop: 'none', paddingBottom: '24px' }}>
-          {offerUpgrade ? (
+          {alert.extraAction ? (
+            <>
+              <button className="btn btn-secondary" onClick={alert.action ? handleAction : closeAlert} style={{ padding: '8px 24px' }}>
+                {alert.action?.label || 'Đóng'}
+              </button>
+              <button className="btn btn-primary" onClick={handleExtraAction} style={{ padding: '8px 24px' }}>{alert.extraAction.label}</button>
+            </>
+          ) : offerUpgrade ? (
             <>
               <button className="btn btn-secondary" onClick={closeAlert} style={{ padding: '8px 24px' }}>Đóng</button>
               <button className="btn btn-primary" onClick={handleUpgrade} style={{ padding: '8px 24px' }}>{UPGRADE_PORTAL_FEATURE_BUTTON_LABEL}</button>
