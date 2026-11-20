@@ -736,7 +736,7 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
         }
       }
       targets += items.length
-      // Dòng tạm dừng in sau khi lô xong, tức sau các dòng lý do của lô ("⚠️ …", "⏸ Kết thúc batch: …").
+      // Dòng tạm dừng in sau khi lô xong, tức sau các dòng lý do của lô ("⚠️ …", "⏸ Dừng gửi: …").
       let paused = false
       const end = await batch.run(batchApi(claim, items, () => { paused = true }))
       if (paused) deps.events.progress(policyPausedProgress(cfg.campaignId, cfg.campaignName))

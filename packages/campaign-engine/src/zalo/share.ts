@@ -588,7 +588,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
     }
     api.progress(`📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batchSize}, thành công ${succeeded}, thất bại ${failed}`, 'info')
     blocklistLine()
-    if (next.stop && stopNote) api.progress(`⏸ Kết thúc batch: ${stopNote}`, 'info')
+    if (next.stop && stopNote) api.progress(`⏸ Dừng gửi: ${stopNote}`, 'info')
     return next
   } finally {
     for (const engagement of engagements.values()) engagement.abandon()
