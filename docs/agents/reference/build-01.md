@@ -87,6 +87,14 @@ Build lại lần 2 cùng ngày vì #726 merge sau khi cắt nhánh: nhánh `cod
 (version chưa merge), cất bộ cài / bằng chứng lần 1 như 10.0.0. Chạy lại smoke bằng script lấy từ commit khác phải `git fetch` trước:
 `git show <sha>:<file> > tệp` với commit chưa có trên máy cho tệp rỗng, và node chạy tệp rỗng vẫn thoát 0.
 
+**Build 10.2.0 (20/11/2026).** `dist/build-10.2.0-work/` của repo chính, script sinh từ 10.1.0 (đổi worktree, số bản, `(10<<16)+2`, bỏ phần
+đối chiếu lần 1). Bản đối chứng là main / renderer giải nén bằng `7za` từ bộ cài 10.1.0 lần 2 đang trên feed; dấu của 10.0.0 và 10.1.0 đều phải
+còn. Hai bài kiểm hỏng vì chính bài kiểm, không phải app: `upgrade-portal-desktop-smoke` (#732) so nguyên đối tượng thông báo của `uiStore` bằng
+`assert.deepEqual`, nên vỡ khi #749 thêm khoá `extraAction` (bản chép bỏ khoá đó khỏi phép so: 22/22 đạt); `campaign-repeat-v561-smoke` có nhánh
+theo giờ chạy coi từ 22:00 VN là "quá giờ trong ngày", nhưng chiến dịch thử dừng 23:59 và chạy lại sau 1 giờ nên 22:00–22:59 hàm DB vẫn hẹn chạy lại
+(đúng V558): chạy bộ kiểm trước 22:00 hoặc sau 23:00. Smoke mới cần Chrome: `run-upgrade-portal-ui-smoke.cjs` qua `UPGRADE_UI_CHROMIUM`,
+`v591/v597/v598/v603-smoke` và `facebook-messages-smoke` qua `CHROMIUM_PATH`. Giả lập dừng app: `scenarios.cjs --seeds 12 --interrupt 0.08 --pages 3`.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
