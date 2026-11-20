@@ -46,6 +46,15 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop 10.2.0](../audits/akaagent-10.2.0-20261120/README.md):
+**Đã build Windows x64, Mac ARM64, Mac Intel x64 lúc 22:51:02–22:54:20 VN, 20/11/2026. Chưa upload/phát hành/feed (anh tự phát hành). Không
+build App Server** (10/247 file trong gói Server đổi sau 10.1.0, đều là engine v2 / Facebook mà App Server không chạy, kiểu dữ liệu, hoặc bộ giữ máy
+ngủ tắt mặc định trên Windows). Nguồn worktree `release-10.2.0`, nhánh `codex/release-10.2.0` `19e0cdde` (chỉ đổi version) trên `origin/dev_3`
+`37efb347` sau PR #757. Mới so với 10.1.0: "Nâng cấp và mua gói" (#732), trang "Tin nhắn Facebook" (#746), câu lỗi Quét data + nút "Mở trình
+duyệt" (#749, #756), AutoCheck không hạ tài khoản ở trang lỗi (#754), lượt engine FB bị ngắt ra RUN01 / SYS02 (#734), DOM kèm ảnh lỗi (#739,
+V595), bộ giữ máy ngủ chờ thức liền 60 giây (#735), dòng "⏸ Dừng gửi" (#750, V601). 82/87 bước kiểm đạt, 5 bước lỗi đã giải thích (2 hỏng sẵn,
+3 do chính bài kiểm). Không DB/deploy service trong bước build. [Receipt](../audits/akaagent-10.2.0-20261120/build-receipt.json).
+
 [Build akaAgent Desktop 10.1.0](../audits/akaagent-10.1.0-20261119/README.md):
 **Đã build lại lần 2 Windows x64, Mac ARM64, Mac Intel x64 lúc 20:54:28–20:57:39 VN, 19/11/2026, vì #726 (mục "Lỗi không xác định"
 cho admin akaBiz, V588) merge `dev_3` lúc 20:09 VN sau khi cắt nhánh lần 1. Chưa upload/phát hành/feed (anh tự phát hành). Không build App
