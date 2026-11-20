@@ -1,0 +1,58 @@
+{
+  "migration": "migration_v597_engine_facebook_group_post_signs",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V597 (20/11/2026, sau khi duyệt mã / câu / cách xử lý qua hộp chọn và mở PR #745)",
+  "applied_at_vn": "2026-11-20 13:58:12",
+  "ledger_version": "20261120065809",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 3 giây, rc 0",
+  "file_md5": "ef2ad656e14a8c68485c02b90f816941",
+  "ledger_statements_md5": "ef2ad656e14a8c68485c02b90f816941",
+  "preflight_live_13_58_00": {
+    "ledger_v597_rows": 0,
+    "block_2871_md5": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "block_2624_md5": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "step_4": { "reviewed_code_md5": "e433ac1a58ac08535c53010fdc5e9ba7", "commit_level": 1, "send_ops": [] },
+    "steps_of_block_2871": 1,
+    "facebook_error_signs_md5": "aa197aea7d2dc397545a8f8e5a8a5a5c",
+    "new_codes": 0,
+    "new_elements": 0,
+    "v597_policies": 0,
+    "max_fb_public_code": 47
+  },
+  "postflight_live": {
+    "block_2871_md5": "f981cac703a91dc6c9f8a49176a61bba",
+    "legacy_block_2624_md5_unchanged": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "step_4_reviewed_code_md5": "f981cac703a91dc6c9f8a49176a61bba",
+    "facebook_error_signs_md5": "dc7fd786e225a7ca05c4a3cfa49852d7",
+    "elements": { "GroupPostRequestFailedNotice": 1808, "GroupPostUploadFailedNotice": 1809, "GroupPostAccountAccessLimitedNotice": 1810 },
+    "codes": {
+      "FB48": { "auto_error_id": 174, "error_code": "err_fb_group_post_request_failed", "error_class": "target_permanent", "customer_title": "Facebook báo gặp sự cố khi đăng bài", "customer_help": null },
+      "FB49": { "auto_error_id": 175, "error_code": "err_fb_group_post_upload_failed", "error_class": "transient", "customer_title": "Facebook không tải được ảnh hoặc video lên", "customer_help": null },
+      "FB50": { "auto_error_id": 176, "error_code": "err_fb_account_access_limited", "error_class": "account_restricted", "customer_title": "Facebook đang giới hạn quyền truy cập của tài khoản", "customer_help": null }
+    },
+    "policies": {
+      "432": "FB48 đăng nhóm: complete / increment / none / count / continue",
+      "433": "FB49 đăng nhóm: requeue / increment / none / no_count / continue",
+      "434": "FB50 đăng nhóm: requeue / ignore / pause / no_count / end_unit"
+    },
+    "fb48_resolve_equals_fb42_all_phases": true,
+    "classify_signal_after_send": "ba mã mới ra đúng mã; dòng 'thất bại' không mã 'Form đăng bài chưa đóng' vẫn ra err_engine_fb_action_failed (FB42)"
+  },
+  "edge_logs_rest_per_minute_utc": {
+    "06:54": "41.958 req, 0 lỗi 5xx",
+    "06:55": "42.089 req, 0",
+    "06:56": "41.893 req, 0",
+    "06:57": "40.340 req, 2 lỗi 5xx (PATCH /rest/v1/contacts quá trần 3 giây, trước apply)",
+    "06:58 (phút apply, tới lúc đọc)": "22.948 req, 3 lỗi 5xx (+1 lúc 06:58:40)"
+  },
+  "five_xx_after_apply": "4 lỗi 500 RPC aka_agent_claim_account_operation lúc 06:58:16 / :24 / :32 / :40 UTC, cùng một máy (UA node) gọi mỗi 2–3 giây, chạm trần 3 giây. Không do V597: các lần gọi của máy này đã chậm 1,1–2,2 giây từ 06:57:38 UTC và postgres_logs có 'still waiting for ShareLock on transaction' / 'canceling statement due to statement timeout' từ 06:57:45 UTC (trước apply); V597 commit khoảng 06:58:12 và chỉ ghi auto_blocks 2871, auto_engine_block_steps 4, auto_system_settings facebook.error_signs, auto_elements, auto_error, auto_outcome_policies. Từ 06:58:47 các lần gọi đều 200; 85 phút trước đó RPC này 0 lỗi 5xx.",
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "CHROMIUM_PATH=<Chrome> LC_ALL=C node scripts/engine-v2-facebook/v597-smoke.cjs: 18/18; FB_DESKTOP_ONLY=V597 desktop-fb-smoke.cjs: 5/5 (cả bộ 42/42 trước khi thêm ca FB49 lỗi 4 data liền)",
+  "rollback": "migrations/rollback_v597_engine_facebook_group_post_signs.sql (chỉ chạy khi block 2871 còn đúng bản V597)",
+  "not_verified": [
+    "Chưa có lượt thật nào ra FB48 / FB49 / FB50 (Desktop nhận block / dấu hiệu mới ở lần nạp danh mục kế tiếp).",
+    "Vị trí thật của chữ đỏ trong trang Facebook: chưa có DOM, element dựng theo ảnh lỗi 20/11.",
+    "Chưa có bản tiếng Anh của ba câu; tài khoản giao diện tiếng Anh vẫn ra FB42.",
+    "Vòng quay 'Đang đăng' chưa làm (anh chốt chờ DOM)."
+  ]
+}
