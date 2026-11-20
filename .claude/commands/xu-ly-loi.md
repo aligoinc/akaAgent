@@ -51,9 +51,16 @@ Session không phải hộp thư (session con, hay session anh mở riêng để
    - Đã có ai sửa chưa: `git fetch -q origin dev_3`, tìm mã lỗi / câu lỗi / tên block trong `git log origin/dev_3`, `CLAUDE.md`, `docs/ENGINE_V2_FACEBOOK_*.md`
      và sổ migration (`supabase_migrations.schema_migrations` mới nhất). Đã sửa mà chưa phát hành thì nói rõ bản nào sẽ có.
 
-3. **Ảnh lỗi.** Ca có `image_request_id`: `select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>)`, lưu từng ảnh JPEG (base64) vào
-   scratchpad rồi mở bằng công cụ đọc tệp. Chỉ mô tả hộp thoại, nút, câu báo của Facebook. Chưa có ảnh mà ca cần ảnh thì đề xuất xin ảnh
+3. **Ảnh lỗi và DOM.** Ca có `image_request_id`: `select public.aka_agent_desktop_diagnostic_files_v1(<mã yêu cầu>)`, lưu từng ảnh JPEG (base64)
+   vào scratchpad rồi mở bằng công cụ đọc tệp. Chỉ mô tả hộp thoại, nút, câu báo của Facebook. Chưa có ảnh mà ca cần ảnh thì đề xuất xin ảnh
    (`public.aka_agent_desktop_diagnostic_request_v1`), không tự tạo yêu cầu.
+
+   DOM cả trang (V595, chỉ có khi máy khách chạy bản Desktop có #739) nằm cùng yêu cầu, cùng `image_id` với ảnh. Xem có DOM nào trước, không kéo nội
+   dung: `select d->>'imageId', d->'meta', d->>'bytes' from jsonb_array_elements(public.aka_agent_desktop_diagnostic_doms_v1(<mã yêu cầu>)->'doms') d;`.
+   Lấy từng trang một (`…doms_v1(<mã yêu cầu>)->'doms'-><thứ tự>->>'gzipBase64'`, `-o json` ra tệp trong scratchpad), tách chuỗi base64 bằng script,
+   giải nén (`base64 -d | gunzip`) thành `.html` trong scratchpad, rồi tìm bằng `grep` / script; đừng đọc cả trang vào ngữ cảnh. Dùng DOM để biết
+   phần tử block chờ có trên trang không và Facebook đang hiện câu gì; DOM có cả tin nhắn, thông báo, tên người của khách: chỉ ghi điều về giao diện,
+   không chép tên người, tên nhóm, nội dung bài hay tin nhắn, không lưu ra ngoài scratchpad.
 
 4. **Đọc đúng chỗ cần sửa**: code Desktop (`src/main/services/campaignScheduler.ts`, `src/main/engineAdapters/facebook/`, `src/main/v2/runtime/`,
    lõi `packages/campaign-engine/src/`), block "[engine] …" trong `auto_blocks`, luật `auto_outcome_signal_rules`, chính sách `auto_outcome_policies`
