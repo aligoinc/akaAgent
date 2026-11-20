@@ -1,0 +1,33 @@
+{
+  "migration": "migration_v598_engine_facebook_comment_pending_link",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V598 (20/11/2026, sau khi duyệt cách xử lý qua hộp chọn \"Theo trang Facebook hiện\" và mở PR #744)",
+  "applied_at_vn": "2026-11-20 13:52:01",
+  "ledger_version": "20261120065200",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây, rc 0",
+  "file_md5": "c510072b77396af525460f1162efd004",
+  "ledger_statements_md5": "c510072b77396af525460f1162efd004",
+  "preflight_live_13_51_36": {
+    "ledger_v598_rows": 0,
+    "ledger_last": "type19_group_invite_backfill_limit_131_finish_today (20261120063841), V595 (20261120053534)",
+    "block_2869_md5": "83bcdb4081685f2c858f4e0937348767",
+    "block_2616_md5": "83bcdb4081685f2c858f4e0937348767",
+    "copy_source": 2616,
+    "step_8": { "reviewed_code_md5": "83bcdb4081685f2c858f4e0937348767", "commit_level": 2, "send_ops": ["press:Enter"] }
+  },
+  "dry_run_rollback": "nguyên file, COMMIT cuối thay bằng SELECT + ROLLBACK: trong giao dịch block 2869 / bước 8 = 1c885e94…, 2616 = 83bcdb40…; sau ROLLBACK đọc lại: 2869 / bước 8 = 83bcdb40…, sổ không có V598",
+  "postflight_live_13_52_12": {
+    "block_2869_md5": "1c885e941698b696816bbeca7281311f",
+    "legacy_block_2616_md5_unchanged": "83bcdb4081685f2c858f4e0937348767",
+    "step_8": { "reviewed_code_md5": "1c885e941698b696816bbeca7281311f", "commit_level": 2, "send_ops": ["press:Enter"] },
+    "policies_unchanged": { "299": "FB15 streak ignore", "301": "FB17 streak ignore", "339": "FB41 streak increment" }
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "CHAT_REPO=<akaAgentChatApi> LC_ALL=C CHROMIUM_PATH=<Chrome> node scripts/engine-v2-facebook/v598-smoke.cjs: 27/27; phát lại 187 lượt thật: ca 584 87 lượt → 63 FB15 / 17 FB17 / 7 giữ FB41",
+  "rollback": "migrations/rollback_v598_engine_facebook_comment_pending_link.sql (chỉ chạy khi block 2869 còn đúng bản V598)",
+  "not_verified": [
+    "Lúc 13:52 VN chưa có lượt comment vào link bài nào chạy sau apply (chiến dịch 59665 đã hoàn thành; 56362, 59096, 59544 còn tạm dừng, khách tự bấm chạy lại).",
+    "Chưa thử thật trên Facebook bằng tài khoản thử (cần bài chờ duyệt trong nhóm phải duyệt).",
+    "Giao diện tiếng Anh chưa có mẫu, trang tiếng Anh vẫn ra FB41."
+  ]
+}
