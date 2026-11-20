@@ -44,6 +44,7 @@ import { canAccessAdmin } from '../../shared/admin'
 import { canManageStaff } from '../../shared/staffManagement'
 import FacebookMessagesPage from './pages/FacebookMessagesPage'
 import { canUsePlatform } from './utils/entitlements'
+import { useBrowserOpenStore } from './stores/browserOpenStore'
 
 const ChatPage = lazy(() => import('./pages/ChatPage'))
 const CrmPage = lazy(() => import('./pages/CrmPage'))
@@ -391,6 +392,18 @@ export default function App() {
     })
     setActivePage('browsers')
   }, [])
+
+  // Cửa sổ con (Quét data trong form chiến dịch, Nhóm data) mở tab trình duyệt của tài khoản qua store này.
+  useEffect(() => {
+    useBrowserOpenStore.getState().setHandler(requestOpenBrowser)
+    return () => useBrowserOpenStore.getState().setHandler(null)
+  }, [requestOpenBrowser])
+
+  // Form chiến dịch và Nhóm data nằm trên document.body, đổi trang không ẩn chúng. Khi đang ở trang Trình duyệt
+  // (chỉ tới được từ các cửa sổ đó bằng nút "Mở trình duyệt") CSS ẩn chúng, quay lại trang khác thì hiện như cũ.
+  useEffect(() => {
+    document.body.dataset.activePage = activePage
+  }, [activePage])
 
   // Listen for realtime campaign status updates (scheduler → renderer)
   useEffect(() => {

@@ -22,6 +22,8 @@ import type { ContactLoadResult, PageInboxScanInfo, PageInboxScanOptions } from 
 import { DEFAULT_PAGE_INBOX_SCAN_DAYS, DEFAULT_PAGE_INBOX_MAX_CUSTOMERS, PAGE_INBOX_MAX_CUSTOMERS, estimatePageInboxScanMinutes, formatPageInboxScanDate, validatePageInboxScanOptions } from '../../../../shared/pageInboxScan'
 import type { ZaloServerCommandName, ZaloServerOperationSnapshot } from '../../../../shared/zaloServerProtocol'
 import { useZaloServerOperationState } from '../../hooks/useZaloServerOperationState'
+import { useBrowserOpenStore } from '../../stores/browserOpenStore'
+import { DATA_SCAN_OPEN_BROWSER_LABEL, describeDataScanError } from '../../../../shared/dataScanBrowserHelp'
 
 export type DataScanAction = 'facebook_friends' | 'facebook_groups' | 'facebook_pages' | 'facebook_post_commenters' | 'facebook_post_likes' | 'facebook_profile_friends' | 'facebook_group_members' | 'facebook_page_inbox_customers' | 'zalo_friends' | 'zalo_groups' | 'zalo_group_members' | 'zalo_remarketing_customers' | 'upload_data'
 export type DataScanPlatform = 'facebook' | 'zalo' | 'email' | 'sms'
@@ -1204,6 +1206,28 @@ export default function DataScanModal({
   )
   const isSelectedAccountZaloServer = selectedAccount?.isZaloServer === true
   const serverOperationState = useZaloServerOperationState(isSelectedAccountZaloServer)
+  const canOpenAccountBrowser = useBrowserOpenStore(state => state.handler !== null)
+  // Lỗi quét xử lý được trong tab Trình duyệt của tài khoản: câu cho khách + nút mở đúng trang. Lỗi gốc vẫn ở nhật ký quét.
+  const showScanError = useCallback((rawError: unknown) => {
+    const view = describeDataScanError(rawError || 'Tải data thất bại.', selectedAccount)
+    const browserAccountId = typeof accountId === 'number' ? accountId : null
+    if (!view.openUrl || browserAccountId === null || !canOpenAccountBrowser) {
+      showAlert(view.message || 'Tải data thất bại.', 'error')
+      return
+    }
+    const openUrl = view.openUrl
+    showAlert(view.message, 'error', {
+      extraAction: {
+        label: DATA_SCAN_OPEN_BROWSER_LABEL,
+        onClick: () => {
+          // Cửa sổ nằm trong form chiến dịch / Nhóm data bị ẩn cùng form khi sang trang Trình duyệt; chỉ cửa sổ đứng
+          // riêng (mở từ thanh trên cùng) thu nhỏ vào góc để khách quay lại quét.
+          if (!onSelect) setMinimized(true)
+          useBrowserOpenStore.getState().open({ accountId: browserAccountId, openUrl })
+        }
+      }
+    })
+  }, [accountId, canOpenAccountBrowser, onSelect, selectedAccount, showAlert])
   const selectedDataset = useMemo(
     () => contactDatasets.find(dataset => dataset.id === selectedDatasetId) || null,
     [contactDatasets, selectedDatasetId]
@@ -2605,7 +2629,7 @@ export default function DataScanModal({
       loadContactGroups()
 
       if (!result.success) {
-        if (!wasStopped) showAlert(result.error || 'Tải data thất bại.', 'error')
+        if (!wasStopped) showScanError(result.error)
         return
       }
       if (!wasStopped) showAlert(`Đã tải ${result.count} data.`, 'success')
@@ -2634,7 +2658,8 @@ export default function DataScanModal({
     normalizedPostCommentersUrl,
     normalizedPostLikesUrl,
     normalizedProfileFriendsUrl,
-    showAlert
+    showAlert,
+    showScanError
   ])
 
   const settleServerScanOperation = useCallback(async (
@@ -3598,7 +3623,7 @@ export default function DataScanModal({
       if (!result.success) {
         if (isPageInboxAction) await refreshPageInboxContactsAfterScan()
         if (wasStopped) return
-        showAlert(result.error || 'Tải data thất bại.', 'error')
+        showScanError(result.error)
         return
       }
       resetPagedContactSelection()
@@ -3623,7 +3648,7 @@ export default function DataScanModal({
       if (completedScanIdsRef.current.has(scanId)) return
       console.error('Failed to scan data:', err)
       if (isPageInboxAction) void refreshPageInboxContactsAfterScan()
-      showAlert(err?.message || 'Tải data thất bại.', 'error')
+      showScanError(err?.message)
     } finally {
       const wasStopped = stoppedScanIdsRef.current.has(scanId)
       stoppedScanIdsRef.current.delete(scanId)
@@ -3946,7 +3971,7 @@ export default function DataScanModal({
           </div>
           <div className="data-scan-header-actions">
             {entitlements?.zalo && <button className="btn btn-secondary btn-sm" disabled={scanLoading || selectingOutput} onClick={() => setShowPhoneCheck(true)}>Kiểm tra SĐT có Zalo</button>}
-            {scanLoading && (
+            {(scanLoading || minimized) && (
               <button
                 className="btn-icon"
                 onClick={() => setMinimized(prev => !prev)}
@@ -3961,7 +3986,16 @@ export default function DataScanModal({
           </div>
         </div>
 
-        {minimized ? (
+        {minimized && !scanLoading ? (
+          <div className="data-scan-minimized-body">
+            <div className="data-scan-minimized-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => setMinimized(false)}>
+                <Maximize2 size={13} />
+                Mở rộng form
+              </button>
+            </div>
+          </div>
+        ) : minimized ? (
           <div className="data-scan-minimized-body">
             <div className="data-scan-minimized-title">
               <RefreshCw size={14} className="spin" />

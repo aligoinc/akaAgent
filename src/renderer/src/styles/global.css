@@ -18503,6 +18503,13 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
   padding: calc(var(--titlebar-height) + 12px) 12px 12px;
 }
 
+/* Nút "Mở trình duyệt" của Quét data chuyển sang trang Trình duyệt; các cửa sổ gắn trên document.body tạm ẩn ở trang đó. */
+body[data-active-page="browsers"] .campaign-form-modal-overlay,
+body[data-active-page="browsers"] .data-group-manager-backdrop,
+body[data-active-page="browsers"] .data-group-scan-layer {
+  display: none;
+}
+
 .data-scan-overlay.minimized {
   background: transparent;
   backdrop-filter: none;
