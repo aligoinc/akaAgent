@@ -1,0 +1,63 @@
+{
+  "migration": "migration_v602_engine_error_watch_stale_via",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "Câu 571 qua hộp thư lỗi: anh chọn \"Làm cách em khuyên\", \"Commit + mở PR\", \"Merge rồi apply\" (20/11/2026)",
+  "merged": {
+    "pr": 751,
+    "merged_at_vn": "2026-11-20 16:10:10",
+    "merge_commit": "30a68daf1d197f23a2ff0a3c5f1221382be073b0"
+  },
+  "applied_at_vn": "2026-11-20 16:13:05–16:13:09",
+  "ledger": {
+    "version": "20261120091305",
+    "name": "migration_v602_engine_error_watch_stale_via",
+    "statements_md5": "692a9214c45b2f7016db922c587996cb",
+    "file_md5": "692a9214c45b2f7016db922c587996cb",
+    "created_by": null
+  },
+  "method": "supabase db query --linked -f (tệp sinh bằng scripts/make-migration-ledger-apply.cjs, dòng sổ trong cùng giao dịch), vào phút lẻ",
+  "preflight": {
+    "ledger_max_before": "migration_v600_remarketing_read_single_pass (20261120090308)",
+    "v602_in_other_repos": "không (akaAgent mọi nhánh và worktree; akaAgentWebApp, akaAgentChatApi, akaAgentChatWeb, SqlServerDashboard mọi nhánh)",
+    "tick_body_md5_before": "2cade73e5b5acb82f76d452bcc3e21da",
+    "file_md5_on_dev_3": "692a9214c45b2f7016db922c587996cb",
+    "trial_rollback_vn": "16:11:05–16:11:07: migration + một lượt tick trong giao dịch rồi ROLLBACK; thân tick trong giao dịch ca0aa05a…, tick ok (stale 0, last_error không có); kiểm lại sau ROLLBACK: thân tick vẫn 2cade73e…, sổ chưa có V602, chưa có ca |orphan"
+  },
+  "postflight": {
+    "tick_body_md5": "ca0aa05adb6ef6eb4ea73116db7335fd",
+    "tick_security_definer": true,
+    "execute_anon_desktop": false,
+    "comment": "bắt đầu bằng \"V574 + V588 + V593 + V594 + V599 + V602:\"",
+    "ticks_after_apply": "pg_cron 16:12:00 VN (bản V599) 164 ms; 16:14:00 VN lượt đầu bằng thân V602: 669 ms, succeeded, ok, last_error null, stale 0 (khung lượt bỏ dở tới 15:44 VN chưa có lượt mới)"
+  },
+  "postgrest": {
+    "schema_reload": "Received reload 16:13:08,9 VN; Schema cache queried in 6386,4 ms (loaded 16:13:19,8 VN); 870 hàm",
+    "minute_16_12_vn": {
+      "rest_requests": 40736,
+      "over_1s": 8,
+      "p50_ms": 53,
+      "p99_ms": 379,
+      "http_5xx": 1
+    },
+    "minute_16_13_vn": {
+      "rest_requests": 41157,
+      "over_1s": 1633,
+      "p50_ms": 87,
+      "p99_ms": 2865,
+      "http_5xx": 9,
+      "http_503": 0,
+      "5xx_detail": "đều là lỗi 500 hết giờ chờ trong lúc nạp schema: 5 POST/PATCH /rest/v1/contacts (gateway chat, 3,0–3,2 giây), 2 HEAD auto_campaign_details (8 giây), 1 GET message_gom (8 giây), 1 rpc/aka_agent_notification_snapshot (8 giây; phút trước apply cũng có 1 lỗi như vậy)"
+    },
+    "minute_16_14_vn_partial": {
+      "rest_requests": 8799,
+      "over_1s": 2,
+      "p50_ms": 62,
+      "p99_ms": 491,
+      "http_5xx": 0
+    }
+  },
+  "settings_change": "không đổi engine.error_watch",
+  "expected_effect": "lượt đóng stale có sự kiện interrupted data.via = desktop_reset không còn vào sổ ca; data.via = orphan vào ca stale|<thao tác>|<mã>|orphan; còn lại như cũ. 24 giờ tới 15:30 VN 20/11: 3 lượt desktop_reset trong hộp thư sẽ không vào, 1 lượt orphan sang ca mồ côi",
+  "verification_local": "LC_ALL=C node scripts/engine-v2-facebook/error-watch-v602-smoke.cjs: 7 nhóm đạt (các nhóm V602 chạy trên thân V599 thì hỏng); typecheck node + web 0 lỗi",
+  "rollback": "migrations/rollback_v602_engine_error_watch_stale_via.sql (trả thân V599; ca |orphan đã tạo vẫn còn trong sổ)"
+}
