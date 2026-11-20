@@ -1,0 +1,144 @@
+{
+  "readAt": "2026-11-20T06:33:19Z",
+  "note": "Đọc chỉ đọc production 20/11/2026 (câu 584). Code block 2869 = code block 2616 = migrations/snapshots/fb-comment-post-unavailable-v472/block-2616.after.js (md5 khớp).",
+  "block": {
+    "id": 2869,
+    "md5": "83bcdb4081685f2c858f4e0937348767",
+    "name": "[engine] fb_comment_current_post",
+    "updatedAt": "2026-11-17T09:32:47.201372+00:00"
+  },
+  "source": {
+    "id": 2616,
+    "md5": "83bcdb4081685f2c858f4e0937348767",
+    "name": "fb_comment_current_post"
+  },
+  "copy": {
+    "engineBlockId": 2869,
+    "engineMd5AtCopy": "83bcdb4081685f2c858f4e0937348767",
+    "sourceBlockId": 2616,
+    "sourceMd5AtCopy": "83bcdb4081685f2c858f4e0937348767"
+  },
+  "steps": [
+    {
+      "actionCode": "fb_comment",
+      "blockId": 2869,
+      "commitLevel": 2,
+      "id": 8,
+      "reviewedMd5": "83bcdb4081685f2c858f4e0937348767",
+      "sendOps": [
+        "press:Enter"
+      ],
+      "stepKind": "delivery"
+    }
+  ],
+  "workflowsUsing": {
+    "2869": [
+      317
+    ],
+    "2616": [
+      207,
+      244
+    ]
+  },
+  "elements": {
+    "GroupPostFrequencyLimitError": "//*[contains(.,'giới hạn tần suất bạn đăng bài')]",
+    "fb_comment_dialog_textbox": "//*[@role='dialog']//*[@role='textbox' and (contains(@aria-label,'Bình luận') or contains(@aria-label,'bình luận') or contains(@aria-label,'Comment') or contains(@aria-label,'comment') or contains(@aria-label,'Trả lời') or contains(@aria-label,'trả lời'))]",
+    "fb_comment_permalink": "(//*[@role='dialog' and not(@aria-label='Thông báo') and not(@aria-label='Messenger')])[1]//*[@role='article' and .//*[@class='xt0psk2']]//a[contains(@href,'comment_id=') or contains(@href,'reply_comment_id=')]"
+  },
+  "policies": [
+    {
+      "actionCode": null,
+      "active": true,
+      "campaignActionId": null,
+      "detailStatusId": 21,
+      "errorCode": "err_fb_comment_unavailable_post_pending",
+      "id": 299,
+      "streak": "ignore"
+    },
+    {
+      "actionCode": null,
+      "active": true,
+      "campaignActionId": null,
+      "detailStatusId": 36,
+      "errorCode": "err_fb_comment_unavailable_post_not_found",
+      "id": 301,
+      "streak": "ignore"
+    },
+    {
+      "actionCode": null,
+      "active": true,
+      "campaignActionId": null,
+      "detailStatusId": null,
+      "errorCode": "err_fb_comment_box_not_found",
+      "id": 339,
+      "streak": "increment"
+    },
+    {
+      "actionCode": "fb_comment",
+      "active": true,
+      "campaignActionId": "facebook_group_post",
+      "detailStatusId": null,
+      "errorCode": "err_fb_comment_box_not_found",
+      "id": 364,
+      "streak": null
+    },
+    {
+      "actionCode": "fb_comment",
+      "active": true,
+      "campaignActionId": "facebook_comment_seeding",
+      "detailStatusId": null,
+      "errorCode": "err_fb_comment_box_not_found",
+      "id": 365,
+      "streak": null
+    },
+    {
+      "actionCode": "fb_comment",
+      "active": true,
+      "campaignActionId": "facebook_timeline_post",
+      "detailStatusId": null,
+      "errorCode": "err_fb_comment_box_not_found",
+      "id": 366,
+      "streak": null
+    },
+    {
+      "actionCode": "fb_comment",
+      "active": true,
+      "campaignActionId": "facebook_newsfeed_interaction",
+      "detailStatusId": null,
+      "errorCode": "err_fb_comment_box_not_found",
+      "id": 367,
+      "streak": null
+    }
+  ],
+  "observedPages": {
+    "note": "Chữ trang đọc từ vết bước comment_current_post (output.actionResult.data) của 78 lượt link /pending_posts/ 18–20/11 (không ghi tên người / nhóm).",
+    "pendingList": {
+      "count": 59,
+      "heading": "Bài viết đang chờ · N",
+      "texts": [
+        "Xóa bộ lọc",
+        "Lọc theo",
+        "Chọn ngày",
+        "Tác giả",
+        "Loại nội dung",
+        "Liên kết"
+      ],
+      "hasDialog": false,
+      "articleCount": 5
+    },
+    "pendingEmpty": {
+      "count": 17,
+      "heading": "Chưa có bài viết nào để xem xét",
+      "texts": [
+        "Không có bài viết nào đang chờ xem xét."
+      ],
+      "hasDialog": false
+    },
+    "pendingPostDialog": {
+      "count": 2,
+      "heading": "Bài viết của <người đăng>",
+      "hasDialog": true,
+      "articleCount": 0
+    }
+  }
+}
