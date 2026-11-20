@@ -5,7 +5,7 @@ Câu 585 của hộp thư lỗi (bộ kiểm lỗi chiến dịch Facebook, engi
 (nguồn kiểm [`v597-live-20261120.json`](../scripts/fixtures/engine-v2-facebook/v597-live-20261120.json)), gỡ bằng
 [rollback](../migrations/rollback_v597_engine_facebook_group_post_signs.sql).
 
-**Đã apply akachat 13:58:12 VN 20/11/2026** theo yêu cầu ("Apply V597"): sổ `20261120065809`, md5 sổ = file `ef2ad656…`, 3 giây, chỉ dữ liệu; block 2871 `e433ac1a…` → `f981cac7…`, dấu hiệu `aa197aea…` → `dc7fd786…`, element 1808–1810, mã FB48 / FB49 / FB50 = `auto_error` 174–176, chính sách 432–434. [Biên nhận](../migrations/snapshots/engine-facebook-v597/apply-receipt.json). PR [#745](https://github.com/aligoinc/akaAgent/pull/745) vào `dev_3`.
+**Đã apply akachat 13:58:12 VN 20/11/2026** theo yêu cầu ("Apply V597"): sổ `20261120065809`, md5 sổ = file `ef2ad656…`, 3 giây, chỉ dữ liệu; block 2871 `e433ac1a…` → `f981cac7…`, dấu hiệu `aa197aea…` → `dc7fd786…`, element 1808–1810, mã FB48 / FB49 / FB50 = `auto_error` 174–176, chính sách 432–434. [Biên nhận](../migrations/snapshots/engine-facebook-v597/apply-receipt.json). Code đã merge `dev_3` qua PR [#745](https://github.com/aligoinc/akaAgent/pull/745) ngày 20/11 theo yêu cầu ("merge đi").
 
 ## Ca lỗi
 
