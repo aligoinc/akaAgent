@@ -3,9 +3,8 @@
 20/11/2026. Chỉ áp dụng cho engine v2 Facebook, bộ cũ không đổi.
 
 **Tình trạng (20/11/2026):**
-- Code xong ở nhánh `claude/fb-error-evidence`, [PR #739](https://github.com/aligoinc/akaAgent/pull/739) vào `dev_3`, chưa merge, chưa build Desktop.
-- Migration [V595](../migrations/migration_v595_desktop_diagnostic_dom.sql) và [bản gỡ](../migrations/rollback_v595_desktop_diagnostic_dom.sql) đã
-  viết, **chưa apply**. Sổ đã có V594 (`engine_error_watch_hourly_skip` của phiên khác, apply 20/11); kiểm lại sổ ngay trước khi apply.
+- Code đã merge `dev_3` qua [PR #739](https://github.com/aligoinc/akaAgent/pull/739) lúc 12:33 VN 20/11 ("Merge PR #739"), chưa build Desktop.
+- [V595](../migrations/migration_v595_desktop_diagnostic_dom.sql) **đã apply akachat 12:35:34 VN 20/11** ("Apply ngay"; sổ `20261120053534`, không apply lại, md5 sổ = file `52f34848…`; PostgREST nạp lại schema ~10 giây, 0 lỗi 5xx / 503; [biên nhận](../migrations/snapshots/desktop-diagnostic-dom-v595/apply-receipt.json)). Gỡ: [bản gỡ](../migrations/rollback_v595_desktop_diagnostic_dom.sql).
 - Bộ kiểm đã chạy:
   - `screenshots-smoke.cjs` 10/10 nhóm, PG17 với V595 thật: DB chưa có V595, đã có V595, các trường hợp bị từ chối, bản gỡ;
   - `desktop-fb-smoke.cjs` 38/38;
