@@ -21,6 +21,7 @@ const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture
 const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly, applyV575 } = require('./fixture.cjs')
 const V563 = require('../build-v563-sql.cjs')
 const V575 = require('../build-v575-sql.cjs')
+const V597 = require('../build-v597-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 // FB_DESKTOP_ONLY=<chữ trong tên ca>: chỉ chạy các ca có tên chứa chữ đó (soạn / dò một ca); để trống thì chạy hết.
@@ -170,6 +171,8 @@ class FakePage {
     // Thời gian block chờ (helpers.sleep có tín hiệu huỷ) trước khi làm tiếp: ca lượt bị ngắt từ ngoài khi block đang chờ.
     if (code === 'typeWaitMs' || code === 'verifyWaitMs' || code === 'sendWaitMs') return this.scenario[code] ?? null
     if (code === 'formClosed') return this.scenario.formClosed !== false
+    // Câu block 2871 trả khi hết giờ mà form chưa đóng (V597: câu riêng khi thấy chữ đỏ của Facebook trong hộp Tạo bài viết).
+    if (code === 'verifyMessage') return this.scenario.verifyMessage ?? null
     if (code === 'typeError') return this.scenario.typeError ?? null
     if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
@@ -221,6 +224,14 @@ if (verifyWait) await helpers.sleep(verifyWait, signal)
 const ok = await page.evaluate('formClosed')
 if (!ok) throw new Error('Form đăng bài chưa đóng sau 60 giây')
 return { ok: true, posted: true, submitClosed: true, message: 'Form đăng bài đã đóng' }` },
+  // Như block 2871 production (V597): hết giờ mà form chưa đóng thì trả ok:false kèm câu (không ném), dòng lịch sử "thất bại" không mã.
+  { id: 2626, name: 'v597_verify_group_post_form_closed', code: `
+const closed = await page.evaluate('formClosed')
+if (closed) { vars.groupPostSubmitted = true; return { ok: true, posted: true, submitClosed: true, message: 'Form đăng bài đã đóng' } }
+const message = String(await page.evaluate('verifyMessage') || 'Form đăng bài chưa đóng sau 60 giây')
+vars.groupPostSubmitted = false
+helpers.log(message)
+return { ok: false, posted: false, submitClosed: false, publishTimeoutMs: 60000, message }` },
   { id: 2833, name: 'fb_get_first_group_post_link', code: `return { postUrl: 'https://www.facebook.com/groups/g1/posts/' + (vars.loopIndex ?? 7) + '123/' }` },
   // Chọn nhóm chia sẻ kèm trong hộp đăng bài (block 2794 production): chọn tối đa groupPostShareMaxCount (≤ 3) trong danh sách ứng viên.
   { id: 2794, name: 'fb_select_group_post_share_targets', code: `
@@ -290,6 +301,22 @@ const adjustWorkflow = () => ({
       config: { condition: 'vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0' } },
     { id: 'loop_comment', blockId: 0, blockName: 'loop', systemType: 'loop', config: { loopType: 'forEach', itemsExpr: 'vars.commentIterations' } },
     { id: 'comment', blockId: 34, blockName: 'fb_comment_at_position', config: {} }
+  ]
+})
+
+// V597: chuỗi bước đăng nhóm tới bước xác nhận như production; form chưa đóng thì workflow production rẽ nhánh if_submitted = false (không
+// lấy link, không comment), ở đây dừng ngay sau bước xác nhận.
+const v597Workflow = () => ({
+  id: WORKFLOW_ID, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
+    { id: 'v1', source: 'open', target: 'gate' }, { id: 'v2', source: 'gate', target: 'type', sourceHandle: 'true' },
+    { id: 'v3', source: 'type', target: 'post' }, { id: 'v4', source: 'post', target: 'verify' }
+  ],
+  nodes: [
+    { id: 'open', blockId: 27, blockName: 'fb_open_composer', config: { composerActionCode: 'fb_post_group' } },
+    { id: 'gate', blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition: 'input.opened === true' } },
+    { id: 'type', blockId: 28, blockName: 'fb_type_post_content', config: {} },
+    { id: 'post', blockId: 30, blockName: 'fb_click_post_button', config: { composerActionCode: 'fb_post_group' } },
+    { id: 'verify', blockId: 2626, blockName: 'fb_verify_group_post_form_closed', config: {} }
   ]
 })
 
@@ -404,7 +431,7 @@ async function main() {
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_group_post', $1)`, [WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_engine_block_steps (block_id, step_kind, action_code, commit_level, send_ops) VALUES
       (27, 'result', NULL, 1, '[]'), (30, 'delivery', 'fb_post_group', 2, '["click:fb_post_button"]'), (34, 'delivery', 'fb_comment', 1, '[]'),
-      (2624, 'result', NULL, 1, '[]')`)
+      (2624, 'result', NULL, 1, '[]'), (2626, 'result', NULL, 1, '[]')`)
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Đăng trang cá nhân', '[]', '[]')`, [TIMELINE_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_workflows (id, name, nodes, edges) VALUES ($1, '[engine] Mời vào nhóm', '[]', '[]')`, [INVITE_WORKFLOW_ID])
     await db.query(`INSERT INTO public.auto_engine_workflows (purpose, workflow_id) VALUES ('facebook_group_invite', $1)`, [INVITE_WORKFLOW_ID])
@@ -1327,6 +1354,93 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
         Object.assign(facade, { getCampaignAction: original.action, getAccountRateLimitStatus: original.limit,
           getAccountActionDisabledStatus: original.disabled, finalizeCampaign: original.finalize })
       }
+    })
+
+    // V597 (anh chốt 20/11/2026, câu 585): đăng nhóm hết giờ chờ form đóng, block 2871 trả câu riêng khi thấy chữ đỏ của Facebook trong hộp Tạo
+    // bài viết; dấu hiệu "message" đổi dòng lịch sử không mã ra FB48 / FB49 / FB50, chính sách của mã quyết data đi đâu. Mã + chính sách đúng
+    // câu trong migration, dấu hiệu nạp như Desktop đọc facebook.error_signs.
+    await db.query(`BEGIN;\n${V597.CODES_POLICIES_SQL}\nCOMMIT;`)
+    const normalizeSigns = signs => signs.map(sign => ({ ...sign,
+      texts: sign.texts.map(text => text.normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase()) }))
+    const v597Signs = [...v575Signs, ...normalizeSigns(V597.NEW_SIGNS)]
+    const v597Run = async ({ verifyMessage = null, targets = 1, signs = v597Signs } = {}) => {
+      const workflows = globalThis.__fbTest.workflows
+      const original = workflows.get(WORKFLOW_ID)
+      workflows.set(WORKFLOW_ID, v597Workflow())
+      globalThis.__fbTest.runtimeSettings = { errorSigns: signs }
+      try {
+        const entry = await makeCampaign({ targets, extra: { enableComment: false } })
+        const { page: fake } = await run(entry, { formClosed: false, verifyMessage })
+        const campaign = await one(`SELECT status, note FROM public.auto_campaigns WHERE id = $1`, [entry.campaign.id])
+        const streak = await one(`SELECT coalesce(max(count_consecutive_bad_targets), 0)::int AS n FROM public.auto_campaign_error_state
+          WHERE campaign_id = $1`, [entry.campaign.id])
+        const quota = await one(`SELECT coalesce(max(count_action_in_day), 0)::int AS n FROM public.auto_account_action_status
+          WHERE account_id = $1 AND action_code = 'fb_post_group'`, [entry.account.id])
+        return { rows: (await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]),
+          out: (await outcomes(entry.campaign.id)).map(o => [o.action_code, o.phase, o.error_code, o.delivery_state]),
+          inputs: (await inputs(entry.campaign.id)).map(r => r.status), marks: (await marks(entry.campaign.id)).map(m => m.state),
+          campaign, streak: streak.n, quota: quota.n, clicks: fake.clicks.filter(c => c === ELEMENTS.fb_post_button).length }
+      } finally {
+        workflows.set(WORKFLOW_ID, original)
+        globalThis.__fbTest.runtimeSettings = null
+      }
+    }
+    let fb42 = null
+    const rowOf = (text, pub) => [['fb_post_group', 'thất bại', `Đăng bài thất bại vào Nhóm 1: ${text} (${pub})`]]
+
+    await check('V597: không thấy chữ đỏ nào → vẫn FB42 như hôm nay (thất bại, tính lượt, cộng chuỗi, data đóng)', async () => {
+      fb42 = await v597Run()
+      assert.deepEqual(fb42.out, [['fb_post_group', 'after_send', 'err_engine_fb_action_failed', 'not_delivered']])
+      assert.deepEqual(fb42.rows, rowOf('Form đăng bài chưa đóng sau 60 giây', 'FB42'))
+      assert.deepEqual(fb42.inputs, ['hoàn thành'])
+      assert.equal(fb42.quota, 1); assert.equal(fb42.streak, 1); assert.equal(fb42.clicks, 1)
+      assert.notEqual(fb42.campaign.status, 'tạm dừng')
+    })
+
+    await check('V597: FB48 "gặp sự cố" → mã mới, xử lý y FB42 (data đóng, tính lượt, cộng chuỗi); trước V597 cùng câu vẫn ra FB42', async () => {
+      if (!fb42) fb42 = await v597Run()
+      const r = await v597Run({ verifyMessage: V597.FB48.title })
+      assert.deepEqual(r.out, [['fb_post_group', 'after_send', V597.FB48.code, 'not_delivered']])
+      assert.deepEqual(r.rows, rowOf(V597.FB48.title, 'FB48'))
+      assert.deepEqual([r.inputs, r.quota, r.streak, r.marks, r.campaign.status], [fb42.inputs, fb42.quota, fb42.streak, fb42.marks, fb42.campaign.status])
+      const before = await v597Run({ verifyMessage: V597.FB48.title, signs: v575Signs })
+      assert.deepEqual(before.out, [['fb_post_group', 'after_send', 'err_engine_fb_action_failed', 'not_delivered']])
+      assert.deepEqual(before.rows, rowOf(V597.FB48.title, 'FB42'))
+    })
+
+    await check('V597: FB49 "không tải được file" → ghi thất bại, data về hàng đợi (không bị chặn vì đã bấm Đăng), không tính lượt, cộng chuỗi', async () => {
+      const r = await v597Run({ verifyMessage: V597.FB49.title })
+      assert.deepEqual(r.out, [['fb_post_group', 'after_send', V597.FB49.code, 'not_delivered']])
+      assert.deepEqual(r.rows, rowOf(V597.FB49.title, 'FB49'))
+      assert.deepEqual(r.inputs, ['chờ xử lý'], 'data về hàng đợi')
+      assert.deepEqual(r.marks, ['not_delivered'])
+      assert.equal(r.quota, 0, 'không tính lượt (trả lượt đã giữ chỗ)')
+      assert.equal(r.streak, 1, 'cộng chuỗi data lỗi')
+      assert.notEqual(r.campaign.status, 'tạm dừng')
+    })
+
+    await check('V597: FB49 lỗi 4 data liền → chuỗi chạm ngưỡng chung (4, như FB42) thì tạm dừng chiến dịch, data không mất, không lặp mãi', async () => {
+      const r = await v597Run({ verifyMessage: V597.FB49.title, targets: 5 })
+      // Data vừa về hàng đợi không được nhận lại trong cùng lượt (V501): lượt chạy tiếp data sau, mỗi data một lần, dừng ở data thứ 4.
+      assert.deepEqual(r.out, Array.from({ length: 4 }, () => ['fb_post_group', 'after_send', V597.FB49.code, 'not_delivered']))
+      assert.deepEqual(r.rows.map(row => row[2]), [1, 2, 3, 4].map(i => `Đăng bài thất bại vào Nhóm ${i}: ${V597.FB49.title} (FB49)`))
+      assert.deepEqual(r.inputs, ['chờ xử lý', 'chờ xử lý', 'chờ xử lý', 'chờ xử lý', 'chờ xử lý'], 'data không mất')
+      assert.equal(r.streak, 4)
+      assert.equal(r.quota, 0)
+      assert.equal(r.campaign.status, 'tạm dừng')
+      assert.match(String(r.campaign.note), /^Dừng sau 4 data lỗi\/thất bại liên tiếp \(ngưỡng 4\): /u)
+      assert.ok(String(r.campaign.note).includes(V597.FB49.title), r.campaign.note)
+    })
+
+    await check('V597: FB50 "giới hạn quyền truy cập" → tạm dừng chiến dịch ngay, data về hàng đợi, không tính lượt, không cộng chuỗi', async () => {
+      const r = await v597Run({ verifyMessage: V597.FB50.title, targets: 2 })
+      assert.deepEqual(r.out, [['fb_post_group', 'after_send', V597.FB50.code, 'not_delivered']], 'dừng sau data đầu')
+      assert.deepEqual(r.rows, rowOf(V597.FB50.title, 'FB50'))
+      assert.deepEqual(r.inputs, ['chờ xử lý', 'chờ xử lý'])
+      assert.equal(r.campaign.status, 'tạm dừng')
+      assert.ok(String(r.campaign.note).includes(`${V597.FB50.title} (FB50).`), r.campaign.note)
+      assert.ok(!/Tiếp tục/.test(String(r.campaign.note)), `không có bước tiếp theo: ${r.campaign.note}`)
+      assert.equal(r.quota, 0); assert.equal(r.streak, 0); assert.equal(r.clicks, 1)
     })
   } finally {
     await db.end().catch(() => {})
