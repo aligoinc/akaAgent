@@ -138,7 +138,8 @@ const FAKE_PAGE_DOM = '<!DOCTYPE html>\n<html lang="vi"><body><div role="main"><
 class FakePage {
   constructor(scenario) {
     this.scenario = scenario
-    this.url = 'https://www.facebook.com/groups/g1/'
+    // scenario.url: trang chạy ngầm đang mở từ đầu lượt (vd Facebook đã chuyển sang trang xác minh / đăng nhập, câu 533).
+    this.url = scenario.url ?? 'https://www.facebook.com/groups/g1/'
     this.clicks = []
     this.destroyed = false
     this.hangs = []
@@ -856,6 +857,110 @@ async function main() {
       const acc = await one('SELECT login_status, status FROM public.auto_accounts WHERE id = $1', [entry.account.id])
       assert.equal(acc.login_status, 'checkpoint'); assert.notEqual(acc.status, 'tạm dừng')
       assert.equal((await one(`SELECT count(*)::int AS n FROM public.auto_account_action_status WHERE account_id = $1 AND is_disable`, [entry.account.id])).n, 0)
+    })
+
+    // Câu 533 / 602 của bộ kiểm lỗi (21/11/2026): block bắt lỗi chờ phần tử rồi tự trả mã lỗi (actionResult, bước "thành công") khi trang chạy
+    // ngầm đang ở trang xác minh / đăng nhập. Trước bản sửa bộ lập lịch chỉ đọc trang khi bước lỗi nên lấy mã của block (FB41 / FB40): data đóng,
+    // cộng chuỗi, tài khoản vẫn "đã đăng nhập". Q6: chưa gửi thì trang xác minh là FB04, trang đăng nhập là FB43 (data về hàng đợi, đổi trạng
+    // thái đăng nhập); đã ghi dấu mà chưa rõ gửi chưa thì giữ mã của block.
+    const CHECKPOINT_PAGE = 'https://www.facebook.com/checkpoint/1501092823525282/?next=https%3A%2F%2Fwww.facebook.com%2Fgroups%2Fg1%2F'
+    const LOGIN_PAGE = 'https://www.facebook.com/login/?next=https%3A%2F%2Fwww.facebook.com%2Fgroups%2Fg1%2F'
+    const loginStatus = async id => (await one('SELECT login_status FROM public.auto_accounts WHERE id = $1', [id])).login_status
+    // Như block 2869 production trước V607: không thấy ô bình luận thì trả actionResult (mã của block, chưa gửi) thay vì ném lỗi.
+    const commentResultBlock = ({ errorCode, reason, operationState = 'not_committed' }) => `
+const box = await helpers.element('fb_comment_box')
+try { await page.waitForSelector(box, { timeout: 100 }) } catch (cause) {
+  const message = ${JSON.stringify(reason === 'checkpoint' ? 'Facebook yêu cầu xác minh tài khoản (checkpoint)' : 'Không tìm thấy ô bình luận trên bài')}
+  return { commented: false, commentFailed: true, position: 1, error: message, actionResult: { actionCode: 'fb_comment', statusCode: 'campaign_detail_error',
+    errorCode: ${JSON.stringify(errorCode)}, inputDataId: vars.inputDataId ?? null, operationState: ${JSON.stringify(operationState)}, message,
+    data: { reason: ${JSON.stringify(reason)}, url: '', source: 'fb_comment_current_post' } } }
+}
+await page.click(box)
+await page.press('Enter')
+return { commented: true, position: 1, text: 'Bình luận 1' }`
+    const withCommentBlock = async (code, fn) => {
+      const blocks = globalThis.__fbTest.blocks
+      const workflows = globalThis.__fbTest.workflows
+      const originalBlock = blocks.get(34)
+      const originalWorkflow = workflows.get(WORKFLOW_ID)
+      blocks.set(34, { ...originalBlock, code })
+      workflows.set(WORKFLOW_ID, commentOnlyWorkflow())
+      try { await fn() } finally { blocks.set(34, originalBlock); workflows.set(WORKFLOW_ID, originalWorkflow) }
+    }
+
+    await check('câu 533: không mở được ô đăng bài trên trang xác minh (block tự trả FB40): FB04, data về hàng đợi, tài khoản checkpoint', async () => {
+      const entry = await makeCampaign()
+      const { page: fake } = await run(entry, { url: CHECKPOINT_PAGE, missing: [ELEMENTS.fb_composer_button] })
+      const out = await outcomes(entry.campaign.id)
+      assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code, o.signal.code]),
+        [['fb_post_group', 'before_send', 'err_fb_checkpoint', 'fb_checkpoint']], JSON.stringify(out))
+      assert.deepEqual(await details(entry.campaign.id), [], 'FB04 không ghi dòng lịch sử (chính sách 281: suppress)')
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý', 'data chưa gửi về hàng đợi')
+      assert.equal(await loginStatus(entry.account.id), 'checkpoint')
+      assert.equal(fake.clicks.length, 0)
+      assert.equal(fake.pageSignReads ?? 0, 0, 'đã biết trang xác minh thì không đọc chữ dấu hiệu')
+    })
+
+    await check('câu 533: không mở được ô đăng bài trên trang đăng nhập (block tự trả FB40): FB43, data về hàng đợi, tài khoản chưa đăng nhập', async () => {
+      const entry = await makeCampaign()
+      await run(entry, { url: LOGIN_PAGE, missing: [ELEMENTS.fb_composer_button] })
+      const out = await outcomes(entry.campaign.id)
+      assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code, o.signal.code]),
+        [['fb_post_group', 'before_send', 'err_engine_fb_logged_out', 'fb_logged_out']], JSON.stringify(out))
+      assert.deepEqual(await details(entry.campaign.id), [])
+      assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+      assert.equal(await loginStatus(entry.account.id), 'chưa đăng nhập')
+    })
+
+    await check('câu 533: block comment bản trước V607 trả FB41 trên trang xác minh: FB04, data về hàng đợi, không cộng chuỗi, tài khoản checkpoint', async () => {
+      await withCommentBlock(commentResultBlock({ errorCode: 'err_fb_comment_box_not_found', reason: 'checkpoint' }), async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: CHECKPOINT_PAGE, missing: [ELEMENTS.fb_comment_box] })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code, o.signal.code]),
+          [['fb_comment', 'before_send', 'err_fb_checkpoint', 'fb_checkpoint']], JSON.stringify(out))
+        assert.deepEqual(await details(entry.campaign.id), [])
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+        assert.equal(await loginStatus(entry.account.id), 'checkpoint')
+        const streak = await one(`SELECT count_consecutive_bad_targets AS n FROM public.auto_campaign_error_state WHERE campaign_id = $1`, [entry.campaign.id])
+        assert.ok(!streak || Number(streak.n) === 0, JSON.stringify(streak))
+      })
+    })
+
+    await check('câu 533: block comment bản V607 trả thẳng err_fb_checkpoint (máy chưa có bản sửa bộ lập lịch vẫn ra FB04 qua đường mã block)', async () => {
+      await withCommentBlock(commentResultBlock({ errorCode: 'err_fb_checkpoint', reason: 'checkpoint' }), async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: CHECKPOINT_PAGE, missing: [ELEMENTS.fb_comment_box] })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_comment', 'before_send', 'err_fb_checkpoint']], JSON.stringify(out))
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+        assert.equal(await loginStatus(entry.account.id), 'checkpoint')
+      })
+    })
+
+    await check('câu 533: trang thường thì mã block trả giữ nguyên (FB41 khi comment, FB40 khi không mở được ô đăng bài)', async () => {
+      await withCommentBlock(commentResultBlock({ errorCode: 'err_fb_comment_box_not_found', reason: 'unknown' }), async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { missing: [ELEMENTS.fb_comment_box] })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_comment', 'before_send', 'err_fb_comment_box_not_found']], JSON.stringify(out))
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+        assert.equal(await loginStatus(entry.account.id), 'đã đăng nhập')
+      })
+      const post = await makeCampaign()
+      await run(post, { missing: [ELEMENTS.fb_composer_button] })
+      assert.deepEqual((await outcomes(post.campaign.id)).map(o => o.error_code), ['err_fb_group_composer_editor_not_found'])
+      assert.equal(await loginStatus(post.account.id), 'đã đăng nhập')
+    })
+
+    await check('câu 533: mã block trả khi chưa rõ đã gửi (operationState unknown) trên trang xác minh: giữ mã của block, không đổi FB04', async () => {
+      await withCommentBlock(commentResultBlock({ errorCode: 'err_fb_comment_box_not_found', reason: 'checkpoint', operationState: 'unknown' }), async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: CHECKPOINT_PAGE, missing: [ELEMENTS.fb_comment_box] })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_comment', 'in_flight', 'err_fb_comment_box_not_found']], JSON.stringify(out))
+        assert.equal(await loginStatus(entry.account.id), 'đã đăng nhập')
+      })
     })
 
     await check('block treo: quá ngưỡng không thao tác thì đóng cửa sổ ẩn, mốc không rõ kết quả (SYS04), lượt kết thúc', async () => {

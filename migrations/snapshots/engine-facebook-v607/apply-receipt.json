@@ -1,0 +1,35 @@
+{
+  "migration": "migration_v607_engine_facebook_comment_checkpoint",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V607 rồi mở PR (21/11/2026, sau khi chọn \"Làm cả hai trong ca này\" qua hộp chọn)",
+  "applied_at_vn": "2026-11-21 09:25:33",
+  "ledger_version": "20261121022532",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây, rc 0",
+  "file_md5": "e62692ccc9561f8301f8191b149cecb4",
+  "ledger_statements_md5": "e62692ccc9561f8301f8191b149cecb4",
+  "preflight_live_09_25_09": {
+    "ledger_v607_rows": 0,
+    "ledger_last": "migration_v606_aka_assistant_agents_data (20261120151616), V605 (20261120143451), V604 (20261120120024), V603 (20261120093910)",
+    "block_2869_md5": "1c885e941698b696816bbeca7281311f",
+    "block_2616_md5": "83bcdb4081685f2c858f4e0937348767",
+    "copy_source": 2616,
+    "step_8": { "reviewed_code_md5": "1c885e941698b696816bbeca7281311f", "commit_level": 2, "send_ops": ["press:Enter"] }
+  },
+  "dry_run_rollback": "nguyên file, COMMIT cuối thay bằng SELECT + ROLLBACK: trong giao dịch block 2869 / bước 8 = 904dc75b…, 2616 = 83bcdb40…; sau ROLLBACK đọc lại: 2869 / bước 8 = 1c885e94…, sổ không có V607",
+  "postflight_live_09_25_45": {
+    "block_2869_md5": "904dc75bfcbf9f9c72440985b253159c",
+    "legacy_block_2616_md5_unchanged": "83bcdb4081685f2c858f4e0937348767",
+    "step_8": { "reviewed_code_md5": "904dc75bfcbf9f9c72440985b253159c", "commit_level": 2, "send_ops": ["press:Enter"] },
+    "classify_direct": { "err_fb_checkpoint": "direct", "err_engine_fb_logged_out": "direct" },
+    "policies_unchanged": { "281": "FB04 requeue, login checkpoint, streak ignore", "341": "FB43 requeue, login logged_out, streak ignore",
+      "299": "FB15 streak ignore", "301": "FB17 streak ignore", "339": "FB41 streak increment" }
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "CHAT_REPO=<akaAgentChatApi> LC_ALL=C CHROMIUM_PATH=<Chrome> node scripts/engine-v2-facebook/v607-smoke.cjs: 32/32; desktop-fb-smoke.cjs 57/57 (ca block V607 trả thẳng err_fb_checkpoint đạt cả trên bộ lập lịch trước bản sửa)",
+  "rollback": "migrations/rollback_v607_engine_facebook_comment_checkpoint.sql (chỉ chạy khi block 2869 còn đúng bản V607)",
+  "not_verified": [
+    "Lúc 09:25 VN chưa có lượt comment vào link bài nào chạy trên trang xác minh sau apply (lượt cuối của ca: 17:08 VN 20/11).",
+    "Chưa thử thật trên Facebook bằng tài khoản đang bị xác minh.",
+    "Phần bộ lập lịch Desktop (cùng nhánh) chưa build, chưa phát hành."
+  ]
+}
