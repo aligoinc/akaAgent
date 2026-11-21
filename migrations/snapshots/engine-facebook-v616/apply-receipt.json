@@ -1,0 +1,84 @@
+{
+  "migration": "migration_v616_engine_facebook_group_post_anonymous",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V616 (21/11/2026, sau khi duyệt XPath / câu / cách xử lý qua hộp chọn và test giả lập + đăng thật vào Nhóm private 1)",
+  "applied_at_vn": "2026-11-21 17:50:51",
+  "ledger_version": "20261121105051",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 1 giây, rc 0",
+  "file_md5": "6a42a2ee18cea5993100f6471c5af2aa",
+  "ledger_statements_md5": "6a42a2ee18cea5993100f6471c5af2aa",
+  "number_note": "Viết với số V615; 21/11 17:3x VN sổ đã có migration_v615_zalo_engagement_friend_rejected của phiên khác nên đổi thành V616 (bộ sinh sinh lại, md5 code block không đổi).",
+  "preflight_live_17_50_41": {
+    "ledger_v616_rows": 0,
+    "workflow_321_md5_graph_vars": "d5172b8a15c0b6f8a973a704dd475f5b/e6dcaa859d181ec948753be1a82db9a4",
+    "workflow_1_md5": "c29504544a7900ae11ccda48f9ae6d73",
+    "engine_workflow_facebook_group_post": 321,
+    "max_fb_public_code": 50,
+    "existing_code_element_block_policy": 0,
+    "open_group_post_target_runs_last_2h": 6
+  },
+  "postflight_live": {
+    "block": {
+      "id": 2923,
+      "name": "[engine] fb_enable_group_anonymous_post",
+      "md5": "0687856f3663282482914025fc606aa0"
+    },
+    "elements": {
+      "fb_group_post_anonymous_switch": 1813,
+      "fb_group_post_anonymous_intro_ok": 1814
+    },
+    "code": {
+      "auto_error_id": 178,
+      "public_code": "FB51",
+      "error_code": "err_fb_group_anonymous_post_not_allowed",
+      "error_class": "target_permanent",
+      "customer_title": "Nhóm này không cho đăng bài ẩn danh",
+      "customer_help": null
+    },
+    "policy": {
+      "id": 439,
+      "summary": "đăng nhóm: hold (data tạm dừng) / ignore / none / no_count / continue, trạng thái 51 Bỏ qua, pace full"
+    },
+    "workflow_321": {
+      "nodes": 58,
+      "edges": 72,
+      "if_composer_opened_true": "enable_anonymous",
+      "if_anonymous_ready": "true → sleep1 + select_group_share_targets, false → merge_join",
+      "default_variables.groupPostAnonymous": false
+    },
+    "workflow_1_md5_unchanged": "c29504544a7900ae11ccda48f9ae6d73",
+    "postgrest_schema_reload": "không (chỉ dữ liệu)",
+    "edge_logs_10_47_to_10_51_utc": "0 lỗi 5xx / 503 trong phút apply, p50 45–46 ms như trước"
+  },
+  "rollback": "migrations/rollback_v616_engine_facebook_group_post_anonymous.sql (workflow / block / element về như trước, mã và chính sách chỉ tắt). Gỡ khi chưa có chiến dịch nào bật groupPostAnonymous; có rồi thì tắt ô ở các chiến dịch đó trước.",
+  "first_live_runs": {
+    "note": "Desktop nạp workflow một lần khi mở unit (openFacebookEngineUnit) nên unit mở trước 17:50:51 chạy bản cũ tới hết lượt (vd lượt data 408816, workflow run 7329682, không có node mới).",
+    "unit_opened_after_apply": [
+      {
+        "target_run": 408858,
+        "campaign": 60195,
+        "workflow_run": 7329751,
+        "enable_anonymous": {
+          "output": {
+            "anonymousReady": true
+          },
+          "ms": 1
+        },
+        "result": "Đăng bài thành công (chờ duyệt)"
+      },
+      {
+        "target_run": 408853,
+        "campaign": 60044,
+        "workflow_run": 7329755,
+        "enable_anonymous": {
+          "output": {
+            "anonymousReady": true
+          },
+          "ms": 2
+        },
+        "result": "Đăng bài thành công (chờ duyệt)"
+      }
+    ],
+    "campaigns_with_groupPostAnonymous_at_apply": 0
+  }
+}

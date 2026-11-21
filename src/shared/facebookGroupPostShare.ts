@@ -6,6 +6,14 @@ export function isNativeGroupPostShare(actionId: string, extra?: CampaignExtraSe
   return actionId === 'facebook_group_post' && extra?.groupPostShareFromPost === true
 }
 
+/**
+ * Đăng bài nhóm ẩn danh (anh chốt 21/11/2026). Không áp dụng cho chế độ chia sẻ bài nguồn. Khi bật: không comment, không up tin, không đăng kèm
+ * chia sẻ sang nhóm khác (Facebook bỏ nút "Thêm nhóm" khi bật ẩn danh); form tự tắt các mục đó, bộ chạy kiểm lại ở đây.
+ */
+export function isGroupPostAnonymous(actionId: string, extra?: CampaignExtraSettings | null): boolean {
+  return actionId === 'facebook_group_post' && extra?.groupPostAnonymous === true && !isNativeGroupPostShare(actionId, extra)
+}
+
 /** Native sharing accepts a particular post, never the latest item of a feed. */
 export function isFacebookPostShareUrl(value: string): boolean {
   try {
