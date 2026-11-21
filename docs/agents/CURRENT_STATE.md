@@ -46,6 +46,16 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop + App Server 10.3.0](../audits/akaagent-10.3.0-20261121/README.md):
+**Đã build Desktop Windows x64, Mac ARM64, Mac Intel x64 lúc 23:26:35–23:30:28 VN và App Server nội bộ 23:34:00–23:35:05 VN, 21/11/2026. Chưa
+upload/phát hành/feed (anh tự phát hành); App Server chưa cài VPS.** Nguồn worktree `release-10.3.0`, nhánh `codex/release-10.3.0` `120d54a7` (chỉ
+đổi version) trên `origin/dev_3` `3a08a107` sau PR #771. Mới so với 10.2.0: quét data Nhà Tốt / Batdongsan / Trang Vàng (#770, V618, chỉ tổ chức 1),
+đăng bài nhóm ẩn danh (#765, #768, V616 / V617), "Đã từ chối kết bạn" (#764, V615), theo dõi tương tác có hạn đọc cấu hình và dùng tạm cấu hình vừa
+hết hạn (#762, #766), trang xác minh / đăng nhập ra FB04 / FB43 (#760, V607), tìm data đẩy qua DB và quản trị viên group vào Nhóm data (#761, #763,
+#767, #769). App Server build lại vì gói Server có `campaignScheduler.ts` và theo dõi tương tác đổi (29/255 file sau 10.2.0). 96/107 bước kiểm đạt,
+11 lỗi đã giải thích (bài kiểm chưa theo code mới, theo giờ chạy, hoặc hỏng sẵn). Không DB/deploy service trong bước build.
+[Receipt](../audits/akaagent-10.3.0-20261121/build-receipt.json).
+
 [Build akaAgent Desktop 10.2.0](../audits/akaagent-10.2.0-20261120/README.md):
 **Đã build Windows x64, Mac ARM64, Mac Intel x64 lúc 22:51:02–22:54:20 VN, 20/11/2026. Chưa upload/phát hành/feed (anh tự phát hành). Không
 build App Server** (10/247 file trong gói Server đổi sau 10.1.0, đều là engine v2 / Facebook mà App Server không chạy, kiểu dữ liệu, hoặc bộ giữ máy
