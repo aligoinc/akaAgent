@@ -65,7 +65,7 @@ V608 thêm 6 dòng (5 trùng), V610 thêm 1 (đúng), gọi lại thêm 0.
 - Chỉ thay thân hàm đẩy (kiểm `md5(prosrc)` V608 `d04c4711…`), không đổi bảng / quyền / khuôn trả về; sổ đẩy production 0 dòng nên đổi
   nghĩa khoá không cần chuyển dữ liệu. Sinh bằng `python3 scripts/find-data-push/build-v610-sql.py`; gỡ: `rollback_v610_…` (về đúng thân V608).
 
-## V614 — vá khoá so sánh của V610 (`migrations/migration_v614_find_data_push_match_key_v2.sql`, CHƯA apply)
+## V614 — vá khoá so sánh của V610 (`migrations/migration_v614_find_data_push_match_key_v2.sql`, đã apply akachat 17:26:36 VN 21/11/2026)
 
 Anh yêu cầu 21/11 tối ("vá lỗ hổng này, sau đó kiểm thử xem còn lỗ hổng nào nữa không để vá tiếp cho đến khi hoàn thiện"). Số V611–V613 trên
 DB thật đã là của phiên khác nên lấy V614. Sinh bằng `python3 scripts/find-data-push/build-v614-sql.py`; gỡ: `rollback_v614_…` (trả hàm
@@ -104,6 +104,12 @@ bản V610). Đường dự phòng: dán `migrations/tests/migration_v614_find_d
 `node scripts/make-migration-ledger-apply.cjs`; nguyên migration + dòng sổ `migration_v614_find_data_push_match_key_v2` trong cùng
 giao dịch, `statements[1]` md5 `b36e9013…` = file; dán lần hai bị sổ chặn). Kiểm trên PG16: `test_v608.sh` với bản dán thay file gốc,
 47 PASS. Sau apply kiểm `md5(statements[1])` và md5 ba thân hàm như postflight.
+
+**Đã apply 17:26:36 VN 21/11/2026** (anh tự dán bản gọn `migrations/tests/migration_v614_find_data_push_match_key_v2_paste.sql` vào SQL
+Editor; sổ `20261121102636`, `created_by` NULL, md5 sổ = file `b36e9013…`; không apply lại). Hậu kiểm: ba thân hàm đúng md5 bản sinh, hàm
+khoá thô đã xoá, Desktop gọi được hàm đẩy nhưng không gọi thẳng hàm khoá / mảnh, sổ đẩy 0 dòng. PostgREST nạp lại schema 6,5 s; phút đó
+260 request quá 1 giây, 1 lỗi 500 (`aka_agent_engine_report_v1` của Desktop chạm trần 3 giây), 0 lỗi 503, phút sau sạch; 0 chiến dịch
+bị tạm dừng do apply. [Biên nhận](../migrations/snapshots/find-data-push-v614/apply-receipt.json).
 
 Chưa: chạy trong app Desktop thật.
 
