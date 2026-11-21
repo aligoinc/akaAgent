@@ -259,6 +259,11 @@ const compareCampaignActionsByPlatform = (left: CampaignAction, right: CampaignA
   return nameCompare !== 0 ? nameCompare : left.id.localeCompare(right.id, 'vi')
 }
 type InternalCampaignPickerSourceType = Exclude<CampaignPickerSource['type'], 'external'>
+/** Nguồn chọn chiến dịch đích nhận data từ chiến dịch tìm data (đẩy thẳng, không qua Nhóm data). */
+const FIND_DATA_TARGET_PICKER_SOURCE_TYPES = new Set<string>([
+  'messageUidTarget', 'postLinkTarget', 'groupPostTarget', 'groupCommentTarget',
+  'zaloMessagePhoneTarget', 'zaloJoinGroupLinkTarget', 'facebookJoinGroupTarget'
+])
 
 interface CampaignPickerRow {
   id: number
@@ -2285,6 +2290,8 @@ export default function CampaignAgentFormModal({
   const campaignNameAiCacheRef = useRef<Map<string, string>>(new Map())
   const dataGroupBundleRequestIdRef = useRef<string | null>(null)
   const dataGroupBundleFingerprintRef = useRef<string | null>(null)
+  // Chiến dịch đích tạo kèm đã lưu xong trong lần lưu dùng lại mã yêu cầu: dùng lại khi lưu lại, không tạo bản mới.
+  const linkedDraftCampaignIdsRef = useRef<{ requestId: string; ids: Map<string, number> } | null>(null)
   const [expandedRateLimitMinuteActions, setExpandedRateLimitMinuteActions] = useState<Record<string, boolean>>({})
   const [editedRateLimitMinuteActions, setEditedRateLimitMinuteActions] = useCampaignDraftField<Record<string, boolean>>(draftPayload, draftValuesRef, 'editedRateLimitMinuteActions', {})
   const [mediaPickerTarget, setMediaPickerTarget] = useState<MainMediaPickerTarget | null>(null)
@@ -2485,7 +2492,9 @@ export default function CampaignAgentFormModal({
 
   // Determine if this is a "simple" campaign (no details/extra sections)
   const isSimpleCampaign = SIMPLE_CAMPAIGN_ACTIONS.has(formData.actionId)
-  const canUseDataGroupSource = actionSupportsDataGroup(formData.actionId)
+  // Như CampaignFormModal: chiến dịch đích tạo kèm trong form tìm data nhận data bằng cách thêm trực tiếp (V608).
+  const isFindDataTargetDraft = draftMode && FIND_DATA_TARGET_PICKER_SOURCE_TYPES.has(draftPickerSourceType ?? '')
+  const canUseDataGroupSource = actionSupportsDataGroup(formData.actionId) && !isFindDataTargetDraft
   const isDataGroupSource = canUseDataGroupSource && formData.dataTargetSourceMode === 'data_group'
   const isMessageCampaign = MESSAGE_CAMPAIGN_ACTIONS.has(formData.actionId)
   const isEmailCampaign = formData.actionId === EMAIL_SEND_ACTION_ID
@@ -7825,7 +7834,8 @@ export default function CampaignAgentFormModal({
         campaignPayload: Partial<Campaign>,
         campaignDetails: Partial<CampaignInputData>[],
         dataGroupSnapshots: DirectDataGroupSnapshotIntent[] = [],
-        progressRange?: CampaignSaveProgressRange
+        progressRange?: CampaignSaveProgressRange,
+        options: { discardOnFailure?: boolean } = {}
       ): Promise<Campaign> => {
         const setItemProgress = (
           ratio: number,
@@ -7847,7 +7857,11 @@ export default function CampaignAgentFormModal({
           : ''
 
         const finalStatus = selectedSaveStatus ?? campaignPayload.status ?? 'chờ xử lý'
-        const usesAtomicProvisioningBarrier = campaignPayload.dataTargetSourceMode === 'data_group' && !!creationBundle
+        // Như CampaignFormModal: chỉ chiến dịch thuộc gói tạo của lần lưu này mới gửi mã gói khi gắn Nhóm data.
+        const campaignBundleId = creationBundle && Number(campaignPayload.creationBundleId) === creationBundle.id
+          ? creationBundle.id
+          : null
+        const usesAtomicProvisioningBarrier = campaignPayload.dataTargetSourceMode === 'data_group' && campaignBundleId !== null
         setItemProgress(
           0.02,
           campaignNumberLabel
@@ -7982,7 +7996,7 @@ export default function CampaignAgentFormModal({
               requestId: `${saveRequestId}:${savedCampaign.id}`,
               campaignId: savedCampaign.id,
               groupId: campaignPayload.dataGroupId,
-              bundleId: creationBundle?.id ?? null
+              bundleId: campaignBundleId
             })
             setItemProgress(0.9, 'Đã liên kết chiến dịch với Nhóm data.')
           }
@@ -7998,6 +8012,22 @@ export default function CampaignAgentFormModal({
           )
           return savedCampaign
         } catch (err) {
+          if (options.discardOnFailure) {
+            // Chiến dịch đích tạo kèm chưa được liên kết với chiến dịch nào: bỏ bản dở, lần lưu lại tạo bản mới đầy đủ.
+            try {
+              await window.electronAPI.deleteCampaign(savedCampaign.id)
+            } catch (deleteErr) {
+              console.error('Failed to discard incomplete linked campaign:', deleteErr)
+              try {
+                await updateCampaign(savedCampaign.id, {
+                  note: formatCampaignDataCreationErrorNote(err)
+                }, { refresh: false })
+              } catch (noteErr) {
+                console.error('Failed to mark campaign data creation error:', noteErr)
+              }
+            }
+            throw err
+          }
           try {
             await updateCampaign(savedCampaign.id, {
               note: formatCampaignDataCreationErrorNote(err)
@@ -8030,7 +8060,10 @@ export default function CampaignAgentFormModal({
         updateSaveProgress(99, 'Đã kích hoạt các chiến dịch.')
       }
 
-      const savedLinkedDraftItems = new Map<string, number>()
+      const savedLinkedDraftItems = linkedDraftCampaignIdsRef.current?.requestId === saveRequestId
+        ? linkedDraftCampaignIdsRef.current.ids
+        : new Map<string, number>()
+      linkedDraftCampaignIdsRef.current = { requestId: saveRequestId, ids: savedLinkedDraftItems }
       const persistDraftCampaign = async (
         draft: InternalCampaignDraft,
         linkTargetIds: number[] = [],
@@ -8062,7 +8095,7 @@ export default function CampaignAgentFormModal({
             : {
                 itemIndex: progressStartIndex + draftItemIndex,
                 itemCount: Math.max(1, campaignWorkItemCount)
-              })
+              }, { discardOnFailure: true })
           savedLinkedDraftItems.set(itemKey, savedDraftCampaign.id)
           createdIds.push(savedDraftCampaign.id)
         }
@@ -8313,6 +8346,7 @@ export default function CampaignAgentFormModal({
           if (saveSignal.aborted) return
           dataGroupBundleRequestIdRef.current = null
           dataGroupBundleFingerprintRef.current = null
+          linkedDraftCampaignIdsRef.current = null
           clearStoredDataGroupBundleRequestId(dataGroupBundleRetryStorageKey)
           updateSaveProgress(100, 'Lưu chiến dịch hoàn tất.')
 
@@ -11813,8 +11847,22 @@ export default function CampaignAgentFormModal({
       )
     }
 
+    const unreachableTargets = FIND_DATA_TARGET_PICKER_SOURCE_TYPES.has(source.type)
+      ? selectedItems.flatMap(item => {
+          if (item.draft) return []
+          if (!item.campaign || item.campaign.isDelete) return [`${item.row.name} (không còn hoặc đã xoá)`]
+          if (item.campaign.dataTargetSourceMode === 'data_group') return [`${item.row.name} (đang chạy bằng Nhóm data)`]
+          return []
+        })
+      : []
+
     return (
       <div className="campaign-picker-summary-table-wrap">
+        {unreachableTargets.length > 0 && (
+          <div className="schedule-hint found-data-entitlement-note">
+            {`Không đẩy được data sang ${unreachableTargets.length} chiến dịch: ${unreachableTargets.join(', ')}. Hãy gỡ các chiến dịch này; chiến dịch chạy bằng Nhóm data thì chọn "Đẩy … sang Nhóm data" với nhóm của chiến dịch đó.`}
+          </div>
+        )}
         <table className={`campaign-picker-summary-table${showTargetActions ? ' campaign-picker-target-table' : ''}`}>
           <thead>
             <tr>
@@ -15146,7 +15194,12 @@ export default function CampaignAgentFormModal({
   const renderCampaignPickerModal = () => {
     if (!campaignPickerModal) return null
 
-    const rows = getCampaignPickerRows(campaignPickerModal.source)
+    const pickerSource = campaignPickerModal.source
+    const rows = getCampaignPickerRows(pickerSource).filter(row =>
+      !FIND_DATA_TARGET_PICKER_SOURCE_TYPES.has(pickerSource.type) ||
+      campaignPickerModal.selectedIds.includes(row.id) ||
+      campaigns.find(item => item.id === row.id)?.dataTargetSourceMode !== 'data_group'
+    )
     const searchQuery = campaignPickerModal.searchQuery.trim().toLowerCase()
     const filteredRows = searchQuery
       ? rows.filter(row => row.searchText.includes(searchQuery))
@@ -16625,6 +16678,11 @@ export default function CampaignAgentFormModal({
               </div>
             )}
 
+            {isFindDataTargetDraft && actionSupportsDataGroup(formData.actionId) && !isSimpleCampaign && (
+              <div className="schedule-hint found-data-entitlement-note">
+                Chiến dịch này nhận data từ chiến dịch tìm data nên data được thêm trực tiếp vào chiến dịch. Muốn chạy bằng Nhóm data, hãy chọn "Đẩy … sang Nhóm data" ở chiến dịch tìm data rồi tạo chiến dịch chạy bằng nhóm đó.
+              </div>
+            )}
             {canUseDataGroupSource && !isSimpleCampaign && (
               <div
                 className="stepper-section campaign-data-source-section"
@@ -16784,6 +16842,12 @@ export default function CampaignAgentFormModal({
                         <Plus size={15} /> {formData.dataGroupId ? 'Đổi nhóm' : 'Chọn nhóm'}
                       </button>
                     </div>
+                    {selectedDataGroup && dataGroupTargetPreviewStatus === 'ready' && dataGroupTargetPreview.length > 0 &&
+                      dataGroupTargetPreview.every(item => item.validTargetCount === 0) && (
+                      <div className="schedule-hint found-data-entitlement-note">
+                        {`Nhóm "${selectedDataGroup.name}" hiện chưa có data phù hợp với loại chiến dịch này (${selectedDataGroup.activeMembershipCount.toLocaleString('vi-VN')} data trong nhóm). Chiến dịch sẽ chờ tới khi nhóm có data phù hợp; kiểm tra lại nhóm nếu bạn định chạy ngay.`}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

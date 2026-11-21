@@ -24,6 +24,7 @@ import * as zaloPhoneCheckRepo from '../data/repositories/zaloPhoneCheckReposito
 import * as emailTrackingRepo from '../data/repositories/emailTrackingRepository'
 import * as dataGroupRepo from '../data/repositories/dataGroupRepository'
 import * as runtimeClockRepo from '../data/repositories/runtimeClockRepository'
+import * as findDataPushRepo from '../data/repositories/findDataPushRepository'
 
 /**
  * Facade that delegates to individual repositories.
@@ -208,6 +209,10 @@ export class SupabaseService {
   }
   reopenCompletedCampaignAfterInputInsert(id: number, expectedActionId: string) {
     return campaignRepo.reopenCompletedCampaignAfterInputInsert(id, expectedActionId)
+  }
+  /** V608: đẩy data tìm được sang chiến dịch đích qua DB; null = DB chưa có hàm (dùng cách đẩy cũ). */
+  pushFindDataToLinkedCampaigns(...args: Parameters<typeof findDataPushRepo.pushFindDataToLinkedCampaigns>) {
+    return findDataPushRepo.pushFindDataToLinkedCampaigns(...args)
   }
   setZaloServerCampaignStatus(id: number, status: campaignRepo.ZaloServerControlStatus) {
     return campaignRepo.setZaloServerCampaignStatus(id, status)
