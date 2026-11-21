@@ -48,31 +48,74 @@ export function parseEngagementConfig(rows: Array<{ key: string; value: unknown;
   return { enabled: enabled?.value === 'true' && !!revision, revision,
     flushIntervalSeconds: integer(1, 5, 60), batchSize: integer(2, 100, 500), trackingWindowHours: integer(3, 48, 720) }
 }
+export type EngagementConfigRows = Parameters<typeof parseEngagementConfig>[0]
+/** Diagnostics only. `stalled`: the read had not settled when the cache gave
+ * up on it; `late`: such a read settled afterwards (it is never applied). */
+export interface EngagementConfigReadEvent {
+  type: 'failed' | 'stalled' | 'late'
+  elapsedMs: number
+  error?: unknown
+  outcome?: 'resolved' | 'rejected'
+}
+export const ENGAGEMENT_CONFIG_TTL_MS = 60_000
+/** A read normally ends by its own abort (5s). This is the bound when it does
+ * not: production App Server 18/11/2026 kept one read pending for days, which
+ * silently disabled tracking for the whole process. */
+export const ENGAGEMENT_CONFIG_READ_MAX_MS = 30_000
+// Every runtime of this module has performance; the Date fallback is only for
+// script harnesses that evaluate the file in a bare VM context.
+const engagementMonotonicNow = (): number => typeof performance === 'undefined' ? Date.now() : performance.now()
 export class EngagementConfigCache {
   private cached: { at: number; value: EngagementConfig } | undefined
   private pending: Promise<EngagementConfig> | undefined
   private failedUntil = 0
-  constructor(private readonly read: () => Promise<Parameters<typeof parseEngagementConfig>[0]>, private readonly now = Date.now) {}
+  // TTL and retry wait are intervals, so they use a monotonic clock: a host
+  // clock moved forward then back must not push the next read days away.
+  constructor(private readonly read: () => Promise<EngagementConfigRows>, private readonly now: () => number = engagementMonotonicNow,
+    private readonly options: { maxReadMs?: number; onReadEvent?: (event: EngagementConfigReadEvent) => void } = {}) {}
   get(): Promise<EngagementConfig> {
-    if (this.cached && this.now() - this.cached.at < 60_000) return Promise.resolve(this.cached.value)
+    if (this.cached && this.now() - this.cached.at < ENGAGEMENT_CONFIG_TTL_MS) return Promise.resolve(this.cached.value)
     if (this.pending) return this.pending
     if (this.now() < this.failedUntil) return Promise.reject(new Error("engagement_config_unavailable"))
-    this.pending = Promise.resolve().then(this.read).then(rows => {
+    const startedAt=this.now(), elapsed=(): number => Math.max(0, Math.round(this.now()-startedAt))
+    let stalled=false
+    const reading=Promise.resolve().then(this.read)
+    const bounded=new Promise<EngagementConfigRows>((resolve,reject) => {
+      // Every caller (and the writer awaiting this promise) gets an answer
+      // within the bound, whatever the read is stuck on.
+      const timer=setTimeout(() => {
+        stalled=true
+        this.report({ type:'stalled',elapsedMs:elapsed() })
+        reject(new Error('engagement_config_read_stalled'))
+      },this.options.maxReadMs ?? ENGAGEMENT_CONFIG_READ_MAX_MS)
+      ;(timer as { unref?: () => void }).unref?.()
+      reading.then(rows => { clearTimeout(timer); resolve(rows) },error => { clearTimeout(timer); reject(error) })
+    })
+    reading.then(() => { if (stalled) this.report({ type:'late',outcome:'resolved',elapsedMs:elapsed() }) },
+      error => { if (stalled) this.report({ type:'late',outcome:'rejected',elapsedMs:elapsed(),error }) })
+    this.pending = bounded.then(rows => {
       const value = parseEngagementConfig(rows)
       this.cached = { at: this.now(), value }
       return value
-    }).catch(error => { this.failedUntil = this.now()+60_000; throw error }).finally(() => { this.pending = undefined })
+    }).catch(error => {
+      this.failedUntil = this.now()+ENGAGEMENT_CONFIG_TTL_MS
+      if (!stalled) this.report({ type:'failed',elapsedMs:elapsed(),error })
+      throw error
+    }).finally(() => { this.pending = undefined })
     return this.pending
   }
   /** Optional tracking must never make a campaign wait for configuration IO. */
   currentOrRefresh(): EngagementConfig | undefined {
-    const current = this.cached && this.now() - this.cached.at < 60_000 ? this.cached.value : undefined
+    const current = this.cached && this.now() - this.cached.at < ENGAGEMENT_CONFIG_TTL_MS ? this.cached.value : undefined
     if (!current) void this.get().catch(() => undefined)
     return current
   }
   /** Only for fencing deferred metadata; never authorizes work with stale settings. */
   lastKnown(): EngagementConfig | undefined { return this.cached?.value }
   invalidate(): void { this.cached = undefined }
+  private report(event: EngagementConfigReadEvent): void {
+    try { this.options.onReadEvent?.(event) } catch { /* Diagnostics never affect tracking. */ }
+  }
 }
 export const engagementRecord = (v: unknown): Record<string, unknown> => v && typeof v === 'object' && !Array.isArray(v) ? v as Record<string, unknown> : {}
 const id = (v: unknown): string => typeof v === 'string' ? v.trim() : typeof v === 'number' && Number.isSafeInteger(v) ? String(v) : ''

@@ -6,16 +6,183 @@ import { getCurrentUser, getCurrentUserCredentials, type ProcessAuthCredentials 
 import { getSupabaseClient } from '../data/supabaseClient'
 import { peekDatabaseRuntimeClock } from '../data/repositories/runtimeClockRepository'
 import { ENGAGEMENT_KEYS, EngagementConfigCache, EngagementWatchCache, normalizeEngagementEvent,
-  type EngagementConfig, type EngagementEvent, type EngagementWatch, type ZaloEngagementSource } from '../../shared/zaloCampaignEngagement'
+  type EngagementConfig, type EngagementConfigReadEvent, type EngagementEvent, type EngagementWatch, type ZaloEngagementSource } from '../../shared/zaloCampaignEngagement'
+import { subscribe } from 'node:diagnostics_channel'
+
+// Intervals only (bounds, busy writer). Every Electron process has performance;
+// the Date fallback exists for script harnesses that run this file in a bare VM.
+const engagementMonotonic = (): number => typeof performance === 'undefined' ? Date.now() : performance.now()
+
+/**
+ * Chẩn đoán cho lần gọi DB của theo dõi tương tác Zalo bị treo: request đã được tạo chưa, đã gửi chưa, đã có trả lời chưa,
+ * lỗi gì, tín hiệu huỷ đã bắn chưa. Đọc từ diagnostics_channel của undici (fetch của Node trong Electron), nên không sửa
+ * thư viện Supabase và không thêm request nào. Chỉ đọc đường dẫn, không đọc header hay nội dung.
+ *
+ * 18/11/2026 App Server giữ một lần đọc cấu hình chưa xong suốt nhiều ngày mà không để lại dấu vết nào; mấy dòng log này
+ * là để lần sau biết nó kẹt ở bước nào.
+ */
+interface Watch {
+  label: string
+  pathParts: string[]
+  startedAt: number
+  request?: object
+  createdAt?: number
+  sentAt?: number
+  headersAt?: number
+  status?: number
+  doneAt?: number
+  errorAt?: number
+  error?: string
+  abortedAt?: number
+}
+
+const activeRequestWatches = new Set<Watch>()
+let requestWatchInstalled = false
+
+function ownRequestWatch(request: unknown): Watch | undefined {
+  if (!request || !activeRequestWatches.size) return undefined
+  for (const watch of activeRequestWatches) if (watch.request === request) return watch
+  return undefined
+}
+
+function installRequestWatch(): void {
+  if (requestWatchInstalled) return
+  requestWatchInstalled = true
+  try {
+    subscribe('undici:request:create', (message) => {
+      if (!activeRequestWatches.size) return
+      const request = (message as { request?: { path?: unknown } }).request
+      const path = typeof request?.path === 'string' ? request.path : ''
+      for (const watch of activeRequestWatches) {
+        if (watch.request || !watch.pathParts.every(part => path.includes(part))) continue
+        watch.request = request
+        watch.createdAt = engagementMonotonic()
+        break
+      }
+    })
+    subscribe('undici:client:sendHeaders', (message) => {
+      const watch = ownRequestWatch((message as { request?: unknown }).request)
+      if (watch && watch.sentAt === undefined) watch.sentAt = engagementMonotonic()
+    })
+    subscribe('undici:request:headers', (message) => {
+      const value = message as { request?: unknown; response?: { statusCode?: unknown } }
+      const watch = ownRequestWatch(value.request)
+      if (!watch) return
+      watch.headersAt = engagementMonotonic()
+      if (typeof value.response?.statusCode === 'number') watch.status = value.response.statusCode
+    })
+    subscribe('undici:request:trailers', (message) => {
+      const watch = ownRequestWatch((message as { request?: unknown }).request)
+      if (watch) watch.doneAt = engagementMonotonic()
+    })
+    subscribe('undici:request:error', (message) => {
+      const value = message as { request?: unknown; error?: unknown }
+      const watch = ownRequestWatch(value.request)
+      if (!watch) return
+      watch.errorAt = engagementMonotonic()
+      watch.error = describeEngagementError(value.error)
+    })
+  } catch {
+    // Không có diagnostics_channel thì chỉ còn thời gian chờ, chốt chặn vẫn chạy.
+  }
+}
+
+interface EngagementRequestWatch {
+  describe(): Record<string, unknown>
+  end(): void
+}
+
+/** `pathParts`: mọi đoạn phải có trong đường dẫn + query của request undici (ví dụ tên bảng và tên khoá cài đặt). */
+function watchEngagementRequest(label: string, pathParts: string[], signal?: AbortSignal): EngagementRequestWatch {
+  installRequestWatch()
+  const watch: Watch = { label, pathParts, startedAt: engagementMonotonic() }
+  activeRequestWatches.add(watch)
+  const onAbort = (): void => { if (watch.abortedAt === undefined) watch.abortedAt = engagementMonotonic() }
+  signal?.addEventListener('abort', onAbort, { once: true })
+  const at = (value: number | undefined): number | null => value === undefined ? null : Math.round(value - watch.startedAt)
+  return {
+    describe: () => ({
+      call: watch.label,
+      elapsedMs: Math.round(engagementMonotonic() - watch.startedAt),
+      // null = chưa xảy ra. requestMs null nghĩa là chưa tới được fetch (ví dụ còn chờ ở bước lấy mã đăng nhập).
+      requestMs: at(watch.createdAt),
+      sentMs: at(watch.sentAt),
+      responseMs: at(watch.headersAt),
+      status: watch.status ?? null,
+      bodyDoneMs: at(watch.doneAt),
+      errorMs: at(watch.errorAt),
+      error: watch.error ?? null,
+      abortMs: at(watch.abortedAt)
+    }),
+    end: () => {
+      activeRequestWatches.delete(watch)
+      signal?.removeEventListener('abort', onAbort)
+    }
+  }
+}
+
+/** Tên, mã và 160 ký tự đầu của câu lỗi; không chép header, dữ liệu hay cause đầy đủ. */
+function describeEngagementError(error: unknown): string {
+  if (!error || typeof error !== 'object') return String(error ?? '').slice(0, 160)
+  const value = error as { name?: unknown; code?: unknown; message?: unknown; cause?: { code?: unknown } }
+  const parts = [value.name, value.code, value.cause?.code].filter(part => typeof part === 'string' && part).map(String)
+  const message = typeof value.message === 'string' ? value.message.slice(0, 160) : ''
+  return [...new Set(parts), message].filter(Boolean).join(': ')
+}
+
+/** Lời hứa luôn có kết quả trong `ms`; quá hạn thì gọi `onStall` một lần rồi báo lỗi `code`. */
+function settleEngagementCallWithin<T>(promise: PromiseLike<T>, ms: number, code: string, onStall: () => void): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      try { onStall() } catch { /* chẩn đoán không được ảnh hưởng luồng ghi */ }
+      reject(new Error(code))
+    }, ms)
+    ;(timer as { unref?: () => void }).unref?.()
+    Promise.resolve(promise).then(value => { clearTimeout(timer); resolve(value) }, error => { clearTimeout(timer); reject(error) })
+  })
+}
 
 // One process-wide coordinator, including legacy Server's multiple staff runtimes.
+let configWatch: EngagementRequestWatch | undefined
+let configFailureLogAt = -Infinity, configFailuresSinceLog = 0, lastConfigReadStages: Record<string, unknown> | undefined
 const config = new EngagementConfigCache(async () => {
-  const { data, error } = await getSupabaseClient().from('auto_system_settings')
-    .select('key,value,updated_at,is_active,is_secret').in('key', ENGAGEMENT_KEYS)
-    .abortSignal(AbortSignal.timeout(5_000))
-  if (error) throw error
-  return data || []
-})
+  const signal = AbortSignal.timeout(5_000)
+  const watch = watchEngagementRequest('config', ['/auto_system_settings', 'campaign_engagement'], signal)
+  configWatch = watch
+  try {
+    const { data, error } = await getSupabaseClient().from('auto_system_settings')
+      .select('key,value,updated_at,is_active,is_secret').in('key', ENGAGEMENT_KEYS)
+      .abortSignal(signal)
+    if (error) throw error
+    return data || []
+  } finally {
+    // The failure is reported after this finally; keep its stages for that log.
+    lastConfigReadStages = watch.describe()
+    watch.end()
+    if (configWatch === watch) configWatch = undefined
+  }
+}, undefined, { onReadEvent: logConfigReadEvent })
+// Bounds for calls that normally end by their own abort signal (5s / 20s).
+const OWNER_AUTH_MAX_MS = 30_000, RPC_MAX_MS = 45_000, WRITER_BUSY_LOG_MS = 5 * 60_000
+let writerStartedAt = 0, writerStep = '', writerBusyLogged = false
+function logConfigReadEvent(event: EngagementConfigReadEvent): void {
+  if (event.type === 'stalled') {
+    engagementMetrics.configStalls++
+    console.warn('[ZaloEngagement] config read stalled; giving up on it', { ...configWatch?.describe(), elapsedMs: event.elapsedMs })
+    // A read that never settles must not leave its watch behind.
+    configWatch?.end(); configWatch = undefined
+  } else if (event.type === 'late') {
+    console.warn('[ZaloEngagement] stalled config read settled later', { outcome: event.outcome, elapsedMs: event.elapsedMs,
+      ...(event.error ? { error: describeEngagementError(event.error) } : {}) })
+  } else {
+    engagementMetrics.configFailures++; configFailuresSinceLog++
+    // At most one read per minute fails; a long outage logs every 10 minutes.
+    if (engagementMonotonic() - configFailureLogAt < 10 * 60_000) return
+    configFailureLogAt = engagementMonotonic()
+    console.warn('[ZaloEngagement] config read failed', { ...lastConfigReadStages, elapsedMs: event.elapsedMs, error: describeEngagementError(event.error), failures: configFailuresSinceLog })
+    configFailuresSinceLog = 0
+  }
+}
 type Registration = { detailId: string; source: ZaloEngagementSource; accountId?: string }
 type Hold = { accountId: string; accountZaloUid: string; targetZaloUid: string }
 type Recovery = Hold & { campaignId: string; source: ZaloEngagementSource; detailInsertStarted?: boolean }
@@ -39,7 +206,8 @@ const watches = new EngagementWatchCache()
 let timer: ReturnType<typeof setTimeout> | undefined
 let timerAt = 0
 let writing = false, cursor = 0, staging = 0, stagingBytes = 0, configFailures = 0, lastWarningAt = 0
-export const engagementMetrics = { received: 0, filtered: 0, coalesced: 0, updated: 0, retry: 0, overflow: 0, rpcMs: 0, journalErrors: 0, backlog: 0, oldestAgeMs: 0, recoveryExpired: 0 }
+export const engagementMetrics = { received: 0, filtered: 0, coalesced: 0, updated: 0, retry: 0, overflow: 0, rpcMs: 0, journalErrors: 0, backlog: 0, oldestAgeMs: 0, recoveryExpired: 0,
+  configFailures: 0, configStalls: 0, callStalls: 0 }
 const MAX_ITEMS = 10_000, MAX_BYTES = 16 * 1024 * 1024, JOURNAL_MAX_BYTES = 128 * 1024 * 1024
 // Optional commit recovery, independent of the DB's registered tracking window.
 const RECOVERY_MAX_AGE_MS = 5 * 60_000
@@ -237,16 +405,29 @@ async function request(scope: Scope, settings: EngagementConfig, mode: 'register
   const generation=scope.generation
   const serverOwner=serverOwners.get(scope.key)
   if (serverOwner?.active) {
+    writerStep = 'owner_auth'
     await prepareServerOwner(serverOwner)
     if (!serverOwner.credentials || !scope.active() || scope.generation!==generation) throw new Error('engagement_owner_auth_unavailable')
     scope.credentials=serverOwner.credentials
   }
   if (!scope.credentials) throw new Error('engagement_owner_auth_unavailable')
   const started=Date.now()
-  const { data,error }=await getSupabaseClient().rpc(`aka_agent_${mode}_campaign_engagement`,{
-    p_staff_id:scope.staffId,p_organization_id:scope.organizationId,p_revision:settings.revision,p_items:items,
-    p_auth_username:scope.credentials.username,p_auth_password:scope.credentials.password
-  }).abortSignal(AbortSignal.timeout(20_000))
+  writerStep = `rpc:${mode}`
+  const signal = AbortSignal.timeout(20_000)
+  const watch = watchEngagementRequest(`rpc:${mode}`, [`/rpc/aka_agent_${mode}_campaign_engagement`], signal)
+  let response: { data: any; error: { message?: string } | null }
+  try {
+    // An unknown outcome is already retried after the 20s abort; the bound
+    // only covers a call that does not end even then.
+    response = await settleEngagementCallWithin(getSupabaseClient().rpc(`aka_agent_${mode}_campaign_engagement`,{
+      p_staff_id:scope.staffId,p_organization_id:scope.organizationId,p_revision:settings.revision,p_items:items,
+      p_auth_username:scope.credentials.username,p_auth_password:scope.credentials.password
+    }).abortSignal(signal), RPC_MAX_MS, 'engagement_rpc_stalled', () => {
+      engagementMetrics.callStalls++
+      console.warn('[ZaloEngagement] rpc stalled; retrying later', { ...watch.describe(), items: items.length })
+    })
+  } finally { watch.end() }
+  const { data,error }=response
   engagementMetrics.rpcMs+=Date.now()-started
   if (!scope.active() || scope.generation!==generation) throw new Error('engagement_owner_changed')
   if (error) {
@@ -261,16 +442,23 @@ async function request(scope: Scope, settings: EngagementConfig, mode: 'register
   engagementMetrics.updated+=Number(data?.updated || 0)
   return data
 }
+function noteBusyWriter(): void {
+  if (writerBusyLogged || engagementMonotonic()-writerStartedAt<WRITER_BUSY_LOG_MS) return
+  writerBusyLogged=true
+  console.warn('[ZaloEngagement] writer busy', { step: writerStep, elapsedMs: Math.round(engagementMonotonic()-writerStartedAt), backlog: engagementMetrics.backlog })
+}
 async function flush(): Promise<void> {
-  if (writing) return
-  writing=true
+  if (writing) { noteBusyWriter(); return }
+  writing=true; writerStartedAt=engagementMonotonic(); writerStep='scope_ready'; writerBusyLogged=false
   let failed=false, canContinue=false, nextSettings: EngagementConfig | undefined
   try {
     // Logout suspends writes and leaves the metadata journal for its owning login.
     let available=[...scopes.values()].filter(s=>s.active())
     for (const scope of available) { await scope.ready; expireRecoveries(scope) }
     if (!available.some(s=>s.recovery || s.catalogPending || s.items.some(i=>i.mode!=='hold' && !held(s,i)))) return
+    writerStep='config'
     const settings=await config.get()
+    writerStep='persist'
     available=available.filter(s=>s.active())
     for (const scope of available) {
       await scope.ready
@@ -320,7 +508,7 @@ async function flush(): Promise<void> {
         for (const id of scope.recoveringAfterRestart) releaseOperation(scope,id,false)
         scope.items=scope.items.filter(i=>!scope.recoveringAfterRestart.has(i.id)); scope.recoveringAfterRestart.clear()
       }
-      refresh(scope); await persist(scope,true)
+      refresh(scope); writerStep='persist'; await persist(scope,true)
     } else if (!foreground && scope.catalogPending) {
       const result=await request(scope,settings,'read',[{catalog:scope.catalogCursor || {}}])
       if (!result.enabled) return
@@ -390,7 +578,7 @@ async function flush(): Promise<void> {
       failed=true
       for (const item of batch) if (scope.items.includes(item)) retry(item)
     }
-    refresh(scope); await persist(scope,true)
+    refresh(scope); writerStep='persist'; await persist(scope,true)
   } catch { failed=true; canContinue=true; configFailures++; engagementMetrics.retry++ }
   finally {
     writing=false
@@ -542,9 +730,18 @@ async function prepareServerOwner(explicitOwner?: ServerOwner): Promise<void> {
   if (owner.pending) return owner.pending
   owner.pending=(async () => {
     try {
-      const { data,error }=await getSupabaseClient().from('org_staff').select('username,password')
-        .eq('id',owner.staffId).eq('organization_id',owner.organizationId).eq('is_active',true)
-        .abortSignal(AbortSignal.timeout(5_000)).maybeSingle()
+      const signal=AbortSignal.timeout(5_000)
+      const watch=watchEngagementRequest('owner_auth',['/org_staff','username'],signal)
+      let response: { data: { username?: unknown; password?: unknown } | null; error: unknown }
+      try {
+        response=await settleEngagementCallWithin(getSupabaseClient().from('org_staff').select('username,password')
+          .eq('id',owner.staffId).eq('organization_id',owner.organizationId).eq('is_active',true)
+          .abortSignal(signal).maybeSingle(), OWNER_AUTH_MAX_MS, 'engagement_owner_auth_stalled', () => {
+          engagementMetrics.callStalls++
+          console.warn('[ZaloEngagement] owner auth read stalled', watch.describe())
+        })
+      } finally { watch.end() }
+      const { data,error }=response
       if (error || !data?.username || !data?.password) throw new Error('owner_auth_unavailable')
       if (owner.active) owner.credentials={ username:String(data.username),password:String(data.password) }
     } catch { owner.retryAt=Date.now()+60_000; warn('server_owner_auth_unavailable') }
