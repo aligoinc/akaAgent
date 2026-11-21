@@ -50,6 +50,7 @@ import { AccountActionLimitStatus, ActionLimitConfig, AkaBizIntegrationInfo, Aut
 import { formatCampaignLogMessage } from '../../shared/campaignLogFormat'
 import { readFacebookSearchGroupCardFields, type FacebookSearchGroupCardFields } from '../../shared/facebookSearchGroupCard'
 import { formatFacebookGroupAdminsLine, readFacebookGroupAdminFields, type FacebookGroupAdminFields } from '../../shared/facebookGroupAdmins'
+import { buildFindDataGroupAdminRows } from '../../shared/findDataGroupAdminRows'
 import { normalizeVietnamMobilePhone as normalizeSharedVietnamMobilePhone } from '../../shared/phone'
 import {
   getRuntimeMediaDownloadExtensionForMimeType,
@@ -737,6 +738,8 @@ type FindDataGroupOutputKind =
   | 'facebook_uid'
   | 'post_link'
   | 'facebook_group'
+  | 'facebook_group_admin_uid'
+  | 'facebook_group_admin_phone'
 
 type FindDataTargetCampaignField =
   | 'findUidTargetCampaignIds'
@@ -14526,8 +14529,13 @@ export class CampaignScheduler {
       'zalo_group_link',
       'facebook_uid',
       'post_link',
-      'facebook_group'
+      'facebook_group',
+      'facebook_group_admin_uid',
+      'facebook_group_admin_phone'
     ] as FindDataGroupOutputKind[]).filter(kind => {
+      // Quản trị viên chỉ có khi chiến dịch bật "Lấy thông tin quản trị viên của group".
+      if ((kind === 'facebook_group_admin_uid' || kind === 'facebook_group_admin_phone')
+        && sourceCampaign.extraSettings?.isFindFacebookGroupAdmins !== true) return false
       const groupId = Number(destinations[kind]?.groupId)
       return Number.isSafeInteger(groupId) && groupId > 0
     })
@@ -14653,16 +14661,37 @@ export class CampaignScheduler {
       }
     }))
 
+    // Quản trị viên group: hai Nhóm data riêng (UID / SĐT), độc lập với các loại trên. Bỏ chính tài khoản chạy chiến dịch.
+    let adminUidRows: DataGroupIngestRow[] = []
+    let adminPhoneRows: DataGroupIngestRow[] = []
+    if (configuredKinds.includes('facebook_group_admin_uid') || configuredKinds.includes('facebook_group_admin_phone')) {
+      const groupsWithAdmins = found.facebookGroups.filter(group => (group.admins?.length ?? 0) > 0)
+      if (groupsWithAdmins.length > 0) {
+        let ownFacebookUid: string | null = null
+        try {
+          ownFacebookUid = (await this.retryFindDataTransient(() => this.supabase.getAccount(accountId)))?.facebookUid ?? null
+        } catch (err) {
+          console.error('Failed to read account before pushing group admins to Data Groups:', err)
+        }
+        const adminRows = buildFindDataGroupAdminRows(groupsWithAdmins, ownFacebookUid, sourceMetadata)
+        adminUidRows = adminRows.uidRows
+        adminPhoneRows = adminRows.phoneRows
+      }
+    }
+
     const specs: Record<FindDataGroupOutputKind, {
       code: DataTypeCategoryCode
       label: string
       rows: DataGroupIngestRow[]
+      requestTag?: string
     }> = {
       phone: { code: 'phone', label: 'SĐT', rows: phoneRows },
       zalo_group_link: { code: 'zalo_group', label: 'link group Zalo', rows: zaloGroupRows },
       facebook_uid: { code: 'facebook_person', label: 'UID Facebook', rows: facebookUidRows },
       post_link: { code: 'facebook_post_url', label: 'link bài post', rows: postLinkRows },
-      facebook_group: { code: 'facebook_group', label: 'group Facebook', rows: facebookGroupRows }
+      facebook_group: { code: 'facebook_group', label: 'group Facebook', rows: facebookGroupRows },
+      facebook_group_admin_uid: { code: 'facebook_person', label: 'quản trị viên group (UID)', rows: adminUidRows, requestTag: 'admin_uid' },
+      facebook_group_admin_phone: { code: 'phone', label: 'SĐT quản trị viên group', rows: adminPhoneRows, requestTag: 'admin_phone' }
     }
 
     const sourceName = `Chiến dịch tìm data: ${sourceCampaign.name}`.slice(0, 255)
@@ -14701,7 +14730,7 @@ export class CampaignScheduler {
               inputIdentity,
               runIdentity,
               groupId,
-              spec.code,
+              spec.requestTag ? `${spec.code}~${spec.requestTag}` : spec.code,
               chunkIndex,
               payloadHash.slice(0, 24),
               'v1'

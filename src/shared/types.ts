@@ -550,6 +550,9 @@ export type FindDataOutputKind =
   | 'post_link'
   | 'facebook_group'
 
+/** Nơi nhận Nhóm data của chiến dịch tìm data: các loại kết quả, cộng hai loại quản trị viên group (chỉ Nhóm data, src/shared/findDataGroupAdminRows.ts). */
+export type FindDataGroupDestinationKind = FindDataOutputKind | 'facebook_group_admin_uid' | 'facebook_group_admin_phone'
+
 export interface FindDataTargetDataGroup {
   groupId: number
   groupName: string
@@ -758,7 +761,7 @@ export interface CampaignExtraSettings {
   findZaloGroupLinkJoinTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign Zalo tham gia group nội bộ đã chọn
   findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
   findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
-  findDataTargetDataGroups?: Partial<Record<FindDataOutputKind, FindDataTargetDataGroup>> // Nhóm data nhận từng loại kết quả tìm kiếm
+  findDataTargetDataGroups?: Partial<Record<FindDataGroupDestinationKind, FindDataTargetDataGroup>> // Nhóm data nhận từng loại kết quả tìm kiếm
   // Tìm kiếm data bằng Facebook Search — UI/config phase
   countSearchPostFindData?: number
   countSearchGroupFindData?: number
