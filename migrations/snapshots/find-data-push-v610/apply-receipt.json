@@ -1,0 +1,29 @@
+{
+  "migration": "migrations/migration_v610_find_data_push_match_key.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "run v 610",
+  "applied_via": "Supabase MCP apply_migration (exact file text)",
+  "applied_at_vn": "2026-11-21 15:39:34",
+  "ledger": { "version": "20261121083934", "name": "migration_v610_find_data_push_match_key", "statements_md5": "7af170be104441424ea0dd387369850d", "file_md5": "7af170be104441424ea0dd387369850d" },
+  "renumbered_from": "V609 (ledger already had migration_v609_campaign_result_groups, 15:16:54 VN 21/11, another session; touches no V608/V610 object)",
+  "preflight_live": { "push_prosrc_md5_before": "d04c4711cbdadeffca7238cff5f5f5cd", "deliveries_rows": 0, "push_rpc_calls_24h": 0 },
+  "postflight_live": {
+    "push_prosrc_md5_after": "d9fbaed069124f9fdc85f8be2036bd45",
+    "match_key_prosrc_md5": "3360f6e7130f9857866564c497ba26d4",
+    "coarse_key_prosrc_md5": "f8b51af4beded560216ce3c937810be1",
+    "push_proconfig": ["search_path=pg_catalog, public, private", "statement_timeout=20s"],
+    "aka_agent_desktop_can_execute_push": true,
+    "aka_agent_desktop_can_execute_match_key": false,
+    "anon_can_execute_push": false,
+    "sample_key": "post_link https://m.facebook.com/groups/1/posts/2/?__cft__[0]=x&mibextid=y -> www.facebook.com/groups/1/posts/2"
+  },
+  "postgrest_reload": {
+    "schema_cache_query_ms": 8245.5,
+    "window_08_39_30_to_08_39_45_utc": { "rest_requests": 7787, "over_1s": 1030, "p50_ms": 148, "http_500": 2, "http_503": 0 },
+    "http_500_detail": "2x POST rpc/aka_agent_engine_report_v1 from aka_agent_desktop, 57014 statement timeout (3 s role cap) while reload ran",
+    "recovered_by_utc": "08:39:45 (p50 85 ms, 0 slow)",
+    "campaigns_paused_08_39_30_to_08_42": 0
+  },
+  "not_reapply": "Do not apply again; preflight refuses when the ledger has migration_v610_%.",
+  "rollback": "migrations/rollback_v610_find_data_push_match_key.sql"
+}

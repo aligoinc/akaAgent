@@ -48,7 +48,7 @@ Gọi lại cùng data không thêm trùng (sổ + kiểm đích), nên app th�
 
 App cũ (chưa gọi hàm) vẫn tự thêm dòng; hàm mới thấy các dòng đó qua phần kiểm "đã có ở đích".
 
-## V610 — nhận ra cùng một data dù viết khác (`migrations/migration_v610_find_data_push_match_key.sql`, CHƯA apply)
+## V610 — nhận ra cùng một data dù viết khác (`migrations/migration_v610_find_data_push_match_key.sql`, đã apply akachat 15:39:34 VN 21/11/2026, sổ `20261121083934`, không apply lại; [biên nhận](../migrations/snapshots/find-data-push-v610/apply-receipt.json))
 
 Đổi số 21/11/2026 ~16:00 VN: bản này viết với số V609, nhưng sổ migration production đã có `migration_v609_campaign_result_groups` (apply 15:16:54 VN 21/11 bằng SQL Editor, phiên khác; nhóm kết quả chiến dịch + sự kiện đến muộn của Quy trình). Bản đó không đụng hàm đẩy, sổ đẩy hay bảng liên kết; chỉ đọc `auto_campaign_input_data` và thêm trigger trên `auto_campaign_details` / `auto_campaign_detail_zalo_engagement` (hàm đẩy không ghi hai bảng này). Chỉ đổi số, SQL sinh lại giống hệt bản cũ trừ con số.
 
