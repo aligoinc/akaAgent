@@ -23,6 +23,24 @@ danh thì data chuyển "tạm dừng", ghi rõ nguyên nhân; XPath mới phả
   Vì vậy "nhóm không cho ẩn danh" chỉ nhận ra bằng việc **không thấy công tắc** trong hộp đã mở (anh chấp nhận đánh đổi ở trên).
 - Khung trình duyệt app bị ẩn thì Facebook không vẽ khung hình nên bảng OK chỉ hiện khi chụp màn hình; đo thời gian trong khung ẩn không đúng.
 
+## V617: mã riêng khi không bật được công tắc
+
+**V617 đã apply akachat 18:49:08 VN 21/11/2026** theo yêu cầu ("Apply V617"; sổ `20261121114908`, md5 sổ = file `f5b7214a…`, không apply lại;
+[biên nhận](../migrations/snapshots/engine-facebook-v617/apply-receipt.json)).
+
+Anh yêu cầu 21/11/2026 ("nếu fb đổi cách bật công tắc thì phải trả mã lỗi rõ ràng"), duyệt qua hộp chọn: câu **"Không bật được chế độ đăng bài
+ẩn danh"**; data về hàng đợi, không tính lượt, cộng chuỗi lỗi, 4 data liền thì tạm dừng chiến dịch.
+
+- Block 2923 (bản V616 đóng băng ở `scripts/engine-v2-facebook/v616/`): thấy công tắc, đã bấm (và bấm OK) mà 15 giây vẫn tắt thì trả `ok: false` +
+  `actionResult` mã **FB52** `err_fb_group_anonymous_switch_not_enabled` (lớp `ui_changed`) thay vì ném lỗi. `ok: false` để engine chụp ảnh + DOM lỗi.
+- Chính sách = FB49 ở đăng nhóm: dòng "thất bại" kèm câu, `requeue`, `increment` (ngưỡng chung 4), `no_count`. Dòng chung của lớp `ui_changed` có
+  `requeue_after_minutes` 60 nhưng `report_v1` chỉ dùng trường này với `requeue_after`.
+- Phân biệt với FB51: FB51 = không có công tắc (nhóm không cho ẩn danh, hoặc Facebook đổi chính công tắc), FB52 = có công tắc mà không bật được.
+- Kiểm: `CHROMIUM_PATH=<Chrome> LC_ALL=C node scripts/engine-v2-facebook/v617-smoke.cjs` 15/15 (PG17: chỉ FB52 đổi quyết định, block đúng code, gỡ trả
+  về V616; Chromium: các ca bật được / không có công tắc giữ như V616, không bật được ra FB52); `desktop-fb-smoke.cjs` 62/62, ca V617: 4 data liền ra
+  FB52 trước khi gửi, dòng `Không bật được chế độ đăng bài ẩn danh (FB52)` trạng thái thất bại, data "chờ xử lý", không tính lượt, chiến dịch tạm dừng,
+  mọi kết quả có mã ảnh lỗi. Không tạo được tình huống Facebook không cho bật trên trang thật nên chưa thử thật.
+
 ## Element (`auto_elements`)
 
 | Tên | XPath |

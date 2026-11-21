@@ -17,7 +17,7 @@
 // như FB40, không tính lượt, không cộng chuỗi lỗi, chạy tiếp nhóm sau. Thấy công tắc mà không bật được: block ném lỗi (không bấm Đăng).
 //
 // Nguồn guard: scripts/fixtures/engine-v2-facebook/v616-live-20261121.json (đọc chỉ đọc production 21/11 17:24 VN).
-// Code block: scripts/engine-v2-facebook/group-anonymous-block.fragment.js (không ghi số migration, đổi số không đổi md5 code). Số migration chỉ
+// Code block: scripts/engine-v2-facebook/v616/group-anonymous-block.fragment.js (bản đã apply, đóng băng; bản đang dùng ở thư mục cha; không ghi số migration). Số migration chỉ
 // thật sự giữ được khi đã có dòng trong sổ: kiểm lại sổ ngay trước khi apply.
 // Chạy: node scripts/build-v616-sql.cjs (ghi migration + bản gỡ); --check chỉ kiểm file đang có khớp bộ sinh.
 'use strict'
@@ -91,7 +91,7 @@ if (norm(outOfOpened) !== norm(expectOut)) throw new Error('Fixture: cạnh ra t
 if (VARS.some(v => v.name === VAR_NAME) || VAR_NAME in DEFAULTS) throw new Error('Fixture: workflow đã có biến groupPostAnonymous')
 
 // ----- Block mới -----
-const BLOCK_CODE = '\n' + fs.readFileSync(path.join(ROOT, 'scripts/engine-v2-facebook/group-anonymous-block.fragment.js'), 'utf8').replace(/\n+$/, '') + '\n'
+const BLOCK_CODE = '\n' + fs.readFileSync(path.join(ROOT, 'scripts/engine-v2-facebook/v616/group-anonymous-block.fragment.js'), 'utf8').replace(/\n+$/, '') + '\n'
 const BLOCK_MD5 = md5(BLOCK_CODE)
 const TAG = '$v616_block$'
 if (BLOCK_CODE.includes(TAG)) throw new Error('Code block chứa thẻ dollar-quote')
