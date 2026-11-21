@@ -47,6 +47,17 @@ if (state === 'off') {
     }
   }
 }
-// Không bật được thì dừng ở đây: tuyệt đối không bấm Đăng bằng tên thật.
-if (state !== 'on') throw new Error('Không bật được chế độ đăng bài ẩn danh')
+// Có công tắc mà không bật được (Facebook đổi cách bật): không bấm Đăng bằng tên thật; trả FB52 (anh chốt 21/11/2026: data về hàng đợi, cộng
+// chuỗi, 4 data liền thì tạm dừng chiến dịch). ok: false để engine chụp ảnh + DOM lỗi.
+if (state !== 'on') {
+  return {
+    ok: false,
+    anonymousReady: false,
+    actionResult: {
+      actionCode: 'fb_post_group', statusCode: 'campaign_detail_error', errorCode: 'err_fb_group_anonymous_switch_not_enabled',
+      inputDataId: vars.inputDataId ?? null, operationState: 'not_committed', message: 'Không bật được chế độ đăng bài ẩn danh',
+      data: { source: 'fb_enable_group_anonymous_post', selector: switchSelector, okSelector, switchState: state }
+    }
+  }
+}
 return { anonymousReady: true, anonymousEnabled: true }

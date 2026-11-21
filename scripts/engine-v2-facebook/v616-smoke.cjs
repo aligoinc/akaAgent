@@ -249,7 +249,7 @@ function pageApi(pw) {
   }
 }
 
-async function runBlock(pw, kase) {
+async function runBlock(pw, kase, code = V.BLOCK_CODE) {
   await pw.setContent(composerHtml(kase.page))
   const elements = new Map(V.ELEMENTS.map(e => [e.name, e.xpath]))
   // Đồng hồ giả: helpers.sleep tiến thời gian theo đúng số ms block chờ (thật chỉ chờ ≤ 200 ms) để ca "không bật được" không mất 15 giây.
@@ -264,7 +264,7 @@ async function runBlock(pw, kase) {
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
   let out
   try {
-    out = await new AsyncFunction('page', 'helpers', 'vars', 'input', 'signal', 'Date', V.BLOCK_CODE)(pageApi(pw), helpers, vars, { opened: true },
+    out = await new AsyncFunction('page', 'helpers', 'vars', 'input', 'signal', 'Date', code)(pageApi(pw), helpers, vars, { opened: true },
       { aborted: false }, FakeDate)
   } catch (error) {
     out = { thrown: error.message }
@@ -334,4 +334,5 @@ async function main() {
   console.log(`\n${passed} đạt, ${failed} lỗi (md5 migration ${md5(MIGRATION)})`)
   if (failed) process.exit(1)
 }
-main().catch(error => { console.error(error); process.exit(1) })
+module.exports = { FB_ACTIONS, policyGrid, dump, seedWorkflows, children, composerHtml, pageApi, runBlock, CASES }
+if (require.main === module) main().catch(error => { console.error(error); process.exit(1) })

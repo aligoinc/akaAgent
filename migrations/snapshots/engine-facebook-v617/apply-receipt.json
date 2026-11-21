@@ -1,0 +1,27 @@
+{
+  "migration": "migration_v617_engine_facebook_group_post_anonymous_switch",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V617 (21/11/2026, sau khi duyệt câu FB52 và cách xử lý qua hộp chọn)",
+  "applied_at_vn": "2026-11-21 18:49:08",
+  "ledger_version": "20261121114908",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 1 giây, rc 0",
+  "file_md5": "f5b7214a5f8eb9ef0c6c551c10dbeb65",
+  "ledger_statements_md5": "f5b7214a5f8eb9ef0c6c551c10dbeb65",
+  "preflight_live_18_48_56": {
+    "ledger_v617_rows": 0,
+    "block_2923_md5": "0687856f3663282482914025fc606aa0",
+    "max_fb_public_code": 51,
+    "existing_fb52_code_or_policy": 0,
+    "campaigns_with_groupPostAnonymous": 0
+  },
+  "postflight_live": {
+    "block_2923_md5": "1bf17cec942b68537a7bdff675ee94f8",
+    "code": { "auto_error_id": 179, "public_code": "FB52", "error_code": "err_fb_group_anonymous_switch_not_enabled", "error_class": "ui_changed",
+      "customer_title": "Không bật được chế độ đăng bài ẩn danh", "customer_help": null },
+    "policy": { "id": 440, "summary": "đăng nhóm: requeue / increment (ngưỡng chung 4) / none / no_count / continue, trạng thái 21 thất bại, {message}; = FB49 trừ lớp lỗi; requeue_after_minutes 60 của lớp ui_changed không có tác dụng với requeue" },
+    "fb51_active": true,
+    "postgrest_schema_reload": "không (chỉ dữ liệu)",
+    "edge_logs_11_46_to_11_49_utc": "0 lỗi 5xx / 503, p50 45–46 ms như trước"
+  },
+  "rollback": "migrations/rollback_v617_engine_facebook_group_post_anonymous_switch.sql (block 2923 về code V616, mã và chính sách FB52 chỉ tắt)"
+}

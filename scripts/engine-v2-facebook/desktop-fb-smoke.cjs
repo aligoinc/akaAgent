@@ -24,6 +24,7 @@ const V575 = require('../build-v575-sql.cjs')
 const V597 = require('../build-v597-sql.cjs')
 const V603 = require('../build-v603-sql.cjs')
 const V616 = require('../build-v616-sql.cjs')
+const V617 = require('../build-v617-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 // FB_DESKTOP_ONLY=<chữ trong tên ca>: chỉ chạy các ca có tên chứa chữ đó (soạn / dò một ca); để trống thì chạy hết.
@@ -1711,7 +1712,7 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
         return { rows: (await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]),
           out: (await outcomes(entry.campaign.id)).map(o => [o.action_code, o.phase, o.error_code]),
           inputs: (await inputs(entry.campaign.id)).map(r => [r.status, r.note]), campaign, streak: streak.n, quota: quota.n,
-          clicks: fake.clicks, vars: globalThis.__fbTest.runs.at(-1)?.variables ?? {}, progress: [...progress] }
+          clicks: fake.clicks, vars: globalThis.__fbTest.runs.at(-1)?.variables ?? {}, progress: [...progress], campaignId: entry.campaign.id }
       } finally {
         workflows.set(WORKFLOW_ID, original)
       }
@@ -1769,6 +1770,32 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
       assert.equal(r.streak, 1)
       assert.equal(r.quota, 0)
       console.log(`  kết quả: ${JSON.stringify(r.out[0])} | data: ${JSON.stringify(r.inputs[0])} | chuỗi lỗi: ${r.streak}`)
+    })
+
+    // V617 (anh chốt 21/11/2026): có công tắc mà không bật được thì block bản V617 trả FB52 (không ném lỗi): ghi thất bại, data về hàng đợi,
+    // không tính lượt, cộng chuỗi; 4 data liền thì tạm dừng chiến dịch theo ngưỡng chung.
+    await db.query(`BEGIN;\n${V617.CODES_POLICIES_SQL}\nCOMMIT;`)
+    await check('V617: không bật được công tắc → FB52: dòng "thất bại" kèm câu, không bấm Đăng, data về hàng đợi, không tính lượt, chuỗi lỗi +1, có ảnh lỗi', async () => {
+      globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, code: V617.NEW_CODE, configSchema: [], defaultConfig: {}, isBuiltin: false })
+      try {
+        const r = await v616Run({ extra: { groupPostAnonymous: true }, anon: { state: 'off', stuck: true }, targets: 4 })
+        console.log(`  kết quả: ${JSON.stringify(r.out.slice(0, 2))} | dòng: ${JSON.stringify(r.rows[0])} | data: ${JSON.stringify(r.inputs)} | chuỗi: ${r.streak} | chiến dịch: ${JSON.stringify(r.campaign)}`)
+        assert.ok(r.out.length >= 4, JSON.stringify(r.out))
+        assert.ok(r.out.every(o => o[0] === 'fb_post_group' && o[1] === 'before_send' && o[2] === V617.FB52.code), JSON.stringify(r.out))
+        assert.equal(r.clicks.filter(c => c === ELEMENTS.fb_post_button).length, 0)
+        assert.deepEqual(r.rows[0].slice(0, 2), ['fb_post_group', 'thất bại'])
+        assert.match(r.rows[0][2], /Không bật được chế độ đăng bài ẩn danh/)
+        assert.ok(r.inputs.every(([status]) => status === 'chờ xử lý'), JSON.stringify(r.inputs))
+        assert.equal(r.quota, 0)
+        assert.equal(r.campaign.status, 'tạm dừng', 'dừng sau 4 data liền')
+        assert.ok(r.progress.some(p => p.includes('Không bật được chế độ đăng bài ẩn danh')), r.progress.join('\n'))
+        // Block trả ok: false nên engine chụp ảnh lỗi (mã ảnh trong tín hiệu) để biết Facebook đổi gì.
+        const shots = (await db.query(`SELECT signal->>'screenshotId' AS s FROM public.auto_engine_outcomes WHERE campaign_id = $1 AND error_code = $2`,
+          [r.campaignId, V617.FB52.code])).rows.map(x => x.s)
+        assert.ok(shots.length > 0 && shots.every(Boolean), JSON.stringify(shots))
+      } finally {
+        globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, configSchema: [], defaultConfig: {}, isBuiltin: false })
+      }
     })
   } finally {
     await db.end().catch(() => {})
