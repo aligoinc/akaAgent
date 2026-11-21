@@ -6330,6 +6330,11 @@ export class CampaignScheduler {
        * kiểu cũ (không có operationState): theo dấu và vết thao tác (cú bấm chưa chạy → chưa gửi; "lỗi" sau cú bấm → không rõ kết quả).
        */
       const screenshotOf = (step: RunStepV2 | null): string | null => (step?.stepKey ? stepsInfo.get(step.stepKey)?.screenshotId ?? null : null)
+      /** Trang xác minh / đăng nhập đã đọc lúc bước chạy xong mà block tự trả mã lỗi (câu 533); bước lỗi thì theo blockFailureOutcome như cũ. */
+      const pageStateOf = (step: RunStepV2 | null): Signal | null => {
+        const entry = step?.stepKey ? stepsInfo.get(step.stepKey) : undefined
+        return entry && !entry.failure ? entry.pageState : null
+      }
 
       const placeRow = (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null): { key: string; phase: Phase | null } => {
         const stepKey = step?.stepKey || step?.nodeId || '__row'
@@ -6441,6 +6446,10 @@ export class CampaignScheduler {
         const actionResult = (info.result.output as { actionResult?: { errorCode?: unknown; actionCode?: unknown } } | null | undefined)?.actionResult
         const signAction = String(actionResult?.actionCode || entry.step.actionCode || firstAction)
         const resultCode = typeof actionResult?.errorCode === 'string' && actionResult.errorCode ? actionResult.errorCode : null
+        // Câu 533 của bộ kiểm lỗi (21/11/2026, Q6): block bắt lỗi chờ phần tử rồi tự trả mã lỗi (bước vẫn "thành công", vd FB41 không thấy ô
+        // bình luận, FB40 không thấy ô đăng bài) trong khi trang chạy ngầm đang ở trang xác minh / đăng nhập: đọc trang như khi bước lỗi, để dòng
+        // lỗi chưa gửi của bước ra FB04 / FB43 (pageStateOf) thay mã của block. Đã biết trang thì không đọc chữ dấu hiệu.
+        if (!failed && resultCode && page?.isConnected()) entry.pageState = facebookPageStateSignal(safePageUrl(page))
         if ((failed || resultCode) && page?.isConnected() && !entry.pageState && hasPageSigns(signs, signAction, resultCode)) {
           entry.pageTexts = await readFacebookPageSignTexts(page)
         }
@@ -6450,7 +6459,7 @@ export class CampaignScheduler {
           realtime.add(info.stepKey)
           await this.reportFacebookEngineRows(campaign, detail, account.id, [{ runId: info.runId, nodeId: info.nodeId, blockId: info.blockId,
             blockName: info.blockName, status: 'success', input: {}, output: info.result.output, stepKey: info.stepKey }], null, {
-            report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow })
+            report, placeRow, screenshotOf, pageStateOf, signOf, firstAction, extraRow: shareRow })
         }
       }
 
@@ -6526,7 +6535,7 @@ export class CampaignScheduler {
       // 1. Dòng lịch sử của bộ dựng bộ cũ theo đúng thứ tự bước (bỏ bước newsfeed đã báo ngay).
       const skippedNote = await this.reportFacebookEngineRows(campaign, detail, account.id,
         result.steps.filter(step => !step.stepKey || !realtime.has(step.stepKey)),
-        result.steps, { report, placeRow, screenshotOf, signOf, firstAction, extraRow: shareRow, interruptedRow })
+        result.steps, { report, placeRow, screenshotOf, pageStateOf, signOf, firstAction, extraRow: shareRow, interruptedRow })
       for (const log of screenshotLogs) {
         await this.logCampaignProgress(campaign, log.storedMessage, { realtimeMessage: log.realtimeMessage, realtimeAction: log.action, engine: true })
       }
@@ -6689,6 +6698,8 @@ export class CampaignScheduler {
       placeRow: (step: RunStepV2 | null, actionCode: string, legacyStatus: string | null) => { key: string; phase: Phase | null }
       /** Mã ảnh lỗi của bước (nếu đã chụp). */
       screenshotOf?: (step: RunStepV2 | null) => string | null
+      /** Trang xác minh / đăng nhập lúc bước chạy xong mà block tự trả mã lỗi (câu 533); null = không phải hai trang đó. */
+      pageStateOf?: (step: RunStepV2 | null) => Signal | null
       /** Dấu hiệu có mặt của lỗi cụ thể cho dòng lỗi (errorSigns.ts, anh chốt 17/11); null = như hôm nay. */
       signOf?: (step: RunStepV2 | null, actionCode: string, phase: Phase, currentErrorCode: string | null,
         messages: ReadonlyArray<string | null | undefined>) => FacebookErrorSign | null
@@ -6710,10 +6721,14 @@ export class CampaignScheduler {
       if (routed !== undefined) return routed
       const place = ctx.placeRow(current, outcome.actionCode, action.resultOutput?.operationState ? null : String(action.status ?? ''))
       if (!outcome.raw.ok && place.phase) outcome.raw = { ...outcome.raw, phase: place.phase }
+      // Câu 533 (Q6): dòng lỗi chưa gửi của bước mà trang chạy ngầm đang ở trang xác minh / đăng nhập là trạng thái đăng nhập, không phải lỗi
+      // của block: FB04 / FB43 (data về hàng đợi, đổi trạng thái đăng nhập) thay mã block trả. Đã ghi dấu mà chưa rõ gửi chưa thì giữ mã block.
+      const pageState = !outcome.raw.ok && outcome.raw.phase === 'before_send' ? ctx.pageStateOf?.(current) ?? null : null
+      if (pageState && !outcome.raw.ok) outcome.raw = { ...outcome.raw, signal: { ...pageState } }
       // Dòng "lỗi" kiểu cũ (mã chung) của một bước bị ngắt từ ngoài: không phải lỗi của trang. Chưa gửi → "đã dừng" (RUN01, về hàng đợi);
       // sau dấu gửi → "bị ngắt khi đang gửi" (SYS02, đóng data, không gửi lại). Không cộng chuỗi data lỗi, không dừng chiến dịch.
       let interrupted = false
-      if (!outcome.raw.ok && ctx.interruptedRow && String(action.status ?? '') === 'lỗi'
+      if (!pageState && !outcome.raw.ok && ctx.interruptedRow && String(action.status ?? '') === 'lỗi'
         && (!outcome.raw.signal.errorCode || outcome.raw.signal.errorCode === 'err_undefined')
         && ctx.interruptedRow(current, [outcome.raw.signal.message ?? null, action.log ?? null])) {
         const out = interruptedOutcome(outcome.raw.phase === 'before_send' ? 'before_send' : 'in_flight', outcome.raw.signal.message ?? action.log ?? null)
@@ -6721,7 +6736,7 @@ export class CampaignScheduler {
         interrupted = true
       }
       // Dấu hiệu có mặt: mã cụ thể thay mã chung / dòng chưa có mã; chính sách của mã đó giữ cách xử lý như hôm nay (V559), chỉ đổi câu.
-      if (!outcome.raw.ok && ctx.signOf && !interrupted) {
+      if (!outcome.raw.ok && ctx.signOf && !interrupted && !pageState) {
         const raw = outcome.raw
         const sign = ctx.signOf(current, outcome.actionCode, raw.phase, raw.signal.errorCode ?? null, [raw.signal.message ?? null, action.log ?? null])
         if (sign) {
