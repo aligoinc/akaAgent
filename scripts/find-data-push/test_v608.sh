@@ -56,6 +56,44 @@ race_rows="$(psql_run "-t -A -c \"SELECT count(*) FROM public.auto_campaign_inpu
 if [ "$race_rows" != "1" ]; then echo "FAIL: hai nguồn đẩy cùng lúc tạo $race_rows dòng"; exit 1; fi
 echo "PASS: hai nguồn đẩy cùng lúc: đích chỉ có 1 dòng"
 if [ "${WITH_V610:-1}" = "1" ]; then
+  echo "== câu đối chiếu A↔B (reconcile-prod.sql): dữ liệu đúng ra 0 dòng, làm sai từng loại thì bắt được"
+  body="$(sed -n '/^WITH params/,/^LIMIT 500;/p' "$here/reconcile-prod.sql" | sed "s/timestamptz '2026-11-21 00:00:00+00'/timestamptz '-infinity'/; s/^LIMIT 500;/LIMIT 500/")"
+  cat > "$work/reconcile_test.sql" <<SQL
+BEGIN;
+CREATE TABLE IF NOT EXISTS public.auto_campaign_details (id bigint PRIMARY KEY, campaign_id bigint);
+CREATE TABLE IF NOT EXISTS public.auto_data_ingest_batches (id bigserial PRIMARY KEY, request_id text, status text, created_at timestamptz DEFAULT now());
+INSERT INTO public.auto_campaign_details (id, campaign_id)
+  SELECT DISTINCT source_detail_id, source_campaign_id FROM public.auto_campaign_data_link_deliveries WHERE source_detail_id IS NOT NULL
+  ON CONFLICT DO NOTHING;
+INSERT INTO public.auto_data_ingest_batches (request_id, status) VALUES ('find-data:20:1:1:9:facebook_group:0:x:v1', 'completed');
+CREATE TEMP VIEW recon AS $body;
+SELECT 'CLEAN ' || count(*) FROM recon;
+SELECT 'CLEANDETAIL ' || check_id || ' ' || problem || ' ' || coalesce(detail,'') FROM recon;
+-- C1: xoá dòng B do hàm đẩy thêm. C2: thêm vào B cùng data viết khác. C3: lệch bộ đếm. C4: dòng "Tìm data" sai chiến dịch.
+-- C5: lượt đẩy Nhóm data lỗi. C6: đích đã xoá mà liên kết còn active, sổ ghi sau lúc xoá.
+WITH a AS (SELECT target_input_data_id AS id FROM public.auto_campaign_data_link_deliveries WHERE result = 'inserted' AND target_input_data_id IS NOT NULL ORDER BY id LIMIT 1)
+UPDATE public.auto_campaign_input_data x SET is_delete = true FROM a WHERE x.id = a.id;
+WITH b AS (SELECT d.target_campaign_id, d.value FROM public.auto_campaign_data_link_deliveries d JOIN public.auto_campaign_data_links l ON l.id = d.link_id
+            JOIN public.auto_campaign_data_link_rules r ON r.id = l.rule_id
+           WHERE d.result = 'inserted' AND r.value_column = 'uid' AND r.output_kind IN ('facebook_group','facebook_uid') ORDER BY d.id DESC LIMIT 1)
+INSERT INTO public.auto_campaign_input_data (campaign_id, uid, status) SELECT target_campaign_id, upper(value) || '/', 'chờ xử lý' FROM b;
+UPDATE public.auto_campaign_data_links SET inserted_count = inserted_count + 1 WHERE id = (SELECT min(id) FROM public.auto_campaign_data_links WHERE inserted_count > 0);
+UPDATE public.auto_campaign_details SET campaign_id = -1 WHERE id = (SELECT min(id) FROM public.auto_campaign_details);
+INSERT INTO public.auto_data_ingest_batches (request_id, status, created_at) VALUES ('find-data:20:2:2:9:facebook_group:0:y:v1', 'failed', now() - interval '1 hour');
+UPDATE public.auto_campaigns SET is_delete = true, updated_at = '2000-01-01'
+ WHERE id = (SELECT max(l.target_campaign_id) FROM public.auto_campaign_data_links l WHERE l.status = 'active' AND l.last_push_at IS NOT NULL
+               AND EXISTS (SELECT 1 FROM public.auto_campaign_data_link_deliveries d WHERE d.link_id = l.id));
+SELECT 'FOUND ' || string_agg(DISTINCT check_id, ',' ORDER BY check_id) FROM recon;
+ROLLBACK;
+SQL
+  [ "$(id -u)" = "0" ] && chown postgres "$work/reconcile_test.sql"
+  rec_out="$(psql_run "-t -A -f '$work/reconcile_test.sql'")"
+  echo "$rec_out" | grep -E '^(CLEANDETAIL)' || true
+  if ! echo "$rec_out" | grep -qx 'CLEAN 0'; then echo "FAIL: đối chiếu trên dữ liệu đúng ra lệch"; echo "$rec_out"; exit 1; fi
+  if ! echo "$rec_out" | grep -qx 'FOUND C1,C2,C3,C4,C5,C6'; then echo "FAIL: đối chiếu không bắt đủ 6 loại lệch"; echo "$rec_out"; exit 1; fi
+  echo "PASS: đối chiếu A↔B: dữ liệu đúng 0 dòng lệch; bắt đủ C1–C6 khi làm sai"
+fi
+if [ "${WITH_V610:-1}" = "1" ]; then
   echo "== gỡ V610 (về đúng thân V608), apply lại V610 bị sổ chặn"
   psql_run "-f '$work/rollback_v610_find_data_push_match_key.sql'"
   psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121090000', 'migration_v610_find_data_push_match_key')\""

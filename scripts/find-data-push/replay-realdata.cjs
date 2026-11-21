@@ -399,6 +399,24 @@ const problem = (type, info) => { problems.push({ ...info, type }); if (problems
     console.log('sổ đẩy:', JSON.stringify(ledger), 'liên kết:', JSON.stringify(links))
     console.log('nhóm data: ', groupIngests.length, 'lượt nạp')
     console.table(compare.slice(0, 40))
+    if (args.includes('--reconcile')) {
+      // Câu đối chiếu A↔B dùng cho production (reconcile-prod.sql) chạy trên kết quả phát lại: phải ra 0 dòng lệch.
+      const recSql = fs.readFileSync(path.join(__dirname, 'reconcile-prod.sql'), 'utf8')
+      const body = recSql.slice(recSql.indexOf('WITH params'), recSql.indexOf('LIMIT 500;') + 'LIMIT 500'.length)
+        .replace("timestamptz '2026-11-21 00:00:00+00'", "timestamptz '-infinity'")
+      // Dòng "Tìm data" bộ chạy đã ghi trong lúc phát lại (để C4 so sổ đẩy với đúng dòng nguồn).
+      await db.query('CREATE TABLE IF NOT EXISTS public.auto_campaign_details (id bigint PRIMARY KEY, campaign_id bigint)')
+      for (const d of replayDetails) await db.query('INSERT INTO public.auto_campaign_details (id, campaign_id) VALUES ($1, $2) ON CONFLICT DO NOTHING', [d.id, d.campaignId])
+      await db.query('CREATE TABLE IF NOT EXISTS public.auto_data_ingest_batches (id bigserial PRIMARY KEY, request_id text, status text, created_at timestamptz DEFAULT now())')
+      // C6 bỏ qua khi phát lại: sổ đẩy ghi giờ thật (clock_timestamp của DB) còn giờ xoá đích là giờ cũ của production, nên mọi lượt
+      // đẩy đều như sau lúc xoá. Ở production hai mốc cùng một đồng hồ; C6 đã kiểm ở test_v608.sh.
+      const rec = (await db.query(body)).rows.filter(r => r.check_id !== 'C6')
+      const byCheck = {}
+      for (const r of rec) byCheck[r.check_id] = (byCheck[r.check_id] || 0) + 1
+      console.log('đối chiếu A↔B (reconcile-prod.sql):', rec.length, 'dòng lệch', JSON.stringify(byCheck))
+      for (const r of rec.slice(0, 10)) console.log('  ', r.check_id, r.campaign_id, r.problem, r.detail)
+      if (rec.length) problem('reconcile', { count: rec.length, byCheck, sample: rec.slice(0, 5) })
+    }
     if (args.includes('--variants')) await runVariants()
     if (args.includes('--states')) await runStates()
     async function runStates() {

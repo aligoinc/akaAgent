@@ -120,14 +120,19 @@ Theo yêu cầu ("kiểm thử theo lô… đến khi không còn nhầm lẫn")
 | 5 Nhóm data production | đối chiếu chỉ đọc từng dòng "Tìm data" (94 nguồn, 30 ngày) với `auto_data_ingest_batches` | 2.216/2.223 khớp; 7 lệch do lỗi mạng → thêm gửi lại |
 | 6 form thật | `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/find-data-push/run-form-bundle-ui-smoke.cjs` (Electron, IPC giả theo luật DB: mã gói, gói / chiến dịch theo mã yêu cầu); `--form <bản cũ>` chạy bản trước sửa | 10/10; bản cũ hiện đúng lỗi của khách 2481 |
 | 7 DB thật | `build-prod-dryrun-sql.py` → khối DO kết thúc bằng RAISE (huỷ hết), phiên Desktop thật của nhân viên chủ chiến dịch | V608 thêm 5 trùng, V610 đúng; sau đó DB không đổi (đích 2.454 dòng, sổ 0, hàm V608) |
+| 8 B chạy data được đẩy (DB thật, chỉ đọc) | dòng hàm đẩy ghi = đúng các cột app cũ ghi (`createCampaignInputDataBatch` không SMS: tên, `uid` / `phone`, "chờ xử lý", ghi chú; loại dữ liệu do trigger `aka_agent_stamp_campaign_input_semantic_type` điền theo loại chiến dịch đích); mở lại B "hoàn thành" giống hệt `reopenCompletedCampaignAfterInputInsert`; đối chiếu dòng B do app cũ đẩy đã chạy với lịch sử hành động | Tham gia group 4.204/4.204 đúng group (`data.targetUid`), Đăng bài 229/229 đúng group (`rawPostLink`), Nhắn tin UID 2.810 dòng có tên: tên trong lịch sử đúng người (0 lệch); Comment vào bài không ghi link bài trong lịch sử nên không so từng bài được |
+| 9 Nhóm data → chiến dịch nhận từ nhóm (DB thật, chỉ đọc) | mọi nhóm nhận data từ chiến dịch tìm data 30 ngày: data vào nhóm sau lúc gắn chiến dịch có vào từng chiến dịch đang nhận không (so `uid` / SĐT) | 7.710 cặp, thiếu 0 (nhóm 4549, 5193); nhóm có chiến dịch nhận mà "chuyển 0" (6681…) là data vào nhóm trước lúc gắn, đã chép lúc gắn (6.038/6.038) |
+| 10 câu đối chiếu A↔B | `scripts/find-data-push/reconcile-prod.sql` (C1 sổ → dòng B, C2 B trùng khoá, C3 bộ đếm, C4 dòng "Tìm data", C5 lượt Nhóm data lỗi / treo, C6 liên kết active mà đích xoá): DB thật, `test_v608.sh` (dữ liệu đúng + làm sai từng loại), phát lại `--reconcile` | DB thật 0 dòng (sổ rỗng; C5 thật: từ 1/11 không lượt Nhóm data nào lỗi); bộ kiểm: 0 dòng, bắt đủ C1–C6; phát lại 1.128 lượt thật: 0 dòng (C6 bỏ khi phát lại vì giờ sổ là giờ thật) |
 
-Chạy lại: `PG_MODULE=<node_modules/pg> node scripts/find-data-push/replay-realdata.cjs <dữ liệu> --variants --states --migrations migration_v610_find_data_push_match_key.sql`.
+Chạy lại: `PG_MODULE=<node_modules/pg> node scripts/find-data-push/replay-realdata.cjs <dữ liệu> --reconcile --variants --states --migrations migration_v610_find_data_push_match_key.sql`.
+
+Sau khi phát hành Desktop có hàm đẩy: chạy `scripts/find-data-push/reconcile-prod.sql` (chỉ đọc, sửa mốc `since`), không dòng nào là khớp.
 
 ## Kiểm thử
 
 - `scripts/find-data-push/test_v608.sh` (PG16 cục bộ, fixture theo định nghĩa production 21/11): 42 ca SQL chạy trên V608 + V610
   (`WITH_V610=0` để chỉ V608) + hai nguồn đẩy cùng lúc (bỏ khoá theo đích thì ca này hỏng: 2 dòng) + gỡ V610 về V608 + gỡ V608 + chặn chạy
-  lại theo sổ (44 PASS).
+  lại theo sổ + câu đối chiếu A↔B trên dữ liệu đúng / làm sai (45 PASS).
 - `node scripts/find-data-push/app-smoke.cjs`: hàm thật của bộ lập lịch gọi hàm DB thật V608 (11 nhóm: câu tiến trình, thử lại,
   chia lượt, gói, cách cũ khi chưa có V608, kiểm mã nguồn form và nhánh "Tìm data").
 - `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `electron-vite build`: sạch.
