@@ -13,7 +13,7 @@ import { useCampaignPendingReasons } from '../../hooks/useCampaignPendingReasons
 import { useCampaignLimitProgress, useServerClock } from '../../hooks/useCampaignLimitProgress'
 import { canCheckCampaignPendingReason } from '../../../../shared/campaignPendingReason'
 import type { DesktopCampaignFilters, DesktopCampaignSelection } from '../../../../shared/desktopUiReads'
-import { useState, useEffect, useLayoutEffect, useMemo, useRef, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
+import { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Plus, Trash2, Edit3, RefreshCw, Settings2, Copy, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pause, Play, X, Download, Check, Search, Sparkles, Eye, LogIn, Info, History, Merge, CalendarDays, CircleDot, Monitor, Hash, AtSign, ListTodo, Upload, Users, SlidersHorizontal, FileText, Zap, Layers, FolderOpen, ArrowUpDown } from 'lucide-react'
 import { loadSelectedCampaignInputData } from '../../../../shared/campaignInputDataSelection'
@@ -53,8 +53,8 @@ import type { CampaignDraftSummary } from '../../../../shared/campaignDrafts'
 import { getVietnamMobileCarrier, getVietnamMobileCarrierLabel } from '../../../../shared/phone'
 import { utils, writeFile } from 'xlsx'
 import {
-  applyFacebookGroupCard, applyFacebookGroupCards, buildFoundDataWorkbook, describeFacebookGroup, needsFacebookGroupCard,
-  needsFacebookGroupCards, toFacebookGroupList,
+  applyFacebookGroupCard, applyFacebookGroupCards, buildFoundDataWorkbook, buildFoundGroupAdminList, buildFoundGroupAdminWorkbook,
+  describeFacebookGroup, needsFacebookGroupCard, needsFacebookGroupCards, toFacebookGroupList,
   type FacebookGroupDisplay, type FoundDataExportItem, type FoundDataKind, type FoundFacebookGroup
 } from './foundDataExport'
 import { useFoundFacebookGroupCards } from './useFoundFacebookGroupCards'
@@ -576,6 +576,9 @@ const foundDataGroupAdmins = (group: FacebookGroupDisplay) => {
     )
   })
 }
+
+// Bảng quản trị viên chỉ vẽ ngần này dòng đầu (chiến dịch tìm group có thể có hàng chục nghìn quản trị viên); file Excel luôn đủ.
+const FOUND_GROUP_ADMIN_TABLE_LIMIT = 1000
 
 const FOUND_DATA_EXPORT_OPTIONS: { kind: FoundDataKind; label: string }[] = [
   { kind: 'phone', label: 'SĐT' },
@@ -1896,6 +1899,8 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   const [foundDataExportKinds, setFoundDataExportKinds] = useState<Set<FoundDataKind>>(
     () => new Set(FOUND_DATA_EXPORT_OPTIONS.map(option => option.kind))
   )
+  // Tab Data tìm được của chiến dịch tìm group bằng search: xem theo group (mặc định) hoặc theo quản trị viên; đổi chiến dịch thì về group.
+  const [foundDataView, setFoundDataView] = useState<'groups' | 'admins'>('groups')
   const defaultTimeRange = useMemo(() => getCampaignDateRange(DEFAULT_CAMPAIGN_TIME_PRESET), [])
   const [timePreset, setTimePreset] = useState<CampaignTimePreset>(DEFAULT_CAMPAIGN_TIME_PRESET)
   const [dateFrom, setDateFrom] = useState(defaultTimeRange.fromDate)
@@ -2016,6 +2021,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     if (detailTab === 'randomRun' && !randomRunAccount) setDetailTab('info')
   }, [detailTab, randomRunAccount])
   const selectedCampaignConfig = selectedCampaignId ? campaignConfigs[selectedCampaignId] : undefined
+  useEffect(() => { setFoundDataView('groups') }, [selectedCampaignId])
   const selectedContentPreview = useMemo(
     () => selectedCampaignConfig ? buildCampaignContentPreview(selectedCampaignConfig) : null,
     [selectedCampaignConfig]
@@ -3755,6 +3761,75 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     )
   }), [detailTab, foundDataRows, foundDataShowsGroupColumns, foundDataShowsAdminColumn, foundDataShowsProfileColumns, foundDataAccountNameById])
 
+  // Cách xem "Danh sách quản trị viên": chỉ chiến dịch tìm bằng search có lấy quản trị viên (cài đặt bật, hoặc kết quả đã có quản trị viên).
+  const foundDataAdminViewAvailable = isSelectedFindDataSearchCampaign && (
+    foundDataShowsAdminColumn || selectedCampaignConfig?.extraSettings?.isFindFacebookGroupAdmins === true
+  )
+  const foundDataShowsViewPicker = isSelectedFindDataSearchCampaign && (
+    foundDataAdminViewAvailable || foundDataShowsGroupColumns || selectedCampaignConfig?.extraSettings?.isFindFacebookGroup === true
+  )
+  const foundDataAdminView = foundDataAdminViewAvailable && foundDataView === 'admins'
+  const toFoundDataExportItem = useCallback((item: FoundDataItem, facebookGroup = item.facebookGroup): FoundDataExportItem => {
+    const accountName = item.accountId ? foundDataAccountNameById.get(item.accountId) : undefined
+    return {
+      kind: item.kind,
+      value: item.value,
+      name: item.name,
+      facebookGroup,
+      keywords: item.kind === 'facebookGroup' && item.groupUrl && item.groupUrl !== '-' ? [item.groupUrl] : [],
+      accountNames: accountName ? [accountName] : [],
+      foundAt: item.createdAt
+    }
+  }, [foundDataAccountNameById])
+  const foundGroupAdmins = useMemo(() => {
+    if (detailTab !== 'foundData' || !foundDataAdminView) return null
+    return buildFoundGroupAdminList(foundDataItems
+      .filter(item => item.kind === 'facebookGroup' && item.facebookGroup)
+      .map(item => toFoundDataExportItem(item,
+        applyFacebookGroupCard(item.facebookGroup!, foundGroupCards?.byKey.get(facebookGroupUrlKey(item.value))))))
+  }, [detailTab, foundDataAdminView, foundDataItems, foundGroupCards, toFoundDataExportItem])
+  const foundGroupAdminTableRows = useMemo(() => !foundGroupAdmins ? [] : foundGroupAdmins.rows.slice(0, FOUND_GROUP_ADMIN_TABLE_LIMIT).map(row => {
+    const { admin, group } = row
+    const foundAtLabel = formatDisplayDateTime(row.foundAt)
+    return (
+      <tr key={row.key}>
+        <td className="find-data-name-cell" title={admin.url}>
+          <a className="find-data-log-link" href={admin.url} target="_blank" rel="noreferrer">{admin.name || admin.url}</a>
+        </td>
+        <td className="find-data-nowrap-cell">{foundDataText(admin.uid)}</td>
+        <td className="find-data-contact-cell">{admin.phones.length > 0 ? admin.phones.map(phone => <div key={phone}>{phone}</div>) : FOUND_DATA_EMPTY}</td>
+        <td className="find-data-contact-cell">{admin.emails.length > 0 ? admin.emails.map(email => <div key={email}>{email}</div>) : FOUND_DATA_EMPTY}</td>
+        <td className="find-data-nowrap-cell" title="Đã mở được trang cá nhân để đọc thông tin liên hệ chưa">
+          {admin.profileRead === true ? 'Đã đọc' : admin.profileRead === false ? <span className="find-data-unread">Chưa đọc được</span> : FOUND_DATA_EMPTY}
+        </td>
+        <td className="find-data-admin-group-cell" title={row.groupUrl}>
+          <div>{row.groupName || '-'}</div>
+          <a className="find-data-log-link" href={row.groupUrl} target="_blank" rel="noreferrer">{row.groupUrl}</a>
+        </td>
+        <td className="find-data-number-cell">{foundDataCount(group.memberCount)}</td>
+        <td className="find-data-number-cell">{group.postsText || foundDataCount(group.postsPerDay)}</td>
+        <td className="find-data-nowrap-cell">{foundDataText(group.privacy)}</td>
+        <td className={`find-data-nowrap-cell${group.joinState === 'Đã tham gia' ? ' find-data-joined' : ''}`}>{foundDataText(group.joinState)}</td>
+        <td className="find-data-group-cell" title={row.keywords}>{foundDataText(row.keywords)}</td>
+        <td className="find-data-nowrap-cell" title={row.accountNames}>{foundDataText(row.accountNames)}</td>
+        <td title={foundAtLabel} style={{ whiteSpace: 'nowrap' }}>{foundAtLabel}</td>
+      </tr>
+    )
+  }), [foundGroupAdmins])
+  const foundGroupAdminNote = useMemo(() => {
+    if (!foundGroupAdmins) return ''
+    const parts = [
+      foundGroupAdmins.groupsNotListed > 0
+        ? `${foundGroupAdmins.groupsNotListed} group Facebook không hiện quản trị viên (group riêng tư mà tài khoản chưa tham gia)` : '',
+      foundGroupAdmins.groupsFailed > 0 ? `${foundGroupAdmins.groupsFailed} group chưa đọc được trang quản trị viên` : ''
+    ].filter(Boolean)
+    const missing = parts.length > 0 ? `Không có trong danh sách: ${parts.join('; ')}.` : ''
+    const truncated = foundGroupAdmins.rows.length > FOUND_GROUP_ADMIN_TABLE_LIMIT
+      ? `Bảng hiện ${FOUND_GROUP_ADMIN_TABLE_LIMIT.toLocaleString('vi-VN')} dòng đầu trong ${foundGroupAdmins.rows.length.toLocaleString('vi-VN')} dòng; file Excel có đủ.`
+      : ''
+    return [missing, truncated].filter(Boolean).join(' ')
+  }, [foundGroupAdmins])
+
   const findDataLogRows = useMemo(() => (
     campaignRunEvents.map(buildFindDataLogRow)
   ), [campaignRunEvents])
@@ -4286,29 +4361,27 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       showAlert('Vui lòng chọn chiến dịch trước.', 'error')
       return
     }
-    if (foundDataExportKinds.size === 0) {
+    const adminMode = foundDataAdminView
+    if (adminMode) {
+      if (!foundGroupAdmins || foundGroupAdmins.rows.length === 0) {
+        showAlert('Chưa có quản trị viên nào để xuất.', 'info')
+        return
+      }
+    } else if (foundDataExportKinds.size === 0) {
       showAlert('Vui lòng chọn ít nhất một loại data để xuất.', 'error')
       return
-    }
-    if (selectedFoundDataItems.length === 0) {
+    } else if (selectedFoundDataItems.length === 0) {
       showAlert('Không có data phù hợp với tuỳ chọn xuất.', 'info')
       return
     }
     if (exportingFoundData) return
 
     const campaign = selectedCampaign
-    let items: FoundDataExportItem[] = selectedFoundDataItems.map(item => {
-      const accountName = item.accountId ? foundDataAccountNameById.get(item.accountId) : undefined
-      return {
-        kind: item.kind,
-        value: item.value,
-        name: item.name,
-        facebookGroup: item.facebookGroup,
-        keywords: item.kind === 'facebookGroup' && item.groupUrl && item.groupUrl !== '-' ? [item.groupUrl] : [],
-        accountNames: accountName ? [accountName] : [],
-        foundAt: item.createdAt
-      }
-    })
+    // Xem theo quản trị viên: xuất toàn bộ quản trị viên của mọi group, không theo các ô chọn loại data.
+    let items: FoundDataExportItem[] = (adminMode
+      ? foundDataItems.filter(item => item.kind === 'facebookGroup' && item.facebookGroup)
+      : selectedFoundDataItems
+    ).map(item => toFoundDataExportItem(item))
     setExportingFoundData(true)
     try {
       // Chiến dịch tìm bằng search: dùng thẻ nhóm trong log chạy (đã đọc khi mở tab, quá cũ thì đọc lại) để file đủ
@@ -4323,10 +4396,10 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           note = ' Chưa đọc được log chạy nên một số cột thêm của nhóm có thể trống.'
         }
       }
-      const workbook = buildFoundDataWorkbook(items, campaign.actionId)
+      const workbook = adminMode ? buildFoundGroupAdminWorkbook(items) : buildFoundDataWorkbook(items, campaign.actionId)
       const name = sanitizeFileSegment(campaign.name || `campaign-${campaign.id}`)
-      writeFile(workbook, `found-data-${campaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
-      showAlert(`Đã xuất data tìm được ra Excel.${note}`, note ? 'info' : 'success')
+      writeFile(workbook, `${adminMode ? 'found-group-admins' : 'found-data'}-${campaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert(`${adminMode ? 'Đã xuất danh sách quản trị viên ra Excel.' : 'Đã xuất data tìm được ra Excel.'}${note}`, note ? 'info' : 'success')
     } catch (err) {
       console.error('Failed to export found data:', err)
       showAlert('Không thể xuất file Excel data tìm được.', 'error')
@@ -7720,7 +7793,52 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               {/* Tab: Found data extracted by facebook_find_data_group */}
               {detailTab === 'foundData' && (
                 <>
+                  {foundDataShowsViewPicker && (
+                    <fieldset className="find-data-view-picker">
+                      <legend>Hiển thị</legend>
+                      <label className={`find-data-view-option${!foundDataAdminView ? ' active' : ''}`}>
+                        <input
+                          type="radio"
+                          name="found-data-view"
+                          value="groups"
+                          checked={!foundDataAdminView}
+                          onChange={() => setFoundDataView('groups')}
+                        />
+                        <span>Danh sách group</span>
+                      </label>
+                      <label
+                        className={`find-data-view-option${foundDataAdminView ? ' active' : ''}${foundDataAdminViewAvailable ? '' : ' disabled'}`}
+                        title={foundDataAdminViewAvailable ? undefined : 'Chiến dịch không bật "Lấy thông tin quản trị viên của group"'}
+                      >
+                        <input
+                          type="radio"
+                          name="found-data-view"
+                          value="admins"
+                          checked={foundDataAdminView}
+                          disabled={!foundDataAdminViewAvailable}
+                          onChange={() => setFoundDataView('admins')}
+                        />
+                        <span>Danh sách quản trị viên</span>
+                      </label>
+                      {!foundDataAdminViewAvailable && (
+                        <span className="find-data-view-hint">Chiến dịch không bật "Lấy thông tin quản trị viên của group".</span>
+                      )}
+                    </fieldset>
+                  )}
                   <div className="find-data-export-bar">
+                    {foundDataAdminView ? (
+                      <div className="find-data-admin-summary" role="status">
+                        {foundGroupAdmins && foundGroupAdmins.rows.length > 0 ? (
+                          <>
+                            <span><b>{foundGroupAdmins.rows.length.toLocaleString('vi-VN')}</b> dòng</span>
+                            <span><b>{foundGroupAdmins.people.toLocaleString('vi-VN')}</b> quản trị viên</span>
+                            <span><b>{foundGroupAdmins.peopleWithPhone.toLocaleString('vi-VN')}</b> người có SĐT</span>
+                            <span><b>{foundGroupAdmins.peopleWithEmail.toLocaleString('vi-VN')}</b> người có email</span>
+                            <span>từ <b>{foundGroupAdmins.groupsListed.toLocaleString('vi-VN')}</b>/{foundGroupAdmins.groupsScanned.toLocaleString('vi-VN')} group</span>
+                          </>
+                        ) : null}
+                      </div>
+                    ) : (
                     <div className="find-data-export-options">
                       {FOUND_DATA_EXPORT_OPTIONS.map(option => (
                         <label key={option.kind} className="schedule-checkbox-label">
@@ -7734,13 +7852,16 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                         </label>
                       ))}
                     </div>
+                    )}
                     <button
                       className="btn btn-secondary"
                       onClick={() => { void handleExportFoundData() }}
-                      disabled={loadingCampaignDetails || exportingFoundData || selectedFoundDataItems.length === 0}
-                      title="Xuất data tìm được ra Excel"
+                      disabled={loadingCampaignDetails || exportingFoundData || (foundDataAdminView
+                        ? !foundGroupAdmins || foundGroupAdmins.rows.length === 0
+                        : selectedFoundDataItems.length === 0)}
+                      title={foundDataAdminView ? 'Xuất toàn bộ quản trị viên ra Excel' : 'Xuất data tìm được ra Excel'}
                     >
-                      <Download size={14} /> {exportingFoundData ? 'Đang xuất...' : 'Xuất Excel'}
+                      <Download size={14} /> {exportingFoundData ? 'Đang xuất...' : foundDataAdminView ? 'Xuất Excel danh sách quản trị viên' : 'Xuất Excel'}
                     </button>
                   </div>
                   {!loadingCampaignDetails && foundGroupCardKeys.length > 0 && (
@@ -7761,6 +7882,38 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                   )}
                   {loadingCampaignDetails ? (
                     <div className="text-center text-secondary" style={{ padding: 16 }}>Đang tải...</div>
+                  ) : foundDataAdminView ? (
+                    <>
+                      {foundGroupAdminNote && <div className="find-data-cards-note">{foundGroupAdminNote}</div>}
+                      {!foundGroupAdmins || foundGroupAdmins.rows.length === 0 ? (
+                        <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa có quản trị viên nào</div>
+                      ) : (
+                        <div className="find-data-result-table-wrap">
+                          <table className="campaign-grid find-data-result-grid find-data-result-grid-wide find-data-admin-grid" style={{ fontSize: 12 }}>
+                            <thead>
+                              <tr>
+                                <th>Quản trị viên</th>
+                                <th>UID</th>
+                                <th>Số điện thoại</th>
+                                <th>Email</th>
+                                <th title="Đã mở được trang cá nhân để đọc thông tin liên hệ chưa">Trang cá nhân</th>
+                                <th>Group</th>
+                                <th className="find-data-number-cell" title="Số thành viên của nhóm">Thành viên</th>
+                                <th className="find-data-number-cell" title="Số bài viết mỗi ngày Facebook hiển thị">Bài/ngày</th>
+                                <th title="Nhóm công khai hay riêng tư">Riêng tư</th>
+                                <th title="Tài khoản tìm đã tham gia nhóm chưa">Tham gia</th>
+                                <th>Từ khóa</th>
+                                <th>Tài khoản</th>
+                                <th>Thời gian</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {foundGroupAdminTableRows}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </>
                   ) : foundDataItems.length === 0 ? (
                     <div className="text-center text-muted" style={{ padding: 16, fontSize: 12 }}>Chưa tìm thấy data nào</div>
                   ) : (

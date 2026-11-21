@@ -111,6 +111,29 @@ try {
   assert.equal(book['Group Facebook'][1][14], 2)
   assert.deepEqual(book['Admin group'].slice(1).map(row => [row[2], row[7]]), [['Căn hộ A', 'k1, k2'], ['Mỹ Trinh', 'k1, k2']])
   console.log('PASS quản trị viên của group: cột thêm + sheet "Admin group", lý do khi Facebook không hiện, không bật thì giữ mẫu 14 cột')
+
+  // Cách xem "Danh sách quản trị viên": mỗi người một dòng trong mỗi group, group trùng gộp, đếm người không trùng, file một sheet.
+  const second = groupItem(5, 'Hội E', 'k3', '2026-11-18T04:00:00Z', { adminScan: 'listed', admins: [{ ...adminB, phones: ['0912000111'] }] })
+  const list = h.buildFoundGroupAdminList([again, listed, hidden, failed, unscanned, second, { kind: 'phone', value: '0903221229' }])
+  assert.deepEqual(list.rows.map(row => [row.admin.name, row.groupName, row.keywords]), [
+    ['Căn hộ A', 'Hội A', 'k1, k2'], ['Mỹ Trinh', 'Hội A', 'k1, k2'], ['Mỹ Trinh', 'Hội E', 'k3']])
+  assert.deepEqual([list.people, list.peopleWithPhone, list.peopleWithEmail, list.groupsScanned, list.groupsListed, list.groupsNotListed, list.groupsFailed],
+    [2, 2, 1, 4, 2, 1, 1])
+  assert.equal(new Set(list.rows.map(row => row.key)).size, list.rows.length)
+  const empty = h.buildFoundGroupAdminList([unscanned, { kind: 'uid', value: '1' }])
+  assert.deepEqual([empty.rows.length, empty.groupsScanned, empty.people], [0, 0, 0])
+  const adminBook = h.buildFoundGroupAdminWorkbook([again, listed, hidden, second])
+  assert.deepEqual(adminBook.SheetNames, ['Quản trị viên'])
+  const adminSheet = XLSX.utils.sheet_to_json(adminBook.Sheets['Quản trị viên'], { header: 1, defval: '' })
+  assert.equal(adminSheet[0].length, 15)
+  assert.deepEqual(adminSheet.slice(1).map(row => row.slice(0, 8)), [
+    ['Căn hộ A', '1001', 'https://www.facebook.com/canhoa', '0903221229, 0977123456', 'a@example.com', 'Có', 'Hội A', 'https://www.facebook.com/groups/1/'],
+    ['Mỹ Trinh', '1002', 'https://www.facebook.com/profile.php?id=1002', '', '', '', 'Hội A', 'https://www.facebook.com/groups/1/'],
+    ['Mỹ Trinh', '1002', 'https://www.facebook.com/profile.php?id=1002', '0912000111', '', '', 'Hội E', 'https://www.facebook.com/groups/5/']])
+  assert.deepEqual(adminSheet.slice(1).map(row => row[13]), ['TK1', 'TK1', 'TK1'])
+  // Không có quản trị viên nào: file vẫn có dòng tiêu đề.
+  assert.deepEqual(XLSX.utils.sheet_to_json(h.buildFoundGroupAdminWorkbook([hidden]).Sheets['Quản trị viên'], { header: 1 }).length, 1)
+  console.log('PASS xem theo quản trị viên: mỗi người một dòng mỗi group, gộp group trùng, đếm người / SĐT / email, group thiếu, file một sheet 15 cột')
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }
