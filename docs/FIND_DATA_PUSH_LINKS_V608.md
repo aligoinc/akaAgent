@@ -65,6 +65,54 @@ V608 thêm 6 dòng (5 trùng), V610 thêm 1 (đúng), gọi lại thêm 0.
 - Chỉ thay thân hàm đẩy (kiểm `md5(prosrc)` V608 `d04c4711…`), không đổi bảng / quyền / khuôn trả về; sổ đẩy production 0 dòng nên đổi
   nghĩa khoá không cần chuyển dữ liệu. Sinh bằng `python3 scripts/find-data-push/build-v610-sql.py`; gỡ: `rollback_v610_…` (về đúng thân V608).
 
+## V614 — vá khoá so sánh của V610 (`migrations/migration_v614_find_data_push_match_key_v2.sql`, đã apply akachat 17:26:36 VN 21/11/2026)
+
+Anh yêu cầu 21/11 tối ("vá lỗ hổng này, sau đó kiểm thử xem còn lỗ hổng nào nữa không để vá tiếp cho đến khi hoàn thiện"). Số V611–V613 trên
+DB thật đã là của phiên khác nên lấy V614. Sinh bằng `python3 scripts/find-data-push/build-v614-sql.py`; gỡ: `rollback_v614_…` (trả hàm
+khoá, khoá thô, hàm đẩy về đúng bản V610 theo md5, tính lại khoá sổ đẩy).
+
+Lỗ hổng đo trên dữ liệu thật (chỉ đọc) và cách vá:
+
+| Loại | V610 coi là khác nhau | V614 |
+|---|---|---|
+| UID | UID số / `profile.php?id=` (có khi kèm `comment_id`) / `groups/<nhóm>/user/<id>/?__cft__…` / `marketplace/profile/<id>/` / `facebook.com/<số>` của cùng người; tên riêng trần (`huan.khanh.1840`) với `facebook.com/huan.khanh.1840` | lấy UID số từ mọi dạng (như bộ chạy mở: `normalizeFbUrl` / `extractUidFromInput`); tên riêng = trang cá nhân (một đoạn, hoặc thêm trang con `about`, `photos`…), đường dẫn khác (link bài) so nguyên |
+| Group | mã group số trần (~850 dòng mỗi loại chiến dịch group) với `facebook.com/groups/<mã>` | mã số trần là group; link không phải group (chiến dịch comment seeding nhận cả trang cá nhân / trang) so như UID, tiền tố `profile:` |
+| Link bài | `groups/<g>/permalink/<id>`, `/pending_posts/<id>` (416 dòng), `?multi_permalinks=<id>` với `/posts/<id>`; `story_fbid` / `id` đổi thứ tự; `story.php` với `permalink.php` | cùng một khoá cho cùng bài; ảnh (`fbid`), video (`watch?v=`, `/videos/<id>`), reel, link chia sẻ |
+| Link Zalo | tham số sau `?` | bỏ tham số |
+| Mọi loại | V610 hạ chữ thường cả mã phân biệt hoa thường (`share/<x>/<mã>`: 1.074/1.074 link chia sẻ group có chữ hoa; `pfbid…`) | giữ nguyên chữ hoa của mã |
+
+Không đổi được (cần hỏi Facebook / Zalo): tên riêng ↔ UID số của cùng người, mã group dạng chữ ↔ mã số, link chia sẻ ↔ link gốc, mã group
+Zalo dạng số ↔ link `zalo.me/g/…`.
+
+Bước lọc nhanh dòng của đích: V610 dùng "khoá thô" (một hàm SQL riêng phải tự giữ bất biến với khoá đầy đủ, dễ lệch khi sửa khoá). V614 dùng
+"mảnh": các đoạn chữ / số của giá trị (`private.aka_agent_find_data_match_tokens`), bỏ từ dừng (tên miền, từ khoá đường dẫn, tham số theo
+dõi; `scripts/find-data-push/v614-stop-tokens.json`) ở phía data gửi lên. Khoá ghép từ chính các đoạn của giá trị nên hai giá trị cùng khoá
+luôn chung mảnh (giá trị không có chữ / số nào thì mảnh là chính khoá). Hàm khoá thô bị xoá.
+
+Kiểm (21/11/2026), lặp tới khi sạch:
+
+| Vòng | Cách | Kết quả |
+|---|---|---|
+| 1 | khoá V614 trên dữ liệu thật của mọi loại chiến dịch đích (hàm tạm `pg_temp`, giao dịch huỷ; `scripts/find-data-push/build-v614-prodcheck-sql.py`) | UID: 10 link bài khác nhau của cùng người bị gộp (tên riêng lấy đoạn đầu) → chỉ coi là tên riêng khi là trang cá nhân. Group: mọi `profile.php?id=` trong chiến dịch comment seeding gộp thành một (bỏ tham số) → không bỏ tham số mang danh tính |
+| 2 | như vòng 1 sau khi sửa | UID 88.308 dòng / 496 chiến dịch, group 56.807 / 473, link bài 8.501 / 501, link Zalo 1.332, SĐT 29.574: không gộp nhầm, không lỗi, bước lọc nhanh không bỏ sót |
+| 3 | bộ nhận diện độc lập (`scripts/find-data-push/key-holes.cjs`, đọc link bằng `URL` của JS) trên 3.680 giá trị thật đa dạng dạng viết + cách viết khác tự sinh (giao thức, máy chủ, "/" cuối, tham số theo dõi, chữ hoa, dạng khác của cùng UID / group / bài): 57.281 giá trị (`scripts/find-data-push/test_v614_keys.sh`) | "/" thừa ở cuối giá trị tham số; giá trị rác không có chữ / số không có mảnh → vá |
+| 4 | lô 2 (chiến dịch cũ hơn, hạt chọn mẫu khác) 58.127 giá trị; gộp hai lô 110.914 giá trị | 0 cách viết ra khoá khác, 0 gộp nhầm, 0 bỏ sót, 0 vi phạm mảnh, 0 lỗi với giá trị lạ |
+| 5 | `test_v608.sh` (V608 → V610 → V614, gỡ V614 về V610, chặn chạy lại, câu đối chiếu), phát lại 1.128 lượt thật `--reconcile --variants --states` với V610 + V614, `perf_v614.sh` | 46 PASS; phát lại 0 vấn đề, 13.514 dòng thêm như trước; đích 60.000 dòng: group 0,62 s, link bài cùng một group 3,2 s (mọi dòng chung mảnh mã group), UID 2,6 s (UID số nhận ra dạng `profile.php?id=`); đích thật lớn nhất 7.745 dòng |
+
+Apply: `apply_migration` của MCP hỏi xác nhận; 21/11 17:16 VN hộp hỏi hết hạn, không chạy gì (kiểm lại: sổ chưa có V614, khoá vẫn
+bản V610). Đường dự phòng: dán `migrations/tests/migration_v614_find_data_push_match_key_v2_guarded_apply.sql` vào SQL Editor (sinh bằng
+`node scripts/make-migration-ledger-apply.cjs`; nguyên migration + dòng sổ `migration_v614_find_data_push_match_key_v2` trong cùng
+giao dịch, `statements[1]` md5 `b36e9013…` = file; dán lần hai bị sổ chặn). Kiểm trên PG16: `test_v608.sh` với bản dán thay file gốc,
+47 PASS. Sau apply kiểm `md5(statements[1])` và md5 ba thân hàm như postflight.
+
+**Đã apply 17:26:36 VN 21/11/2026** (anh tự dán bản gọn `migrations/tests/migration_v614_find_data_push_match_key_v2_paste.sql` vào SQL
+Editor; sổ `20261121102636`, `created_by` NULL, md5 sổ = file `b36e9013…`; không apply lại). Hậu kiểm: ba thân hàm đúng md5 bản sinh, hàm
+khoá thô đã xoá, Desktop gọi được hàm đẩy nhưng không gọi thẳng hàm khoá / mảnh, sổ đẩy 0 dòng. PostgREST nạp lại schema 6,5 s; phút đó
+260 request quá 1 giây, 1 lỗi 500 (`aka_agent_engine_report_v1` của Desktop chạm trần 3 giây), 0 lỗi 503, phút sau sạch; 0 chiến dịch
+bị tạm dừng do apply. [Biên nhận](../migrations/snapshots/find-data-push-v614/apply-receipt.json).
+
+Chưa: chạy trong app Desktop thật.
+
 ## App (Desktop)
 
 - **Lưu form** (`CampaignFormModal.tsx`, `CampaignAgentFormModal.tsx`): chỉ chiến dịch thuộc gói của lần lưu gửi mã gói khi gắn

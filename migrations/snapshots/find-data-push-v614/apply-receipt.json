@@ -1,0 +1,44 @@
+{
+  "migration": "migrations/migration_v614_find_data_push_match_key_v2.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "hiển thị SQL ra đây để tôi tự chạy (after MCP apply_migration confirmation timed out at 17:16 VN, nothing ran)",
+  "applied_via": "User pasted migrations/tests/migration_v614_find_data_push_match_key_v2_paste.sql into Supabase SQL Editor (file text loaded into a variable, md5-checked, body executed, ledger row written, one transaction)",
+  "applied_at_vn": "2026-11-21 17:26:36",
+  "ledger": { "version": "20261121102636", "name": "migration_v614_find_data_push_match_key_v2", "statements_md5": "b36e9013f715628ae031e22f67db9ebc", "file_md5": "b36e9013f715628ae031e22f67db9ebc", "created_by": null },
+  "renumbered_from": "none (V611-V613 already used by other sessions when written)",
+  "preflight_live_17_12_vn": {
+    "ledger_v614_rows": 0,
+    "push_prosrc_md5_before": "d9fbaed069124f9fdc85f8be2036bd45",
+    "match_key_prosrc_md5_before": "3360f6e7130f9857866564c497ba26d4",
+    "coarse_key_prosrc_md5_before": "f8b51af4beded560216ce3c937810be1",
+    "deliveries_rows": 0,
+    "active_backends": 3
+  },
+  "postflight_live": {
+    "push_prosrc_md5_after": "a9298a62cd6860f32bb2001b5f52388e",
+    "match_key_prosrc_md5": "eced466b2910026db6c75178da5b09d1",
+    "match_tokens_prosrc_md5": "4358d2a568d9ad08addcdffc15262af2",
+    "coarse_key_functions_left": 0,
+    "push_proconfig": ["search_path=pg_catalog, public, private", "statement_timeout=20s"],
+    "aka_agent_desktop_can_execute_push": true,
+    "aka_agent_desktop_can_execute_match_tokens": false,
+    "anon_can_execute_push": false,
+    "deliveries_rows": 0,
+    "temporary_ledger_keys": 0,
+    "sample_keys": {
+      "facebook_uid https://www.facebook.com/profile.php?id=100072022092879": "100072022092879",
+      "facebook_group 1856052657967796": "facebook.com/groups/1856052657967796",
+      "post_link https://www.facebook.com/groups/1/permalink/2/": "facebook.com/groups/1/posts/2"
+    }
+  },
+  "postgrest_reload": {
+    "schema_cache_query_ms": 6468.0,
+    "loaded_at_utc": "10:26:44",
+    "minute_10_26_utc": { "rest_requests": 29290, "over_1s": 260, "p50_ms": 48, "http_5xx": 1, "http_503": 0 },
+    "http_500_detail": "1x POST rpc/aka_agent_engine_report_v1 at 10:26:37 UTC, 3995 ms (Desktop 3 s role cap) while reload ran",
+    "minute_10_27_utc": { "over_1s": 0, "http_5xx": 0 },
+    "campaigns_paused_10_26_to_10_29_utc": "1 (60474 at 10:26:07 UTC, before apply, reason 'Failed to get image metadata'; not related)"
+  },
+  "not_reapply": "Do not apply again; preflight and the paste wrapper refuse when the ledger has migration_v614_%.",
+  "rollback": "migrations/rollback_v614_find_data_push_match_key_v2.sql"
+}

@@ -16,7 +16,8 @@ as_pg "LC_ALL=C '$PGBIN/pg_ctl' -D '$work/data' -o '-p $port -k $work' -l '$work
 psql_run() { as_pg "'$PGBIN/psql' -X -q -v ON_ERROR_STOP=1 -h '$work' -p $port -U postgres -d postgres $*"; }
 cp "$here"/fixture_v608.sql "$here"/seed_v608.sql "$here"/test_v608_cases.sql "$repo/migrations/migration_v608_find_data_push_links.sql" \
    "$repo/migrations/rollback_v608_find_data_push_links.sql" "$repo/migrations/migration_v610_find_data_push_match_key.sql" \
-   "$repo/migrations/rollback_v610_find_data_push_match_key.sql" "$work/"
+   "$repo/migrations/rollback_v610_find_data_push_match_key.sql" "$repo/migrations/migration_v614_find_data_push_match_key_v2.sql" \
+   "$repo/migrations/rollback_v614_find_data_push_match_key_v2.sql" "$work/"
 [ "$(id -u)" = "0" ] && chown postgres "$work"/*.sql
 psql_run "-f '$work/fixture_v608.sql'"
 psql_run "-f '$work/seed_v608.sql'"
@@ -27,6 +28,11 @@ if [ "${WITH_V610:-1}" = "1" ]; then
   psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121072153', 'migration_v608_find_data_push_links')\""
   psql_run "-f '$work/migration_v610_find_data_push_match_key.sql'"
   echo "== apply V610: ok"
+  if [ "${WITH_V614:-1}" = "1" ]; then
+    psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121083934', 'migration_v610_find_data_push_match_key')\""
+    psql_run "-f '$work/migration_v614_find_data_push_match_key_v2.sql'"
+    echo "== apply V614: ok"
+  fi
 fi
 psql_run "-f '$work/test_v608_cases.sql'" 2>&1 | sed -n 's/^.*NOTICE:  //p'
 echo "== hai nguồn đẩy cùng lúc vào một đích"
@@ -94,6 +100,14 @@ SQL
   echo "PASS: đối chiếu A↔B: dữ liệu đúng 0 dòng lệch; bắt đủ C1–C6 khi làm sai"
 fi
 if [ "${WITH_V610:-1}" = "1" ]; then
+  if [ "${WITH_V614:-1}" = "1" ]; then
+    echo "== gỡ V614 (về đúng thân V610), apply lại V614 bị sổ chặn"
+    psql_run "-f '$work/rollback_v614_find_data_push_match_key_v2.sql'"
+    psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121100000', 'migration_v614_find_data_push_match_key_v2')\""
+    if psql_run "-f '$work/migration_v614_find_data_push_match_key_v2.sql'" >/dev/null 2>&1; then echo "FAIL: có dòng sổ mà V614 vẫn chạy lại"; exit 1; fi
+    psql_run "-c \"DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v61%'\""
+    echo "PASS: gỡ V614 về V610 (sổ đẩy tính lại khoá V610); có dòng sổ thì V614 không chạy lại"
+  fi
   echo "== gỡ V610 (về đúng thân V608), apply lại V610 bị sổ chặn"
   psql_run "-f '$work/rollback_v610_find_data_push_match_key.sql'"
   psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121090000', 'migration_v610_find_data_push_match_key')\""

@@ -1,3 +1,4 @@
+-- Cần V614 (khoá so sánh mới).
 -- Đối chiếu chỉ đọc: data chiến dịch tìm data (A) đẩy sang chiến dịch đích (B) và Nhóm data, sau khi Desktop gọi hàm đẩy V608/V610.
 -- Mỗi dòng trả về là một chỗ lệch; không dòng nào = khớp. Sửa mốc thời gian ở CTE params (giờ UTC) trước khi chạy.
 --   supabase db query --linked -f scripts/find-data-push/reconcile-prod.sql -o json     (hoặc dán vào SQL Editor)
@@ -35,20 +36,24 @@ c1 AS (
              IS DISTINCT FROM g.value_key)
 ),
 pushed AS MATERIALIZED (
-  SELECT DISTINCT g.target_campaign_id, g.output_kind, g.value_column, g.value_key, g.target_input_data_id
+  SELECT DISTINCT g.target_campaign_id, g.output_kind, g.value_column, g.target_input_data_id
     FROM ledger AS g WHERE g.result = 'inserted' AND g.target_input_data_id IS NOT NULL
 ),
+-- Mỗi dòng còn sống của B (chỉ B có dòng do hàm đẩy thêm) tính khoá một lần, rồi gom theo khoá.
+bkeys AS MATERIALIZED (
+  SELECT x.id, x.campaign_id, t.output_kind,
+         private.aka_agent_find_data_match_key(t.output_kind, CASE WHEN t.value_column = 'phone' THEN x.phone ELSE x.uid END) AS k
+    FROM (SELECT DISTINCT target_campaign_id, output_kind, value_column FROM pushed) AS t
+    JOIN public.auto_campaign_input_data AS x ON x.campaign_id = t.target_campaign_id AND NOT COALESCE(x.is_delete, false)
+),
 c2 AS (
-  SELECT 'C2' AS check_id, p.target_campaign_id AS campaign_id, p.target_input_data_id AS ref_id,
+  SELECT 'C2' AS check_id, b.campaign_id, min(b.id) FILTER (WHERE b.id IN (SELECT target_input_data_id FROM pushed)) AS ref_id,
          'B có dòng trùng khoá với dòng hàm đẩy thêm' AS problem,
-         left(p.value_key, 200) || ' / dòng trùng ' || string_agg(x.id::text, ',' ORDER BY x.id) AS detail
-    FROM pushed AS p
-    JOIN public.auto_campaign_input_data AS x
-      ON x.campaign_id = p.target_campaign_id AND x.id <> p.target_input_data_id AND NOT COALESCE(x.is_delete, false)
-     AND private.aka_agent_find_data_coarse_key(p.output_kind, CASE WHEN p.value_column = 'phone' THEN x.phone ELSE x.uid END)
-         = private.aka_agent_find_data_coarse_key(p.output_kind, p.value_key)
-     AND private.aka_agent_find_data_match_key(p.output_kind, CASE WHEN p.value_column = 'phone' THEN x.phone ELSE x.uid END) = p.value_key
-   GROUP BY p.target_campaign_id, p.target_input_data_id, p.value_key
+         left(b.k, 200) || ' / dòng ' || string_agg(b.id::text, ',' ORDER BY b.id) AS detail
+    FROM bkeys AS b
+   WHERE b.k IS NOT NULL
+   GROUP BY b.campaign_id, b.output_kind, b.k
+  HAVING count(*) > 1 AND bool_or(b.id IN (SELECT target_input_data_id FROM pushed))
 ),
 c3 AS (
   SELECT 'C3' AS check_id, l.target_campaign_id AS campaign_id, l.id AS ref_id,
