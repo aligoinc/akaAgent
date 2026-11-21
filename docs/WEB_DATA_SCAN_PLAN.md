@@ -411,6 +411,20 @@ Anh yêu cầu "Bắt đầu code" sau khi chốt hai câu hỏi của 7.4.
   loại chiến dịch khác giữ nguyên (đối chứng trong `v618-smoke`). Production 21/11 có thân `72b8c969…` (khớp bản đọc sáng), thiết lập
   `engine.stale_unsent_target_action` = `requeue_unstarted`. Giả lập: mở lại app thì quét tiếp, bỏ 40 tin đã quét, từ khoá hoàn thành, xoá ghi
   chú bị ngắt.
+- Đẩy SĐT sang chiến dịch "Nhắn tin theo SĐT" và Nhóm data (21/11 tối, anh: "Làm bài kiểm đẩy"):
+  `LC_ALL=C CHAT_REPO=<akaAgentChatApi> node scripts/web-scan/push-smoke.cjs` (PG17, ~10 giây, 11 nhóm). DB: fixture của bài kiểm V608 + nguyên văn
+  V608 → V610 → V614; thân `aka_agent_find_data_push_v1` và 4 hàm khoá / quy tắc kiểm md5 `prosrc` bằng bản production đọc chỉ đọc tối 21/11
+  (hàm đẩy `a9298a62…`, sổ tới V617, 11 quy tắc); khối quy tắc của V618 p3 chạy nguyên văn từ file migration. Mã app: lớp `CampaignScheduler`
+  thật (esbuild) gọi `pushWebScanRecords` → `findDataPushRepository` / `dataGroupRepository` thật. Đạt: thêm SĐT vào đích (bỏ số đã có dù viết
+  khác), mở lại đích "hoàn thành", báo đích chạy bằng Nhóm data / đã xoá / của người khác bằng câu có sẵn, lượt sau không thêm lại, ba trang đẩy
+  vào một đích không trùng, sổ đẩy đúng từng nguồn, gói không có Zalo thì đích không nhận, lỗi mạng gửi lại không trùng, Nhóm data lỗi vẫn đẩy
+  sang chiến dịch Zalo, bản gỡ p3 xoá quy tắc / liên kết / sổ đẩy của nguồn web và giữ của Facebook. Dòng gửi lên Nhóm data: loại SĐT (mã 34),
+  Info1–5 theo lựa chọn, email, `extra_data` có site / link / trường / cờ số dùng lại, cùng lô thì cùng mã yêu cầu. Hàm nạp Nhóm data không có
+  trong DB thử: đọc chỉ đọc thân production `aka_agent_ingest_data_group_v186_internal` (md5 `prosrc` `f1bdba98…`) thì hàm đọc `info1`–`info5`,
+  `extra_data` của dòng loại `phone`; bản ghi đã có thì giữ `extra_data` cũ (`v_extra || cũ`). Form (`form-ui-smoke`, 9 ca): chọn chiến dịch
+  Zalo đích và Nhóm data ở chiến dịch web lưu đúng `findPhoneZaloMessagePhoneTargetCampaignIds` / `findDataTargetDataGroups.phone`, sửa chiến
+  dịch hiện lại và giữ. Câu có sẵn khi nguồn bị xoá giữa lượt in mã thô `find_data_push_source_not_found` (đường chung với Tìm data Facebook,
+  không sửa).
 - Nhận xét (không sửa): bỏ trùng theo tin, không theo số (doanh nghiệp / tin khác cùng số vẫn lấy, Nhóm data tự gộp theo số); nhatot môi giới đăng
   nhiều tin nên vài lần bấm hiện số ra lại số đã có (không biết trước khi bấm); giới hạn ngày nhập quá 500 lưu thành 500 không báo.
 

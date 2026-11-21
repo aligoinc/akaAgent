@@ -190,6 +190,52 @@ async function main() {
     assert.deepEqual(await errors(), [])
     pass('sửa nhanh: nghỉ kẹp 10 giây, giữ cài đặt quét; không có ô nội dung')
 
+    // 8. Xử lý data tìm được: chọn chiến dịch "Nhắn tin theo SĐT" và Nhóm data loại SĐT, lưu đúng khoá mà bộ chạy đọc
+    //    (findPhoneZaloMessagePhoneTargetCampaignIds, findDataTargetDataGroups.phone; scripts/web-scan/push-smoke.cjs kiểm phần đẩy).
+    await open('web_find_data_nhatot')
+    await page.getByPlaceholder('Nhập tên chiến dịch...').fill('Môi giới Q7 đẩy Zalo')
+    await kw().fill('nhà quận 7')
+    await page.getByRole('checkbox', { name: 'Đẩy SĐT sang chiến dịch Zalo gửi tin nhắn, kết bạn' }).check()
+    await page.getByRole('button', { name: 'Chọn chiến dịch', exact: true }).click()
+    await page.locator('.campaign-picker-modal').getByText('Nhắn tin khách BĐS').click()
+    await page.locator('.campaign-picker-confirm-button').click()
+    await page.locator('.campaign-picker-modal').waitFor({ state: 'detached' })
+    await page.getByRole('checkbox', { name: 'Đẩy SĐT sang Nhóm data' }).check()
+    await page.getByRole('button', { name: 'Chọn nhóm', exact: true }).click()
+    await page.locator('.data-group-manager-picker-footer').waitFor()
+    await page.getByText('Nhóm SĐT', { exact: true }).first().click()
+    await page.getByRole('button', { name: 'Chọn nhóm data', exact: true }).click()
+    await page.locator('.data-group-manager-picker-footer').waitFor({ state: 'detached' })
+    await page.locator('.campaign-data-group-control').getByText('Nhóm SĐT', { exact: true }).waitFor()
+    await shot('nhatot-push-targets')
+    await save()
+    assert.deepEqual(await alerts(), [])
+    const pushed = (await calls('createCampaign'))[0][0].extraSettings
+    assert.equal(pushed.isFindPhone, true)
+    assert.deepEqual(pushed.findPhoneZaloMessagePhoneTargetCampaignIds, [301])
+    assert.equal(pushed.findDataTargetDataGroups?.phone?.groupId, 77)
+    assert.deepEqual(await errors(), [])
+    pass('xử lý data tìm được: chọn chiến dịch Zalo đích và Nhóm data SĐT, lưu đúng khoá bộ chạy đọc')
+
+    // 9. Sửa chiến dịch đã có đích: hiện lại đích đã chọn, lưu không mất.
+    await open('web_find_data_nhatot', 'edit', { webScan: { site: 'nhatot' }, isFindPhone: true, findPhoneZaloMessagePhoneTargetCampaignIds: [301],
+      findDataTargetDataGroups: { phone: { groupId: 77, groupName: 'Nhóm SĐT' } } },
+      [{ id: 3, campaignId: 9, uid: 'nhà quận 7', name: 'nhà quận 7', status: 'chờ xử lý', isDelete: false }])
+    await page.getByRole('cell', { name: 'nhà quận 7', exact: true }).waitFor()
+    assert.equal(await page.getByRole('checkbox', { name: 'Đẩy SĐT sang chiến dịch Zalo gửi tin nhắn, kết bạn' }).isChecked(), true)
+    assert.equal(await page.getByRole('checkbox', { name: 'Đẩy SĐT sang Nhóm data' }).isChecked(), true)
+    await page.getByText('Nhắn tin khách BĐS').first().waitFor()
+    await page.getByRole('button', { name: 'Lưu chiến dịch', exact: true }).click()
+    await page.waitForTimeout(300)
+    await page.evaluate(() => window.webScanSmoke.selectSaveStatus('tạm dừng'))
+    await page.waitForFunction(() => window.webScanSmoke.state.calls.some(call => call.method === 'updateCampaign'), null, { timeout: 20000 })
+    const kept = (await calls('updateCampaign'))[0][1].extraSettings
+    assert.deepEqual(kept.findPhoneZaloMessagePhoneTargetCampaignIds, [301])
+    assert.equal(kept.findDataTargetDataGroups?.phone?.groupId, 77)
+    assert.equal(kept.isFindPhone, true)
+    assert.deepEqual(await errors(), [])
+    pass('sửa chiến dịch web có đích: hiện lại và giữ chiến dịch Zalo đích, Nhóm data')
+
     // 6. Data tìm được: mỗi SĐT một dòng (số trùng ở dòng sau bỏ), số dùng lại giữ cờ, Excel đúng cột mẫu Nhóm data.
     const found = await page.evaluate(() => window.webScanSmoke.foundData())
     assert.deepEqual(found.records.map(r => r.phone), ['0901000001', '0901000002', '0901000003'])

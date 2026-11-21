@@ -25,6 +25,9 @@ const WEB_ACTIONS = [
   { id: 'web_find_data_batdongsan', name: 'Tìm data Batdongsan', limitCheckActionCodes: ['web_batdongsan_phone'] },
   { id: 'web_find_data_yellowpages', name: 'Tìm data Trang Vàng', limitCheckActionCodes: ['web_yellowpages_page'] }
 ]
+// Chiến dịch "Nhắn tin theo SĐT" để chọn làm đích nhận SĐT tìm được (danh mục chiến dịch của form).
+const catalog = [{ id: 301, name: 'Nhắn tin khách BĐS', actionId: 'zalo_message_phone', accountId: 22, accountName: 'Zalo 22', status: 'chờ xử lý',
+  isDelete: false, dataTargetSourceMode: 'direct', schedule: '2035-01-01T02:00:00.000Z', updatedAt: '2026-11-21T00:00:00.000Z', extraSettings: {} }]
 const state: any = { calls: [], errors: [], alerts: [], details: [], nextId: 500 }
 const handlers: Record<string, any> = {
   platform: 'darwin', fileExists: () => true,
@@ -32,8 +35,10 @@ const handlers: Record<string, any> = {
   getAkaBizIntegrations: () => ({}), getStaffIntegrations: () => ({}),
   getEmailNotificationSettings: () => ({ recipientEmails: [], dailyReportTime: '18:00' }),
   getSystemSetting: () => null, getSystemSettingValue: () => null,
-  listDataGroups: () => ({ groups: [{ id: 77, name: 'Nhóm SĐT', dataTypeCategoryItemId: 501, dataTypeCode: 'phone', memberCount: 0 }], total: 1 }),
+  listDataGroups: () => ({ groups: [{ id: 77, name: 'Nhóm SĐT', dataTypeCategoryItemId: 501, dataTypeCode: 'phone', memberCount: 0, activeMembershipCount: 0 }], total: 1 }),
   listAccounts: () => accounts,
+  listDesktopCampaignCatalog: () => structuredClone(catalog),
+  listDataGroupMembers: () => ({ members: [], total: 0, nextCursor: null, hasMore: false }),
   listSendExclusionGroups: () => ({ groups: [], blocklists: [], revision: 1 }),
   listCampaignInputData: () => structuredClone(state.details),
   listCampaignInputDataPage: () => ({ rows: structuredClone(state.details), total: state.details.length }),
@@ -61,7 +66,7 @@ useAuthStore.setState({ user: { staffId: 7, organizationId: 1, entitlements: nor
 useCampaignStore.setState({ accounts: accounts as any,
   campaignActions: [...WEB_ACTIONS.map(a => ({ ...a, flatformType: 'web', isActive: false, isDelete: false })),
     { id: 'zalo_message_phone', name: 'Nhắn tin theo SĐT', flatformType: 'zalo', isActive: true, isDelete: false }] as any,
-  campaigns: [], loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {} })
+  campaigns: [], campaignCatalog: catalog as any, loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {} })
 useUiStore.setState({ showAlert: (message, type) => { state.alerts.push({ message, type }) }, showConfirm: (_message, confirm) => { void confirm() } })
 useDesktopPollingStore.setState({ settings: { campaigns: 30, accounts: 30 } } as any)
 
