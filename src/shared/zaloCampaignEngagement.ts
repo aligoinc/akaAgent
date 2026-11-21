@@ -1,5 +1,7 @@
 /** Shared metadata contract. This module must never call a Zalo API. */
-export type EngagementKind = 'message' | 'reaction' | 'friend' | 'seen'
+export type EngagementKind = 'message' | 'reaction' | 'friend' | 'friend_rejected' | 'seen'
+/** Kết bạn: đồng ý (`friend`) hoặc người nhận từ chối lời mời (`friend_rejected`, V615); cả hai chỉ khớp lượt gửi lời mời. */
+export const isFriendEngagementKind = (kind: EngagementKind): boolean => kind === 'friend' || kind === 'friend_rejected'
 export type EngagementFilter = 'all' | 'responded' | 'reacted' | 'friended' | 'seen' | 'none'
 export interface ZaloEngagementSource {
   version: 1
@@ -18,6 +20,8 @@ export interface ZaloEngagement {
   responded_at: string | null
   reacted_at: string | null
   friended_at: string | null
+  /** Người nhận từ chối lời mời kết bạn (V615). DB chưa có V615 thì không có trường này. */
+  rejected_at?: string | null
 }
 export interface EngagementEvent {
   accountId: string
@@ -148,7 +152,10 @@ export function normalizeEngagementEvent(type: string, payload: unknown, account
   }
   const row = engagementRecord(payload)
   const data = engagementRecord(row.data)
-  if (!accountId || !ownUid || row.isSelf === true || row.isGroup === true) return []
+  // Zalo's "reject" friend event keeps the request's direction (fromUid = the requester), so the SDK flags a rejection of
+  // this account's own request as isSelf although the recipient acted. It is the only self-flagged event kept here.
+  const rejectedRequest = type === 'friend_event' && row.type === 4
+  if (!accountId || !ownUid || (row.isSelf === true && !rejectedRequest) || row.isGroup === true) return []
   let kind: EngagementKind
   let target: string
   let messageIds: string[] = []
@@ -176,8 +183,14 @@ export function normalizeEngagementEvent(type: string, payload: unknown, account
     kind = 'seen'; messageIds = [messageId]
     // The SDK's seen receipt has no timestamp: retain the first arrival time.
   } else if (type === 'friend_event') {
-    if (row.type !== 0) return [] // ADD only; SDK isSelf cannot identify who accepted.
-    kind = 'friend'; target = id(row.data) || id(row.threadId); at = row.ts
+    if (rejectedRequest) {
+      // REJECT_REQUEST of a request this account sent: the recipient (toUid) declined it.
+      if (id(data.fromUid) !== ownUid) return []
+      kind = 'friend_rejected'; target = id(data.toUid); at = row.ts
+    } else {
+      if (row.type !== 0) return [] // ADD only; SDK isSelf cannot identify who accepted.
+      kind = 'friend'; target = id(row.data) || id(row.threadId); at = row.ts
+    }
   } else return []
   if (!target || target === ownUid || target === '0') return []
   return [{ accountId, accountZaloUid: ownUid, targetZaloUid: target, kind, occurredAt: eventTime(at, receivedAt), messageIds }]
@@ -189,7 +202,7 @@ export function makeEngagementSource(ownUid: string | undefined | null, targetUi
 }
 export function engagementDisplay(value: ZaloEngagement | null | undefined, applicable: boolean): string {
   if (!applicable || !value) return ''
-  const marks = [[value.seen_at, 'Đã xem'], [value.responded_at, 'Đã phản hồi'], [value.reacted_at, 'Đã thả cảm xúc'], [value.friended_at, 'Đã kết bạn']]
+  const marks = [[value.seen_at, 'Đã xem'], [value.responded_at, 'Đã phản hồi'], [value.reacted_at, 'Đã thả cảm xúc'], [value.friended_at, 'Đã kết bạn'], [value.rejected_at, 'Đã từ chối kết bạn']]
     .filter(([at]) => at).map(([at, label]) => `${label}: ${new Date(at!).toLocaleString('vi-VN')}`)
   return marks.join('\n')
 }
@@ -238,7 +251,7 @@ export class EngagementWatchCache {
     for (const id of Array.from(ids || [])) {
       const item=this.rows.get(id)!, row=item.row
       if (at<Date.parse(row.sent_at) || at>Date.parse(row.tracking_until)) continue
-      if (event.kind==='friend' ? row.action_type!=='friend_request' : row.action_type!=='message') continue
+      if (isFriendEngagementKind(event.kind) ? row.action_type!=='friend_request' : row.action_type!=='message') continue
       if ((event.kind==='reaction' || event.kind==='seen') && !row.message_ids.some(id=>event.messageIds.includes(id))) continue
       this.rows.delete(id); this.rows.set(id,item)
       return true

@@ -21,6 +21,13 @@ async function main(){
  assert.equal(api.normalizeEngagementEvent('reaction',{...reaction,data:{...reaction.data,content:{rIcon:'',rMsg:[{gMsgID:'campaign-message'}]}}},'1','own',new Date(now).toISOString()).length,0)
  assert.equal(api.normalizeEngagementEvent('friend_event',{type:0,data:'target',isSelf:false},'1','own',new Date(now).toISOString())[0].kind,'friend')
  assert.equal(api.normalizeEngagementEvent('friend_event',{type:1,data:'target'},'1','own',new Date(now).toISOString()).length,0)
+ // V615: Zalo "reject" keeps the request direction (fromUid = requester), so the SDK flags a rejection of our own request as isSelf.
+ const rejected={type:4,isSelf:true,threadId:'target',data:{fromUid:'own',toUid:'target'}}
+ const rejectedEvent=api.normalizeEngagementEvent('friend_event',rejected,'1','own',new Date(now).toISOString())[0]
+ assert.equal(rejectedEvent.kind,'friend_rejected');assert.equal(rejectedEvent.targetZaloUid,'target');assert.equal(rejectedEvent.occurredAt,new Date(now).toISOString())
+ for(const bad of [{...rejected,data:{fromUid:'target',toUid:'own'}},{...rejected,data:{fromUid:'own',toUid:'own'}},{...rejected,type:3},{...rejected,type:2},{...rejected,isGroup:true}]) assert.equal(api.normalizeEngagementEvent('friend_event',bad,'1','own',new Date(now).toISOString()).length,0)
+ assert.equal(api.normalizeEngagementEvent('friend_event',{type:0,data:'target',isSelf:true},'1','own',new Date(now).toISOString()).length,0)
+ assert.equal(api.isFriendEngagementKind('friend_rejected'),true);assert.equal(api.isFriendEngagementKind('friend'),true);assert.equal(api.isFriendEngagementKind('message'),false)
  assert.equal(JSON.stringify(api.engagementMessageIds({mediaResponse:{attachment:[{msgId:'a'}]},contentResponse:{message:{msgId:'b'}},content:{msgId:'ignore'},cliMsgId:'ignore'})),JSON.stringify(['a','b']))
  const seen={type:0,isSelf:false,threadId:'target',data:{idTo:'target',msgId:'campaign-message',realMsgId:'do-not-use'}}
  assert.equal(api.normalizeEngagementEvent('seen_messages',[seen],'1','own',new Date(now).toISOString())[0].messageIds[0],'campaign-message')
@@ -31,6 +38,10 @@ async function main(){
  const lru=new api.EngagementWatchCache(1,10000);lru.put(watch);assert.equal(lru.mayMatch(event),true)
  lru.put({...watch,campaign_detail_id:2,target_zalo_uid:'other'});assert.equal(lru.mayMatch(event),undefined)
  assert.equal(lru.mayMatch({...event,accountZaloUid:'old-session'}),undefined)
+ const friendWatch={...watch,campaign_detail_id:3,action_type:'friend_request',message_ids:[]}
+ const friendLru=new api.EngagementWatchCache(10,10000);friendLru.put(friendWatch);assert.equal(friendLru.mayMatch(rejectedEvent),true)
+ const messageLru=new api.EngagementWatchCache(10,10000);messageLru.put(watch);assert.equal(messageLru.mayMatch(rejectedEvent),undefined)
+ assert.match(api.engagementDisplay({...friendWatch,rejected_at:'2026-10-02T01:00:00Z'},true),/^Đã từ chối kết bạn: /)
  assert.equal(api.engagementDisplay(watch,true),'')
  assert.equal(api.engagementDisplay({...watch,tracking_until:'2000-01-01T00:00:00Z'},true),'')
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'engagement-journal-'))

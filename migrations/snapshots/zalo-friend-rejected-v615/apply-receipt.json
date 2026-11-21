@@ -1,0 +1,26 @@
+{
+  "migration": "migration_v615_zalo_engagement_friend_rejected",
+  "requestedBy": "anh, 21/11/2026 (\"apply luôn đi\")",
+  "renumbered": "Viết là V613, rồi V614; cả hai số bị phiên khác apply trước (migration_v613_group_adds_data_type 16:18 VN, migration_v614_find_data_push_match_key_v2 17:26 VN 21/11) nên đổi sang V615 ngay trước khi apply.",
+  "project": "akachat cgjbsmqtfhqvttudyjzq",
+  "method": "supabase db query --linked -f (file bọc bằng scripts/make-migration-ledger-apply.cjs: dòng sổ chèn trước COMMIT, cùng giao dịch)",
+  "dryRun": { "at": "2026-11-21T10:31:00Z (khoảng)", "result": "BEGIN … ROLLBACK trên production: hàm mới md5 a20c9aea…, to_jsonb(engagement) có rejected_at, cả giao dịch 17 ms" },
+  "appliedAt": "2026-11-21T10:31:33Z (17:31:33 VN)",
+  "ledger": { "version": "20261121103128", "md5Statements": "b46c13bd23c9b48617a0d9ac335c2e88", "equalsFileMd5": true },
+  "function": {
+    "signature": "public.aka_agent_campaign_engagement_batch(bigint,bigint,text,jsonb,text,text,text)",
+    "before": { "prosrcMd5": "167571de84782301ddd8bcd1ad3b2f89", "defMd5": "e5b4431626d8d205b1883b2b92545253", "note": "thân V524" },
+    "after": { "prosrcMd5": "a20c9aea1a3925e41907cdbb6ee632a4", "defMd5": "dd5c0aa6cf6aa1c786939ecfbbd04e41" },
+    "attributes": "postgres, SECURITY DEFINER, search_path=pg_catalog, public, statement_timeout=15s, ACL {postgres=X/postgres} (không đổi)"
+  },
+  "column": { "table": "public.auto_campaign_detail_zalo_engagement", "name": "rejected_at", "type": "timestamp with time zone", "notNull": false },
+  "postApply": {
+    "postgrestSchemaReload": "nhận lệnh 10:31:33.68Z, truy vấn schema 5.455,7 ms, nạp xong 10:31:39.58Z",
+    "edgeLogs": "phút 10:31: 30.771 request, 0 lỗi 5xx, 0 lỗi 503, 184 request > 1 giây (phút trước 2), p50 46 ms; phút 10:32 p50 45 ms, 0 request > 1 giây",
+    "postgresErrors": "10:30–10:36 UTC chỉ có lỗi permission denied của máy Desktop < 9.1.0 (có sẵn), không lỗi mới",
+    "engagementWrites": "bảng tương tác vẫn được ghi sau apply (updated_at mới nhất 10:31:41Z); chưa có dòng rejected_at nào vì ChatApi / Desktop đang chạy chưa gửi loại sự kiện mới"
+  },
+  "notReappliable": "preflight từ chối khi sổ đã có migration_v615_% hoặc hàm không còn là thân V524",
+  "rollback": "migrations/rollback_v615_zalo_engagement_friend_rejected.sql (trả thân V524, bỏ cột)",
+  "next": "deploy ChatApi nhóm worker (nhánh feat/zalo-friend-rejected sau khi merge dev) để tổ chức chạy trên Fly bắt đầu ghi; Web deploy để hiện nhãn; Desktop / App Server / iOS theo bản phát hành"
+}
