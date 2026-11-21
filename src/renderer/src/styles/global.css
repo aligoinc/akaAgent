@@ -19496,7 +19496,7 @@ body[data-active-page="browsers"] .data-group-scan-layer {
   justify-content: center;
   overflow: hidden;
   background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-default);
   color: var(--text-secondary);
   font-size: 12px;
   font-weight: 700;
@@ -24295,7 +24295,7 @@ body.theme-light :is(
 }
 
 .add-current-data-preview {
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-default);
   border-radius: 6px;
   max-height: min(320px, 42vh);
   overflow: auto;
@@ -25111,6 +25111,89 @@ body.theme-light :is(
 
 .find-data-admin-contact {
   margin-left: 6px;
+  color: var(--text-secondary);
+}
+
+/* Tab Data tìm được: chọn xem theo group hay theo quản trị viên (chiến dịch tìm group bằng search). */
+.find-data-view-picker {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 0;
+  padding: 10px 14px 0;
+  border: none;
+  min-width: 0;
+}
+
+.find-data-view-picker legend {
+  float: left;
+  padding: 0;
+  margin-right: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.find-data-view-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.find-data-view-option.active {
+  border-color: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+}
+
+.find-data-view-option.disabled {
+  color: var(--text-tertiary);
+  cursor: not-allowed;
+}
+
+.find-data-view-option input {
+  margin: 0;
+}
+
+.find-data-view-hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.find-data-admin-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.find-data-admin-summary b {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.find-data-result-grid .find-data-contact-cell {
+  white-space: nowrap;
+}
+
+.find-data-result-grid .find-data-admin-group-cell {
+  min-width: 220px;
+  max-width: 320px;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.find-data-unread {
   color: var(--text-secondary);
 }
 

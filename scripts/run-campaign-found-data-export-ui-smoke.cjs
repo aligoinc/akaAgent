@@ -222,6 +222,94 @@ async function main() {
     assert.equal(await cardCalls(), callsBeforeAdmins, 'kết quả đã lưu đủ thì không đọc log thẻ')
     assert.deepEqual(await state(() => window.sortSmoke.state.errors), [])
     console.log('PASS quản trị viên của group: cột ở bảng (tên mở trang cá nhân, SĐT, email, lý do khi Facebook không hiện), sheet "Admin group" trong file')
+
+    // Cách xem "Danh sách quản trị viên" (docs/FIND_DATA_GROUP_ADMIN_VIEW.md).
+    const groupsRadio = page.getByRole('radio', { name: 'Danh sách group' })
+    const adminsRadio = page.getByRole('radio', { name: 'Danh sách quản trị viên' })
+    assert.equal(await groupsRadio.isChecked(), true, 'mặc định xem theo group')
+    assert.equal(await adminsRadio.isDisabled(), false)
+    await state(() => { window.sortSmoke.state.adminDetails = 'multi' })
+    await page.getByText('Sort campaign 92', { exact: true }).first().click()
+    await page.getByText('Sort campaign 91', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr .find-data-admin-cell').first().waitFor()
+    await adminsRadio.check()
+    await page.locator('.find-data-admin-grid tbody tr').first().waitFor()
+    assert.equal(await page.locator('.find-data-export-options').count(), 0, 'xem theo quản trị viên thì ẩn ô chọn loại data')
+    assert.deepEqual(await tableHead(), ['Quản trị viên', 'UID', 'Số điện thoại', 'Email', 'Trang cá nhân', 'Group', 'Thành viên', 'Bài/ngày',
+      'Riêng tư', 'Tham gia', 'Từ khóa', 'Tài khoản', 'Thời gian'])
+    const adminRows = await state(() => [...document.querySelectorAll('.find-data-admin-grid tbody tr')]
+      .map(tr => [...tr.querySelectorAll('td')].slice(0, 11).map(td => td.innerText.trim())))
+    assert.deepEqual(adminRows, [
+      ['Căn hộ cho thuê', '100072022092879', '0903221229', 'canhodn43@gmail.com', 'Đã đọc', 'Có quản trị viên\nhttps://www.facebook.com/groups/admins-listed/', '137.000', '90+', 'Công khai', 'Chưa tham gia', 'đà nẵng, hội an'],
+      ['Trần Mỹ Trinh', '100044882776478', '-', '-', 'Đã đọc', 'Có quản trị viên\nhttps://www.facebook.com/groups/admins-listed/', '137.000', '90+', 'Công khai', 'Chưa tham gia', 'đà nẵng, hội an'],
+      ['Trần Mỹ Trinh', '100044882776478', '0912000111\n0912000222', '-', 'Đã đọc', 'Nhóm thứ hai\nhttps://www.facebook.com/groups/admins-second/', '4.200', '3', 'Riêng tư', 'Đã tham gia', 'hội an'],
+      ['Người chưa đọc', '100099900000001', '-', '-', 'Chưa đọc được', 'Nhóm thứ hai\nhttps://www.facebook.com/groups/admins-second/', '4.200', '3', 'Riêng tư', 'Đã tham gia', 'hội an']])
+    const summary = (await page.locator('.find-data-admin-summary').innerText()).replace(/\s+/g, ' ').trim()
+    assert.equal(summary, '4 dòng 3 quản trị viên 2 người có SĐT 1 người có email từ 2/4 group')
+    assert.equal((await note.innerText()).trim(),
+      'Không có trong danh sách: 1 group Facebook không hiện quản trị viên (group riêng tư mà tài khoản chưa tham gia); 1 group chưa đọc được trang quản trị viên.')
+    const adminExportButton = page.getByRole('button', { name: 'Xuất Excel danh sách quản trị viên', exact: true })
+    const exportsBefore = await state(() => window.sortSmoke.state.exports.length)
+    await adminExportButton.click()
+    await page.waitForFunction(count => window.sortSmoke.state.exports.length > count, exportsBefore)
+    const adminExport = await state(() => window.sortSmoke.state.exports.at(-1))
+    assert.match(adminExport.filename, /^found-group-admins-91-/)
+    const adminBook = XLSX.read(adminExport.bytes, { type: 'base64' })
+    assert.deepEqual(adminBook.SheetNames, ['Quản trị viên'])
+    const adminSheet = rows(adminBook, 'Quản trị viên')
+    assert.deepEqual(adminSheet[0], ['Tên quản trị viên', 'UID', 'Link trang cá nhân', 'Số điện thoại', 'Email', 'Đã đọc trang cá nhân',
+      'Tên group', 'Link group', 'Số thành viên', 'Số bài/ngày', 'Privacy', 'Trạng thái tham gia', 'Từ khóa', 'Tài khoản tìm', 'Thời gian tìm'])
+    assert.deepEqual(adminSheet.slice(1).map(row => row.slice(0, 13)), [
+      ['Căn hộ cho thuê', '100072022092879', 'https://www.facebook.com/canhodichvu43', '0903221229', 'canhodn43@gmail.com', 'Có', 'Có quản trị viên', 'https://www.facebook.com/groups/admins-listed/', 137000, 90, 'Công khai', 'Chưa tham gia', 'đà nẵng, hội an'],
+      ['Trần Mỹ Trinh', '100044882776478', 'https://www.facebook.com/profile.php?id=100044882776478', '', '', 'Có', 'Có quản trị viên', 'https://www.facebook.com/groups/admins-listed/', 137000, 90, 'Công khai', 'Chưa tham gia', 'đà nẵng, hội an'],
+      ['Trần Mỹ Trinh', '100044882776478', 'https://www.facebook.com/profile.php?id=100044882776478', '0912000111, 0912000222', '', 'Có', 'Nhóm thứ hai', 'https://www.facebook.com/groups/admins-second/', 4200, 3, 'Riêng tư', 'Đã tham gia', 'hội an'],
+      ['Người chưa đọc', '100099900000001', 'https://www.facebook.com/profile.php?id=100099900000001', '', '', 'Không', 'Nhóm thứ hai', 'https://www.facebook.com/groups/admins-second/', 4200, 3, 'Riêng tư', 'Đã tham gia', 'hội an']])
+    assert.ok(adminSheet.slice(1).every(row => row[13] === 'Sort account' && row[14]), 'tài khoản tìm, thời gian tìm')
+    // Quay lại cách xem group thì bảng cũ.
+    await groupsRadio.check()
+    await page.locator('.find-data-export-options').waitFor()
+    assert.equal(await page.locator('.find-data-admin-grid').count(), 0)
+    await adminsRadio.check()
+    await page.getByText('Sort campaign 92', { exact: true }).first().click()
+    await page.getByText('Sort campaign 91', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr').first().waitFor()
+    assert.equal(await groupsRadio.isChecked(), true, 'đổi chiến dịch thì về xem theo group')
+    // 3.500 quản trị viên: bảng vẽ 1.000 dòng đầu và báo, file Excel đủ.
+    await state(() => { window.sortSmoke.state.adminDetails = 'huge' })
+    await page.getByText('Sort campaign 92', { exact: true }).first().click()
+    await page.getByText('Sort campaign 91', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr').first().waitFor()
+    const hugeStart = Date.now()
+    await adminsRadio.check()
+    await page.locator('.find-data-admin-grid tbody tr').first().waitFor()
+    const hugeMs = Date.now() - hugeStart
+    assert.equal(await page.locator('.find-data-admin-grid tbody tr').count(), 1000)
+    assert.match(await note.innerText(), /Bảng hiện 1\.000 dòng đầu trong 3\.500 dòng; file Excel có đủ\./)
+    const hugeBefore = await state(() => window.sortSmoke.state.exports.length)
+    await adminExportButton.click()
+    await page.waitForFunction(count => window.sortSmoke.state.exports.length > count, hugeBefore)
+    const hugeBook = XLSX.read((await state(() => window.sortSmoke.state.exports.at(-1))).bytes, { type: 'base64' })
+    assert.equal(rows(hugeBook, 'Quản trị viên').length, 3501)
+    console.log(`PASS 3.500 quản trị viên: bảng 1.000 dòng (${hugeMs} ms từ lúc chọn), có câu báo, Excel đủ 3.500 dòng`)
+    await groupsRadio.check()
+    // Chiến dịch tìm bằng search không lấy quản trị viên: nút chọn thứ hai bị khoá.
+    await state(() => { window.sortSmoke.state.adminDetails = false })
+    await page.getByText('Sort campaign 92', { exact: true }).first().click()
+    await page.getByText('Sort campaign 91', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr').first().waitFor()
+    assert.equal(await adminsRadio.isDisabled(), true)
+    assert.match(await page.locator('.find-data-view-picker').innerText(), /không bật "Lấy thông tin quản trị viên của group"/)
+    // Chiến dịch tìm trong group: không có nút chọn.
+    await page.getByText('Sort campaign 92', { exact: true }).first().click()
+    await dataTab.click()
+    await page.locator('.find-data-result-grid tbody tr').first().waitFor()
+    assert.equal(await page.locator('.find-data-view-picker').count(), 0)
+    assert.deepEqual(await state(() => window.sortSmoke.state.errors), [])
+    console.log('PASS xem theo quản trị viên: radio mặc định group, bảng quản trị viên nối group, gộp group trùng giữa lượt, đếm người, ghi chú group thiếu, Excel một sheet đủ cột, đổi chiến dịch về group, khoá khi không lấy quản trị viên')
     console.log('PASS chỉ nhóm thì một sheet, chọn loại xuất, tắt hết thì khoá nút; tìm trong group: cột Link Facebook/Nguồn, mẫu Excel cũ giữ nguyên, không đọc log')
   } catch (error) {
     if (page) console.error(await page.evaluate(() => ({ errors: window.sortSmoke?.state.errors, text: document.body.innerText.slice(-1600) })))
