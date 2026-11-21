@@ -17,6 +17,7 @@ export const getAccountPlatformLabel = (
 ): string => {
   switch (account.flatformType) {
     case 'facebook': return 'Facebook'
+    case 'web': return 'Website'
     case 'zalo': return isZaloServerAccount(account)
       ? 'Zalo (web) - Chạy trên server'
       : isZaloWebAccount(account)

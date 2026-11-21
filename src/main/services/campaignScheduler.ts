@@ -104,6 +104,15 @@ import { DesktopEngineRunner } from '../engineAdapters/desktopEngineRunner'
 import { ENGINE_OBSERVATION_TTL_MS, engineWaitMessage, isEngineWaitingReason, type EngineClaimObservation } from '../engineAdapters/engineWaitReason'
 import { takeEngineContentIndex } from '../engineAdapters/desktopEngineData'
 import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters/facebook/desktopFacebookRunner'
+import type { DesktopWebHost, WebUnitSession } from '../engineAdapters/web/desktopWebRunner'
+import { webScanSleepSeconds } from '../engineAdapters/web/desktopWebRunner'
+import { runWebScanTarget, WEB_SCAN_BLOCK_NAMES, type WebBlockRun } from '../engineAdapters/web/webScanTarget'
+import { loadWebScanBlocks, loadWebScanSeen, recordWebScanSeen } from '../data/repositories/webScanRepository'
+import {
+  WEB_SCAN_DEFAULT_LIMITS, getWebScanSite, isWebAccountPlatform, isWebFindDataAction, normalizeWebScanCampaignSettings, webScanInfoValues,
+  type WebScanCampaignSettings, type WebScanRecord, type WebScanSite
+} from '../../shared/webScan'
+import { BlockExecutor } from '../v2/runtime/blockExecutor'
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
 import { monotonicNow } from '../../shared/monotonicNow'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
@@ -1146,7 +1155,8 @@ export class CampaignScheduler {
         if (result.ok && rewritten) return rewritten
         throw new Error(result.error || 'AI trả về nội dung không hợp lệ.')
       },
-      facebook: this.createFacebookEngineHost()
+      facebook: this.createFacebookEngineHost(),
+      web: this.createWebEngineHost()
     })
     if (this.runtimeTarget === 'desktop' && this.proxyRuntime) this.webEnrichment = new WebEnrichmentService({
       ready: account => this.running && !this.isAccountStartupPending?.(account)
@@ -1196,6 +1206,10 @@ export class CampaignScheduler {
     if (sourceCampaign.isDelete) return false
     const isFindDataGroup = sourceCampaign.actionId === FIND_DATA_GROUP_ACTION_ID
     const isFindDataSearch = sourceCampaign.actionId === FIND_DATA_SEARCH_ACTION_ID
+    // Quét data website (V618) chỉ ra SĐT, đẩy sang "Nhắn tin theo SĐT" như Tìm data Facebook.
+    if (isWebFindDataAction(sourceCampaign.actionId)) {
+      return targetField === 'findPhoneZaloMessagePhoneTargetCampaignIds' && sourceCampaign.extraSettings?.isFindPhone === true
+    }
     if (!isFindDataGroup && !isFindDataSearch) return false
 
     if (targetField === 'findUidTargetCampaignIds') return sourceCampaign.extraSettings?.isFindUid === true
@@ -1269,7 +1283,8 @@ export class CampaignScheduler {
       engineReason: (account, campaign) => {
         const observation = this.engineObservations.get(campaign.id)
         if (!observation || observation.accountId !== account.id) return null
-        const label = account.flatformType === 'facebook' ? 'Facebook' : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
+        const label = account.flatformType === 'facebook' ? 'Facebook' : isWebAccountPlatform(account.flatformType) ? 'Website'
+          : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
         return engineWaitMessage(observation, Date.now(), label)
       }
     }
@@ -2319,6 +2334,8 @@ export class CampaignScheduler {
       const engineSupport = this.engineRunner?.support(account, currentCampaign)
       // Danh mục engine Facebook đang nạp (ngay sau đăng nhập): chờ lượt quét sau, không để bộ cũ chạy chiến dịch của tổ chức đã bật engine.
       if (engineSupport && !engineSupport.ok && engineSupport.reason === 'catalog_loading') continue
+      // Tài khoản Website (quét data website, V618) không có bộ cũ: không chạy được bằng engine v2 thì bỏ qua, không gọi executeCampaign.
+      if (isWebAccountPlatform(account.flatformType) && !(this.engineRunner && engineSupport?.ok)) continue
       if (this.engineRunner && engineSupport?.ok) {
         this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
         let engineResult: Awaited<ReturnType<DesktopEngineRunner['run']>> = null
@@ -3917,7 +3934,7 @@ export class CampaignScheduler {
    */
   private async rememberEngineWait(account: AutoAccount, campaign: Campaign, result: { detail?: Record<string, unknown> }): Promise<void> {
     const platform = String(account.flatformType || '').trim().toLowerCase()
-    if (platform !== 'zalo' && platform !== 'facebook') return
+    if (platform !== 'zalo' && platform !== 'facebook' && platform !== 'web') return
     const claim = result.detail?.claim as { wait?: { until?: string | null } } | undefined
     const until = claim?.wait?.until ? Date.parse(claim.wait.until) : Number.NaN
     const waitMs = Number.isFinite(until) ? Math.min(until - Date.now(), PRECLAIM_LIMIT_RECHECK_MAX_MS) : PRECLAIM_LIMIT_RECHECK_MAX_MS
@@ -5818,6 +5835,155 @@ export class CampaignScheduler {
       sleepBetweenActionsSeconds: (account, campaign) => this.getEffectiveSleepBetweenActions(account, campaign.extraSettings?.actionLimits),
       openUnit: (account, campaign, signal) => this.openFacebookEngineUnit(account, campaign, signal)
     }
+  }
+
+  /** Quét data website (V618): tài khoản Website chạy bằng engine v2 khi tổ chức nằm trong web_scan.campaigns (chốt lúc đăng nhập). */
+  private createWebEngineHost(): DesktopWebHost {
+    return {
+      enabled: () => getCurrentUser()?.webScanEnabled === true,
+      limits: () => getCurrentUser()?.webScanLimits ?? WEB_SCAN_DEFAULT_LIMITS,
+      openUnit: (account, campaign, signal) => this.openWebEngineUnit(account, campaign, signal)
+    }
+  }
+
+  private async openWebEngineUnit(account: AutoAccount, campaign: Campaign, signal: AbortSignal): Promise<WebUnitSession> {
+    const issues: ConfigIssue[] = []
+    const site = getWebScanSite(campaign.actionId) as WebScanSite
+    const settings = normalizeWebScanCampaignSettings(campaign.extraSettings?.webScan, site)
+    let blocks = new Map<string, string>()
+    try {
+      blocks = await loadWebScanBlocks(WEB_SCAN_BLOCK_NAMES, signal)
+    } catch (error) {
+      console.error('[CampaignEngine] failed to load web scan blocks', { campaignId: campaign.id, error })
+    }
+    if (WEB_SCAN_BLOCK_NAMES.some(name => !blocks.has(name))) {
+      issues.push({ errorCode: 'err_system_block_load', publicCode: 'SYS03', scope: 'campaign', field: 'workflow',
+        message: 'Chưa tải được các bước quét data website, vui lòng thử lại sau' })
+    }
+    const sleepSeconds = webScanSleepSeconds(campaign, getCurrentUser()?.webScanLimits ?? WEB_SCAN_DEFAULT_LIMITS)
+    return {
+      issues,
+      runTarget: api => this.runWebEngineTarget(account, campaign, site, settings, blocks, sleepSeconds, api),
+      close: async () => { this.stopBackgroundPreview(account.id, campaign.id) }
+    }
+  }
+
+  /**
+   * Một từ khoá của chiến dịch quét data website: block "[engine] web_*" chạy trên trang chạy ngầm của tài khoản (cùng phiên trình duyệt
+   * với tab Trình duyệt, giữ UA thật của Electron vì Cloudflare của batdongsan chặn UA giả). Block treo (5 phút không thao tác nào) thì gỡ
+   * lời gọi đang chờ để block thoát, như engine Facebook.
+   */
+  private async runWebEngineTarget(account: AutoAccount, campaign: Campaign, site: WebScanSite, settings: WebScanCampaignSettings,
+    blocks: ReadonlyMap<string, string>, sleepSeconds: number, api: WorkflowTargetApi): Promise<WorkflowTargetEnd> {
+    const page = (await this.getAutomationPage(account, campaign.id)).page
+    if (!page) throw new Error('Không mở được trang chạy ngầm của tài khoản Website')
+    this.startBackgroundPreview(account.id, campaign.id, page)
+    const trace = new PageTrace()
+    const traced = tracePage(page, trace)
+    const executor = new BlockExecutor()
+    const hangMs = 5 * 60_000
+    const inputDataId = Number(api.target.id) > 0 ? Number(api.target.id) : null
+    const runBlock = async (name: string, input: Record<string, unknown>): Promise<WebBlockRun> => {
+      const code = blocks.get(name)
+      if (!code) return { ok: false, error: `Thiếu bước ${name}` }
+      trace.beginBlock()
+      const abort = new AbortController()
+      const onAbort = () => abort.abort(api.signal.reason)
+      api.signal.addEventListener('abort', onAbort, { once: true })
+      let hung = false
+      let lastTick = monotonicNow()
+      const timer = setInterval(() => {
+        const now = monotonicNow()
+        if (now - lastTick > 3 * 15_000) trace.touch()
+        lastTick = now
+        if (!hung && trace.idleFor(hangMs)) {
+          hung = true
+          try { this.backgroundPages.destroy(account.id) } catch { /* đã đóng */ }
+          trace.abandonPending('Trang web không phản hồi, đã đóng cửa sổ chạy ngầm')
+        } else if (!page.isConnected()) {
+          trace.abandonPending('Cửa sổ chạy ngầm đã đóng')
+        }
+      }, 15_000)
+      try {
+        const result = await executor.execute({ code, blockName: name, timeoutMs: 10 * 60_000 },
+          { input: { waitMs: 30_000, ...input }, page: traced, vars: { campaignId: campaign.id, inputDataId }, signal: abort.signal })
+        return result.success ? { ok: true, output: (result.output || {}) as Record<string, unknown> }
+          : { ok: false, error: result.error || 'Bước quét lỗi không rõ', ...(hung ? { hang: true } : {}) }
+      } finally {
+        clearInterval(timer)
+        api.signal.removeEventListener('abort', onAbort)
+      }
+    }
+    return runWebScanTarget({
+      api, site, settings, sleepSeconds, runBlock,
+      loadSeen: keys => loadWebScanSeen(campaign.id, site, keys, api.signal),
+      recordSeen: items => recordWebScanSeen(campaign.id, site, items, api.signal),
+      pushRecords: records => this.pushWebScanRecords(account, campaign, settings, inputDataId, api.targetRunId, records),
+      sleep: async ms => {
+        let left = ms
+        while (left > 0) {
+          if (api.signal.aborted || api.shouldStop()) return false
+          const chunk = Math.min(left, 500)
+          await new Promise(resolve => setTimeout(resolve, chunk))
+          left -= chunk
+        }
+        return !api.signal.aborted
+      }
+    })
+  }
+
+  /**
+   * Data vừa quét được của chiến dịch web: Nhóm data loại SĐT (Info1–5 theo lựa chọn, email, mọi trường đã chọn ở extraData) rồi chiến dịch
+   * "Nhắn tin theo SĐT" đã liên kết (đường đẩy V608 như Tìm data Facebook). Lỗi chỉ in cảnh báo, không đổi kết quả của từ khoá.
+   */
+  private async pushWebScanRecords(account: AutoAccount, campaign: Campaign, settings: WebScanCampaignSettings, inputDataId: number | null,
+    targetRunId: number, records: readonly WebScanRecord[]): Promise<void> {
+    if (records.length === 0) return
+    const destination = (campaign.extraSettings?.findDataTargetDataGroups as Record<string, { groupId?: unknown; groupName?: unknown }> | undefined)?.phone
+    const groupId = Number(destination?.groupId)
+    if (Number.isSafeInteger(groupId) && groupId > 0) {
+      const groupName = String(destination?.groupName || '').trim() || `Nhóm #${groupId}`
+      try {
+        const dataTypes = await this.retryFindDataTransient(() => this.supabase.listDataTypeCategoryItems())
+        const dataTypeCategoryItemId = dataTypes.find(item => item.code === 'phone')?.id
+        if (!dataTypeCategoryItemId) throw new Error('không tìm thấy loại dữ liệu SĐT')
+        const rows: DataGroupIngestRow[] = records.map(rec => ({
+          contactType: 'phone',
+          flatformType: null,
+          name: rec.name || rec.phone,
+          phone: rec.phone,
+          email: rec.email || null,
+          ...webScanInfoValues(rec, settings.infoMap),
+          extraData: {
+            sourceCampaignId: campaign.id, sourceCampaignActionId: campaign.actionId, sourceInputDataId: inputDataId,
+            site: rec.site, listingKey: rec.listingKey, link: rec.link, section: rec.section ?? null, reused: rec.reused === true, fields: rec.fields
+          }
+        }))
+        const payloadHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
+        const result = await this.retryFindDataTransient(() => this.supabase.ingestDataGroup({
+          requestId: ['web-scan', campaign.id, inputDataId ?? 'none', targetRunId, groupId, payloadHash.slice(0, 24), 'v1'].join(':'),
+          groupId,
+          kind: 'scan',
+          rows,
+          sourceAccountId: account.id,
+          sourceName: `Chiến dịch tìm data: ${campaign.name}`.slice(0, 255),
+          payloadHash,
+          dataTypeCategoryItemId: Number(dataTypeCategoryItemId)
+        }))
+        const added = result.insertedMembershipCount + result.reactivatedMembershipCount
+        const skipped = result.invalidCount + result.incompatibleCount + result.conflictCount
+        const detail = [`${added} mới`, result.alreadyMemberCount > 0 ? `${result.alreadyMemberCount} đã có` : '',
+          skipped > 0 ? `${skipped} không hợp lệ/không tương thích` : ''].filter(Boolean).join(' · ')
+        await this.logCampaignProgress(campaign, `✅ Đã đẩy ${rows.length} SĐT sang Nhóm data "${groupName}" (${detail}).`)
+      } catch (error) {
+        console.error(`Failed to push web scan phones to Data Group ${groupId}:`, error)
+        await this.logCampaignProgress(campaign, `⚠️ Không thể đẩy SĐT sang Nhóm data "${groupName}": ${getErrorMessage(error)}`)
+      }
+    }
+    const items = records.map(rec => ({ value: rec.phone, key: rec.phone, name: rec.name || null }))
+    const profiles: FindDataPhoneProfile[] = records.map(rec => ({ phone: rec.phone, name: rec.name, uid: '', url: rec.link, source: `web_scan:${rec.site}` }))
+    await this.pushFoundDataToLinkedCampaigns(campaign, 'phone', items, { sourceDetailId: null, sourceInputDataId: inputDataId },
+      () => this.pushFoundPhonesToZaloMessagePhoneCampaigns(campaign, records.map(rec => rec.phone), profiles))
   }
 
   /** createCampaignDetail của bộ dựng lịch sử: chiến dịch đang chạy bằng engine thì báo kết quả lên engine thay vì ghi thẳng DB. */

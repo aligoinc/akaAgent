@@ -1,4 +1,11 @@
 import type { AuthEntitlementFeature, AuthEntitlements, CampaignAction } from '../../../shared/types'
+import { isWebAccountPlatform, isWebFindDataAction, isWebScanActionCode } from '../../../shared/webScan'
+import { useAuthStore } from '../stores/authStore'
+
+/** Quét data website (V618): tổ chức bật web_scan.campaigns, chốt lúc đăng nhập (AuthUser.webScanEnabled); không theo gói. */
+export function isWebScanEnabled(): boolean {
+  return useAuthStore.getState().user?.webScanEnabled === true
+}
 
 const DEFAULT_DAILY_SEND_LIMITS: AuthEntitlements['dailySendLimits'] = {
   facebookCore: null,
@@ -121,6 +128,7 @@ export function canUsePlatform(
   platform: string | null | undefined,
   entitlements?: Partial<AuthEntitlements> | null
 ): boolean {
+  if (isWebAccountPlatform(platform)) return isWebScanEnabled()
   const normalized = normalizeEntitlements(entitlements)
   switch (String(platform || '').trim().toLowerCase()) {
     case 'email':
@@ -141,6 +149,7 @@ export function canUseCampaignAction(
   entitlements?: Partial<AuthEntitlements> | null
 ): boolean {
   if (!action) return false
+  if (isWebFindDataAction(action.id) || isWebAccountPlatform(action.flatformType)) return isWebScanEnabled()
   const normalized = normalizeEntitlements(entitlements)
   if (action.id === SMS_SEND_ACTION_ID || action.id === VOICE_CALL_ACTION_ID || action.flatformType === 'sms') return normalized.sms
   if (action.id === 'email_send' || action.flatformType === 'email') return normalized.email
@@ -188,6 +197,7 @@ export function getCampaignActionDailySendLimit(
   entitlements?: Partial<AuthEntitlements> | null
 ): number | null {
   if (!action) return null
+  if (isWebFindDataAction(action.id)) return useAuthStore.getState().user?.webScanLimits?.maxDaily ?? null
   return getFeatureDailySendLimit(entitlements, getCampaignActionFeature(action))
 }
 
@@ -198,6 +208,7 @@ export function getAccountActionDailySendLimit(
 ): number | null {
   const normalizedActionCode = String(actionCode || '').trim()
   if (normalizedActionCode === ZALO_FIND_PHONE_ACTION_CODE) return null
+  if (isWebScanActionCode(normalizedActionCode)) return useAuthStore.getState().user?.webScanLimits?.maxDaily ?? null
   return getFeatureDailySendLimit(entitlements, getAccountActionFeature(normalizedActionCode, flatformType))
 }
 

@@ -16,7 +16,8 @@ function load(file, imports = {}) {
 }
 
 const limitsModule = load('src/shared/accountActionLimits.ts')
-const descriptors = load('src/shared/campaignActionDescriptors.ts')
+const webScan = load('src/shared/webScan.ts')
+const descriptors = load('src/shared/campaignActionDescriptors.ts', { './webScan': webScan })
 const limitShared = load('src/shared/campaignLimitProgress.ts')
 const shared = load('src/shared/campaignAccountActions.ts')
 
@@ -55,9 +56,10 @@ const entitlementRepository = {
 const diagnostics = load('src/main/data/repositories/campaignDiagnosticsRepository.ts', {
   '../../../shared/accountActionLimits': limitsModule,
   '../supabaseClient': { getSupabaseClient: () => client },
-  '../currentUser': currentUser,
+  '../currentUser': { ...currentUser, getCurrentUser: () => user },
   '../mappers': { mapCampaignFromDB: row => row },
   '../../domain/campaigns/campaignActionDescriptors': descriptors,
+  '../../../shared/webScan': webScan,
   './entitlementRepository': entitlementRepository
 })
 const repo = load('src/main/data/repositories/campaignLimitProgressRepository.ts', {

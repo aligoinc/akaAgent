@@ -19,6 +19,7 @@ import { desktopEngineData, finishEngineCampaign } from './desktopEngineData'
 import { SqliteEngineJournal } from './desktopEngineJournal'
 import { createDesktopZaloPort } from './desktopZaloPort'
 import { facebookEngineSupport, facebookUnitConfig, type DesktopFacebookHost, type FacebookUnitSession } from './facebook/desktopFacebookRunner'
+import { isWebAccount, webEngineSupport, webUnitConfig, type DesktopWebHost, type WebUnitSession } from './web/desktopWebRunner'
 
 /** Lời gọi Zalo dài nhất của một bước: gửi chữ 90 giây (zaloRuntimeService), tra số tối đa 2 lần. */
 const STEP_TIMEOUT_MS = 150_000
@@ -71,6 +72,8 @@ export interface DesktopEngineHost {
   rewriteMessage(account: AutoAccount, campaign: Campaign, inputDataId: number | null, content: string): Promise<string>
   /** Chiến dịch Facebook (V556–V558): không có thì mọi chiến dịch FB chạy bộ cũ. */
   facebook?: DesktopFacebookHost
+  /** Quét data website (V618): tài khoản Website chỉ chạy bằng engine v2, không có bộ cũ. */
+  web?: DesktopWebHost
 }
 
 function toCoreCampaign(campaign: Campaign): ZaloCampaign {
@@ -102,12 +105,15 @@ export class DesktopEngineRunner {
   private readonly runnerId = `desktop:${randomUUID()}`
   /** Chiến dịch FB mà claim trả not_enabled (tắt khẩn cấp engine.facebook): chạy bộ cũ tới hết phiên. */
   private readonly facebookDisabled = new Set<number>()
+  /** Chiến dịch web mà claim trả not_enabled (tổ chức vừa bị tắt web_scan.campaigns): không chạy tới hết phiên. */
+  private readonly webDisabled = new Set<number>()
 
   constructor(private readonly host: DesktopEngineHost) {}
 
   /** Chiến dịch có chạy bằng bộ mới ở bản cài này không. */
   support(account: AutoAccount, campaign: Campaign): V2Support {
     if (isFacebookAccount(account)) return facebookEngineSupport(this.host.facebook, this.facebookDisabled, account, campaign)
+    if (isWebAccount(account)) return webEngineSupport(this.host.web, this.webDisabled, account, campaign)
     // Công tắc theo tổ chức (V513): cờ tắt, chưa đọc được hay DB chưa có hàm thì chạy bộ cũ như bản chưa có engine v2.
     // Cờ chốt lúc đăng nhập, nên không đổi bộ chạy giữa lúc chiến dịch đang chạy dở.
     if (!this.host.engineEnabled()) return { ok: false, reason: 'org_flag_off' }
@@ -134,6 +140,7 @@ export class DesktopEngineRunner {
 
   async run(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
     if (isFacebookAccount(account)) return this.runFacebook(account, campaign)
+    if (isWebAccount(account)) return this.runWeb(account, campaign)
     const zaloRuntime = this.host.zaloRuntime()
     const staffId = this.host.staffId()
     if (!zaloRuntime || !staffId || this.host.zaloRuntimeBlocked() || this.runs.has(account.id)) return null
@@ -321,6 +328,77 @@ export class DesktopEngineRunner {
       await this.host.broadcastCampaign(campaign.id).catch(() => undefined)
       this.host.broadcastAccounts()
       if (result) console.info('[CampaignEngine] Facebook unit ended', { campaignId: campaign.id, accountId: account.id, reason: result.reason, targets: result.targets })
+    }
+  }
+
+  /**
+   * Chiến dịch quét data website: lõi chạy chế độ workflow, phiên của bộ lập lịch chạy từng từ khoá (trang chạy ngầm của tài khoản Website,
+   * block "[engine] web_*" của DB). Mỗi tài khoản một lượt; tạm dừng giữa từ khoá thì từ khoá về hàng đợi sau lần mở trang đang chạy.
+   */
+  private async runWeb(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
+    const web = this.host.web
+    const staffId = this.host.staffId()
+    if (!web || !staffId || this.runs.has(account.id)) return null
+    const controller = new AbortController()
+    this.runs.set(account.id, controller)
+    let progress: Promise<void> = Promise.resolve()
+    const log = (text: string): void => {
+      progress = progress.then(() => this.host.logProgress(campaign, text)).catch(error => {
+        console.error('[CampaignEngine] failed to log progress', { campaignId: campaign.id, error })
+      })
+    }
+    const trace = (event: { type: string; [key: string]: unknown }): void => {
+      if (event.type === 'unit_started') {
+        progress = progress.then(async () => {
+          await this.host.broadcastCampaign(campaign.id)
+          this.host.broadcastAccounts()
+        }).catch(() => undefined)
+        return
+      }
+      if (/failed|error|lost|rejected|refused/.test(event.type)) console.warn('[CampaignEngine]', { campaignId: campaign.id, accountId: account.id, ...event })
+    }
+    let session: WebUnitSession | null = null
+    let result: UnitResult | null = null
+    try {
+      session = await web.openUnit(account, campaign, controller.signal)
+      result = await runUnit({
+        data: desktopEngineData,
+        journal: new SqliteEngineJournal(`${staffId}:${account.id}`),
+        clock: systemClock,
+        events: { progress: line => log(line.text), trace }
+      }, {
+        runnerId: this.runnerId,
+        runtimeTarget: 'desktop',
+        staffId,
+        accountId: account.id,
+        campaignId: campaign.id,
+        actionId: campaign.actionId,
+        campaignName: campaign.name,
+        accountName: account.name,
+        campaignNote: campaign.note ?? null,
+        ...webUnitConfig(campaign, session, web.limits()),
+        stepTimeoutMs: STEP_TIMEOUT_MS,
+        heartbeatMs: HEARTBEAT_MS,
+        retry: DEFAULT_RETRY,
+        drainTimeoutMs: DRAIN_TIMEOUT_MS,
+        onNoTarget: (info, signal) => this.onNoTarget(account, campaign, info, signal),
+        formatTime: formatVietnamTime,
+        shouldStopAfterTarget: () => !this.host.acceptingWork() || this.host.isPauseRequested(campaign.id)
+      }, controller.signal)
+      if (result.reason === 'not_enabled') this.webDisabled.add(campaign.id)
+      return result
+    } finally {
+      this.runs.delete(account.id)
+      if (session) await session.close().catch(error => console.error('[CampaignEngine] failed to close web unit', { campaignId: campaign.id, error }))
+      await progress
+      if (result && this.host.isPauseRequested(campaign.id)) {
+        await this.host.completeReleasedPause(campaign).catch(error => {
+          console.error('[CampaignEngine] failed to complete pause', { campaignId: campaign.id, error })
+        })
+      }
+      await this.host.broadcastCampaign(campaign.id).catch(() => undefined)
+      this.host.broadcastAccounts()
+      if (result) console.info('[CampaignEngine] web unit ended', { campaignId: campaign.id, accountId: account.id, reason: result.reason, targets: result.targets })
     }
   }
 }

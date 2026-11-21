@@ -43,7 +43,7 @@ const MAX_TEXT = 200
 
 /** Tên thao tác ghi trong vết theo method của PageController (chỉ các method này được ghi). */
 export const PAGE_TRACE_OPS: Readonly<Record<string, string>> = {
-  navigate: 'navigate', reload: 'reload', goBack: 'back', goForward: 'forward', waitForNavigation: 'waitNav',
+  navigate: 'navigate', open: 'navigate', reload: 'reload', goBack: 'back', goForward: 'forward', waitForNavigation: 'waitNav',
   waitForSelector: 'wait', $: 'query', $$: 'queryAll', click: 'click', type: 'type', focus: 'focus', paste: 'paste',
   insertText: 'insertText', fill: 'fill', hover: 'hover', press: 'press', scroll: 'scroll', select: 'select',
   getText: 'getText', getValue: 'getValue', getAttribute: 'getAttribute', screenshot: 'screenshot', evaluate: 'evaluate',

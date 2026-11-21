@@ -185,9 +185,10 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
   const hasZaloServerAccounts = accounts.some(isZaloServerAccount)
   const serverOperationState = useZaloServerOperationState(hasZaloServerAccounts)
   const canUseEmailFeature = canUsePlatform('email', entitlements)
+  const canUseWebAccount = authUser?.webScanEnabled === true
   const allowedAccountPlatforms = useMemo(
-    () => ['facebook', 'zalo', 'email'].filter(platform => canUsePlatform(platform, entitlements)),
-    [entitlements]
+    () => ['facebook', 'zalo', 'email', 'web'].filter(platform => canUsePlatform(platform, entitlements)),
+    [entitlements, authUser?.webScanEnabled]
   )
   const defaultAccountPlatform = getFirstAllowedPlatform(entitlements)
   const [showForm, setShowForm] = useState(false)
@@ -610,6 +611,10 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
       }
       if (formData.flatformType === 'facebook' && !canUseFacebookAccount) {
         useUiStore.getState().showAlert('Tính năng Facebook chưa được kích hoạt hoặc đã hết hạn.', 'error')
+        return
+      }
+      if (formData.flatformType === 'web' && !canUseWebAccount) {
+        useUiStore.getState().showAlert('Tính năng này chưa được kích hoạt hoặc đã hết hạn.', 'error')
         return
       }
 
@@ -1185,7 +1190,16 @@ export default function AccountPanel({ editAccountRequest, onAccountFormClosed, 
                     {(!editingAccount || editingAccount.flatformType === 'email') && canUseEmailFeature && (
                       <option value="email">Email</option>
                     )}
+                    {(!editingAccount || editingAccount.flatformType === 'web') && canUseWebAccount && (
+                      <option value="web">Website</option>
+                    )}
                   </select>
+                  {formAccountType === 'web' && (
+                    <div className="account-form-hint">
+                      Tài khoản Website là một trình duyệt riêng để quét data từ batdongsan, Trang Vàng, nhatot. Không cần đăng nhập. Muốn lấy SĐT
+                      batdongsan thì mở trình duyệt của tài khoản này và đăng nhập batdongsan.
+                    </div>
+                  )}
                 </div>
 
                 <div className="stepper-form-group">

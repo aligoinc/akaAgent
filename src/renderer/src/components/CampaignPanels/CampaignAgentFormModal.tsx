@@ -228,14 +228,16 @@ const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
   facebook: 0,
   zalo: 1,
   email: 2,
-  sms: 3
+  sms: 3,
+  web: 4
 }
 
 const CAMPAIGN_ACTION_PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   zalo: 'Zalo',
   email: 'Email',
-  sms: 'SMS'
+  sms: 'SMS',
+  web: 'Website'
 }
 
 const CAMPAIGN_DETAILS_PAGE_SIZE = 100
@@ -2864,6 +2866,8 @@ export default function CampaignAgentFormModal({
   const availableCampaignActions = useMemo(
     () => campaignActions
       .filter(action => canUseCampaignAction(action, entitlements))
+      // Quét data website (V618): đợt đầu không tạo bằng form AI (anh chốt 21/11/2026, phương án mục 7.7).
+      .filter(action => String(action.flatformType || '').trim().toLowerCase() !== 'web')
       .filter(action => canUseZaloQrAccount || action.id !== ZALO_MESSAGE_GROUP_REALTIME_ACTION_ID)
       .sort(compareCampaignActionsByPlatform),
     [campaignActions, canUseZaloQrAccount, entitlements]

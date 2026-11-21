@@ -184,6 +184,11 @@ import {
   resolveContentTemplate
 } from './contentTemplateCampaignUtils'
 import type { ContentTemplateGroupCandidate } from './contentTemplateCampaignUtils'
+import { WebScanFieldSettings, WebScanKeywordInput, WebScanSearchSettings, formatWebScanKeywordRows, invalidWebScanLinks, parseWebScanKeywordRows } from './WebScanFormSections'
+import {
+  WEB_SCAN_DEFAULT_LIMITS, clampWebScanSleepSeconds, defaultWebScanCampaignSettings, getWebScanSite, isWebScanActionCode,
+  normalizeWebScanCampaignSettings, type WebScanCampaignSettings
+} from '../../../../shared/webScan'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -215,14 +220,16 @@ const CAMPAIGN_ACTION_PLATFORM_ORDER: Record<string, number> = {
   facebook: 0,
   zalo: 1,
   email: 2,
-  sms: 3
+  sms: 3,
+  web: 4
 }
 
 const CAMPAIGN_ACTION_PLATFORM_LABELS: Record<string, string> = {
   facebook: 'Facebook',
   zalo: 'Zalo',
   email: 'Email',
-  sms: 'SMS'
+  sms: 'SMS',
+  web: 'Website'
 }
 
 const CAMPAIGN_DETAILS_PAGE_SIZE = 100
@@ -688,7 +695,14 @@ const getDefaultActionLimitForCode = (
   actionCode: string,
   fallback: ActionLimitForm
 ): ActionLimitForm => (
-  actionCode === ZALO_FIND_PHONE_ACTION_CODE
+  isWebScanActionCode(actionCode)
+    ? {
+      ...fallback,
+      dailyLimit: WEB_SCAN_DEFAULT_LIMITS.defaultDaily,
+      rateLimitCount: WEB_SCAN_DEFAULT_LIMITS.defaultDaily,
+      rateLimitMinutes: 60
+    }
+    : actionCode === ZALO_FIND_PHONE_ACTION_CODE
     ? {
       ...fallback,
       dailyLimit: ZALO_FIND_PHONE_DEFAULT_LIMIT,
@@ -1703,6 +1717,12 @@ const COMMENT_POST_SEARCH_STEP: StepDef = {
   fields: [{ key: 'commentPostSearchConditions', label: 'Điều kiện bài viết' }]
 }
 
+const WEB_SCAN_FIELDS_STEP: StepDef = {
+  id: 'webScanFields',
+  title: 'Thông tin lấy thêm',
+  fields: [{ key: 'webScanFields', label: 'Trường lấy thêm' }]
+}
+
 const FOUND_DATA_HANDLING_STEP: StepDef = {
   id: 'foundDataHandling',
   title: 'Xử lý data tìm được',
@@ -1877,8 +1897,10 @@ export default function CampaignFormModal({
     : rawInitialActionId
   const initialIsZaloFriendRecommendationCampaign = initialActionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   const initialIsFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(initialActionId)
+  const initialWebScanSite = getWebScanSite(initialActionId)
   const initialSleepBetweenActions = campaign?.extraSettings?.actionLimits?.sleepBetweenActions
-    ?? (initialActionId === SMS_SEND_ACTION_ID ? DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS : DEFAULT_SLEEP_BETWEEN_ACTIONS)
+    ?? (initialWebScanSite ? WEB_SCAN_DEFAULT_LIMITS.defaultSleepSeconds
+      : initialActionId === SMS_SEND_ACTION_ID ? DEFAULT_SMS_SLEEP_BETWEEN_ACTIONS : DEFAULT_SLEEP_BETWEEN_ACTIONS)
   const hasSavedContinueWhenActionLimitReached = typeof campaign?.extraSettings?.actionLimits?.continueWhenActionLimitReached === 'boolean'
   const initialContinueWhenActionLimitReached = campaign
     ? (hasSavedContinueWhenActionLimitReached ? campaign.extraSettings?.actionLimits?.continueWhenActionLimitReached === true : false)
@@ -1888,7 +1910,7 @@ export default function CampaignFormModal({
     draftRequiredTargetField === 'findFacebookGroupCommentTargetCampaignIds' ||
     draftRequiredTargetField === 'findFacebookGroupJoinTargetCampaignIds'
   const initialFindDataFlags = normalizeFindDataFlagState({
-    isFindPhone: campaign?.extraSettings?.isFindPhone ?? false,
+    isFindPhone: initialWebScanSite ? true : (campaign?.extraSettings?.isFindPhone ?? false),
     isFindLinkGroupZalo: campaign?.extraSettings?.isFindLinkGroupZalo ?? false,
     isFindUid: draftRequiredTargetField === 'findUidTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindUid ?? false),
     isFindPostLink: draftRequiredTargetField === 'findPostLinkTargetCampaignIds' ? true : (campaign?.extraSettings?.isFindPostLink ?? false),
@@ -2196,7 +2218,8 @@ export default function CampaignFormModal({
     findFacebookGroupJoinTargetCampaignIds: campaign?.extraSettings?.findFacebookGroupJoinTargetCampaignIds || [] as number[],
     findDataTargetDataGroups: {
       ...(campaign?.extraSettings?.findDataTargetDataGroups || {})
-    } as FindDataTargetDataGroups
+    } as FindDataTargetDataGroups,
+    webScan: (initialWebScanSite ? normalizeWebScanCampaignSettings(campaign?.extraSettings?.webScan, initialWebScanSite) : null) as WebScanCampaignSettings | null
   })
   const [preservedScheduleSnapshot] = useState(() => draftPayload ? draftPayload.preservedSchedule
     : preserveCampaignSchedule(formData, cloneFromId ? undefined : campaign?.schedule, campaign?.scheduleEndDate))
@@ -2623,6 +2646,10 @@ export default function CampaignFormModal({
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
   const isFindDataCampaign = isFindDataGroupCampaign || isFindDataSearchCampaign
+  // Quét data website (V618): ba loại Tìm data của nhatot / batdongsan / Trang Vàng, form riêng (không dùng các phần của Tìm data Facebook).
+  const webScanSite = getWebScanSite(formData.actionId)
+  const isWebFindDataCampaign = webScanSite !== null
+  const webScanSettings = webScanSite ? (formData.webScan?.site === webScanSite ? formData.webScan : defaultWebScanCampaignSettings(webScanSite)) : null
   const isCommentSeedingCampaign = COMMENT_SEEDING_ACTIONS.has(formData.actionId)
   const isCommentSeedingFeedCampaign = COMMENT_SEEDING_FEED_ACTIONS.has(formData.actionId)
   const isCommentSeedingPostCampaign = COMMENT_SEEDING_POST_ACTIONS.has(formData.actionId)
@@ -2634,7 +2661,7 @@ export default function CampaignFormModal({
       : formData.actionId.startsWith('facebook_') && !(isPagePostCampaign && formData.pagePostMode === 'api')
         ? 'image-video'
         : 'image'
-  const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
+  const canUseRerunAfterCompletion = isFindDataCampaign || isWebFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
   const canUseSleepBetweenActions = formData.actionId !== 'facebook_timeline_post' && !isNewsfeedInteractionCampaign && !isFacebookGroupInviteCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
   const isSavedDataGroupIdentityLocked = isEditingSavedCampaign && campaign?.dataTargetSourceMode === 'data_group'
@@ -2693,7 +2720,7 @@ export default function CampaignFormModal({
     formData.isFindUid ||
     formData.isFindPostLink ||
     formData.isFindFacebookGroup
-  )
+  ) || isWebFindDataCampaign
   const hasFindDataTargetSelection = showFoundDataHandlingSection
   const findDataGoalOptions = getAvailableFindDataGoalOptions(formData)
   const effectiveFindDataGoalPriority = normalizeFindDataGoalPriority(formData, formData.findDataGoalPriority)
@@ -2740,6 +2767,7 @@ export default function CampaignFormModal({
   const hasSourceContentAiPrompt = formData.sourceContentAiPrompt.trim().length > 0
   const requiresMainContentOrMedia =
     !isFindDataCampaign &&
+    !isWebFindDataCampaign &&
     !isCommentSeedingCampaign &&
     !isNewsfeedInteractionCampaign &&
     !isUsingSourceContent &&
@@ -2756,6 +2784,7 @@ export default function CampaignFormModal({
     !isZaloCancelSentFriendRequestCampaign
   const canShowContentSection =
     !isFindDataCampaign &&
+    !isWebFindDataCampaign &&
     !isNewsfeedInteractionCampaign &&
     !isFacebookJoinGroupCampaign &&
     !isFacebookGroupInviteCampaign &&
@@ -2888,7 +2917,7 @@ export default function CampaignFormModal({
   const showPostBumpVideoWarning = formData.enablePostBump && (isAdvancedContentMode
     ? advancedContentDisplayItems.some(item => item.mediaOption !== 'none' && campaignMediaHasVideo(item.mediaItems || []))
     : formData.imageOption !== 'none' && campaignMediaHasVideo(formData.images))
-  const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
+  const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign || isWebFindDataCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
       ? (isEditingSavedCampaign ? 4 : 5)
@@ -3156,10 +3185,17 @@ export default function CampaignFormModal({
       const compatibleState = shouldConvertRichContentToPlain
         ? convertFormattedStateToPlain(prev)
         : prev
+      const nextWebSite = getWebScanSite(actionId)
       return {
         ...compatibleState,
         actionId,
         accountIds: getAccountIdsForPlatform(prev.accountIds, nextPlatform || selectedActionPlatformFilter, actionId),
+        // Quét data website: chỉ ra SĐT (đẩy Nhóm data loại SĐT / chiến dịch "Nhắn tin theo SĐT"), nghỉ mặc định 15 giây.
+        ...(nextWebSite && actionChanged ? {
+          webScan: prev.webScan?.site === nextWebSite ? prev.webScan : defaultWebScanCampaignSettings(nextWebSite),
+          isFindPhone: true, isFindLinkGroupZalo: false, isFindUid: false, isFindPostLink: false, isFindFacebookGroup: false,
+          sleepBetweenActions: WEB_SCAN_DEFAULT_LIMITS.defaultSleepSeconds
+        } : {}),
         ...([SMS_SEND_ACTION_ID, VOICE_CALL_ACTION_ID].includes(actionId)
         ? {
           imageOption: 'none' as const,
@@ -3724,6 +3760,18 @@ export default function CampaignFormModal({
         ? withPostSearch.flatMap(s => s.id === 'details' ? [findDataSourceStep, s] : [s])
         : withPostSearch
     }
+    if (isWebFindDataCampaign) {
+      const baseScheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
+      return [
+        ALL_STEPS.find(s => s.id === 'general')!,
+        { ...ALL_STEPS.find(s => s.id === 'content')!, title: 'Cấu hình tìm kiếm', fields: [{ key: 'webScanSearch', label: 'Cách tìm' }] },
+        WEB_SCAN_FIELDS_STEP,
+        { ...ALL_STEPS.find(s => s.id === 'details')!, title: 'Danh sách từ khoá', fields: [{ key: 'details', label: 'Từ khoá' }] },
+        FOUND_DATA_HANDLING_STEP,
+        { ...baseScheduleStep, fields: [...baseScheduleStep.fields, { key: 'findDataRerun', label: 'Chạy lại sau mỗi' }] },
+        ALL_STEPS.find(s => s.id === 'limits')!
+      ]
+    }
     if (isFindDataCampaign) {
       const generalStep = ALL_STEPS.find(s => s.id === 'general')!
       const baseScheduleStep = ALL_STEPS.find(s => s.id === 'schedule')!
@@ -4039,7 +4087,18 @@ export default function CampaignFormModal({
     () => buildFindDataSearchKeywordRows(findDataSearchKeywordsText),
     [findDataSearchKeywordsText]
   )
-  const detailEntryCount = isFindDataSearchCampaign && !isEditingSavedCampaign
+  const [webScanKeywordsText, setWebScanKeywordsText] = useCampaignDraftField(draftPayload, draftValuesRef, 'webScanKeywordsText', () =>
+    initialWebScanSite ? formatWebScanKeywordRows(normalizeInitialDetails(initialDetails)) : ''
+  )
+  const webScanKeywordRows = useMemo<Partial<CampaignInputData>[]>(
+    () => webScanSite
+      ? parseWebScanKeywordRows(webScanSite, webScanKeywordsText).map(row => ({ name: row.name, phone: '', uid: row.uid, email: '', note: '', status: 'chờ xử lý' }))
+      : [],
+    [webScanSite, webScanKeywordsText]
+  )
+  const detailEntryCount = isWebFindDataCampaign && !isEditingSavedCampaign
+    ? webScanKeywordRows.length
+    : isFindDataSearchCampaign && !isEditingSavedCampaign
     ? findDataSearchKeywordRows.length
     : details.length
   const directDataSourceSelectionCount = detailEntryCount + directDataGroupSnapshots.length
@@ -4976,6 +5035,7 @@ export default function CampaignFormModal({
         if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
           setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(normalizedDetails))
         }
+        if (getWebScanSite(formData.actionId)) setWebScanKeywordsText(formatWebScanKeywordRows(normalizedDetails))
         setDeletedIds([])
         return
       }
@@ -4991,11 +5051,13 @@ export default function CampaignFormModal({
             if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
               setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(clonedDetails))
             }
+            if (getWebScanSite(formData.actionId)) setWebScanKeywordsText(formatWebScanKeywordRows(clonedDetails))
           } else {
             setDetails(existingDetails)
             if (FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)) {
               setFindDataSearchKeywordsText(formatFindDataSearchKeywordsText(existingDetails))
             }
+            if (getWebScanSite(formData.actionId)) setWebScanKeywordsText(formatWebScanKeywordRows(existingDetails))
             setDeletedIds([])
           }
         } catch (err) {
@@ -5088,6 +5150,8 @@ export default function CampaignFormModal({
       case 'findDataTargets': return formData.isFindPhone || formData.isFindLinkGroupZalo || formData.isFindUid || formData.isFindPostLink || formData.isFindFacebookGroup
       case 'foundDataHandling': return true
       case 'findDataSources': return true
+      case 'webScanSearch': return true
+      case 'webScanFields': return true
       case 'messageActions':
         if (isZaloCancelSentFriendRequestCampaign) {
           return normalizeZaloCancelFriendRequestLimit(formData.zaloCancelFriendRequestLimit) >= 1
@@ -6393,7 +6457,7 @@ export default function CampaignFormModal({
       const saveFindDataGoalPriority = formData.findDataGoalModeEnabled
         ? normalizeFindDataGoalPriority(normalizedFindData, formData.findDataGoalPriority) || undefined
         : undefined
-      const saveFindDataTargetDataGroups = isFindDataCampaign
+      const saveFindDataTargetDataGroups = isFindDataCampaign || isWebFindDataCampaign
         ? getFindDataTargetDataGroupsForSave(
           formData.findDataTargetDataGroups,
           normalizedFindData,
@@ -6611,7 +6675,9 @@ export default function CampaignFormModal({
               ? formData.newsfeedMessageRequestRules.map(rule => ({ ...rule }))
               : undefined,
             actionLimits: {
-              sleepBetweenActions: formData.sleepBetweenActions,
+              sleepBetweenActions: isWebFindDataCampaign
+                ? clampWebScanSleepSeconds(formData.sleepBetweenActions, authUser?.webScanLimits ?? WEB_SCAN_DEFAULT_LIMITS)
+                : formData.sleepBetweenActions,
               enabledActionCodes,
               dailyLimit: clampDailyLimitToEntitlement(formData.dailyLimit, campaignDailyLimitCap),
               rateLimitCount: formData.rateLimitCount,
@@ -6763,8 +6829,10 @@ export default function CampaignFormModal({
             sourceLinkIndex: cloneFromId ? 0 : (campaign?.extraSettings?.sourceLinkIndex ?? 0),
             contentRotationIndex: cloneFromId ? 0 : (campaign?.extraSettings?.contentRotationIndex ?? 0),
             pagePostMode: formData.pagePostMode,
-            isFindPhone: normalizedFindData.isFindPhone,
+            isFindPhone: isWebFindDataCampaign ? true : normalizedFindData.isFindPhone,
             isFindLinkGroupZalo: normalizedFindData.isFindLinkGroupZalo,
+            // Quét data website (V618): cài đặt của loại chiến dịch (trang, tỉnh, số trang, trường lấy thêm, Info1–5).
+            webScan: isWebFindDataCampaign && webScanSettings ? webScanSettings : undefined,
             isFindUid: normalizedFindData.isFindUid,
             isFindPostLink: normalizedFindData.isFindPostLink,
             isFindFacebookGroup: isFindDataSearchCampaign ? normalizedFindData.isFindFacebookGroup : false,
@@ -7351,7 +7419,16 @@ export default function CampaignFormModal({
         return
       }
     }
-    const detailRowsForSave = isFindDataSearchCampaign && !isEditingSavedCampaign
+    if (isWebFindDataCampaign && webScanSite && !isEditingSavedCampaign) {
+      const badLinks = invalidWebScanLinks(webScanSite, webScanKeywordsText)
+      if (badLinks.length > 0) {
+        showAlert(`Link không phải trang ngành / trang tìm kiếm của Trang Vàng: ${badLinks.slice(0, 3).join(', ')}`, 'error')
+        return
+      }
+    }
+    const detailRowsForSave = isWebFindDataCampaign && !isEditingSavedCampaign
+      ? webScanKeywordRows
+      : isFindDataSearchCampaign && !isEditingSavedCampaign
       ? findDataSearchKeywordRows
       : details
     const normalizedDetails = isEditingSavedCampaign ? details : normalizeCampaignInputDataForSave(detailRowsForSave)
@@ -16089,13 +16166,13 @@ export default function CampaignFormModal({
       return (
         <tr key={d.id || `new-${i}`}>
         <td className="campaign-grid-index-col">{i + 1}</td>
-        {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
+        {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign || isWebFindDataCampaign ? (
           <td>
             <input
               type="text"
               value={d.uid || ''}
               onChange={e => updateDetailRow(i, 'uid', e.target.value)}
-              placeholder={isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isFacebookJoinGroupCampaign ? 'Dán link hoặc UID group...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
+              placeholder={isWebFindDataCampaign ? 'Từ khoá' : isFindDataSearchCampaign ? 'Nhập từ khóa search...' : isFacebookJoinGroupCampaign ? 'Dán link hoặc UID group...' : isZaloJoinGroupLinkCampaign ? 'Dán link group Zalo...' : 'Dán link bài post...'}
               disabled={isEditingSavedCampaign}
             />
           </td>
@@ -16485,6 +16562,52 @@ export default function CampaignFormModal({
               </div>
             )}
 
+            {isWebFindDataCampaign && webScanSite && webScanSettings && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['content'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('content')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('content')}</span>
+                    <span className="stepper-section-title">Cấu hình tìm kiếm</span>
+                  </div>
+                  {collapsedSections['content'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['content'] && (
+                  <div className="stepper-section-body">
+                    <WebScanSearchSettings site={webScanSite} settings={webScanSettings} onChange={next => setFormData(p => ({ ...p, webScan: next }))} />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {isWebFindDataCampaign && webScanSite && webScanSettings && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['webScanFields'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('webScanFields')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('webScanFields')}</span>
+                    <span className="stepper-section-title">Thông tin lấy thêm</span>
+                  </div>
+                  {collapsedSections['webScanFields'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['webScanFields'] && (
+                  <div className="stepper-section-body">
+                    <WebScanFieldSettings site={webScanSite} settings={webScanSettings} onChange={next => setFormData(p => ({ ...p, webScan: next }))} />
+                  </div>
+                )}
+              </div>
+            )}
+
             {showFindDataConditionsSection && (
               <div
                 className="stepper-section"
@@ -16718,7 +16841,7 @@ export default function CampaignFormModal({
                 <div className="stepper-section-header-left">
                   <span className="stepper-section-num">{getSectionNumber('details')}</span>
                   <span className="stepper-section-title">
-                    {isFindDataSearchCampaign
+                    {isFindDataSearchCampaign || isWebFindDataCampaign
                       ? 'Danh sách từ khóa'
                       : isFindDataGroupCampaign
                         ? 'Danh sách group'
@@ -17095,7 +17218,9 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
-                  {isFindDataSearchCampaign && !isEditingSavedCampaign ? (
+                  {isWebFindDataCampaign && webScanSite && !isEditingSavedCampaign ? (
+                    <WebScanKeywordInput site={webScanSite} value={webScanKeywordsText} onChange={setWebScanKeywordsText} />
+                  ) : isFindDataSearchCampaign && !isEditingSavedCampaign ? (
                     <div className="stepper-form-group">
                       <label>Từ khóa search</label>
                       <textarea
@@ -17111,10 +17236,10 @@ export default function CampaignFormModal({
                       <div className="stepper-grid-container">
                         <table className="campaign-grid">
                           <thead>
-                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign ? (
+                          {isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign || isWebFindDataCampaign ? (
                             <tr>
                               <th className="campaign-grid-index-col">STT</th>
-                              <th>{isFindDataSearchCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
+                              <th>{isFindDataSearchCampaign || isWebFindDataCampaign ? 'Từ khóa' : isFacebookJoinGroupCampaign ? 'Group URL/UID' : isZaloJoinGroupLinkCampaign ? 'Link group Zalo' : 'Link bài post'}</th>
                               {!isEditingSavedCampaign && <th style={{ width: 40 }}></th>}
                             </tr>
                           ) : isPagePostCampaign ? (
@@ -17756,7 +17881,7 @@ export default function CampaignFormModal({
                     {canUseSleepBetweenActions && (
                       <div className="stepper-form-row">
                         <div className="stepper-form-group" style={{ maxWidth: 340 }}>
-                          <label>Thời gian nghỉ giữa 2 lần gửi</label>
+                          <label>{isWebFindDataCampaign ? `Nghỉ giữa 2 lần mở trang / bấm hiện số (thấp nhất ${authUser?.webScanLimits?.minSleepSeconds ?? WEB_SCAN_DEFAULT_LIMITS.minSleepSeconds} giây)` : 'Thời gian nghỉ giữa 2 lần gửi'}</label>
                           <div className="stepper-input-unit-wrap">
                             <input
                               type="number"

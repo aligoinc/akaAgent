@@ -15,6 +15,7 @@ import type {
 } from '../../../../shared/types'
 import { renderContentSpinMax, splitContentVariants } from '../../../../shared/contentSpin'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../../../shared/smsContent'
+import { WEB_SCAN_DEFAULT_LIMITS, clampWebScanSleepSeconds, getWebScanSite } from '../../../../shared/webScan'
 import {
   IMAGE_FILE_ACCEPT,
   IMAGE_VIDEO_FILE_ACCEPT,
@@ -550,6 +551,9 @@ function QuickEditShell({
 
 export function CampaignLimitUpdateModal({ campaign, action, onClose }: CampaignQuickEditModalProps) {
   const entitlements = useAuthStore(state => state.user?.entitlements)
+  const webScanLimits = useAuthStore(state => state.user?.webScanLimits) ?? WEB_SCAN_DEFAULT_LIMITS
+  // Quét data website (V618): nghỉ giữa hai lần mở trang / bấm hiện số không thấp hơn mức của DB (như form chiến dịch).
+  const isWebScanCampaign = getWebScanSite(campaign.actionId) !== null
   const showAlert = useUiStore(state => state.showAlert)
   const [saving, setSaving] = useState(false)
   const saveInFlight = useRef(false)
@@ -637,7 +641,9 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
         ...(campaign.extraSettings || {}),
         actionLimits: {
           ...(campaign.extraSettings?.actionLimits || {}),
-          sleepBetweenActions: normalizePositiveInteger(formData.sleepBetweenActions, canUseSleepBetweenActions ? DEFAULT_SLEEP_BETWEEN_ACTIONS : 0),
+          sleepBetweenActions: isWebScanCampaign
+            ? clampWebScanSleepSeconds(formData.sleepBetweenActions, webScanLimits)
+            : normalizePositiveInteger(formData.sleepBetweenActions, canUseSleepBetweenActions ? DEFAULT_SLEEP_BETWEEN_ACTIONS : 0),
           enabledActionCodes: checkedLimitActionCodes,
           dailyLimit: fallback.dailyLimit,
           rateLimitCount: fallback.rateLimitCount,
@@ -691,11 +697,11 @@ export function CampaignLimitUpdateModal({ campaign, action, onClose }: Campaign
           </div>
           <div className="stepper-section-body">
             <div className="stepper-form-group campaign-quick-edit-number-field">
-              <label>Thời gian nghỉ giữa 2 lần gửi</label>
+              <label>{isWebScanCampaign ? `Nghỉ giữa 2 lần mở trang / bấm hiện số (thấp nhất ${webScanLimits.minSleepSeconds} giây)` : 'Thời gian nghỉ giữa 2 lần gửi'}</label>
               <div className="stepper-input-unit-wrap">
                 <input
                   type="number"
-                  min={0}
+                  min={isWebScanCampaign ? webScanLimits.minSleepSeconds : 0}
                   value={formData.sleepBetweenActions}
                   onChange={event => setFormData(prev => ({
                     ...prev,
@@ -870,6 +876,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
   const showMainContentSection =
     !isUsingSourceContent &&
     !FIND_DATA_ACTION_IDS.has(actionId) &&
+    // Quét data website (V618) không có nội dung: như Tìm data Facebook.
+    !getWebScanSite(actionId) &&
     !isNewsfeedInteractionCampaign &&
     !isFacebookJoinGroupCampaign &&
     !isFacebookGroupInviteCampaign &&

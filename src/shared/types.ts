@@ -565,6 +565,8 @@ export interface NewsfeedMessageRequestRule {
 }
 
 export interface CampaignExtraSettings {
+  /** Quét data website (V618, docs/WEB_DATA_SCAN_PLAN.md): cài đặt của ba loại chiến dịch Tìm data website. */
+  webScan?: import('./webScan').WebScanCampaignSettings
   facebookRestBrowse?: import('./facebookRestBrowse').FacebookRestBrowseSettings
   zaloSendExclusionsByAccountId?: SendExclusionsByAccount
   runAsPage?: boolean             // Facebook: một Page quản lý cho toàn bộ lượt chạy
@@ -3133,6 +3135,13 @@ export interface AuthUser {
    * Tắt khẩn cấp có hiệu lực ở lần nhận lượt kế tiếp nhờ claim kiểm lại (not_enabled → bộ cũ tới hết phiên).
    */
   facebookEngineV2?: boolean
+  /**
+   * V618: tổ chức nằm trong web_scan.campaigns (quét data website: tài khoản "Website" + 3 loại chiến dịch Tìm data). Chốt lúc đăng nhập;
+   * claim kiểm lại mỗi lượt nên tắt có hiệu lực ngay cho việc chạy.
+   */
+  webScanEnabled?: boolean
+  /** V618: mặc định / trần giới hạn ngày và thời gian nghỉ của quét data website (web_scan.campaigns.limits). */
+  webScanLimits?: import('./webScan').WebScanLimits
   /** Desktop Chat menu snapshot, fixed until the next authenticated app session. */
   chatWebEnabledAtLogin?: boolean
   /** Opaque desktop login generation; never a Chat authentication token. */

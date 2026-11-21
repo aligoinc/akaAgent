@@ -1,0 +1,3088 @@
+-- V618 p2: hàm quét data website + vá claim / report / hạn mức / kết thúc lượt / snapshot tài khoản / gói quyền / nháp / dọn lượt bỏ dở / nạp Nhóm data. SINH TỪ scripts/build-v618-sql.cjs, không sửa tay.
+-- Nguồn = pg_get_functiondef production 21/11/2026 (md5 trước → sau):
+--   claim: 1ea2f16387985542b48dfbda6965c790 → acf4f9d47113ae5c7ee110d96ef1b97c
+--   report: 09fe52a53d9f419207506f1033bdb800 → be745999ab2d14b5b432422c1ae1bd1e
+--   limit: 5c7e8c79040723a3c6f21f7565d58d81 → dc5f819d9e16e5e63d34e5b26eb10db0
+--   finish: 92c119f20d47ea5eee0770b5e6498d41 → ed7406cbccac16af32af4f329aabb170
+--   snapshot: e4dbe2f2dba71e96c0b669ef1a79179b → dce1535bfecdb6dd35c3d2b7d132c99b
+--   packages: 4f2251c2a5848ae174481a97fe02fe72 → 034826d2fd6431883c560f7f82a654bd
+--   drafts: a943ffce5b3bb36020a3cf5c7f548b85 → f21afaf32a95ba722947f1749998a61e
+--   closeRun: 72b8c9698e7176640b0e1911c8c5c49f → 4de95bc591469af1b738927e5d853e0d
+--   ingest: dc8ccc8c8502ee0e463d911f71ee497e → dc8b8c7fdcba4adce08efbc17e1fb005
+-- Đổi thân claim / report nên PostgREST nạp lại schema: apply buổi tối. Gỡ: rollback_v618_web_data_scan_p2.sql.
+BEGIN;
+SET LOCAL lock_timeout = '3s';
+SET LOCAL statement_timeout = '120s';
+
+DO $pre$
+DECLARE v_oid oid; v_acl text;
+BEGIN
+  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v618_web_data_scan_p2') THEN
+      RAISE EXCEPTION 'V618 p2 đã có trong sổ migration, không chạy lại';
+    END IF;
+  END IF;
+  IF to_regclass('private.auto_web_scan_seen') IS NULL OR to_regclass('private.auto_web_scan_listings') IS NULL THEN
+    RAISE EXCEPTION 'V618 p2: chưa apply p1';
+  END IF;
+  IF to_regprocedure('public.aka_agent_web_scan_org_enabled(bigint)') IS NOT NULL THEN RAISE EXCEPTION 'V618 p2 đã chạy'; END IF;
+  v_oid := to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_engine_claim_target_v1(jsonb)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '1ea2f16387985542b48dfbda6965c790' THEN
+    RAISE EXCEPTION 'V618 p2: claim khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_claim', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '09fe52a53d9f419207506f1033bdb800' THEN
+    RAISE EXCEPTION 'V618 p2: report khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_report', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_engine_action_limit(bigint,bigint,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_engine_action_limit(bigint,bigint,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '5c7e8c79040723a3c6f21f7565d58d81' THEN
+    RAISE EXCEPTION 'V618 p2: limit khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_limit', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '92c119f20d47ea5eee0770b5e6498d41' THEN
+    RAISE EXCEPTION 'V618 p2: finish khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_finish', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'e4dbe2f2dba71e96c0b669ef1a79179b' THEN
+    RAISE EXCEPTION 'V618 p2: snapshot khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_snapshot', v_acl, true);
+  v_oid := to_regprocedure('private.app_access_packages(bigint,text,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có private.app_access_packages(bigint,text,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '4f2251c2a5848ae174481a97fe02fe72' THEN
+    RAISE EXCEPTION 'V618 p2: packages khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_packages', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'a943ffce5b3bb36020a3cf5c7f548b85' THEN
+    RAISE EXCEPTION 'V618 p2: drafts khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_drafts', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_engine_close_run_v1(bigint,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_engine_close_run_v1(bigint,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '72b8c9698e7176640b0e1911c8c5c49f' THEN
+    RAISE EXCEPTION 'V618 p2: closeRun khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_closeRun', v_acl, true);
+  v_oid := to_regprocedure('public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)');
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V618 p2: không có public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)'; END IF;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'dc8ccc8c8502ee0e463d911f71ee497e' THEN
+    RAISE EXCEPTION 'V618 p2: ingest khác bản đã đọc (%)', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  PERFORM set_config('aka.v618_acl_ingest', v_acl, true);
+END $pre$;
+
+-- Tổ chức có bật quét data website không (web_scan.campaigns: {"mode": "all"} hoặc {"organizationIds": [...]}).
+CREATE FUNCTION public.aka_agent_web_scan_org_enabled(p_organization_id bigint)
+ RETURNS boolean
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_raw text;
+  v jsonb;
+BEGIN
+  IF p_organization_id IS NULL THEN RETURN false; END IF;
+  SELECT s.value INTO v_raw FROM public.auto_system_settings s WHERE s.key = 'web_scan.campaigns' AND s.is_active LIMIT 1;
+  IF v_raw IS NULL OR NOT pg_input_is_valid(v_raw, 'jsonb') THEN RETURN false; END IF;
+  v := v_raw::jsonb;
+  IF jsonb_typeof(v) IS DISTINCT FROM 'object' THEN RETURN false; END IF;
+  IF v->>'mode' = 'all' THEN RETURN true; END IF;
+  IF jsonb_typeof(v->'organizationIds') = 'array' THEN
+    RETURN EXISTS (SELECT 1 FROM jsonb_array_elements(v->'organizationIds') e
+                    WHERE jsonb_typeof(e.value) IN ('number', 'string') AND (e.value #>> '{}') = p_organization_id::text);
+  END IF;
+  RETURN false;
+END $function$;
+
+-- Desktop: trong các mã tin vừa đọc, tin nào chiến dịch đã quét ở lượt trước, tin nào đã có số do chiến dịch cùng tổ chức hiện trong 30 ngày.
+CREATE FUNCTION public.aka_agent_web_scan_seen_v1(p_campaign_id bigint, p_site text, p_keys text[])
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+ SET statement_timeout TO '10s'
+AS $function$
+DECLARE
+  c record;
+  v_keys text[];
+BEGIN
+  IF p_site IS NULL OR p_site NOT IN ('nhatot', 'batdongsan', 'yellowpages') THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid_site'); END IF;
+  SELECT x.id, x.staff_id, x.organization_id INTO c FROM public.auto_campaigns x WHERE x.id = p_campaign_id AND NOT coalesce(x.is_delete, false);
+  IF NOT FOUND OR NOT public.aka_agent_engine_scope_ok(c.staff_id) THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  IF NOT public.aka_agent_web_scan_org_enabled(c.organization_id) THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_enabled'); END IF;
+  SELECT coalesce(array_agg(DISTINCT k), '{}') INTO v_keys FROM unnest(coalesce(p_keys, '{}'::text[])) k WHERE k IS NOT NULL AND length(k) BETWEEN 1 AND 200;
+  IF cardinality(v_keys) > 500 THEN RETURN jsonb_build_object('ok', false, 'reason', 'too_many_keys'); END IF;
+  RETURN jsonb_build_object('ok', true,
+    'seen', coalesce((SELECT jsonb_agg(s.listing_key ORDER BY s.listing_key) FROM private.auto_web_scan_seen s
+                       WHERE s.campaign_id = p_campaign_id AND s.site = p_site AND s.listing_key = ANY (v_keys)), '[]'::jsonb),
+    'cached', coalesce((SELECT jsonb_object_agg(l.listing_key, jsonb_build_object('phone', l.phone, 'name', l.name, 'data', l.data))
+                         FROM private.auto_web_scan_listings l
+                        WHERE l.organization_id = c.organization_id AND l.site = p_site AND l.listing_key = ANY (v_keys)
+                          AND l.revealed_at > clock_timestamp() - interval '30 days'), '{}'::jsonb));
+END $function$;
+
+-- Desktop: ghi tin vừa quét của chiến dịch (và số vừa hiện, dùng lại trong tổ chức 30 ngày). p_items: [{ key, phone?, name?, data? }], tối đa 200.
+CREATE FUNCTION public.aka_agent_web_scan_record_v1(p_campaign_id bigint, p_site text, p_items jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO ''
+ SET statement_timeout TO '10s'
+AS $function$
+DECLARE
+  c record;
+  v_seen integer := 0;
+  v_cached integer := 0;
+BEGIN
+  IF p_site IS NULL OR p_site NOT IN ('nhatot', 'batdongsan', 'yellowpages') THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid_site'); END IF;
+  IF jsonb_typeof(p_items) IS DISTINCT FROM 'array' OR jsonb_array_length(p_items) > 200 THEN RETURN jsonb_build_object('ok', false, 'reason', 'invalid_items'); END IF;
+  SELECT x.id, x.staff_id, x.organization_id INTO c FROM public.auto_campaigns x WHERE x.id = p_campaign_id AND NOT coalesce(x.is_delete, false);
+  IF NOT FOUND OR NOT public.aka_agent_engine_scope_ok(c.staff_id) THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_found'); END IF;
+  IF NOT public.aka_agent_web_scan_org_enabled(c.organization_id) THEN RETURN jsonb_build_object('ok', false, 'reason', 'not_enabled'); END IF;
+  WITH items AS (
+    SELECT DISTINCT ON (btrim(e->>'key')) btrim(e->>'key') AS k, nullif(btrim(e->>'phone'), '') AS phone, left(nullif(btrim(e->>'name'), ''), 200) AS name,
+           CASE WHEN jsonb_typeof(e->'data') = 'object' AND length((e->'data')::text) <= 8000 THEN e->'data' ELSE '{}'::jsonb END AS data
+      FROM jsonb_array_elements(p_items) e
+     WHERE jsonb_typeof(e) = 'object' AND length(btrim(coalesce(e->>'key', ''))) BETWEEN 1 AND 200
+  ), seen AS (
+    INSERT INTO private.auto_web_scan_seen AS s (campaign_id, site, listing_key)
+    SELECT p_campaign_id, p_site, i.k FROM items i
+    ON CONFLICT (campaign_id, site, listing_key) DO NOTHING
+    RETURNING 1
+  ), cached AS (
+    INSERT INTO private.auto_web_scan_listings AS l (organization_id, site, listing_key, phone, name, data, revealed_at)
+    SELECT c.organization_id, p_site, i.k, i.phone, i.name, i.data, clock_timestamp() FROM items i WHERE i.phone ~ '^0[0-9]{9,10}$'
+    ON CONFLICT (organization_id, site, listing_key) DO UPDATE SET phone = EXCLUDED.phone, name = coalesce(EXCLUDED.name, l.name),
+      data = EXCLUDED.data, revealed_at = EXCLUDED.revealed_at
+    RETURNING 1
+  )
+  SELECT (SELECT count(*) FROM seen), (SELECT count(*) FROM cached) INTO v_seen, v_cached;
+  RETURN jsonb_build_object('ok', true, 'seen', v_seen, 'cached', v_cached);
+END $function$;
+
+-- Dọn: tin đã quét quá 180 ngày, số đã hiện quá 30 ngày (mỗi lượt tối đa 20.000 dòng mỗi bảng).
+CREATE FUNCTION public.aka_agent_web_scan_retention_v1()
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ VOLATILE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_seen integer;
+  v_listings integer;
+BEGIN
+  DELETE FROM private.auto_web_scan_seen s WHERE (s.campaign_id, s.site, s.listing_key) IN (
+    SELECT x.campaign_id, x.site, x.listing_key FROM private.auto_web_scan_seen x WHERE x.seen_at < clock_timestamp() - interval '180 days' LIMIT 20000);
+  GET DIAGNOSTICS v_seen = ROW_COUNT;
+  DELETE FROM private.auto_web_scan_listings l WHERE (l.organization_id, l.site, l.listing_key) IN (
+    SELECT x.organization_id, x.site, x.listing_key FROM private.auto_web_scan_listings x WHERE x.revealed_at < clock_timestamp() - interval '30 days' LIMIT 20000);
+  GET DIAGNOSTICS v_listings = ROW_COUNT;
+  RETURN jsonb_build_object('seen', v_seen, 'listings', v_listings);
+END $function$;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_engine_claim_target_v1(p_ctx jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_now timestamptz := clock_timestamp();
+  v_vn date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
+  v_staff bigint := nullif(p_ctx->>'staffId', '')::bigint;
+  v_account_id bigint := nullif(p_ctx->>'accountId', '')::bigint;
+  v_campaign_id bigint := nullif(p_ctx->>'campaignId', '')::bigint;
+  v_runner text := nullif(btrim(p_ctx->>'runnerId'), '');
+  v_runtime text := p_ctx->>'runtimeTarget';
+  v_req_token uuid := nullif(p_ctx->>'leaseToken', '')::uuid;
+  v_lease_seconds integer := greatest(30, public.aka_agent_engine_setting('engine.lease_seconds', '180')::integer);
+  c public.auto_campaigns%ROWTYPE;
+  a public.auto_accounts%ROWTYPE;
+  l public.auto_engine_leases%ROWTYPE;
+  t public.auto_campaign_input_data%ROWTYPE;
+  v_has_lease boolean;
+  v_token uuid;
+  v_run_id bigint;
+  v_act jsonb;
+  v_code text;
+  v_required boolean;
+  v_decision jsonb;
+  v_decisions jsonb := '{}'::jsonb;
+  v_target_wait jsonb;
+  v_target_key text;
+  v_lock record;
+  v_limit jsonb;
+  v_daily numeric;
+  v_window_count numeric;
+  v_window_minutes numeric;
+  v_used integer;
+  v_oldest timestamptz;
+  v_allowed boolean;
+  v_boundary text;
+  v_org bigint;
+  v_cap_qr boolean;
+  v_cap_web boolean;
+  v_cap_server boolean;
+  v_max integer;
+  v_running bigint;
+  v_day_start timestamptz := ((clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh');
+  v_wait_note text;
+  v_found boolean := false;
+  v_cooldown boolean;
+  v_cd_decision text;
+  v_cd_note text;
+  v_cd_error text;
+  v_cd_paused jsonb := '[]'::jsonb;
+  v_cd_skip bigint[] := '{}';
+  v_cd_scanned integer := 0;
+  v_dg_result jsonb;
+  v_cd_deadline timestamptz;
+  v_legacy_setting text;
+  v_legacy_before timestamptz;
+  -- V558: lượt theo lịch (loại chiến dịch không có dòng data: trang cá nhân, newsfeed Facebook).
+  v_slot_mode boolean := coalesce(p_ctx->>'mode', '') = 'campaign_slot';
+  v_slot timestamptz;
+  v_is_facebook boolean;
+  -- Quét data website: số lượt đã dùng trong ngày / trong khung giờ của mã thao tác web (để trả số lượt còn lại).
+  v_web_day numeric;
+  v_web_window numeric;
+  -- V558: chỉ nhận đúng các data này (ctx.inputDataIds), trong lượt đang giữ lease.
+  v_only_ids bigint[];
+  -- V564: chiến dịch đăng nhóm bật "Xáo trộn danh sách group" (như bộ cũ xáo các data chờ ở đầu mỗi lượt).
+  v_shuffle boolean := false;
+  v_shuffle_count integer;
+  -- V571: kiểm người nhận trên toàn hệ thống (engine.target_check).
+  v_tc jsonb;                       -- {thao tác: mã} người nhận đã biết hỏng (mã đang bật, còn hiệu lực)
+  v_tc_global text;                 -- global id của người nhận (zalo_users theo tài khoản + UID)
+  v_tc_friend boolean := false;     -- tài khoản gửi đã là bạn bè (zalo_users.is_fr)
+  v_tc_sends jsonb;                 -- mọi bước gửi đã biết hỏng: {thao tác gửi: mã}, bỏ luôn bước tìm SĐT
+BEGIN
+  IF v_staff IS NULL OR v_account_id IS NULL OR v_campaign_id IS NULL OR v_runner IS NULL OR v_runtime IS NULL OR v_runtime NOT IN ('desktop','fly') THEN
+    RETURN jsonb_build_object('status', 'invalid_request');
+  END IF;
+  -- Desktop chỉ nhận việc của chính nhân viên đăng nhập, và chỉ với vai trò Desktop.
+  IF public.aka_agent_engine_desktop_staff() IS NOT NULL AND v_runtime <> 'desktop' THEN
+    RETURN jsonb_build_object('status', 'invalid_request');
+  END IF;
+  IF NOT public.aka_agent_engine_scope_ok(v_staff) THEN RETURN jsonb_build_object('status', 'not_found'); END IF;
+  -- V558: nhận thêm đúng các data này vào lượt đang chạy (đăng nhóm Facebook kèm chia sẻ sang các nhóm đã chọn trong hộp đăng bài, như bộ
+  -- cũ giữ chỗ các nhóm chia sẻ cùng data chính). Chỉ khi đang giữ lease, không cho lượt theo lịch, tối đa 50 id.
+  IF p_ctx ? 'inputDataIds' THEN
+    IF v_req_token IS NULL OR v_slot_mode OR jsonb_typeof(p_ctx->'inputDataIds') <> 'array'
+       OR jsonb_array_length(p_ctx->'inputDataIds') NOT BETWEEN 1 AND 50
+       OR EXISTS (SELECT 1 FROM jsonb_array_elements(p_ctx->'inputDataIds') x
+                   WHERE jsonb_typeof(x.value) <> 'number' OR x.value::text !~ '^[0-9]{1,18}$') THEN
+      RETURN jsonb_build_object('status', 'invalid_request');
+    END IF;
+    SELECT array_agg(DISTINCT x.value::text::bigint) INTO v_only_ids FROM jsonb_array_elements(p_ctx->'inputDataIds') x;
+  END IF;
+
+  -- V501 (review 12/11): khoá tư vấn trước khoá dòng, đúng thứ tự của bản cũ. Chiến dịch Nhóm data: khoá nạp data của chiến dịch
+  -- (cùng khoá với aka_agent_lock_campaign_input_serialization; luồng nạp Nhóm data, hàm kết thúc v219 và finish_campaign_v2 lấy
+  -- khoá này trước khoá dòng chiến dịch), vì nhánh hết hạn bên dưới gọi hàm kết thúc v219.
+  IF EXISTS (SELECT 1 FROM public.auto_campaigns x WHERE x.id = v_campaign_id AND x.data_target_source_mode = 'data_group') THEN
+    PERFORM pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || v_campaign_id::text, 0));
+  END IF;
+  -- Tài khoản Zalo (trình duyệt) bắt đầu lượt trên Desktop: khoá giới hạn chạy đồng thời của nhân viên như claim bản cũ (v397), để
+  -- hai lượt nhận cùng lúc (của bộ mới hay bộ cũ) không cùng đếm N-1 rồi cùng vượt giới hạn.
+  IF v_runtime = 'desktop' AND v_req_token IS NULL AND to_regclass('public.org_staff') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.auto_accounts xa WHERE xa.id = v_account_id AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'zalo'
+                   AND coalesce(xa.is_zalo_show_web, false) AND NOT coalesce(xa.is_zalo_server, false)) THEN
+    EXECUTE 'SELECT s.max_running_zalo_web_accounts FROM public.org_staff s WHERE s.id = $1' INTO v_max USING v_staff;
+    IF v_max IS NOT NULL THEN
+      PERFORM pg_advisory_xact_lock(hashtextextended('aka-agent-browser-run-limits:' || v_staff::text, 0));
+    END IF;
+  END IF;
+  -- V558: tài khoản Facebook bắt đầu lượt trên Desktop: cùng khoá giới hạn chạy đồng thời của nhân viên như claim bản cũ (v397 khoá chung
+  -- cho Zalo trình duyệt và Facebook), để hai lượt nhận cùng lúc không cùng đếm N-1 rồi cùng vượt giới hạn.
+  IF v_runtime = 'desktop' AND v_req_token IS NULL AND to_regclass('public.org_staff') IS NOT NULL
+     AND EXISTS (SELECT 1 FROM public.auto_accounts xa WHERE xa.id = v_account_id AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'facebook') THEN
+    EXECUTE 'SELECT s.max_running_facebook_accounts FROM public.org_staff s WHERE s.id = $1' INTO v_max USING v_staff;
+    IF v_max IS NOT NULL THEN
+      PERFORM pg_advisory_xact_lock(hashtextextended('aka-agent-browser-run-limits:' || v_staff::text, 0));
+    END IF;
+  END IF;
+  SELECT * INTO c FROM public.auto_campaigns WHERE id = v_campaign_id FOR UPDATE;
+  IF NOT FOUND OR coalesce(c.is_delete, false) OR c.staff_id IS DISTINCT FROM v_staff THEN
+    RETURN jsonb_build_object('status', 'not_found');
+  END IF;
+  IF c.account_id IS DISTINCT FROM v_account_id THEN RETURN jsonb_build_object('status', 'account_mismatch'); END IF;
+
+  -- Không có công tắc theo loại chiến dịch: bộ chạy chỉ gọi claim cho loại mà lõi đã phủ.
+  -- Desktop bản mới tự chạy bộ mới; Fly chỉ chạy bộ mới cho tổ chức bật cờ use_new_zalo_runtime (V371).
+  IF v_runtime = 'fly'
+     AND NOT coalesce((SELECT o.use_new_zalo_runtime FROM public.org_organization o WHERE o.id = c.organization_id), false) THEN
+    RETURN jsonb_build_object('status', 'not_enabled');
+  END IF;
+
+  SELECT * INTO a FROM public.auto_accounts WHERE id = v_account_id FOR UPDATE;
+  IF NOT FOUND OR coalesce(a.is_delete, false) OR a.staff_id IS DISTINCT FROM v_staff THEN
+    RETURN jsonb_build_object('status', 'account_not_found');
+  END IF;
+  -- V558: tài khoản Facebook chỉ chạy engine trên Desktop, khi tổ chức bật engine.facebook (anh chốt Q1). Kiểm mỗi lần nhận lượt: tắt
+  -- (mode off / bỏ tổ chức khỏi danh sách) có hiệu lực ở lần nhận kế tiếp, Desktop nhận not_enabled thì chạy bộ cũ.
+  v_is_facebook := lower(btrim(coalesce(a.flatform_type, ''))) = 'facebook';
+  IF v_is_facebook THEN
+    IF v_runtime <> 'desktop' THEN RETURN jsonb_build_object('status', 'runtime_not_owner'); END IF;
+    IF NOT public.aka_agent_engine_facebook_org_enabled(coalesce(c.organization_id, a.organization_id)) THEN
+      RETURN jsonb_build_object('status', 'not_enabled');
+    END IF;
+  END IF;
+  -- Quét data website (tài khoản "Website"): chỉ Desktop, chỉ tổ chức bật web_scan.campaigns. Kiểm mỗi lần nhận lượt; tắt có hiệu lực ở lần
+  -- nhận kế tiếp. Tài khoản web không cần gói (anh chốt: mở theo tổ chức, lúc đầu chỉ tổ chức 1).
+  IF lower(btrim(coalesce(a.flatform_type, ''))) = 'web' THEN
+    IF v_runtime <> 'desktop' THEN RETURN jsonb_build_object('status', 'runtime_not_owner'); END IF;
+    IF NOT public.aka_agent_web_scan_org_enabled(coalesce(c.organization_id, a.organization_id)) THEN
+      RETURN jsonb_build_object('status', 'not_enabled');
+    END IF;
+  END IF;
+  -- Bộ cũ còn giữ tài khoản (token thao tác) hoặc một chiến dịch của tài khoản (claim token, unit lease):
+  -- chờ, không chạy chồng. Bộ mới không bao giờ dùng hay xoá các token này.
+  IF a.runtime_operation_claim_token IS NOT NULL THEN
+    RETURN jsonb_build_object('status', 'legacy_busy', 'scope', 'account');
+  END IF;
+  -- V527: claim token bộ cũ còn sót trên chiến dịch đã xoá / tạm dừng không chặn tài khoản nữa. Trigger
+  -- aka_agent_clear_campaign_runtime_claim_metadata cố ý giữ claim khi chiến dịch Server chuyển "đang chạy" → "tạm dừng" (chờ nơi chạy tự
+  -- nhả) và App Server nhả tài khoản mà không xoá claim đó, nên claim treo hàng tháng. Chỉ bỏ qua khi đủ cả: tài khoản không còn token
+  -- thao tác (kiểm ở trên), chiến dịch không giữ unit lease, không còn data "đang chạy", và cả lúc claim lẫn lần ghi cuối của chiến dịch
+  -- (lúc tạm dừng / xoá) đã cũ hơn engine.legacy_stale_claim_minutes phút (mặc định 30, tối thiểu 10). Unit lease,
+  -- claim trên chiến dịch chờ / đang chạy và chiến dịch vừa tạm dừng giữa lượt vẫn chặn. Không xoá token nào ở đây.
+  IF EXISTS (SELECT 1 FROM public.auto_campaigns x
+              WHERE x.account_id = v_account_id AND (x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL)) THEN
+    v_legacy_setting := btrim(public.aka_agent_engine_setting('engine.legacy_stale_claim_minutes', '30'));
+    v_legacy_before := v_now - make_interval(mins => CASE WHEN v_legacy_setting ~ '^[0-9]{1,6}$'
+                                                         THEN greatest(10, v_legacy_setting::integer) ELSE 30 END);
+    IF EXISTS (SELECT 1 FROM public.auto_campaigns x
+                WHERE x.account_id = v_account_id AND (x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL)
+                  AND NOT (x.runtime_unit_token IS NULL
+                           AND (coalesce(x.is_delete, false) OR x.status = 'tạm dừng')
+                           AND coalesce(x.runtime_claimed_at, '-infinity'::timestamptz) < v_legacy_before
+                           AND coalesce(x.updated_at, '-infinity'::timestamptz) < v_legacy_before
+                           AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                                            WHERE d.campaign_id = x.id AND d.status = 'đang chạy'
+                                              AND coalesce(d.is_delete, false) = false))) THEN
+      RETURN jsonb_build_object('status', 'legacy_busy', 'scope', 'campaign');
+    END IF;
+  END IF;
+  -- Cùng điều kiện nhận lượt của bản cũ (aka_agent_claim_campaign_run_unit_v2): đúng runtime sở hữu
+  -- tài khoản, tài khoản còn bật và đã đăng nhập, quyền dùng app, khung giờ cho phép của nhân viên.
+  IF (v_runtime = 'fly' AND (lower(btrim(coalesce(a.flatform_type, ''))) <> 'zalo' OR coalesce(a.is_zalo_show_web, false)
+                              OR NOT coalesce(a.is_zalo_server, false)))
+     OR (v_runtime = 'desktop' AND lower(btrim(coalesce(a.flatform_type, ''))) = 'zalo' AND coalesce(a.is_zalo_server, false)) THEN
+    RETURN jsonb_build_object('status', 'runtime_not_owner');
+  END IF;
+  IF a.is_active IS NOT TRUE OR a.login_status IS DISTINCT FROM 'đã đăng nhập' THEN
+    RETURN jsonb_build_object('status', 'account_logged_out', 'loginStatus', a.login_status);
+  END IF;
+  -- V501 (G7): tài khoản tạm dừng (hay trạng thái khác "chờ xử lý"/"đang chạy") không nhận lượt, như bản cũ. "đang chạy" mà
+  -- không còn ai giữ (bộ cũ đã kiểm ở trên bằng token, bộ mới bằng lease bên dưới) là sót lại sau khi app/worker tắt đột ngột.
+  IF coalesce(a.status, 'chờ xử lý') NOT IN ('chờ xử lý', 'đang chạy') THEN
+    RETURN jsonb_build_object('status', 'account_paused', 'accountStatus', a.status);
+  END IF;
+  -- Hai hàm có sẵn trên production gọi qua EXECUTE: PL/pgSQL phân giải tên hàm khi lập kế hoạch biểu thức.
+  IF to_regprocedure('public.aka_agent_app_access_account_allowed(bigint,text)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.aka_agent_app_access_account_allowed($1, $2)' INTO v_allowed USING v_account_id, 'akaAgent';
+    IF v_allowed IS NOT TRUE THEN RETURN jsonb_build_object('status', 'app_access_denied', 'reason', 'app_access_account'); END IF;
+  END IF;
+  IF to_regprocedure('public.aka_agent_staff_time_allowed(bigint)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.aka_agent_staff_time_allowed($1)' INTO v_allowed USING v_staff;
+    IF v_allowed IS NOT TRUE THEN RETURN jsonb_build_object('status', 'staff_time_blocked'); END IF;
+  END IF;
+  -- V501: quyền gói Zalo của tổ chức như claim của bản cũ (aka_agent_claim_campaign_runtime_checked): Server cần QR + Server,
+  -- tài khoản trình duyệt cần Web, tài khoản QR cần QR.
+  v_org := coalesce(c.organization_id, a.organization_id);
+  IF lower(btrim(coalesce(a.flatform_type, ''))) = 'zalo' AND v_org IS NOT NULL
+     AND to_regprocedure('public.resolve_organization_zalo_account_capabilities(bigint)') IS NOT NULL THEN
+    EXECUTE 'SELECT x.qr_enabled, x.web_enabled, x.server_enabled FROM public.resolve_organization_zalo_account_capabilities($1) x'
+      INTO v_cap_qr, v_cap_web, v_cap_server USING v_org;
+    IF (coalesce(a.is_zalo_server, false) AND NOT (coalesce(v_cap_qr, false) AND coalesce(v_cap_server, false)))
+       OR (NOT coalesce(a.is_zalo_server, false) AND coalesce(a.is_zalo_show_web, false) AND NOT coalesce(v_cap_web, false))
+       OR (NOT coalesce(a.is_zalo_server, false) AND NOT coalesce(a.is_zalo_show_web, false) AND NOT coalesce(v_cap_qr, false)) THEN
+      RETURN jsonb_build_object('status', 'entitlement_denied');
+    END IF;
+  END IF;
+  -- V558: quyền gói Facebook như bộ cũ (entitlementRepository: Facebook dùng được khi tổ chức có gói sản phẩm 3 hoặc 10 còn hạn).
+  IF v_is_facebook AND v_org IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM public.org_organization_product p
+                      WHERE p.organization_id = v_org AND p.is_deleted = false AND p.product_id IN (3, 10)
+                        AND p.expiration_date IS NOT NULL AND (p.expiration_date AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= v_vn) THEN
+    RETURN jsonb_build_object('status', 'entitlement_denied');
+  END IF;
+  -- V501 (G10): giới hạn số tài khoản Zalo (trình duyệt) chạy đồng thời của nhân viên, đếm như bản cũ (v397). Chỉ khi bắt đầu
+  -- lượt (chưa giữ lease): lượt đang chạy không bị cắt giữa chừng.
+  IF v_runtime = 'desktop' AND v_req_token IS NULL AND lower(btrim(coalesce(a.flatform_type, ''))) = 'zalo'
+     AND coalesce(a.is_zalo_show_web, false) AND NOT coalesce(a.is_zalo_server, false)
+     AND to_regclass('public.org_staff') IS NOT NULL THEN
+    EXECUTE 'SELECT s.max_running_zalo_web_accounts FROM public.org_staff s WHERE s.id = $1' INTO v_max USING v_staff;
+    IF v_max IS NOT NULL THEN
+      SELECT count(DISTINCT x.account_id) INTO v_running
+        FROM public.auto_campaigns x
+        JOIN public.auto_accounts xa ON xa.id = x.account_id AND xa.staff_id = x.staff_id
+       WHERE x.staff_id = v_staff AND xa.id <> v_account_id
+         AND (x.organization_id IS NULL OR x.organization_id = v_org)
+         AND (xa.organization_id IS NULL OR xa.organization_id = v_org)
+         AND (x.status = 'đang chạy' OR x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL)
+         AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'zalo' AND xa.is_zalo_show_web = true AND xa.is_zalo_server = false;
+      IF v_running >= v_max THEN RETURN jsonb_build_object('status', 'concurrency_limit', 'max', v_max); END IF;
+    END IF;
+  END IF;
+  -- V558: giới hạn số tài khoản Facebook chạy đồng thời của nhân viên, đếm như claim bản cũ (v397): chiến dịch "đang chạy" hoặc còn token
+  -- của bộ cũ, trên tài khoản Facebook khác của nhân viên. Chỉ khi bắt đầu lượt (chưa giữ lease): lượt đang chạy không bị cắt.
+  IF v_runtime = 'desktop' AND v_req_token IS NULL AND v_is_facebook AND to_regclass('public.org_staff') IS NOT NULL THEN
+    EXECUTE 'SELECT s.max_running_facebook_accounts FROM public.org_staff s WHERE s.id = $1' INTO v_max USING v_staff;
+    IF v_max IS NOT NULL THEN
+      SELECT count(DISTINCT x.account_id) INTO v_running
+        FROM public.auto_campaigns x
+        JOIN public.auto_accounts xa ON xa.id = x.account_id AND xa.staff_id = x.staff_id
+       WHERE x.staff_id = v_staff AND xa.id <> v_account_id
+         AND (x.organization_id IS NULL OR x.organization_id = v_org)
+         AND (xa.organization_id IS NULL OR xa.organization_id = v_org)
+         AND (x.status = 'đang chạy' OR x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL)
+         AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'facebook';
+      IF v_running >= v_max THEN RETURN jsonb_build_object('status', 'concurrency_limit', 'max', v_max); END IF;
+    END IF;
+  END IF;
+
+  -- V501 (G5): chiến dịch Nhóm data đang chờ data mới (không có data đến hạn, không có data đang chạy) khi bắt đầu lượt: như claim của
+  -- bản cũ (v397) không nhận lượt và không ghi gì; hàm kết thúc Nhóm data chỉ chạy ở cuối một lượt đã chạy data (finish_campaign_v2).
+  IF v_req_token IS NULL AND c.data_target_source_mode = 'data_group' AND c.status = 'chờ xử lý'
+     AND NOT (c.schedule_end_date IS NOT NULL AND c.schedule_end_date <= v_now)
+     AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                      WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false
+                        AND (d.status = 'đang chạy' OR (d.status = 'chờ xử lý' AND (d.schedule IS NULL OR d.schedule <= v_now)))) THEN
+    RETURN jsonb_build_object('status', 'data_group_waiting', 'note', c.note);
+  END IF;
+
+  -- Giữ chỗ tài khoản có hạn. Lease cũ đã hết hạn thì runner mới lấy được; data dở của lease cũ
+  -- vẫn "đang chạy" và chỉ được aka_agent_engine_close_stale_v1 đóng (không bao giờ gửi lại).
+  SELECT * INTO l FROM public.auto_engine_leases WHERE account_id = v_account_id FOR UPDATE;
+  v_has_lease := FOUND;
+  IF v_has_lease AND l.expires_at > v_now AND l.lease_token IS DISTINCT FROM v_req_token THEN
+    RETURN jsonb_build_object('status', 'busy', 'runnerId', l.runner_id, 'expiresAt', l.expires_at);
+  END IF;
+  v_token := CASE WHEN v_has_lease AND l.lease_token = v_req_token AND l.expires_at > v_now THEN l.lease_token ELSE gen_random_uuid() END;
+  -- V501: campaign_schedule = lịch của chiến dịch lúc bắt đầu lượt (khung giờ hiện tại của chiến dịch nhiều khung giờ).
+  INSERT INTO public.auto_engine_leases AS el (account_id, lease_token, runner_id, runtime_target, campaign_id, acquired_at, heartbeat_at, expires_at, campaign_schedule)
+  VALUES (v_account_id, v_token, v_runner, v_runtime, v_campaign_id, v_now, v_now, v_now + make_interval(secs => v_lease_seconds), c.schedule)
+  ON CONFLICT (account_id) DO UPDATE SET
+    lease_token = EXCLUDED.lease_token, runner_id = EXCLUDED.runner_id, runtime_target = EXCLUDED.runtime_target,
+    campaign_id = EXCLUDED.campaign_id,
+    acquired_at = CASE WHEN el.lease_token = EXCLUDED.lease_token THEN el.acquired_at ELSE EXCLUDED.acquired_at END,
+    campaign_schedule = CASE WHEN el.lease_token = EXCLUDED.lease_token THEN el.campaign_schedule ELSE EXCLUDED.campaign_schedule END,
+    heartbeat_at = EXCLUDED.heartbeat_at, expires_at = EXCLUDED.expires_at;
+
+  IF c.status = 'tạm dừng' THEN RETURN jsonb_build_object('status', 'campaign_paused', 'leaseToken', v_token); END IF;
+  IF c.status NOT IN ('chờ xử lý', 'đang chạy') THEN
+    RETURN jsonb_build_object('status', 'campaign_not_runnable', 'campaignStatus', c.status, 'leaseToken', v_token);
+  END IF;
+  -- V501 (G10): chiến dịch đang nạp data ban đầu chưa được chạy, như bản cũ.
+  IF coalesce(c.provisioning_state, 'ready') <> 'ready' THEN
+    RETURN jsonb_build_object('status', 'campaign_not_ready', 'leaseToken', v_token, 'provisioningState', c.provisioning_state);
+  END IF;
+  IF c.status = 'chờ xử lý' AND c.schedule IS NOT NULL AND c.schedule > v_now THEN
+    RETURN jsonb_build_object('status', 'not_due', 'schedule', c.schedule, 'leaseToken', v_token);
+  END IF;
+  -- V501 (G1): lịch còn là ngày cũ mà chiến dịch chưa qua bảo trì lịch ngày mới: không chạy, nơi chạy cập nhật lịch rồi hỏi
+  -- lại (như daily_maintenance_required của bản cũ, v340). Riêng hằng ngày không bật "chạy tiếp hôm sau" thì chạy tiếp ngay.
+  IF c.status = 'chờ xử lý' AND c.schedule IS NOT NULL AND c.schedule < v_day_start
+     AND NOT (coalesce(nullif(c.schedule_type, ''), 'daily') = 'daily' AND c.continue_next_day IS NOT TRUE) THEN
+    RETURN jsonb_build_object('status', 'maintenance_required', 'leaseToken', v_token, 'schedule', c.schedule);
+  END IF;
+  -- V501 (G5): chiến dịch theo Nhóm data đã hết hạn nhận và chạy data mới: không nhận lượt; kết thúc bằng đúng hàm kết thúc Nhóm data
+  -- của bản cũ (finalizeDataGroupCampaignAtHardEnd: dừng nguồn, đóng data chờ "Chiến dịch đã hết hạn", hoàn thành khi không còn data
+  -- đang chạy). Hàm chưa có (DB thử) thì chỉ không nhận lượt.
+  IF c.data_target_source_mode = 'data_group' AND c.schedule_end_date IS NOT NULL AND c.schedule_end_date <= v_now THEN
+    IF to_regprocedure('public.aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)') IS NOT NULL THEN
+      EXECUTE 'SELECT public.aka_agent_internal_finalize_data_group_campaign_v219($1, $2, $3, $4)' INTO v_dg_result
+        USING c.staff_id, c.organization_id, c.id, 'Chiến dịch đã hết thời hạn nhận và chạy data mới';
+    END IF;
+    RETURN jsonb_build_object('status', 'data_group_hard_end', 'leaseToken', v_token, 'finalize', v_dg_result);
+  END IF;
+  -- Mốc ngày như bản cũ (daily_stop_due / daily_drain_due / vietnam_day_changed): sau giờ dừng trong ngày
+  -- (mặc định 23:59) hoặc khi lease mở từ ngày trước thì không nhận data mới, để bảo trì ngày mới chạy.
+  v_boundary := CASE
+    WHEN c.daily_stop_time IS NOT NULL
+     AND v_now >= ((v_vn + least(c.daily_stop_time, time '23:59:00')) AT TIME ZONE 'Asia/Ho_Chi_Minh') THEN 'daily_stop_due'
+    WHEN v_now >= ((v_vn + time '23:59:00') AT TIME ZONE 'Asia/Ho_Chi_Minh') THEN 'daily_drain_due'
+    WHEN v_has_lease AND l.lease_token = v_token AND (l.acquired_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date < v_vn THEN 'vietnam_day_changed'
+  END;
+  IF v_boundary IS NOT NULL THEN
+    -- Qua giờ dừng / giờ chốt trong ngày: không nhận data tới 0:00 hôm sau. Qua ngày khi lượt còn mở từ hôm trước:
+    -- chỉ kết thúc lượt (nextAt = bây giờ) để bảo trì ngày mới chạy, xong là chạy tiếp ngay trong ngày.
+    -- V501: kèm giờ dừng đã cấu hình để lõi in đúng câu ⏹ của Desktop (giờ dừng riêng hay mốc 23:59).
+    RETURN jsonb_build_object('status', 'daily_boundary', 'leaseToken', v_token, 'reason', v_boundary, 'stopTime', c.daily_stop_time,
+      'nextAt', CASE WHEN v_boundary = 'vietnam_day_changed' THEN v_now
+                     ELSE ((v_vn + 1)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') END);
+  END IF;
+
+  -- V558: lượt theo lịch (Q4). Mốc lịch = lịch của chiến dịch lúc nhận (chưa có lịch thì lúc tạo). Mỗi mốc chạy một lượt: mốc đã có lượt
+  -- đang mở, đã thử với lease này, hoặc đã đóng mà không phải "về hàng đợi" (chờ xử lý) thì xong; claim trả no_target để nơi chạy kết thúc
+  -- lượt (finish_campaign tính lịch kế tiếp như bộ cũ). Mỗi chiến dịch tối đa một lượt theo lịch đang mở (chỉ mục V557).
+  IF v_slot_mode THEN
+    v_slot := coalesce(c.schedule, c.created_at, v_now);
+    IF EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr
+                WHERE tr.campaign_id = v_campaign_id AND tr.slot_at IS NOT NULL
+                  AND (tr.completed_at IS NULL
+                       OR (tr.slot_at = v_slot AND (tr.lease_token = v_token OR tr.final_target_status IS DISTINCT FROM 'chờ xử lý')))) THEN
+      RETURN jsonb_build_object('status', 'no_target', 'leaseToken', v_token, 'nextSchedule', NULL,
+        'runningTargets', (SELECT count(*) FROM public.auto_engine_target_runs tr
+                            WHERE tr.campaign_id = v_campaign_id AND tr.slot_at IS NOT NULL AND tr.completed_at IS NULL),
+        'hasTargets', true, 'dueTried', 0, 'dataGroup', false, 'slot', true, 'slotAt', v_slot, 'cooldownPaused', '[]'::jsonb);
+    END IF;
+  END IF;
+  -- V501 (G3): mỗi data chỉ thử một lần trong một lượt (như Desktop đi qua danh sách một lần): data vừa về hàng đợi
+  -- được thử lại ở lượt sau, các data phía sau vẫn chạy trong lượt này.
+  -- V501: chống gửi lặp N ngày (applyRecentDeliveryCooldown của Desktop, trước khi nhận data và trước bước tra số): gọi đúng
+  -- RPC của bộ cũ cho data sắp nhận (còn "chờ xử lý", đã khoá). RPC tự tạm dừng data đã gửi gần đây; lõi in "⏸️ Bỏ qua …".
+  -- Không ghi lịch sử, không tính lượt, không đổi chuỗi lỗi, không nghỉ. Mỗi lần gọi xét tối đa 50 data, và dừng khi hết ngân sách
+  -- thời gian (engine.cooldown_scan_ms, mặc định 1.500 ms tính từ đầu lần gọi; review 12/11): lần gọi từ Desktop có trần 3 giây của
+  -- vai trò aka_agent_desktop, quá trần thì cả lần gọi bị huỷ (kể cả các data đã tạm dừng) và lần gọi lại làm lại từ đầu. Trả
+  -- cooldown_scan thì các data đã tạm dừng được giữ, lõi gọi lại ngay và đi tiếp từ data kế tiếp.
+  v_cooldown := NOT v_slot_mode AND coalesce(c.extra_settings->'recentDeliveryCooldownEnabled' = 'true'::jsonb, false)
+    AND to_regprocedure('public.aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])') IS NOT NULL;
+  v_cd_deadline := v_now + make_interval(secs => (CASE WHEN public.aka_agent_engine_setting('engine.cooldown_scan_ms', '1500') ~ '^[0-9]{1,6}$'
+                                                       THEN greatest(1, public.aka_agent_engine_setting('engine.cooldown_scan_ms', '1500')::integer)
+                                                       ELSE 1500 END) / 1000.0);
+  -- V503: nhận cả lô (claim_batch_v1) đặt một mốc chung cho mọi lần nhận trong lô, để cả lời gọi không chạm trần 3 giây của Desktop.
+  IF nullif(current_setting('aka.engine.claim_deadline', true), '') IS NOT NULL THEN
+    v_cd_deadline := least(v_cd_deadline, current_setting('aka.engine.claim_deadline', true)::timestamptz);
+  END IF;
+  -- V564: đăng nhóm bật "Xáo trộn danh sách group" (lưu kiểu boolean, đo 18/11): xáo khi nhận data kế tiếp của lượt; nhận theo danh sách
+  -- inputDataIds (nhóm chia sẻ kèm) và lượt theo lịch không xáo. Mọi chiến dịch khác giữ câu chọn theo d.id + 0 (V532).
+  v_shuffle := NOT v_slot_mode AND v_only_ids IS NULL AND c.action_id = 'facebook_group_post'
+    AND coalesce(c.extra_settings->'shuffleGroupList' = 'true'::jsonb, false);
+  LOOP
+    EXIT WHEN v_slot_mode;
+    -- V532: sắp theo d.id + 0 (cùng thứ tự) để planner không đi khoá chính auto_campaign_input_data_pkey. Kế hoạch theo tham số có lúc
+    -- quét khoá chính từ id nhỏ nhất rồi lọc theo chiến dịch (chiến dịch 34061 ngày 14/11/2026: lọc 12,26 triệu dòng, 6,8 giây, quá
+    -- trần 3 giây của Desktop). Sắp theo biểu thức buộc lấy data của chiến dịch qua chỉ mục theo chiến dịch rồi mới sắp (vài chục ms).
+    IF v_shuffle THEN
+      -- V564: thứ tự ngẫu nhiên theo lượt (md5 theo lease): trong lượt giữ nguyên, lượt sau (lease mới) khác, như bộ cũ xáo ở đầu lượt.
+      SELECT d.* INTO t FROM public.auto_campaign_input_data d
+       WHERE d.campaign_id = v_campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false
+         AND (d.schedule IS NULL OR d.schedule <= v_now)
+         AND NOT EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.input_data_id = d.id AND tr.lease_token = v_token)
+         AND d.id <> ALL (v_cd_skip)
+       ORDER BY md5(d.id::text || v_token::text), d.id LIMIT 1 FOR UPDATE SKIP LOCKED;
+    ELSE
+      SELECT d.* INTO t FROM public.auto_campaign_input_data d
+       WHERE d.campaign_id = v_campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false
+         AND (d.schedule IS NULL OR d.schedule <= v_now)
+         AND NOT EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.input_data_id = d.id AND tr.lease_token = v_token)
+         AND d.id <> ALL (v_cd_skip)
+         AND (v_only_ids IS NULL OR d.id = ANY (v_only_ids))
+       ORDER BY d.id + 0 LIMIT 1 FOR UPDATE SKIP LOCKED;
+    END IF;
+    v_found := FOUND;
+    EXIT WHEN NOT v_found OR NOT v_cooldown;
+    v_cd_decision := NULL; v_cd_note := NULL; v_cd_error := NULL;
+    BEGIN
+      EXECUTE 'SELECT x.decision, x.note FROM public.aka_agent_apply_campaign_delivery_cooldown($1, $2, $3, ARRAY[$4]::bigint[]) x'
+        INTO v_cd_decision, v_cd_note USING v_campaign_id, v_account_id, v_staff, t.id;
+    EXCEPTION WHEN OTHERS THEN
+      v_cd_error := SQLERRM;
+    END;
+    IF v_cd_error IS NOT NULL THEN
+      IF coalesce((SELECT g.on_error FROM public.auto_engine_gates g WHERE g.code = 'delivery_cooldown'), 'closed') = 'open' THEN EXIT; END IF;
+      -- Như Desktop: chiến dịch chờ, ghi chú lý do, tự thử lại ở nhịp sau; data giữ nguyên.
+      v_wait_note := 'Không thể kiểm tra giới hạn gửi/đăng lặp; chiến dịch sẽ tự thử lại: Không thể kiểm tra lịch sử gửi/đăng gần nhất: ' || v_cd_error;
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', note = v_wait_note, updated_at = v_now
+       WHERE id = v_campaign_id AND (status IS DISTINCT FROM 'chờ xử lý' OR note IS DISTINCT FROM v_wait_note);
+      RETURN jsonb_build_object('status', 'gate_unavailable', 'leaseToken', v_token, 'gate', 'delivery_cooldown', 'note', v_wait_note,
+        'cooldownPaused', v_cd_paused);
+    END IF;
+    EXIT WHEN v_cd_decision = 'allowed';
+    IF v_cd_decision IN ('paused_recent_delivery', 'paused_unidentifiable') THEN
+      v_cd_paused := v_cd_paused || jsonb_build_object('inputDataId', t.id, 'name', t.name, 'phone', t.phone, 'uid', t.uid, 'email', t.email,
+        'note', coalesce(nullif(btrim(v_cd_note), ''), 'Tạm dừng vì giới hạn gửi/đăng lặp.'));
+    END IF;
+    v_cd_skip := v_cd_skip || t.id;
+    v_cd_scanned := v_cd_scanned + 1;
+    IF v_cd_scanned >= 50 OR clock_timestamp() >= v_cd_deadline THEN
+      RETURN jsonb_build_object('status', 'cooldown_scan', 'leaseToken', v_token, 'cooldownPaused', v_cd_paused);
+    END IF;
+  END LOOP;
+  IF NOT v_found AND NOT v_slot_mode THEN
+    RETURN jsonb_build_object('status', 'no_target', 'leaseToken', v_token,
+      'nextSchedule', (SELECT min(d.schedule) FROM public.auto_campaign_input_data d
+                        WHERE d.campaign_id = v_campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false AND d.schedule > v_now),
+      'runningTargets', (SELECT count(*) FROM public.auto_campaign_input_data d
+                          WHERE d.campaign_id = v_campaign_id AND d.status = 'đang chạy' AND coalesce(d.is_delete, false) = false),
+      -- Chiến dịch chưa có data nào (khác "đã chạy hết"): host có thể chờ nguồn bơm data thay vì hoàn thành.
+      'hasTargets', EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                             WHERE d.campaign_id = v_campaign_id AND coalesce(d.is_delete, false) = false),
+      -- V501: data đến hạn đã thử trong lượt này (về hàng đợi): lượt kết thúc, lượt sau thử lại.
+      'dueTried', (SELECT count(*) FROM public.auto_campaign_input_data d
+                    WHERE d.campaign_id = v_campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false
+                      AND (d.schedule IS NULL OR d.schedule <= v_now)
+                      AND EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.input_data_id = d.id AND tr.lease_token = v_token)),
+      'dataGroup', c.data_target_source_mode = 'data_group',
+      'cooldownPaused', v_cd_paused);
+  END IF;
+
+  v_target_key := public.aka_agent_engine_target_key(t.phone, t.uid, t.email);
+  -- V571: chiến dịch nhắn người lạ (theo SĐT / theo UID), không kiêm SMS, tổ chức bật engine.target_check: tra sổ theo SĐT và global id
+  -- (UID gắn theo tài khoản nên lấy global id ở zalo_users). Bước tương ứng nhận quyết định skip ở vòng dưới. Kiểm lỗi thì coi như chưa
+  -- biết (chạy như thường).
+  IF NOT v_slot_mode AND c.action_id IN ('zalo_message_phone', 'zalo_message_group_member', 'zalo_message_group_realtime', 'zalo_message_friend_recommendation', 'zalo_message_remarketing_customer')
+     AND NOT coalesce(c.extra_settings->'internalSmsEnabled' = 'true'::jsonb, false)
+     AND NOT coalesce(c.extra_settings->'externalSmsEnabled' = 'true'::jsonb, false)
+     AND private.aka_agent_engine_target_check_on(c.organization_id) THEN
+    BEGIN
+      IF nullif(btrim(coalesce(t.uid, '')), '') IS NOT NULL THEN
+        SELECT nullif(btrim(coalesce(zu.global_id, '')), ''), coalesce(zu.is_fr = 1, false) INTO v_tc_global, v_tc_friend
+          FROM public.zalo_users zu WHERE zu.account_id = v_account_id AND zu.zalo_uid = btrim(t.uid) LIMIT 1;
+        v_tc_friend := coalesce(v_tc_friend, false);
+      END IF;
+      SELECT jsonb_object_agg(x.action_code, x.error_code) INTO v_tc FROM private.aka_agent_engine_target_check_probe(t.phone, v_tc_global) x;
+    EXCEPTION WHEN OTHERS THEN
+      v_tc := NULL;
+    END;
+    -- Chặn tin người lạ không áp với tài khoản đã là bạn bè.
+    IF v_tc IS NOT NULL AND v_tc_friend THEN v_tc := v_tc - 'zalo_message_stranger'; END IF;
+    IF v_tc = '{}'::jsonb THEN v_tc := NULL; END IF;
+    -- "Nhắn tin theo SĐT": mọi bước gửi của chiến dịch đã biết hỏng và không tag Zalo / đổi tên / tag akaBiz (các bước cần kết quả tìm SĐT)
+    -- thì bỏ luôn bước tìm SĐT; report tách thành một dòng cho mỗi bước gửi.
+    IF v_tc IS NOT NULL AND c.action_id = 'zalo_message_phone' AND NOT (v_tc ? 'zalo_find_phone_user')
+       AND NOT coalesce(c.extra_settings->'enableZaloTag' = 'true'::jsonb, false)
+       AND NOT coalesce(c.extra_settings->'enableZaloAlias' = 'true'::jsonb, false)
+       AND NOT coalesce(c.extra_settings->'enableAkaBizTag' = 'true'::jsonb, false) THEN
+      -- (Bí danh "ja": "a" là biến bản ghi tài khoản của hàm.)
+      SELECT CASE WHEN count(*) > 0 AND bool_and(v_tc ? (ja.value->>'code')) THEN jsonb_object_agg(ja.value->>'code', v_tc->(ja.value->>'code')) END
+        INTO v_tc_sends
+        FROM jsonb_array_elements(coalesce(p_ctx->'actions', '[]'::jsonb)) ja WHERE ja.value->>'code' <> 'zalo_find_phone_user';
+    END IF;
+  END IF;
+  FOR v_act IN SELECT x.value FROM jsonb_array_elements(coalesce(p_ctx->'actions', '[]'::jsonb)) x LOOP
+    v_code := v_act->>'code';
+    v_required := coalesce((v_act->>'required')::boolean, true);
+    v_decision := jsonb_build_object('decision', 'allow');
+
+    SELECT s.is_disable, s.date_enable, s.disabled_error_code INTO v_lock
+      FROM public.auto_account_action_status s WHERE s.account_id = v_account_id AND s.action_code = v_code;
+    IF FOUND AND v_lock.is_disable AND (v_lock.date_enable IS NULL OR v_lock.date_enable > v_now) THEN
+      v_decision := jsonb_build_object('decision', 'wait', 'gate', 'action_lock', 'errorCode', v_lock.disabled_error_code, 'until', v_lock.date_enable);
+    END IF;
+
+    -- Hạn mức tính trong DB theo đúng công thức của bộ chạy Desktop/VPS (aka_agent_engine_action_limit).
+    -- V505: thao tác khai "quota": false chỉ kiểm khoá, không kiểm hạn mức (huỷ lời mời kết bạn: limit_check_action_codes rỗng ở bản cũ).
+    v_limit := CASE WHEN v_act->'quota' = 'false'::jsonb THEN NULL
+                    ELSE public.aka_agent_engine_action_limit(v_campaign_id, v_account_id, v_code) END;
+    IF v_decision->>'decision' = 'allow' AND v_limit IS NOT NULL THEN
+      v_daily := (v_limit->>'daily')::numeric;
+      v_window_count := (v_limit->>'windowCount')::numeric;
+      v_window_minutes := (v_limit->>'windowMinutes')::numeric;
+      IF coalesce(v_daily, 0) > 0 THEN
+        SELECT CASE WHEN s.count_date = v_vn THEN s.count_action_in_day ELSE 0 END INTO v_used
+          FROM public.auto_account_action_status s WHERE s.account_id = v_account_id AND s.action_code = v_code;
+        IF coalesce(v_used, 0) >= v_daily THEN
+          v_decision := jsonb_build_object('decision', 'wait', 'gate', 'quota', 'errorCode', 'error_limit_in_day',
+            'until', date_trunc('day', v_now AT TIME ZONE 'Asia/Ho_Chi_Minh') AT TIME ZONE 'Asia/Ho_Chi_Minh' + interval '1 day');
+        END IF;
+      END IF;
+      IF v_decision->>'decision' = 'allow' AND coalesce(v_window_count, 0) > 0 AND coalesce(v_window_minutes, 0) > 0 THEN
+        SELECT count(*), min(x.at) INTO v_used, v_oldest FROM (
+          -- Như countLimitDetailsInWindow của bộ chạy: không lọc is_delete.
+          SELECT d.created_at AS at FROM public.auto_campaign_details d
+           WHERE d.account_id = v_account_id AND d.action_code = v_code
+             AND d.created_at >= v_now - make_interval(secs => (v_window_minutes * 60)::double precision)
+             AND (d.counts_toward_limit IS TRUE OR (d.counts_toward_limit IS NULL AND d.status IN ('thành công', 'thất bại')))
+          UNION ALL
+          SELECT (m.value->>'markedAt')::timestamptz FROM public.auto_engine_target_runs rr, jsonb_array_elements(rr.marks) m
+           WHERE rr.account_id = v_account_id AND rr.completed_at IS NULL
+             AND m.value->>'actionCode' = v_code AND m.value->>'state' = 'pending'
+        ) x;
+        IF v_used >= v_window_count THEN
+          -- Như bộ chạy: chờ tới khi lượt cũ nhất ra khỏi khung, ít nhất 60 giây.
+          v_decision := jsonb_build_object('decision', 'wait', 'gate', 'quota', 'errorCode', 'error_limit_in_hour',
+            'until', greatest(v_now + interval '60 seconds', v_oldest + make_interval(secs => (v_window_minutes * 60)::double precision)));
+        END IF;
+      END IF;
+    END IF;
+
+    -- Quét data website: một data (từ khoá) tốn nhiều lượt (mỗi lần hiện SĐT / mở trang một lượt), nên trả số lượt còn lại trong ngày và
+    -- trong khung giờ để block dừng đúng lúc; hết lượt giữa từ khoá thì từ khoá về hàng đợi, lần nhận sau chờ theo hạn mức như mọi thao tác.
+    IF v_code LIKE 'web\_%' AND v_decision->>'decision' = 'allow' AND v_limit IS NOT NULL THEN
+      v_web_day := NULL; v_web_window := NULL;
+      SELECT CASE WHEN s.count_date = v_vn THEN s.count_action_in_day ELSE 0 END INTO v_web_day
+        FROM public.auto_account_action_status s WHERE s.account_id = v_account_id AND s.action_code = v_code;
+      SELECT count(*) INTO v_web_window FROM public.auto_campaign_details d
+       WHERE d.account_id = v_account_id AND d.action_code = v_code
+         AND d.created_at >= v_now - make_interval(secs => ((v_limit->>'windowMinutes')::numeric * 60)::double precision)
+         AND (d.counts_toward_limit IS TRUE OR (d.counts_toward_limit IS NULL AND d.status IN ('thành công', 'thất bại')));
+      v_decision := v_decision || jsonb_build_object(
+        'remainingDaily', greatest((v_limit->>'daily')::numeric - coalesce(v_web_day, 0), 0),
+        'remainingWindow', greatest((v_limit->>'windowCount')::numeric - coalesce(v_web_window, 0), 0));
+    END IF;
+
+    -- V571: người nhận đã biết hỏng: bước tìm SĐT bỏ qua kể cả khi đang khoá / hết lượt (không gọi Zalo, không tính lượt); bước gửi chỉ bỏ
+    -- qua khi đang được phép (đang chờ thì vẫn chờ như thường) và khi bước tìm SĐT không bị bỏ.
+    IF v_tc IS NOT NULL THEN
+      IF v_code = 'zalo_find_phone_user' THEN
+        IF v_tc ? v_code THEN
+          v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc->>v_code);
+        ELSIF v_tc_sends IS NOT NULL THEN
+          v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc_sends::text);
+        END IF;
+      ELSIF v_tc ? v_code AND v_tc_sends IS NULL AND NOT (c.action_id = 'zalo_message_phone' AND v_tc ? 'zalo_find_phone_user')
+            AND v_decision->>'decision' = 'allow' THEN
+        v_decision := jsonb_build_object('decision', 'skip', 'gate', 'target_check', 'errorCode', v_tc->>v_code);
+      END IF;
+    END IF;
+
+    -- Thao tác không bắt buộc chỉ được bỏ qua với các cổng khai trong skippableGates (không khai = mọi cổng),
+    -- như preflightActions: hết lượt thì bỏ qua được, đang bị khoá thì không.
+    IF NOT v_required AND v_decision->>'decision' = 'wait' AND jsonb_typeof(v_act->'skippableGates') = 'array'
+       AND NOT (v_act->'skippableGates' ? coalesce(v_decision->>'gate', '')) THEN
+      v_required := true;
+    END IF;
+    IF v_decision->>'decision' = 'wait' THEN
+      v_decision := v_decision || jsonb_build_object('note', regexp_replace(
+        public.aka_agent_engine_wait_note(v_decision->>'errorCode', nullif(v_decision->>'until', '')::timestamptz), '^⏳ ', ''));
+    END IF;
+    v_decisions := v_decisions || jsonb_build_object(v_code, v_decision || jsonb_build_object('required', v_required));
+    IF v_required AND v_decision->>'decision' = 'wait' AND v_target_wait IS NULL THEN v_target_wait := v_decision; END IF;
+  END LOOP;
+  -- requireAny: cả nhóm thao tác đều phải chờ thì không nhận data (không tra số khi không gửi được gì),
+  -- hẹn lại theo thao tác mở sớm nhất.
+  IF v_target_wait IS NULL AND jsonb_typeof(p_ctx->'requireAny') = 'array' AND jsonb_array_length(p_ctx->'requireAny') > 0
+     AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements_text(p_ctx->'requireAny') q(code)
+                      WHERE coalesce(v_decisions->q.code->>'decision', 'allow') <> 'wait') THEN
+    SELECT v_decisions->q.code INTO v_target_wait FROM jsonb_array_elements_text(p_ctx->'requireAny') q(code)
+     ORDER BY nullif(v_decisions->q.code->>'until', '')::timestamptz NULLS LAST LIMIT 1;
+  END IF;
+
+  -- Bước bắt buộc phải chờ (khoá / hạn mức): không nhận data. V501 (G2): như Desktop, KHÔNG dời lịch chiến dịch (dời lịch
+  -- sang ngày sau làm chiến dịch thoát bảo trì lịch ngày mới, chạy lúc 00:00 hay vào ngày không hẹn, và đổi giờ gốc của lịch
+  -- lặp khi original_schedule rỗng); chỉ ghi câu chờ khi đổi. Nơi chạy nhớ wait.until để không hỏi lại liên tục.
+  IF v_target_wait IS NOT NULL THEN
+    v_wait_note := public.aka_agent_engine_wait_note(v_target_wait->>'errorCode', nullif(v_target_wait->>'until', '')::timestamptz);
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', note = v_wait_note, updated_at = v_now
+     WHERE id = v_campaign_id AND (status IS DISTINCT FROM 'chờ xử lý' OR note IS DISTINCT FROM v_wait_note);
+    RETURN jsonb_build_object('status', 'wait', 'leaseToken', v_token, 'wait', v_target_wait, 'actions', v_decisions, 'cooldownPaused', v_cd_paused);
+  END IF;
+
+  -- V564: lần nhận đầu của lượt ở chiến dịch xáo trộn (lease mới, hoặc lõi báo lượt chưa nhận data nào: lần gọi trước trả cooldown_scan đã
+  -- cấp lease): số data chờ đến hạn lúc bắt đầu lượt (kể cả data vừa nhận, chưa chuyển "đang chạy"), để lõi in "🔀 Đã xáo trộn danh sách N
+  -- group" như bộ cũ (N > 1).
+  IF v_shuffle AND (v_req_token IS DISTINCT FROM v_token OR p_ctx->>'unitStarted' = 'false') THEN
+    SELECT count(*)::integer INTO v_shuffle_count FROM public.auto_campaign_input_data d
+     WHERE d.campaign_id = v_campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false
+       AND (d.schedule IS NULL OR d.schedule <= v_now);
+  END IF;
+
+  -- Trigger phân quyền ứng dụng (V445) có thể từ chối chuyển "đang chạy": hoàn tác cả bước nhận data
+  -- và giữ chỗ, trả trạng thái rõ ràng thay vì lỗi.
+  BEGIN
+    UPDATE public.auto_campaign_input_data SET status = 'đang chạy' WHERE id = t.id;
+    -- Ghi lịch = lúc nhận khi lịch còn là ngày cũ: cổng bảo trì của bộ cũ đếm chiến dịch "đang chạy" có lịch
+    -- trước đầu ngày, nên chiến dịch của bộ mới không được giữ cổng đó đóng.
+    -- V501 (G6): bắt đầu chạy thì xoá ghi chú (câu chờ cũ), như claim của bản cũ (v397). Lịch ngày cũ chỉ còn tới đây với
+    -- hằng ngày không chạy tiếp hôm sau (G1 ở trên).
+    UPDATE public.auto_campaigns SET status = 'đang chạy',
+           schedule = CASE WHEN schedule IS NULL OR schedule < (v_vn::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh') THEN v_now ELSE schedule END,
+           note = CASE WHEN status = 'chờ xử lý' THEN NULL ELSE note END,
+           updated_at = v_now
+     WHERE id = v_campaign_id
+       AND (status = 'chờ xử lý' OR schedule IS NULL OR schedule < (v_vn::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'));
+    IF a.status = 'chờ xử lý' THEN UPDATE public.auto_accounts SET status = 'đang chạy', updated_at = v_now WHERE id = v_account_id; END IF;
+    INSERT INTO public.auto_engine_target_runs (input_data_id, campaign_id, account_id, staff_id, organization_id, lease_token, runner_id, runtime_target, started_at,
+      slot_at)
+    VALUES (CASE WHEN v_slot_mode THEN NULL ELSE t.id END, v_campaign_id, v_account_id, v_staff, c.organization_id, v_token, v_runner, v_runtime, v_now,
+      CASE WHEN v_slot_mode THEN v_slot END)
+    RETURNING id INTO v_run_id;
+  EXCEPTION WHEN OTHERS THEN
+    IF SQLERRM NOT LIKE 'app_access%' THEN RAISE; END IF;
+    DELETE FROM public.auto_engine_leases WHERE account_id = v_account_id AND lease_token = v_token;
+    RETURN jsonb_build_object('status', 'app_access_denied', 'reason', SQLERRM);
+  END;
+
+  RETURN jsonb_build_object('status', 'claimed', 'targetRunId', v_run_id, 'leaseToken', v_token,
+    'leaseExpiresAt', v_now + make_interval(secs => v_lease_seconds),
+    'target', CASE WHEN v_slot_mode
+                THEN jsonb_build_object('id', NULL, 'campaign_id', c.id, 'name', c.name, 'phone', NULL, 'uid', NULL, 'email', NULL,
+                       'status', 'đang chạy', 'slotAt', v_slot)
+                ELSE (to_jsonb(t) - 'status') || jsonb_build_object('status', 'đang chạy') END,
+    'targetKey', v_target_key, 'actions', v_decisions,
+    -- Cấu hình cổng kiểm cho adapter (on_error: open = lỗi kiểm vẫn gửi; closed = chờ rồi thử lại).
+    'gates', (SELECT coalesce(jsonb_object_agg(g.code, jsonb_build_object('onError', g.on_error)), '{}'::jsonb) FROM public.auto_engine_gates g),
+    'campaign', jsonb_build_object('id', c.id, 'actionId', c.action_id, 'status', 'đang chạy'),
+    'cooldownPaused', v_cd_paused)
+    -- V564: chỉ chiến dịch xáo trộn, lần nhận đầu của lượt; câu trả lời của mọi chiến dịch khác không đổi.
+    || CASE WHEN v_shuffle_count IS NOT NULL THEN jsonb_build_object('shuffle', jsonb_build_object('count', v_shuffle_count)) ELSE '{}'::jsonb END;
+END $function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_engine_report_v1(p_target_run_id bigint, p_lease_token uuid, p_outcomes jsonb, p_final boolean DEFAULT false, p_dry_run boolean DEFAULT false)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_now timestamptz := clock_timestamp();
+  v_vn date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
+  r public.auto_engine_target_runs%ROWTYPE;
+  c public.auto_campaigns%ROWTYPE;
+  t public.auto_campaign_input_data%ROWTYPE;
+  v_lease_ok boolean;
+  v_run_open boolean;
+  o jsonb;
+  v_results jsonb := '[]'::jsonb;
+  v_rk text;
+  v_prev public.auto_engine_outcomes%ROWTYPE;
+  v_is_replay boolean;
+  v_action text;
+  v_phase text;
+  v_ok boolean;
+  v_status_id bigint;
+  v_signal jsonb;
+  v_evidence jsonb;
+  v_platform text;
+  v_op_class text;
+  v_action_name text;
+  v_rule_id bigint;
+  v_matched_by text;
+  v_catch_all boolean;
+  v_error_code text;
+  v_policy jsonb;
+  v_err public.auto_error%ROWTYPE;
+  v_delivery text;
+  v_count boolean;
+  v_mark_idx integer;
+  v_mark jsonb;
+  v_reserved boolean;
+  v_sem record;
+  v_log text;
+  v_detail_id bigint;
+  -- V571: bước bỏ qua vì người nhận đã biết hỏng (gate target_check): mã lỗi đã biết.
+  v_tc_code text;
+  v_until timestamptz;
+  v_lock_until_max timestamptz;
+  v_lc text;
+  v_side boolean;
+  v_decision jsonb;
+  v_contrib jsonb;
+  v_call jsonb := '[]'::jsonb;
+  v_call_new jsonb := '[]'::jsonb;
+  v_all jsonb;
+  -- Chỉ thị của lượt gọi này.
+  v_target_done boolean := false;
+  v_run_rank integer := 0;
+  v_rank integer;
+  v_pace jsonb;
+  v_pace_rank integer := 0;
+  v_camp_effect text := 'none';
+  v_camp_note text;
+  v_camp_hold integer;
+  v_acc_effect text := 'none';
+  v_login_effect text := 'none';
+  -- Tổng hợp theo data: mọi kết quả của lượt chạy data này, kể cả các lần gọi trước.
+  v_target_effect text;
+  v_target_rank integer := 0;
+  v_requeue_minutes integer;
+  v_note text;
+  v_last_error_code text;
+  v_last_action text;
+  v_streak text := 'ignore';
+  v_covered boolean := false;
+  v_thr_effect text := 'none';
+  v_thr_threshold integer;
+  v_thr_hold integer;
+  v_thr_source text;
+  v_guard_code text;
+  v_gp jsonb;
+  v_streak_count integer;
+  v_any_committed boolean := false;
+  v_final_status text;
+  v_schedule timestamptz;
+  v_safety jsonb := '[]'::jsonb;
+  v_camp_applied text := 'none';
+  v_camp_rows integer;
+  v_next text;
+  v_outcome_count integer := 0;
+  v_more boolean;
+  v_response jsonb;
+  -- V503: chế độ báo theo lô, chỉ report_batch_v1 đặt (trong cùng giao dịch, đặt lại rỗng sau mỗi data).
+  v_scope text := nullif(current_setting('aka.engine.batch_scope', true), '');
+BEGIN
+  -- Lô rỗng chỉ hợp lệ khi chốt data (các bước còn lại bị bỏ vì bước trước không đạt).
+  IF p_outcomes IS NULL OR jsonb_typeof(p_outcomes) <> 'array' OR (jsonb_array_length(p_outcomes) = 0 AND NOT p_final) THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'outcomes_required');
+  END IF;
+  -- V571: bước tìm SĐT bỏ qua vì mọi bước gửi đã biết hỏng (rememberedErrorCode là JSON {thao tác gửi: mã}): tách thành một kết quả cho mỗi
+  -- bước gửi (resultKey đầu giữ nguyên, kết quả sau thêm ':<thao tác>'), như khi các bước đó chạy và Zalo trả lỗi. Gọi lại thì tách y hệt.
+  IF EXISTS (SELECT 1 FROM jsonb_array_elements(p_outcomes) x WHERE x.value->>'statusCode' = 'campaign_detail_skipped'
+              AND x.value->'data'->>'gate' = 'target_check' AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{') THEN
+    SELECT jsonb_agg(z.e ORDER BY z.ord, z.sub) INTO p_outcomes FROM (
+      SELECT x.ordinality AS ord, 0::bigint AS sub, x.value AS e FROM jsonb_array_elements(p_outcomes) WITH ORDINALITY x
+       WHERE NOT (x.value->>'statusCode' = 'campaign_detail_skipped' AND x.value->'data'->>'gate' = 'target_check'
+                  AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{')
+      UNION ALL
+      SELECT x.ordinality, k.n, x.value || jsonb_build_object(
+               'actionCode', k.key,
+               'actionName', CASE k.key WHEN 'zalo_message_stranger' THEN 'Nhắn tin người lạ' WHEN 'zalo_add_friend' THEN 'Kết bạn' ELSE k.key END,
+               'stepKey', k.key,
+               'resultKey', btrim(x.value->>'resultKey') || CASE WHEN k.n = 1 THEN '' ELSE ':' || k.key END,
+               'data', jsonb_build_object('gate', 'target_check', 'rememberedErrorCode', k.code))
+        FROM jsonb_array_elements(p_outcomes) WITH ORDINALITY x
+        CROSS JOIN LATERAL (
+          SELECT e.key, e.value #>> '{}' AS code,
+                 row_number() OVER (ORDER BY CASE e.key WHEN 'zalo_message_stranger' THEN 1 WHEN 'zalo_add_friend' THEN 2 ELSE 3 END, e.key) AS n
+            FROM jsonb_each(CASE WHEN pg_input_is_valid(x.value->'data'->>'rememberedErrorCode', 'jsonb')
+                                  AND jsonb_typeof((x.value->'data'->>'rememberedErrorCode')::jsonb) = 'object'
+                                 THEN (x.value->'data'->>'rememberedErrorCode')::jsonb ELSE '{}'::jsonb END) e) k
+       WHERE x.value->>'statusCode' = 'campaign_detail_skipped' AND x.value->'data'->>'gate' = 'target_check'
+         AND left(coalesce(x.value->'data'->>'rememberedErrorCode', ''), 1) = '{'
+    ) z;
+    IF p_outcomes IS NULL OR (jsonb_array_length(p_outcomes) = 0 AND NOT p_final) THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'outcomes_required');
+    END IF;
+  END IF;
+  IF (SELECT count(DISTINCT btrim(x.value->>'resultKey')) FROM jsonb_array_elements(p_outcomes) x) <> jsonb_array_length(p_outcomes) THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'result_key_duplicate');
+  END IF;
+  SELECT * INTO r FROM public.auto_engine_target_runs WHERE id = p_target_run_id FOR UPDATE;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'reason', 'run_not_found'); END IF;
+  IF r.lease_token IS DISTINCT FROM p_lease_token THEN RETURN jsonb_build_object('ok', false, 'reason', 'lease_token_mismatch'); END IF;
+
+  -- Kiểm cả lô trước khi ghi: lô sai thì không ghi phần nào.
+  FOR o IN SELECT x.value FROM jsonb_array_elements(p_outcomes) x LOOP
+    v_rk := nullif(btrim(o->>'resultKey'), '');
+    IF v_rk IS NULL OR length(v_rk) NOT BETWEEN 8 AND 200 THEN RETURN jsonb_build_object('ok', false, 'reason', 'result_key_required'); END IF;
+    SELECT * INTO v_prev FROM public.auto_engine_outcomes WHERE result_key = v_rk;
+    IF FOUND THEN
+      IF v_prev.target_run_id <> r.id THEN RETURN jsonb_build_object('ok', false, 'reason', 'result_key_conflict', 'resultKey', v_rk); END IF;
+      CONTINUE;
+    END IF;
+    -- V558: kết quả không gắn thao tác (dòng "Tìm data" của tìm data Facebook: bộ cũ ghi không mã thao tác, không tính lượt) phải có tên
+    -- ghi lịch sử và chỉ cho chiến dịch Facebook. Engine Zalo không gửi loại này.
+    IF nullif(btrim(coalesce(o->>'actionCode', '')), '') IS NULL THEN
+      IF nullif(btrim(coalesce(o->>'actionName', '')), '') IS NULL OR NOT EXISTS (
+           SELECT 1 FROM public.auto_campaigns xc JOIN public.auto_campaign_actions xa ON xa.id = xc.action_id
+            WHERE xc.id = r.campaign_id AND lower(btrim(coalesce(xa.flatform_type, ''))) IN ('facebook', 'web')) THEN
+        RETURN jsonb_build_object('ok', false, 'reason', 'action_unknown', 'actionCode', o->>'actionCode');
+      END IF;
+    ELSIF NOT EXISTS (SELECT 1 FROM public.auto_account_actions aa WHERE aa.code = o->>'actionCode') THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'action_unknown', 'actionCode', o->>'actionCode');
+    END IF;
+    IF coalesce(nullif(o->>'phase', ''), 'after_send') NOT IN ('before_send', 'in_flight', 'after_send') THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'phase_invalid', 'phase', o->>'phase');
+    END IF;
+    IF jsonb_typeof(coalesce(o->'ok', 'false'::jsonb)) <> 'boolean' THEN RETURN jsonb_build_object('ok', false, 'reason', 'ok_invalid'); END IF;
+    IF coalesce((o->>'ok')::boolean, false) AND NOT EXISTS (SELECT 1 FROM public.auto_status s
+         WHERE s.code = coalesce(nullif(o->>'statusCode', ''), 'campaign_detail_success') AND s.component_type = 'campaign_detail'
+           AND s.is_active AND NOT s.is_delete) THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'status_unknown', 'statusCode', o->>'statusCode');
+    END IF;
+    -- V558: kết quả lỗi kèm trạng thái (chính sách inherit ghi theo trạng thái block trả) phải là trạng thái lịch sử có thật.
+    IF NOT coalesce((o->>'ok')::boolean, false) AND nullif(o->>'statusCode', '') IS NOT NULL AND NOT EXISTS (SELECT 1 FROM public.auto_status s
+         WHERE s.code = o->>'statusCode' AND s.component_type = 'campaign_detail' AND s.is_active AND NOT s.is_delete) THEN
+      RETURN jsonb_build_object('ok', false, 'reason', 'status_unknown', 'statusCode', o->>'statusCode');
+    END IF;
+  END LOOP;
+
+  -- V515 (B): gọi lại đúng lần báo đã chốt data (câu trả lời lần đầu bị mất: mạng, hết giờ) khi lease của lượt chạy còn hạn: trả lại câu
+  -- trả lời của lần đầu, không áp lại hiệu ứng. Trước V515 lượt data đã đóng nên DB trả 'ownership_lost', lượt chạy dừng mà không nhả
+  -- lease (tài khoản đứng tới khi lease hết hạn). Lease hết hạn, hay lời gọi có kết quả mới, thì đi đường cũ.
+  IF NOT p_dry_run AND r.completed_at IS NOT NULL AND r.final_response IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(p_outcomes) x
+                      WHERE NOT EXISTS (SELECT 1 FROM public.auto_engine_outcomes eo
+                                         WHERE eo.result_key = btrim(x.value->>'resultKey') AND eo.target_run_id = r.id))
+     AND EXISTS (SELECT 1 FROM public.auto_engine_leases l
+                  WHERE l.account_id = r.account_id AND l.lease_token = p_lease_token AND l.expires_at > v_now) THEN
+    SELECT coalesce(jsonb_agg((eo.decision->'result') || jsonb_build_object('replay', true) ORDER BY x.ordinality), '[]'::jsonb)
+      INTO v_results
+      FROM jsonb_array_elements(p_outcomes) WITH ORDINALITY x
+      JOIN public.auto_engine_outcomes eo ON eo.result_key = btrim(x.value->>'resultKey');
+    RETURN r.final_response || jsonb_build_object('outcomes', v_results, 'replay', true);
+  END IF;
+
+  SELECT * INTO c FROM public.auto_campaigns WHERE id = r.campaign_id;
+  SELECT * INTO t FROM public.auto_campaign_input_data WHERE id = r.input_data_id FOR UPDATE;
+  v_run_open := r.completed_at IS NULL;
+  v_lease_ok := v_run_open AND EXISTS (SELECT 1 FROM public.auto_engine_leases l
+    WHERE l.account_id = r.account_id AND l.lease_token = p_lease_token AND l.expires_at > v_now);
+
+  FOR o IN SELECT x.value FROM jsonb_array_elements(p_outcomes) x LOOP
+    v_rk := btrim(o->>'resultKey');
+    -- Gọi lại cùng result_key: trả lại đúng quyết định cũ, không gộp chính sách lần nữa.
+    SELECT * INTO v_prev FROM public.auto_engine_outcomes WHERE result_key = v_rk;
+    v_is_replay := FOUND;
+    IF v_is_replay THEN
+      v_decision := v_prev.decision;
+      v_results := v_results || jsonb_build_array((v_decision->'result') || jsonb_build_object('replay', true));
+      v_contrib := v_decision->'contrib';
+    ELSE
+      v_action := nullif(btrim(coalesce(o->>'actionCode', '')), '');
+      SELECT aa.flatform_type, coalesce(aa.operation_class, 'delivery'), aa.name INTO v_platform, v_op_class, v_action_name
+        FROM public.auto_account_actions aa WHERE aa.code = v_action;
+      -- Tên thao tác ghi vào lịch sử: như helper Desktop ("Tìm SĐT"…) khi bộ chạy gửi kèm, không thì tên trong danh mục.
+      v_action_name := coalesce(nullif(left(btrim(coalesce(o->>'actionName', '')), 120), ''), v_action_name);
+      -- V558: kết quả không gắn thao tác: luật phân loại theo nền tảng của loại chiến dịch; không phải thao tác gửi.
+      IF v_action IS NULL THEN
+        SELECT lower(btrim(xa.flatform_type)) INTO v_platform FROM public.auto_campaign_actions xa WHERE xa.id = c.action_id;
+        v_op_class := 'result';
+      END IF;
+      v_phase := coalesce(nullif(o->>'phase', ''), 'after_send');
+      v_ok := coalesce((o->>'ok')::boolean, false);
+      v_signal := coalesce(o->'signal', '{}'::jsonb);
+      v_evidence := coalesce(o->'evidence', '{}'::jsonb);
+      v_error_code := NULL; v_status_id := NULL; v_rule_id := NULL; v_matched_by := NULL; v_catch_all := NULL; v_err := NULL; v_detail_id := NULL;
+      -- V571: bước bỏ qua vì người nhận đã biết hỏng: ghi như kết quả lỗi thật của mã đã biết (cùng chính sách, trạng thái, câu lịch sử,
+      -- data đi đâu); hiệu ứng phụ bỏ ở dưới.
+      v_tc_code := NULL;
+      IF v_ok AND o->>'statusCode' = 'campaign_detail_skipped' AND o->'data'->>'gate' = 'target_check'
+         AND EXISTS (SELECT 1 FROM public.auto_error e WHERE e.error_code = o->'data'->>'rememberedErrorCode') THEN
+        v_tc_code := o->'data'->>'rememberedErrorCode';
+        v_ok := false;
+        v_phase := 'after_send';
+        v_signal := jsonb_build_object('kind', 'engine', 'code', 'target_check', 'errorCode', v_tc_code);
+        v_evidence := '{}'::jsonb;
+      END IF;
+
+      IF v_ok THEN
+        SELECT s.id INTO v_status_id FROM public.auto_status s
+         WHERE s.code = coalesce(nullif(o->>'statusCode', ''), 'campaign_detail_success') AND s.component_type = 'campaign_detail';
+      ELSE
+        SELECT cs.error_code, cs.rule_id, cs.matched_by, cs.is_catch_all INTO v_error_code, v_rule_id, v_matched_by, v_catch_all
+          FROM public.aka_agent_engine_classify_signal(v_platform, v_action, v_phase, v_signal) cs;
+        v_error_code := coalesce(v_error_code, 'err_undefined');
+        IF coalesce(v_catch_all, true) AND NOT p_dry_run THEN
+          INSERT INTO public.auto_outcome_unmatched AS u (platform, action_code, phase, signal_kind, pattern_key, fallback_error_code, sample, hit_count, first_seen_at, last_seen_at)
+          VALUES (v_platform, v_action, v_phase, coalesce(nullif(v_signal->>'kind', ''), 'unknown'), coalesce(public.aka_agent_engine_pattern_key(v_signal), ''),
+                  v_error_code, v_signal, 1, v_now, v_now)
+          ON CONFLICT (platform, action_code, phase, signal_kind, pattern_key) DO UPDATE SET
+            hit_count = u.hit_count + 1, last_seen_at = EXCLUDED.last_seen_at, sample = EXCLUDED.sample, fallback_error_code = EXCLUDED.fallback_error_code;
+        END IF;
+        SELECT * INTO v_err FROM public.auto_error e WHERE e.error_code = v_error_code;
+      END IF;
+
+      v_policy := public.aka_agent_engine_resolve_policy(v_error_code, v_status_id, v_action, c.action_id, r.runtime_target, v_phase);
+      -- V558: chính sách "trạng thái theo kết quả" (detail_mode = inherit; chính sách Facebook giữ cách ghi của bộ cũ, ghi theo
+      -- actionResult.statusCode): dòng lịch sử lấy trạng thái kết quả gửi lên (statusCode), các trường còn NULL theo chính sách của trạng thái
+      -- đó. Không gửi statusCode thì dùng trạng thái của chính sách, không có thì "thất bại".
+      IF NOT v_ok AND v_policy->>'detail_mode' = 'inherit' THEN
+        v_policy := public.aka_agent_engine_resolve_policy(v_error_code, coalesce((SELECT s.id FROM public.auto_status s WHERE s.code = nullif(o->>'statusCode', '')
+            AND s.component_type = 'campaign_detail' ORDER BY s.id LIMIT 1), (v_policy->>'detail_status_id')::bigint,
+            (SELECT s.id FROM public.auto_status s WHERE s.code = 'campaign_detail_failed' AND s.component_type = 'campaign_detail' ORDER BY s.id LIMIT 1)), v_action, c.action_id, r.runtime_target, v_phase);
+        IF v_policy->>'detail_mode' = 'inherit' THEN v_policy := v_policy || jsonb_build_object('detail_mode', 'write'); END IF;
+      END IF;
+      -- V571: kết quả thay cho bước bỏ qua vì người nhận đã biết hỏng: không tính lượt, không đổi chuỗi data lỗi, không nghỉ giữa data, không
+      -- khoá thao tác, không đổi chiến dịch / tài khoản / đăng nhập, lượt chạy tiếp; trạng thái, câu lịch sử, data đi đâu theo chính sách của mã.
+      IF v_tc_code IS NOT NULL THEN
+        v_policy := v_policy || jsonb_build_object('quota_effect', 'no_count', 'target_streak_effect', 'ignore', 'pace_mode', 'none',
+          'pace_seconds', NULL, 'lock_action_codes', '[]'::jsonb, 'campaign_effect', 'none', 'account_effect', 'none', 'login_effect', 'none',
+          'run_effect', 'continue');
+      END IF;
+      SELECT * INTO v_sem FROM public.aka_agent_status_semantics((v_policy->>'detail_status_id')::bigint);
+
+      -- Trạng thái giao: chỉ thao tác loại delivery mới có thể "đã giao".
+      v_delivery := CASE
+        WHEN v_op_class <> 'delivery' THEN 'none'
+        WHEN v_ok THEN CASE WHEN coalesce(v_sem.counts_as_delivered, false) THEN 'delivered' ELSE 'none' END
+        WHEN coalesce((v_evidence->>'partialDelivery')::boolean, false) THEN 'partial'
+        WHEN v_phase = 'in_flight' OR v_policy->>'error_class' = 'unknown_delivery' OR v_evidence->>'deliveryState' = 'unknown' THEN 'unknown'
+        ELSE 'not_delivered' END;
+      -- V501: giao một phần như finalizeZaloPartialSendDetail của Desktop: luôn ghi dòng "thất bại", không đổi chuỗi data lỗi
+      -- (trừ khi do media quá giờ), data hoàn thành; chính sách không ghi lịch sử (như khoá 802 với người lạ) vẫn ghi.
+      IF v_delivery = 'partial' AND NOT v_ok THEN
+        v_policy := v_policy || jsonb_build_object('detail_mode', 'write',
+          'detail_status_id', coalesce((SELECT s.id FROM public.auto_status s WHERE s.code = 'campaign_detail_failed' AND s.component_type = 'campaign_detail'
+                                         ORDER BY s.id LIMIT 1), (v_policy->>'detail_status_id')::bigint),
+          'target_streak_effect', CASE WHEN v_signal->>'code' = 'campaign_media_timeout' THEN v_policy->>'target_streak_effect' ELSE 'ignore' END,
+          -- Hiệu ứng chiến dịch phụ thuộc ngưỡng (N lần liền, ví dụ 127 [Q4]) chỉ có nghĩa khi kết quả cộng chuỗi; không cộng chuỗi
+          -- thì không được áp ngay (khoá thao tác của mã vẫn giữ).
+          'campaign_effect', CASE WHEN v_signal->>'code' IS DISTINCT FROM 'campaign_media_timeout' AND (v_policy->>'streak_threshold') IS NOT NULL
+                                  THEN 'none' ELSE v_policy->>'campaign_effect' END,
+          'target_effect', 'complete');
+        SELECT * INTO v_sem FROM public.aka_agent_status_semantics((v_policy->>'detail_status_id')::bigint);
+      END IF;
+
+      -- V503: báo cả lô gửi dạng chia sẻ (policyHandling của Desktop). Lô có người đã nhận được (chia sẻ xong hoặc đã nhận media) thì lỗi
+      -- của người khác chỉ ghi cho người đó (target_only): không khoá thao tác, không đổi chiến dịch / tài khoản / đăng nhập, không dừng
+      -- lượt, không cộng chuỗi data lỗi. Lô không ai nhận được thì chỉ người có hiệu ứng mạnh nhất áp đủ chính sách; người khác
+      -- (batch_followup) bỏ hiệu ứng phụ nhưng vẫn theo chuỗi data lỗi. Data đi đâu, ghi lịch sử, hạn mức, nhớ mục tiêu: theo chính sách.
+      IF NOT v_ok AND v_scope IN ('target_only', 'batch_followup') THEN
+        v_policy := v_policy || jsonb_build_object('lock_action_codes', '[]'::jsonb, 'campaign_effect', 'none', 'account_effect', 'none',
+          'login_effect', 'none', 'run_effect', 'continue')
+          || CASE WHEN v_scope = 'target_only' THEN jsonb_build_object('target_streak_effect', 'ignore') ELSE '{}'::jsonb END;
+      END IF;
+
+      -- V558: lỗi khi data đã có kết quả gửi thành công trong lượt này (đăng bài xong rồi comment lỗi): chính sách khai
+      -- streak_after_delivery = ignore thì không cộng chuỗi data lỗi, hiệu ứng chiến dịch có ngưỡng không áp (targetOnlyFailure của bộ cũ
+      -- cho comment Facebook, actionResultRuntime.ts:160-161). Hiệu ứng không ngưỡng, khoá thao tác, data đi đâu vẫn theo chính sách.
+      IF NOT v_ok AND v_policy->>'streak_after_delivery' = 'ignore'
+         AND (EXISTS (SELECT 1 FROM public.auto_engine_outcomes eo WHERE eo.target_run_id = r.id AND eo.delivery_state IN ('delivered', 'partial'))
+              OR EXISTS (SELECT 1 FROM jsonb_array_elements(v_call_new) x WHERE x.value->>'delivery' IN ('delivered', 'partial'))) THEN
+        v_policy := v_policy || jsonb_build_object('target_streak_effect', 'ignore',
+          'campaign_effect', CASE WHEN (v_policy->>'streak_threshold') IS NOT NULL THEN 'none' ELSE v_policy->>'campaign_effect' END);
+      END IF;
+
+      -- Giải quyết dấu "sắp gửi" của bước này.
+      v_reserved := false; v_mark_idx := NULL; v_mark := NULL;
+      SELECT (x.ordinality - 1)::integer, x.value INTO v_mark_idx, v_mark
+        FROM jsonb_array_elements(r.marks) WITH ORDINALITY x
+       WHERE x.value->>'stepKey' = coalesce(nullif(o->>'stepKey', ''), v_action) AND x.value->>'state' = 'pending'
+       LIMIT 1;
+      IF v_mark_idx IS NOT NULL THEN
+        v_reserved := (v_mark->>'reservedQuotaDate')::date = v_vn;
+        r.marks := jsonb_set(r.marks, ARRAY[v_mark_idx::text, 'state'],
+          to_jsonb(CASE WHEN v_delivery = 'none' THEN 'not_delivered' ELSE v_delivery END));
+      ELSIF v_op_class = 'delivery' AND v_delivery IN ('delivered', 'partial', 'unknown') THEN
+        v_safety := v_safety || jsonb_build_array(jsonb_build_object('rule', 'unmarked_delivery', 'actionCode', v_action, 'resultKey', v_rk));
+      END IF;
+
+      -- Giao một phần luôn tính lượt (giống partialDelivery hiện nay).
+      v_count := CASE v_policy->>'quota_effect' WHEN 'count' THEN true WHEN 'no_count' THEN false
+                 ELSE v_delivery IN ('delivered', 'partial', 'unknown') END
+                 OR v_delivery = 'partial';
+      -- V558: kết quả không gắn thao tác không tính lượt (như bộ cũ ghi dòng "Tìm data").
+      IF v_action IS NULL THEN v_count := false; END IF;
+      IF NOT p_dry_run THEN
+        IF v_reserved AND NOT v_count THEN
+          UPDATE public.auto_account_action_status SET count_action_in_day = greatest(count_action_in_day - 1, 0), updated_at = v_now
+           WHERE account_id = r.account_id AND action_code = v_action AND count_date = v_vn;
+        ELSIF NOT v_reserved AND v_count THEN
+          INSERT INTO public.auto_account_action_status AS s (account_id, action_code, count_action_in_day, count_date)
+          VALUES (r.account_id, v_action, 1, v_vn)
+          ON CONFLICT (account_id, action_code) DO UPDATE SET
+            count_action_in_day = CASE WHEN s.count_date = v_vn THEN s.count_action_in_day + 1 ELSE 1 END, count_date = v_vn, updated_at = v_now;
+        END IF;
+      END IF;
+
+      -- Khoá thao tác (sự thật về tài khoản: áp cả khi lease đã mất).
+      v_until := NULL;
+      IF jsonb_array_length(coalesce(v_policy->'lock_action_codes', '[]'::jsonb)) > 0 THEN
+        v_until := public.aka_agent_engine_lock_until(v_policy->>'lock_mode', (v_policy->>'lock_minutes')::integer,
+          (v_policy->>'lock_days')::integer, (v_policy->>'lock_time')::time, v_now);
+      END IF;
+
+      v_log := CASE
+        WHEN v_ok THEN coalesce(public.aka_agent_engine_render(v_policy->>'log_template',
+                  jsonb_build_object('name', coalesce(t.name, ''), 'action', v_action_name)), nullif(o->>'customerLog', ''),
+                  coalesce(v_action_name, v_action) || ': ' || coalesce(v_sem.status_value, 'thành công'))
+        ELSE coalesce(
+                  public.aka_agent_engine_render(v_policy->>'log_template',
+                    jsonb_build_object('name', coalesce(t.name, ''), 'action', v_action_name, 'message', coalesce(v_signal->>'message', ''),
+                      'until', public.aka_agent_engine_format_vn(v_until), 'code', v_err.public_code)),
+                  public.aka_agent_engine_render(coalesce(v_err.customer_title, v_err.noti_running_process, v_err.error_name),
+                    jsonb_build_object('name', coalesce(t.name, ''), 'action', v_action_name, 'message', coalesce(v_signal->>'message', ''),
+                      'until', public.aka_agent_engine_format_vn(v_until), 'code', v_err.public_code)),
+                  coalesce(v_action_name, v_action) || ' không thành công')
+             || CASE WHEN v_err.public_code IS NOT NULL THEN ' (' || v_err.public_code || ')' ELSE '' END
+        END;
+      -- V501: tiền tố của Desktop cho giao một phần.
+      IF v_delivery = 'partial' AND NOT v_ok THEN
+        v_log := CASE WHEN v_evidence->>'partialStage' = 'media_after_content' THEN 'Đã gửi nội dung nhưng gửi file thất bại. '
+                      ELSE 'Đã gửi file nhưng gửi nội dung thất bại. ' END || v_log;
+      END IF;
+
+      IF NOT p_dry_run THEN
+        FOR v_lc IN SELECT jsonb_array_elements_text(coalesce(v_policy->'lock_action_codes', '[]'::jsonb)) LOOP
+          IF EXISTS (SELECT 1 FROM public.auto_account_actions aa WHERE aa.code = v_lc) THEN
+            INSERT INTO public.auto_account_action_status AS s (account_id, action_code, is_disable, date_enable, disabled_error_code, disabled_reason, disabled_at)
+            VALUES (r.account_id, v_lc, true, v_until, v_error_code, v_log, v_now)
+            ON CONFLICT (account_id, action_code) DO UPDATE SET is_disable = true, date_enable = EXCLUDED.date_enable,
+              disabled_error_code = EXCLUDED.disabled_error_code, disabled_reason = EXCLUDED.disabled_reason, disabled_at = EXCLUDED.disabled_at, updated_at = v_now;
+          END IF;
+        END LOOP;
+
+        IF v_policy->>'detail_mode' = 'write' THEN
+          INSERT INTO public.auto_campaign_details (input_data_id, campaign_id, account_id, action_name, action_code, status, status_id, sub_status_id,
+            error_code, counts_toward_limit, report_group, log, data, policy_snapshot, result_key, created_at, post_url)
+          VALUES (r.input_data_id, r.campaign_id, r.account_id, v_action_name, v_action, coalesce(v_sem.status_value, 'thất bại'),
+            (v_policy->>'detail_status_id')::bigint, (v_policy->>'sub_status_id')::bigint, v_error_code, v_count, v_sem.report_group, v_log,
+            -- V571: dòng thay cho bước bỏ qua không ghi tín hiệu / dữ liệu của cổng (không có gì nhắc tới việc kiểm).
+            CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery)
+                 ELSE jsonb_build_object('engine', 'v2', 'phase', v_phase, 'deliveryState', v_delivery, 'signal', v_signal - 'trace', 'evidence', v_evidence)
+                        || coalesce(o->'data', '{}'::jsonb) END,
+            jsonb_build_object('engine', 'v2',
+              'operationState', CASE WHEN v_delivery IN ('delivered', 'partial') THEN 'committed'
+                                     WHEN v_delivery = 'unknown' THEN 'unknown' ELSE 'not_committed' END,
+              'actionCode', v_action, 'statusCode', v_sem.status_code, 'errorCode', v_error_code, 'countsTowardLimit', v_count,
+              'badTargetEffect', v_policy->>'target_streak_effect',
+              'v2', jsonb_build_object('errorClass', v_policy->>'error_class', 'ruleId', v_rule_id, 'matchedBy', v_matched_by,
+                'policyIds', v_policy->'policy_ids', 'revisions', v_policy->'revisions', 'targetRunId', r.id)
+                -- V571: dấu nội bộ để việc nạp lịch sử bỏ qua dòng này (không phải kết quả Zalo thật).
+                || CASE WHEN v_tc_code IS NOT NULL THEN jsonb_build_object('targetCheck', true) ELSE '{}'::jsonb END),
+            v_rk, v_now, nullif(o->'data'->>'postUrl', ''))
+          RETURNING id INTO v_detail_id;
+        END IF;
+      END IF;
+
+      v_side := jsonb_array_length(coalesce(v_policy->'lock_action_codes', '[]'::jsonb)) > 0
+        OR coalesce(v_policy->>'campaign_effect', 'none') <> 'none'
+        OR coalesce(v_policy->>'account_effect', 'none') <> 'none'
+        OR coalesce(v_policy->>'login_effect', 'none') <> 'none';
+      v_contrib := jsonb_build_object(
+        'seq', r.outcome_count + v_outcome_count + 1,
+        'ok', v_ok, 'actionCode', v_action, 'errorCode', v_error_code, 'delivery', v_delivery,
+        'targetEffect', CASE WHEN v_ok AND v_policy->>'remaining_steps' <> 'skip' THEN NULL ELSE v_policy->>'target_effect' END,
+        'requeueAfterMinutes', v_policy->'requeue_after_minutes',
+        'remaining', v_policy->>'remaining_steps',
+        'streak', v_policy->>'target_streak_effect', 'streakThreshold', v_policy->'streak_threshold', 'sideEffect', v_side,
+        'runEffect', v_policy->>'run_effect',
+        'pace', jsonb_build_object('mode', v_policy->>'pace_mode', 'seconds', v_policy->'pace_seconds'),
+        'campaignEffect', v_policy->>'campaign_effect', 'campaignHoldMinutes', v_policy->'campaign_hold_minutes',
+        'campaignNote', CASE WHEN v_policy->>'campaign_effect' IN ('pause', 'hold') THEN
+             -- Như renderZaloPolicyCampaignNote: [x]/[t] là số phút khoá (khoá theo phút), không thì câu lỗi.
+             coalesce(public.aka_agent_engine_render(coalesce(v_policy->>'campaign_note_template', v_err.noti_campaign),
+               jsonb_build_object('name', coalesce(t.name, ''), 'action', v_action_name, 'message', coalesce(v_signal->>'message', ''),
+                 'until', public.aka_agent_engine_format_vn(v_until),
+                 'x', CASE WHEN v_policy->>'lock_mode' IS DISTINCT FROM 'days_at_time' AND coalesce((v_policy->>'lock_minutes')::integer, 0) > 0
+                           THEN v_policy->>'lock_minutes' ELSE coalesce(v_signal->>'message', '') END,
+                 't', CASE WHEN v_policy->>'lock_mode' IS DISTINCT FROM 'days_at_time' AND coalesce((v_policy->>'lock_minutes')::integer, 0) > 0
+                           THEN v_policy->>'lock_minutes' ELSE '' END)), v_log)
+             || CASE WHEN v_err.public_code IS NOT NULL
+                     AND position('(' || v_err.public_code || ')' IN coalesce(public.aka_agent_engine_render(coalesce(v_policy->>'campaign_note_template', v_err.noti_campaign), '{}'::jsonb), v_log)) = 0
+                  THEN ' (' || v_err.public_code || ')' ELSE '' END
+           ELSE NULL END,
+        'accountEffect', v_policy->>'account_effect', 'loginEffect', v_policy->>'login_effect',
+        'lockUntil', v_until, 'log', v_log);
+      -- V517: decision chỉ giữ result (gọi lại lần báo) và contrib (gộp lượt); chính sách đã gộp không lưu nữa (không hàm nào đọc
+      -- lại; lịch sử có policyIds/revisions). Mỗi dòng auto_engine_outcomes nhẹ đi ~500 byte.
+      v_decision := jsonb_build_object(
+        'result', jsonb_build_object('resultKey', v_rk, 'actionCode', v_action, 'actionName', v_action_name, 'ok', v_ok, 'errorCode', v_error_code,
+          'publicCode', v_err.public_code, 'errorClass', v_policy->>'error_class', 'statusId', (v_policy->>'detail_status_id')::bigint,
+          'statusCode', v_sem.status_code, 'reportGroup', v_sem.report_group, 'deliveryState', v_delivery, 'countsTowardLimit', v_count,
+          'detailId', v_detail_id, 'log', v_log, 'lockUntil', v_until),
+        'contrib', v_contrib);
+      IF NOT p_dry_run THEN
+        INSERT INTO public.auto_engine_outcomes (result_key, target_run_id, input_data_id, campaign_id, account_id, action_code, phase, ok,
+          error_code, status_id, delivery_state, detail_id, decision, signal, created_at)
+        -- V558: kết quả không gắn thao tác ghi chuỗi rỗng ở bảng nội bộ này (cột bắt buộc); dòng lịch sử để trống mã thao tác như bộ cũ.
+        VALUES (v_rk, r.id, r.input_data_id, r.campaign_id, r.account_id, coalesce(v_action, ''), v_phase, v_ok, v_error_code,
+          (v_policy->>'detail_status_id')::bigint, v_delivery, v_detail_id, v_decision, v_signal, v_now);
+      END IF;
+      v_results := v_results || jsonb_build_array(v_decision->'result');
+      v_outcome_count := v_outcome_count + 1;
+      v_call_new := v_call_new || jsonb_build_array(v_contrib);
+    END IF;
+    v_call := v_call || jsonb_build_array(v_contrib);
+  END LOOP;
+
+  -- Lượt gọi này: data xong chưa (bước còn lại có chạy tiếp không), hiệu ứng áp ngay.
+  -- run_effect (dừng lượt/tài khoản/chiến dịch) chỉ có hiệu lực SAU khi data hiện tại xong,
+  -- giống stopAfterTarget hiện nay; các bước còn lại của data vẫn chạy trừ khi remaining_steps=skip.
+  FOR v_contrib IN SELECT x.value FROM jsonb_array_elements(v_call) x LOOP
+    IF v_contrib->>'remaining' = 'skip' THEN v_target_done := true; END IF;
+    -- Hiệu ứng chiến dịch áp ngay khi mã không có ngưỡng (applyRuntimeErrorPolicy hiện nay). Có ngưỡng (N data lỗi liền) thì chỉ
+    -- xét ở cuối data, khi kết quả tăng chuỗi. V532: kết quả có ngưỡng mà không tăng chuỗi (bước phụ gắn tag / đổi tên Zalo không
+    -- bao giờ đổi chuỗi lỗi) không còn tạm dừng chiến dịch ngay, như nguyên tắc V501 cho giao một phần; khoá thao tác, dừng lượt và
+    -- data đi đâu của mã vẫn giữ.
+    IF coalesce(v_contrib->>'campaignEffect', 'none') <> 'none'
+       AND (v_contrib->>'streakThreshold') IS NULL
+       AND (v_camp_effect = 'none' OR (v_contrib->>'campaignEffect' = 'pause' AND v_camp_effect = 'hold')) THEN
+      v_camp_effect := v_contrib->>'campaignEffect';
+      v_camp_note := v_contrib->>'campaignNote';
+      v_camp_hold := (v_contrib->>'campaignHoldMinutes')::integer;
+    END IF;
+    IF coalesce(v_contrib->>'accountEffect', 'none') = 'pause' THEN v_acc_effect := 'pause'; END IF;
+    IF coalesce(v_contrib->>'loginEffect', 'none') <> 'none' THEN v_login_effect := v_contrib->>'loginEffect'; END IF;
+    IF (v_contrib->>'lockUntil') IS NOT NULL THEN
+      v_lock_until_max := greatest(coalesce(v_lock_until_max, (v_contrib->>'lockUntil')::timestamptz), (v_contrib->>'lockUntil')::timestamptz);
+    END IF;
+  END LOOP;
+  v_target_done := v_target_done OR p_final;
+
+  IF v_target_done THEN
+    SELECT coalesce(jsonb_agg(eo.decision->'contrib' ORDER BY (eo.decision->'contrib'->>'seq')::integer, eo.result_key), '[]'::jsonb) INTO v_all
+      FROM public.auto_engine_outcomes eo WHERE eo.target_run_id = r.id;
+    IF p_dry_run THEN v_all := v_all || v_call_new; END IF;
+    -- Không bao giờ đóng data mà không có kết quả nào (chống "thành công giả"): runtime phải báo no_outcome.
+    IF jsonb_array_length(v_all) = 0 THEN RETURN jsonb_build_object('ok', false, 'reason', 'no_outcomes'); END IF;
+    FOR v_contrib IN SELECT x.value FROM jsonb_array_elements(v_all) x LOOP
+      IF v_contrib->>'delivery' IN ('delivered', 'partial', 'unknown') THEN v_any_committed := true; END IF;
+      -- Sau khi data xong: dừng lượt/tài khoản/chiến dịch theo kết quả nặng nhất của data này.
+      v_rank := greatest(
+        CASE v_contrib->>'runEffect' WHEN 'stop_campaign' THEN 4 WHEN 'stop_account' THEN 3 WHEN 'end_unit' THEN 2 ELSE 0 END,
+        -- V532: cùng điều kiện với hiệu ứng áp ngay ở trên (hiệu ứng có ngưỡng chỉ dừng lượt qua nhánh ngưỡng).
+        CASE WHEN coalesce(v_contrib->>'campaignEffect', 'none') <> 'none'
+              AND (v_contrib->>'streakThreshold') IS NULL THEN 4 ELSE 0 END,
+        CASE WHEN coalesce(v_contrib->>'accountEffect', 'none') <> 'none' OR coalesce(v_contrib->>'loginEffect', 'none') <> 'none' THEN 3 ELSE 0 END);
+      IF v_rank > v_run_rank THEN v_run_rank := v_rank; END IF;
+      -- Nghỉ sau data theo kết quả "nặng" nhất: full > short > none (bản cũ nghỉ sau mọi data).
+      v_rank := CASE v_contrib->'pace'->>'mode' WHEN 'full' THEN 3 WHEN 'short' THEN 2 WHEN 'none' THEN 1 ELSE 0 END;
+      IF v_rank > v_pace_rank OR (v_rank = v_pace_rank AND v_rank > 0
+           AND coalesce((v_contrib->'pace'->>'seconds')::integer, -1) > coalesce((v_pace->>'seconds')::integer, -1)) THEN
+        v_pace_rank := v_rank; v_pace := v_contrib->'pace';
+      END IF;
+      IF v_contrib->>'targetEffect' IS NOT NULL THEN
+        v_rank := CASE v_contrib->>'targetEffect' WHEN 'hold' THEN 3 WHEN 'requeue' THEN 2 WHEN 'requeue_after' THEN 2 ELSE 1 END;
+        IF v_rank > v_target_rank THEN
+          v_target_rank := v_rank; v_target_effect := v_contrib->>'targetEffect';
+          v_requeue_minutes := (v_contrib->>'requeueAfterMinutes')::integer;
+        END IF;
+      END IF;
+      IF NOT coalesce((v_contrib->>'ok')::boolean, false) THEN
+        v_note := v_contrib->>'log'; v_last_error_code := v_contrib->>'errorCode'; v_last_action := v_contrib->>'actionCode';
+      END IF;
+      -- Chuỗi mục tiêu lỗi: increment > reset > ignore (giống aggregateResultEffects).
+      IF v_contrib->>'streak' = 'increment' THEN
+        v_streak := 'increment';
+        IF (v_contrib->>'streakThreshold') IS NOT NULL OR coalesce((v_contrib->>'sideEffect')::boolean, false) THEN v_covered := true; END IF;
+      ELSIF v_contrib->>'streak' = 'reset' AND v_streak <> 'increment' THEN
+        v_streak := 'reset';
+      END IF;
+      IF coalesce(v_contrib->>'campaignEffect', 'none') <> 'none' AND (v_contrib->>'streakThreshold') IS NOT NULL
+         AND v_contrib->>'streak' = 'increment'
+         AND (v_thr_effect = 'none' OR (v_contrib->>'campaignEffect' = 'pause' AND v_thr_effect = 'hold')) THEN
+        v_thr_effect := v_contrib->>'campaignEffect';
+        v_thr_threshold := (v_contrib->>'streakThreshold')::integer;
+        v_thr_hold := (v_contrib->>'campaignHoldMinutes')::integer;
+        v_thr_source := v_contrib->>'errorCode';
+      END IF;
+    END LOOP;
+    -- Bước đã giao trước đó trong lượt này cũng chặn việc trả về hàng đợi.
+    IF EXISTS (SELECT 1 FROM jsonb_array_elements(r.marks) m WHERE m.value->>'state' IN ('pending', 'delivered', 'partial', 'unknown')) THEN
+      v_any_committed := true;
+    END IF;
+
+    v_target_effect := coalesce(v_target_effect, 'complete');
+    IF v_target_effect IN ('requeue', 'requeue_after') AND v_any_committed THEN
+      v_safety := v_safety || jsonb_build_array(jsonb_build_object('rule', 'no_requeue_after_delivery', 'from', v_target_effect));
+      v_target_effect := 'complete';
+    END IF;
+    v_final_status := CASE v_target_effect WHEN 'hold' THEN 'tạm dừng' WHEN 'complete' THEN 'hoàn thành' ELSE 'chờ xử lý' END;
+    v_schedule := CASE WHEN v_target_effect = 'requeue_after'
+      THEN coalesce(v_lock_until_max, v_now + make_interval(mins => coalesce(v_requeue_minutes, 0))) ELSE NULL END;
+    -- V501 (G3): data vừa về hàng đợi không được nhận lại trong cùng lượt (claim bỏ qua data đã thử với lease này), nên
+    -- lượt chạy tiếp các data phía sau thay vì kết thúc.
+
+    -- Chuỗi lỗi chỉ đổi khi lượt chạy còn mở (báo muộn sau khi data đã bị đóng không đếm lại).
+    IF v_run_open AND NOT p_dry_run AND v_streak = 'increment' THEN
+      INSERT INTO public.auto_campaign_error_state AS es (campaign_id, count_consecutive_bad_targets, last_input_data_id, last_reason, last_bad_target_at)
+      VALUES (r.campaign_id, 1, r.input_data_id, coalesce(v_last_error_code, v_note), v_now)
+      ON CONFLICT (campaign_id) DO UPDATE SET count_consecutive_bad_targets = es.count_consecutive_bad_targets + 1,
+        last_input_data_id = EXCLUDED.last_input_data_id, last_reason = EXCLUDED.last_reason, last_bad_target_at = EXCLUDED.last_bad_target_at, updated_at = v_now
+      RETURNING count_consecutive_bad_targets INTO v_streak_count;
+    ELSIF v_run_open AND NOT p_dry_run AND v_streak = 'reset' THEN
+      UPDATE public.auto_campaign_error_state SET count_consecutive_bad_targets = 0, updated_at = v_now WHERE campaign_id = r.campaign_id;
+      v_streak_count := 0;
+    ELSE
+      SELECT es.count_consecutive_bad_targets INTO v_streak_count FROM public.auto_campaign_error_state es WHERE es.campaign_id = r.campaign_id;
+      v_streak_count := CASE WHEN NOT v_run_open THEN coalesce(v_streak_count, 0)
+                             WHEN v_streak = 'increment' THEN coalesce(v_streak_count, 0) + 1
+                             WHEN v_streak = 'reset' THEN 0 ELSE coalesce(v_streak_count, 0) END;
+    END IF;
+
+    -- Ngưỡng chung: mã tăng chuỗi mà không có ngưỡng/hiệu ứng riêng thì theo mã canh chuỗi
+    -- (mặc định err_undefined), giống guard đang chạy ở campaignScheduler.
+    IF v_streak = 'increment' AND NOT v_covered AND v_thr_effect = 'none' THEN
+      v_guard_code := nullif(btrim(public.aka_agent_engine_setting('engine.bad_target_guard_error_code', 'err_undefined')), '');
+      IF v_guard_code IS NOT NULL AND EXISTS (SELECT 1 FROM public.auto_error e WHERE e.error_code = v_guard_code AND e.is_active AND NOT e.is_delete) THEN
+        v_gp := public.aka_agent_engine_resolve_policy(v_guard_code, NULL, coalesce(v_last_action, ''), c.action_id, r.runtime_target, 'after_send');
+        IF (v_gp->>'streak_threshold') IS NOT NULL AND coalesce(v_gp->>'campaign_effect', 'none') <> 'none' THEN
+          v_thr_effect := v_gp->>'campaign_effect';
+          v_thr_threshold := (v_gp->>'streak_threshold')::integer;
+          v_thr_hold := (v_gp->>'campaign_hold_minutes')::integer;
+          v_thr_source := v_guard_code;
+        END IF;
+      END IF;
+    END IF;
+    IF v_run_open AND v_thr_effect <> 'none' AND v_streak = 'increment' AND v_streak_count >= v_thr_threshold
+       AND (v_camp_effect = 'none' OR (v_thr_effect = 'pause' AND v_camp_effect = 'hold')) THEN
+      v_camp_effect := v_thr_effect;
+      v_camp_hold := v_thr_hold;
+      v_camp_note := 'Dừng sau ' || v_streak_count || ' data lỗi/thất bại liên tiếp (ngưỡng ' || v_thr_threshold || '): '
+        || coalesce(v_note, 'Lỗi không xác định')
+        -- V558: câu bước tiếp theo của mã Facebook (anh duyệt 17/11, Q23) nối sau câu dừng; mã khác (Zalo, SYS) giữ nguyên câu cũ.
+        || coalesce('. ' || nullif(btrim((SELECT e.customer_help FROM public.auto_error e
+                                          WHERE e.error_code = v_last_error_code AND e.public_code LIKE 'FB%')), ''), '');
+    END IF;
+
+    IF NOT p_dry_run THEN
+      IF v_run_open THEN
+        -- V515 (D): ghi chú của data là kết quả của lượt chốt này, như bộ chạy Desktop (thành công thì note = null). Trước V515 data từng
+        -- về hàng đợi kèm ghi chú (NET01…) rồi gửi thành công vẫn giữ ghi chú cũ.
+        UPDATE public.auto_campaign_input_data SET status = v_final_status,
+          note = v_note,
+          schedule = CASE WHEN v_schedule IS NOT NULL THEN v_schedule ELSE schedule END,
+          date_action = v_now
+        WHERE id = r.input_data_id AND status = 'đang chạy';
+      END IF;
+      UPDATE public.auto_engine_target_runs SET marks = r.marks, completed_at = coalesce(completed_at, v_now),
+        final_target_status = coalesce(final_target_status, v_final_status), final_error_code = coalesce(final_error_code, v_last_error_code),
+        close_reason = coalesce(close_reason, 'reported'), outcome_count = outcome_count + v_outcome_count
+      WHERE id = r.id;
+    END IF;
+  ELSIF NOT p_dry_run THEN
+    UPDATE public.auto_engine_target_runs SET marks = r.marks, outcome_count = outcome_count + v_outcome_count WHERE id = r.id;
+  END IF;
+  -- Còn data đến hạn phía sau không: runtime chỉ nghỉ giữa 2 lần gửi khi còn việc.
+  IF v_target_done THEN
+    -- V501: không tính data đã thử trong lượt này (lượt sau mới thử lại).
+    v_more := EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+      WHERE d.campaign_id = r.campaign_id AND d.status = 'chờ xử lý' AND coalesce(d.is_delete, false) = false
+        AND (d.schedule IS NULL OR d.schedule <= v_now)
+        AND NOT EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.input_data_id = d.id AND tr.lease_token = r.lease_token));
+  END IF;
+
+  -- Hiệu ứng chiến dịch/tài khoản chỉ áp khi còn giữ chỗ; mô phỏng thì chỉ báo sẽ áp gì.
+  IF v_lease_ok AND NOT p_dry_run THEN
+    IF v_camp_effect <> 'none' THEN
+      -- V501: không ghi đè trạng thái người dùng vừa đổi trong lúc data chạy (tạm dừng từ Web/Desktop), như VPS. Hoãn theo
+      -- phút chỉ dời lịch khi còn trong ngày, trước giờ dừng (G2).
+      UPDATE public.auto_campaigns SET
+        status = CASE v_camp_effect WHEN 'pause' THEN 'tạm dừng' ELSE 'chờ xử lý' END,
+        schedule = CASE WHEN v_camp_effect = 'hold' AND coalesce(v_camp_hold, 0) > 0
+                         AND v_now + make_interval(mins => v_camp_hold)
+                             < ((v_vn + least(coalesce(daily_stop_time, time '23:59:00'), time '23:59:00')) AT TIME ZONE 'Asia/Ho_Chi_Minh')
+                        THEN v_now + make_interval(mins => v_camp_hold) ELSE schedule END,
+        note = coalesce(v_camp_note, note), updated_at = v_now
+      WHERE id = r.campaign_id AND status IN ('đang chạy', 'chờ xử lý');
+      GET DIAGNOSTICS v_camp_rows = ROW_COUNT;
+      v_camp_applied := CASE WHEN v_camp_rows > 0 THEN v_camp_effect ELSE 'none' END;
+    END IF;
+    IF v_acc_effect = 'pause' THEN UPDATE public.auto_accounts SET status = 'tạm dừng', updated_at = v_now WHERE id = r.account_id; END IF;
+    IF v_login_effect <> 'none' THEN
+      UPDATE public.auto_accounts SET login_status = CASE v_login_effect WHEN 'checkpoint' THEN 'checkpoint' ELSE 'chưa đăng nhập' END, updated_at = v_now
+       WHERE id = r.account_id;
+    END IF;
+  ELSIF p_dry_run AND v_lease_ok THEN
+    v_camp_applied := v_camp_effect;
+  END IF;
+
+  v_next := CASE
+    WHEN NOT v_lease_ok THEN 'ownership_lost'
+    WHEN NOT v_target_done THEN 'next_step'
+    WHEN v_camp_applied <> 'none' OR v_run_rank = 4 THEN 'stop_campaign'
+    WHEN v_run_rank = 3 THEN 'stop_account'
+    WHEN v_run_rank = 2 THEN 'end_unit'
+    ELSE 'next_target' END;
+
+  v_response := jsonb_build_object('ok', true, 'dryRun', p_dry_run, 'next', v_next,
+    'pace', CASE WHEN v_target_done THEN v_pace ELSE NULL END,
+    'outcomes', v_results,
+    'target', jsonb_build_object('done', v_target_done, 'status', v_final_status, 'note', v_note, 'schedule', v_schedule, 'morePending', v_more),
+    'streak', CASE WHEN v_target_done THEN jsonb_build_object('effect', v_streak, 'count', v_streak_count, 'threshold', v_thr_threshold, 'source', v_thr_source,
+      'lastErrorCode', v_last_error_code) END,
+    'campaign', jsonb_build_object('effect', v_camp_applied, 'note', CASE WHEN v_camp_applied <> 'none' THEN v_camp_note END),
+    'account', jsonb_build_object('effect', v_acc_effect, 'loginEffect', v_login_effect),
+    'safety', v_safety);
+  -- V515 (B): lưu câu trả lời của lần chốt (không kèm danh sách kết quả, dựng lại từ auto_engine_outcomes khi gọi lại).
+  IF v_target_done AND v_run_open AND NOT p_dry_run THEN
+    UPDATE public.auto_engine_target_runs SET final_response = v_response - 'outcomes' WHERE id = r.id;
+  END IF;
+  RETURN v_response;
+END $function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_engine_action_limit(p_campaign_id bigint, p_account_id bigint, p_action_code text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+DECLARE
+  v_vn date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
+  v_limits jsonb;
+  v_org bigint;
+  v_base jsonb;
+  v_group jsonb;
+  v_daily numeric;
+  v_count numeric;
+  v_minutes numeric;
+  v_cap numeric;
+  v_unlimited boolean;
+  v_rows integer;
+  v_web jsonb;
+  v_web_default numeric;
+  v_web_max numeric;
+BEGIN
+  SELECT nullif(c.extra_settings->'actionLimits', 'null'::jsonb), c.organization_id INTO v_limits, v_org
+    FROM public.auto_campaigns c WHERE c.id = p_campaign_id;
+  IF p_action_code = 'zalo_find_phone_user' THEN
+    v_base := jsonb_build_object('dailyLimit', 1000, 'rateLimitCount', 1000,
+      'rateLimitMinutes', coalesce(nullif(v_limits->'byActionCode'->p_action_code->'rateLimitMinutes', 'null'::jsonb), v_limits->'rateLimitMinutes'));
+  ELSE
+    v_base := nullif(v_limits->'byActionCode'->p_action_code, 'null'::jsonb);
+    IF v_base IS NULL AND v_limits IS NOT NULL THEN
+      v_base := jsonb_build_object('dailyLimit', v_limits->'dailyLimit', 'rateLimitCount', v_limits->'rateLimitCount', 'rateLimitMinutes', v_limits->'rateLimitMinutes');
+    END IF;
+  END IF;
+  SELECT nullif(g.settings->'byActionCode'->p_action_code, 'null'::jsonb) INTO v_group
+    FROM public.auto_accounts a JOIN public.auto_account_groups g ON g.id = a.account_group_id WHERE a.id = p_account_id;
+
+  -- normalizePositiveActionLimit: số dương thì lấy phần nguyên, còn lại là không đặt.
+  IF v_group IS NOT NULL THEN
+    v_daily := coalesce(public.aka_agent_engine_positive(v_group->'dailyLimit'), public.aka_agent_engine_number(v_base->'dailyLimit'));
+    v_count := coalesce(public.aka_agent_engine_positive(v_group->'rateLimitCount'), public.aka_agent_engine_number(v_base->'rateLimitCount'));
+    v_minutes := coalesce(public.aka_agent_engine_positive(v_group->'rateLimitMinutes'), public.aka_agent_engine_number(v_base->'rateLimitMinutes'));
+  ELSE
+    v_daily := public.aka_agent_engine_number(v_base->'dailyLimit');
+    v_count := public.aka_agent_engine_number(v_base->'rateLimitCount');
+    v_minutes := public.aka_agent_engine_number(v_base->'rateLimitMinutes');
+  END IF;
+
+  -- V558: trần gói Facebook như bộ cũ (getGroupedDailySendLimit, gộp facebookCore sản phẩm 3 và facebookFanpage sản phẩm 10 cho mọi
+  -- thao tác Facebook): gói trả phí không đặt số = không giới hạn; gói demo không đặt số = 30; nhiều gói lấy số lớn nhất.
+  IF p_action_code <> 'zalo_find_phone_user' AND (p_action_code LIKE 'zalo\_%' OR p_action_code LIKE 'fb\_%') THEN
+    SELECT count(*), bool_or(coalesce(p.max_sends_per_day, 0) <= 0 AND lower(btrim(coalesce(p.package_type, ''))) <> 'demo'),
+           max(CASE WHEN coalesce(p.max_sends_per_day, 0) > 0 THEN p.max_sends_per_day ELSE 30 END)
+      INTO v_rows, v_unlimited, v_cap
+      FROM public.org_organization_product p
+     WHERE p.organization_id = v_org AND p.is_deleted = false
+       AND p.product_id IN (SELECT x FROM unnest(CASE WHEN p_action_code LIKE 'fb\_%' THEN ARRAY[3, 10] ELSE ARRAY[16, 18] END) x)
+       AND p.expiration_date IS NOT NULL AND (p.expiration_date AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >= v_vn;
+    IF v_rows > 0 AND NOT v_unlimited THEN
+      v_daily := least(coalesce(public.aka_agent_engine_positive(to_jsonb(v_daily)), 30), v_cap);
+    END IF;
+  END IF;
+
+  -- Quét data website: mặc định / trần theo web_scan.campaigns.limits (anh chốt 21/11/2026: 100 / ngày, trần 500; không theo gói). Giới hạn
+  -- trong giờ không đặt thì bằng giới hạn ngày (không chặn thêm theo giờ), khung 60 phút.
+  IF p_action_code LIKE 'web\_%' THEN
+    SELECT CASE WHEN pg_input_is_valid(s.value, 'jsonb') THEN s.value::jsonb->'limits' END INTO v_web
+      FROM public.auto_system_settings s WHERE s.key = 'web_scan.campaigns' AND s.is_active LIMIT 1;
+    v_web_default := coalesce(public.aka_agent_engine_positive(v_web->'defaultDaily'), 100);
+    v_web_max := coalesce(public.aka_agent_engine_positive(v_web->'maxDaily'), 500);
+    v_daily := least(CASE WHEN v_daily > 0 THEN v_daily ELSE v_web_default END, v_web_max);
+    v_count := least(CASE WHEN v_count > 0 THEN v_count ELSE v_daily END, v_web_max);
+    v_minutes := CASE WHEN v_minutes > 0 THEN v_minutes ELSE 60 END;
+  END IF;
+
+  RETURN jsonb_build_object(
+    'daily', CASE WHEN v_daily > 0 THEN v_daily ELSE 30 END,
+    'windowCount', CASE WHEN v_count > 0 THEN v_count ELSE 9 END,
+    'windowMinutes', CASE WHEN v_minutes > 0 THEN v_minutes ELSE 65 END);
+END $function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_engine_finish_campaign_v2(p_account_id bigint, p_lease_token uuid, p_note text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+-- Hết data khi còn giữ lease: kết thúc lượt như Desktop (campaignScheduler.ts, cuối executeCampaignV2 + handleCampaignCompletion +
+-- rescheduleCompletedCampaignPass), theo đúng thứ tự. Trả lý do; lõi in câu tiến trình theo lý do.
+DECLARE
+  v_now timestamptz := clock_timestamp();
+  v_vn date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
+  v_campaign_id bigint;
+  l public.auto_engine_leases%ROWTYPE;
+  c public.auto_campaigns%ROWTYPE;
+  a public.auto_accounts%ROWTYPE;
+  v_extra jsonb;
+  v_next timestamptz;
+  v_cutoff time;
+  v_slots text[];
+  v_slot text;
+  v_slot_minute integer;
+  v_current_minute integer;
+  v_candidate timestamptz;
+  v_next_slot text;
+  v_minutes integer;
+  v_raw jsonb;
+  v_mode text;
+  v_suffix text;
+  v_total bigint;
+  v_resettable bigint;
+  v_m text[];
+  -- V506: group thời gian thực.
+  v_rt_raw text;
+  v_rt_key text;
+  v_anchor timestamptz;
+  v_rt_slot time;
+  -- V558: chạy lại sau N giờ (giờ, số nguyên ≥ 1).
+  v_hours numeric;
+  -- V561: lặp lại sau khi chạy xong.
+  v_repeat jsonb;
+BEGIN
+  SELECT el.campaign_id INTO v_campaign_id FROM public.auto_engine_leases el
+   WHERE el.account_id = p_account_id AND el.lease_token = p_lease_token AND el.expires_at > v_now;
+  IF NOT FOUND THEN RETURN jsonb_build_object('ok', false, 'reason', 'ownership_lost'); END IF;
+  -- Thứ tự khoá như bản cũ: khoá nạp data của chiến dịch (cùng khoá với aka_agent_lock_campaign_input_serialization và luồng nạp
+  -- Nhóm data), rồi chiến dịch, tài khoản, rồi lease (claim cũng khoá chiến dịch → tài khoản → lease).
+  PERFORM pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || v_campaign_id::text, 0));
+  SELECT * INTO c FROM public.auto_campaigns WHERE id = v_campaign_id FOR UPDATE;
+  SELECT * INTO a FROM public.auto_accounts WHERE id = p_account_id FOR UPDATE;
+  SELECT * INTO l FROM public.auto_engine_leases
+   WHERE account_id = p_account_id AND lease_token = p_lease_token AND expires_at > v_now FOR UPDATE;
+  IF NOT FOUND OR l.campaign_id IS DISTINCT FROM v_campaign_id THEN RETURN jsonb_build_object('ok', false, 'reason', 'ownership_lost'); END IF;
+  IF c.id IS NULL OR coalesce(c.is_delete, false) THEN RETURN jsonb_build_object('ok', false, 'reason', 'campaign_deleted'); END IF;
+  IF c.status NOT IN ('chờ xử lý', 'đang chạy') THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'campaign_control_won', 'campaignStatus', c.status);
+  END IF;
+  -- Review 12/11: máy chưa cập nhật (bộ cũ) đã nhận chiến dịch giữa lúc lõi hết data và lúc kết thúc lượt: không kết thúc / đặt lại
+  -- data, như release_v1 và close_stale_v1 (chỉ đụng chiến dịch không còn token của bộ cũ).
+  IF c.runtime_claim_token IS NOT NULL OR c.runtime_unit_token IS NOT NULL THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'legacy_busy');
+  END IF;
+  -- Như finalizer của VPS: tài khoản Server bị tạm dừng trong lượt thì chiến dịch về "chờ xử lý", không hoàn thành.
+  IF l.runtime_target = 'fly' AND a.status IS DISTINCT FROM 'đang chạy' AND a.status IS DISTINCT FROM 'chờ xử lý' THEN
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', note = NULL, updated_at = v_now WHERE id = c.id;
+    RETURN jsonb_build_object('ok', true, 'reason', 'account_control_won', 'accountStatus', a.status, 'campaignStatus', 'chờ xử lý');
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.campaign_id = c.id AND tr.completed_at IS NULL)
+     OR EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                 WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'đang chạy') THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'targets_remaining');
+  END IF;
+  -- Data đến hạn chưa thử trong lượt này (vừa được thêm vào): chạy tiếp, chưa kết thúc.
+  IF EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+              WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý'
+                AND (d.schedule IS NULL OR d.schedule <= v_now)
+                AND NOT EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.input_data_id = d.id AND tr.lease_token = p_lease_token)) THEN
+    RETURN jsonb_build_object('ok', false, 'reason', 'targets_remaining');
+  END IF;
+  -- Review 12/11: bản cũ xoá ghi chú khi bắt đầu mỗi lượt (claim v397); bộ mới chỉ xoá khi nhận được data (chiến dịch sang "đang
+  -- chạy"). Lượt không nhận data nào (chiến dịch còn "chờ xử lý", ví dụ mọi data còn lại bị chống gửi lặp tạm dừng) thì ghi chú đang
+  -- có là của lượt trước (câu chờ khoá / hạn mức, không kiểm được giới hạn gửi lặp): xoá trước khi hoàn thành / hẹn lại.
+  IF c.status = 'chờ xử lý' AND c.note IS NOT NULL THEN
+    UPDATE public.auto_campaigns SET note = NULL, updated_at = v_now WHERE id = c.id;
+    c.note := NULL;
+  END IF;
+
+  -- 0. Như executeCampaignV2 (isZaloFriendAutoDataCampaign && không có data): chiến dịch nhắn bạn bè "toàn bộ / theo tag" đã lấy
+  -- data một lần mà không còn dòng nào thì giữ "chờ xử lý" kèm ghi chú, không hoàn thành (chế độ lạ coi như "selected").
+  IF c.action_id = 'zalo_message_friend'
+     AND coalesce(c.extra_settings->>'zaloFriendTargetMode', 'selected') IN ('all_friends', 'tagged_friends')
+     AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_input_data d WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false) THEN
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', note = 'Chiến dịch đã lấy data bạn bè Zalo một lần nhưng chưa có data để chạy',
+      updated_at = v_now WHERE id = c.id;
+    RETURN jsonb_build_object('ok', true, 'reason', 'friend_auto_no_data', 'campaignStatus', 'chờ xử lý');
+  END IF;
+
+  -- V506: group thời gian thực, như handleZaloRealtimeGroupCompletion (sau lượt) và prepareZaloRealtimeGroupCampaignRun (lượt không có data
+  -- đến hạn) của Desktop, theo đúng thứ tự: data đến hạn còn chờ → chạy lại ngay; data tương lai → hẹn tới data sớm nhất; còn trong ngày
+  -- nhận data (zaloRealtimeEndDate, ngày VN của DB) → chờ tới giờ gốc của chiến dịch (hôm nay nếu chưa qua, không thì ngày mai); hết ngày
+  -- nhận → hoàn thành. Data do bộ nhận sự kiện của bản cũ đổ vào (enqueue_campaign_zalo_realtime_group_event), không đổi.
+  IF c.action_id = 'zalo_message_group_realtime' THEN
+    IF EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý'
+                  AND (d.schedule IS NULL OR d.schedule <= v_now)) THEN
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_now, note = NULL, updated_at = v_now WHERE id = c.id;
+      RETURN jsonb_build_object('ok', true, 'reason', 'realtime_due_pending', 'campaignStatus', 'chờ xử lý');
+    END IF;
+    SELECT min(d.schedule) INTO v_next FROM public.auto_campaign_input_data d
+     WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý' AND d.schedule > v_now;
+    IF v_next IS NOT NULL THEN
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+      RETURN jsonb_build_object('ok', true, 'reason', 'rescheduled_future_input', 'schedule', v_next, 'campaignStatus', 'chờ xử lý');
+    END IF;
+    -- getZaloRealtimeEndDateKey: "YYYY-MM-DD" giữ nguyên (so như chuỗi), dạng khác đọc như ngày giờ rồi lấy ngày VN; sai thì hết hạn.
+    v_rt_raw := btrim(coalesce(c.extra_settings->>'zaloRealtimeEndDate', ''));
+    v_rt_key := NULL;
+    IF v_rt_raw ~ '^\d{4}-\d{2}-\d{2}$' THEN
+      v_rt_key := v_rt_raw;
+    ELSIF v_rt_raw <> '' THEN
+      BEGIN
+        v_rt_key := to_char((v_rt_raw::timestamptz AT TIME ZONE 'Asia/Ho_Chi_Minh')::date, 'YYYY-MM-DD');
+      EXCEPTION WHEN OTHERS THEN
+        v_rt_key := NULL;
+      END;
+    END IF;
+    IF v_rt_key IS NOT NULL AND to_char(v_vn, 'YYYY-MM-DD') <= v_rt_key THEN
+      -- getZaloRealtimeWaitSchedule: giờ:phút (VN) của lịch gốc, không có thì lịch hiện tại, không có nữa thì bây giờ.
+      v_anchor := coalesce(c.original_schedule, c.schedule, v_now);
+      v_rt_slot := date_trunc('minute', (v_anchor AT TIME ZONE 'Asia/Ho_Chi_Minh'))::time;
+      v_next := ((v_vn + v_rt_slot)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh');
+      IF v_next <= v_now THEN v_next := (((v_vn + 1) + v_rt_slot)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh'); END IF;
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+      -- Lượt đã chạy data thì "tiếp tục chờ" (sau lượt), chưa chạy data nào thì "đang chờ" (trước lượt), như hai câu của Desktop.
+      RETURN jsonb_build_object('ok', true, 'reason', 'realtime_waiting', 'schedule', v_next, 'campaignStatus', 'chờ xử lý',
+        'ranTargets', EXISTS (SELECT 1 FROM public.auto_engine_target_runs tr WHERE tr.lease_token = p_lease_token AND tr.campaign_id = c.id));
+    END IF;
+    RETURN public.aka_agent_engine_finalize_v501(c.id, 'Chiến dịch đã hết ngày nhận data theo thời gian thực và không còn data chờ chạy',
+      'completed_realtime_end', NULL);
+  END IF;
+
+  -- 1. Data chưa đến lịch: hẹn chiến dịch tới data sớm nhất (deferCampaignUntilFutureInput), trước mọi nhánh khác.
+  SELECT min(d.schedule) INTO v_next FROM public.auto_campaign_input_data d
+   WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý' AND d.schedule > v_now;
+  IF v_next IS NOT NULL THEN
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+    RETURN jsonb_build_object('ok', true, 'reason', 'rescheduled_future_input', 'schedule', v_next, 'campaignStatus', 'chờ xử lý');
+  END IF;
+
+  -- 2. Nhóm data (handleCampaignCompletion bước 1): đúng hàm kết thúc của bản cũ (aka_agent_internal_finalize_data_group_campaign_v219,
+  -- cùng lõi với bản Desktop và bản Zalo Server): data chờ / về hàng đợi → chờ xử lý; nguồn đang nhận → chờ xử lý + "Chờ data mới";
+  -- nguồn dừng / hết hạn / bị xoá → hoàn thành. Lease của lượt là bằng chứng sở hữu (thay kiểm runtime của hai bản bọc).
+  IF c.data_target_source_mode = 'data_group'
+     AND to_regprocedure('public.aka_agent_internal_finalize_data_group_campaign_v219(bigint,bigint,bigint,text)') IS NOT NULL THEN
+    EXECUTE 'SELECT public.aka_agent_internal_finalize_data_group_campaign_v219($1, $2, $3, $4)' INTO v_raw
+      USING c.staff_id, c.organization_id, c.id, p_note;
+    RETURN jsonb_build_object('ok', true, 'reason', CASE WHEN (v_raw->>'completed')::boolean THEN 'data_group_completed' ELSE 'data_group_waiting' END,
+      'finalize', v_raw, 'campaignStatus', v_raw->>'status');
+  END IF;
+  -- Nhóm theo thời gian thực có bộ kết thúc riêng của bản cũ; Nhóm data khi DB chưa có hàm kết thúc (DB thử): không tự hoàn thành
+  -- (hoàn thành làm trigger dừng hẳn nguồn Nhóm data).
+  IF c.data_target_source_mode = 'data_group' THEN
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', updated_at = v_now WHERE id = c.id AND status = 'đang chạy';
+    RETURN jsonb_build_object('ok', false, 'reason', 'completion_not_supported', 'campaignStatus', 'chờ xử lý');
+  END IF;
+
+  v_cutoff := least(coalesce(c.daily_stop_time, time '23:59:00'), time '23:59:00');
+  v_extra := coalesce(c.extra_settings, '{}'::jsonb);
+
+  -- 3. Hết ngày kết thúc.
+  IF c.schedule_end_date IS NOT NULL AND v_now >= c.schedule_end_date THEN
+    RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_end_date', NULL);
+  END IF;
+
+  -- 4. Nhiều khung giờ (handleMultiDailyTimeSlotAfterCompletion): khung hiện tại = lịch lúc bắt đầu lượt, phải cùng ngày hôm nay.
+  -- V558: như MULTI_DAILY_TIME_SLOT_ACTION_IDS của bộ cũ (campaignScheduler.ts:666), gồm cả trang cá nhân và Page Facebook.
+  IF c.action_id IN ('zalo_message_friend', 'zalo_message_group', 'facebook_timeline_post', 'facebook_page_post')
+     AND v_extra->'multiDailyTimeSlotsEnabled' = 'true'::jsonb THEN
+    -- Tách theo dấu phẩy/xuống dòng, chuẩn hoá H, H:M, HhM, Hh (giờ 0–23, phút 0–59), bỏ trùng theo phút, xếp tăng dần.
+    SELECT coalesce(array_agg(s.slot ORDER BY s.minute), '{}'::text[]) INTO v_slots FROM (
+      SELECT DISTINCT ON (x.minute) x.minute, x.slot FROM (
+        SELECT (m[1])::integer * 60 + coalesce(nullif(m[2], ''), nullif(m[3], ''), '0')::integer AS minute,
+               lpad(m[1]::integer::text, 2, '0') || ':' || lpad(coalesce(nullif(m[2], ''), nullif(m[3], ''), '0')::integer::text, 2, '0') AS slot
+          -- Danh sách khung giờ: Desktop lưu chuỗi "08:00,09:00", Web lưu mảng ["08:00", "09:00"]. Mảng thì nối các phần tử bằng dấu phẩy
+          -- (bộ cũ đọc mảng bằng String(mảng), cũng ra chuỗi đó) rồi tách và chuẩn hoá như chuỗi; phần tử null bỏ qua.
+          FROM regexp_split_to_table(CASE jsonb_typeof(v_extra->'multiDailyTimeSlots') WHEN 'string' THEN v_extra->>'multiDailyTimeSlots'
+                                          WHEN 'number' THEN v_extra->>'multiDailyTimeSlots'
+                                          WHEN 'array' THEN (SELECT coalesce(string_agg(e.slot_text, ','), '')
+                                                               FROM jsonb_array_elements_text(v_extra->'multiDailyTimeSlots') AS e(slot_text))
+                                          ELSE '' END, '[,\r\n]+') item,
+               LATERAL regexp_match(regexp_replace(lower(btrim(item)), '\s+', '', 'g'), '^(\d{1,2})(?::(\d{1,2})|h(\d{1,2})?|h)?$') m
+         WHERE m IS NOT NULL AND (m[1])::integer BETWEEN 0 AND 23 AND coalesce(nullif(m[2], ''), nullif(m[3], ''), '0')::integer BETWEEN 0 AND 59
+      ) x ORDER BY x.minute
+    ) s;
+    IF cardinality(v_slots) >= 2 AND l.campaign_schedule IS NOT NULL
+       AND (l.campaign_schedule AT TIME ZONE 'Asia/Ho_Chi_Minh')::date = v_vn THEN
+      v_current_minute := extract(hour FROM (l.campaign_schedule AT TIME ZONE 'Asia/Ho_Chi_Minh'))::integer * 60
+                        + extract(minute FROM (l.campaign_schedule AT TIME ZONE 'Asia/Ho_Chi_Minh'))::integer;
+      FOREACH v_slot IN ARRAY v_slots LOOP
+        v_slot_minute := split_part(v_slot, ':', 1)::integer * 60 + split_part(v_slot, ':', 2)::integer;
+        CONTINUE WHEN v_slot_minute <= v_current_minute;
+        v_candidate := ((v_vn + make_interval(mins => v_slot_minute))::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh');
+        CONTINUE WHEN v_candidate <= v_now;
+        v_next_slot := v_slot;
+        EXIT;
+      END LOOP;
+      IF v_next_slot IS NULL THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_no_slot', NULL);
+      END IF;
+      IF (v_candidate AT TIME ZONE 'Asia/Ho_Chi_Minh')::time >= v_cutoff THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_slot_after_cutoff', jsonb_build_object('slot', v_next_slot));
+      END IF;
+      v_next := v_candidate;
+      v_mode := 'slot_advanced';
+      v_suffix := 'ở khung giờ tiếp theo';
+    END IF;
+  END IF;
+
+  -- 5. Gửi lặp lại sau x phút (handleZaloShareRepeatAfterCompletion): nhắn bạn bè/nhóm dạng chia sẻ, không nhiều khung giờ,
+  -- không bật chống gửi lặp N ngày, số phút 5–1439 (số, hoặc chuỗi 1–4 chữ số).
+  IF v_mode IS NULL AND c.action_id IN ('zalo_message_friend', 'zalo_message_group') AND v_extra->'zaloShareRepeatEnabled' = 'true'::jsonb
+     AND v_extra->>'zaloMessageSendMode' = 'share' AND v_extra->'multiDailyTimeSlotsEnabled' IS DISTINCT FROM 'true'::jsonb
+     AND v_extra->'recentDeliveryCooldownEnabled' IS DISTINCT FROM 'true'::jsonb THEN
+    v_raw := v_extra->'zaloShareRepeatAfterMinutes';
+    v_minutes := CASE
+      WHEN jsonb_typeof(v_raw) = 'number' AND (v_raw #>> '{}') ~ '^\d+$' THEN (v_raw #>> '{}')::integer
+      WHEN jsonb_typeof(v_raw) = 'string' AND btrim(v_raw #>> '{}') ~ '^\d{1,4}$' THEN btrim(v_raw #>> '{}')::integer END;
+    IF v_minutes BETWEEN 5 AND 1439 THEN
+      v_next := v_now + make_interval(mins => v_minutes);
+      IF (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <> (l.acquired_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+         OR (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <> v_vn THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_repeat_next_day', NULL);
+      END IF;
+      IF (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::time >= v_cutoff THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_repeat_after_cutoff', NULL);
+      END IF;
+      v_mode := 'repeat_scheduled';
+      v_suffix := 'ở lượt gửi lặp kế tiếp';
+    END IF;
+  END IF;
+
+  -- 5b. (V561) Lặp lại sau khi chạy xong: lịch Hàng ngày, x phút / giờ / ngày tính từ lúc chạy xong, tới khi đủ số lượt tối đa hoặc tới
+  -- ngày kết thúc. Như handleCampaignRepeatAfterCompletion của bộ cũ: chỉ tính lượt khi lượt này thật sự chạy hết (không còn data chờ)
+  -- và còn data để chạy lại (đăng trang cá nhân, lướt newsfeed không có dòng data nào vẫn lặp, bước 6 hẹn lượt kế mà không đặt lại gì).
+  -- Các kiểm tra đó trùng với bước 6 nên bước 6 không rẽ nhánh khác sau khi đã đếm lượt. Đang bật lặp thì "chạy lại sau N giờ" kiểu cũ
+  -- (V558) không áp dụng, kể cả khi lượt này đã là lượt cuối.
+  IF v_mode IS NULL AND v_extra->'repeatAfterCompletionEnabled' = 'true'::jsonb
+     AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                      WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý')
+     AND (EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+                   WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status <> 'tạm dừng')
+          OR (c.action_id IN ('facebook_timeline_post', 'facebook_newsfeed_interaction')
+              AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_input_data d WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false))) THEN
+    v_repeat := private.aka_agent_campaign_repeat_core(c, v_now, true, NULL, 'engine');
+    IF (v_repeat->>'repeat')::boolean THEN
+      v_next := (v_repeat->>'next')::timestamptz;
+      v_mode := 'repeat_scheduled';
+      v_suffix := 'ở lượt lặp kế tiếp';
+    ELSIF NOT (v_repeat->>'enabled')::boolean THEN
+      v_repeat := NULL;
+    END IF;
+  END IF;
+
+  -- V558: chạy lại sau N giờ khi xong (handleRerunAfterCompletion, campaignScheduler.ts:2711-2786): tìm data trong group / bằng search,
+  -- comment seeding, newsfeed; findDataRerunEnabled đúng true, findDataRerunAfterHours lấy phần nguyên, dưới 1 hoặc sai thì tắt (hoàn thành
+  -- như thường). Lịch kế = bây giờ + N giờ; khác ngày nhận lượt hoặc khác hôm nay → hoàn thành; từ giờ dừng trong ngày → hoàn thành. Trừ
+  -- newsfeed (không có data): mọi data chưa xoá, khác "tạm dừng" về "chờ xử lý" (ghi chú rỗng, date_action NULL); không còn data nào như
+  -- vậy → hoàn thành. Không qua bước "còn data đến hạn" và không đòi có data (khác nhánh 6).
+  IF v_mode IS NULL AND v_repeat IS NULL
+     AND c.action_id IN ('facebook_find_data_group', 'facebook_find_data_search', 'facebook_comment_seeding', 'facebook_newsfeed_interaction',
+                         'web_find_data_nhatot', 'web_find_data_batdongsan', 'web_find_data_yellowpages')
+     AND v_extra->'findDataRerunEnabled' = 'true'::jsonb THEN
+    v_raw := v_extra->'findDataRerunAfterHours';
+    v_hours := CASE
+      WHEN jsonb_typeof(v_raw) = 'number' THEN floor((v_raw #>> '{}')::numeric)
+      WHEN jsonb_typeof(v_raw) = 'string' AND btrim(v_raw #>> '{}') ~ '^[0-9]{1,6}(\.[0-9]+)?$' THEN floor(btrim(v_raw #>> '{}')::numeric) END;
+    IF v_hours >= 1 AND v_hours <= 1000000 THEN
+      v_next := v_now + make_interval(hours => v_hours::integer);
+      IF (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <> (l.acquired_at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+         OR (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::date <> v_vn THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_rerun_next_day', NULL);
+      END IF;
+      IF (v_next AT TIME ZONE 'Asia/Ho_Chi_Minh')::time >= v_cutoff THEN
+        RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_rerun_after_cutoff', jsonb_build_object('hours', v_hours));
+      END IF;
+      IF c.action_id <> 'facebook_newsfeed_interaction' THEN
+        SELECT count(*) INTO v_resettable FROM public.auto_campaign_input_data d
+         WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status <> 'tạm dừng';
+        IF v_resettable = 0 THEN
+          RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_rerun_no_data', NULL);
+        END IF;
+        UPDATE public.auto_campaign_input_data SET status = 'chờ xử lý', note = '', date_action = NULL
+         WHERE campaign_id = c.id AND coalesce(is_delete, false) = false AND status <> 'tạm dừng';
+      END IF;
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+      RETURN jsonb_build_object('ok', true, 'reason', 'rerun_scheduled', 'schedule', v_next, 'hours', v_hours, 'campaignStatus', 'chờ xử lý');
+    END IF;
+  END IF;
+
+  IF v_mode IS NULL THEN
+    v_raw := public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed',
+      CASE WHEN v_repeat IS NOT NULL THEN jsonb_build_object('repeat', v_repeat) END);
+    IF v_repeat IS NOT NULL AND v_raw->>'campaignStatus' = 'hoàn thành' THEN
+      PERFORM private.aka_agent_campaign_repeat_confirm_end(c.id);
+    END IF;
+    RETURN v_raw;
+  END IF;
+
+  -- 6. Hẹn lượt kế tiếp (rescheduleCompletedCampaignPass).
+  IF EXISTS (SELECT 1 FROM public.auto_campaign_input_data d
+              WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false AND d.status = 'chờ xử lý'
+                AND (d.schedule IS NULL OR d.schedule <= v_now)) THEN
+    UPDATE public.auto_campaigns SET status = 'chờ xử lý', note = 'Còn data đã đến lịch, chiến dịch sẽ tiếp tục xử lý.', updated_at = v_now
+     WHERE id = c.id;
+    RETURN jsonb_build_object('ok', true, 'reason', 'due_pending', 'campaignStatus', 'chờ xử lý');
+  END IF;
+  SELECT count(*), count(*) FILTER (WHERE d.status <> 'tạm dừng') INTO v_total, v_resettable
+    FROM public.auto_campaign_input_data d WHERE d.campaign_id = c.id AND coalesce(d.is_delete, false) = false;
+  IF v_resettable = 0 THEN
+    -- V558: như rescheduleCompletedCampaignPass của bộ cũ: Page không có dòng data nào thì hoàn thành ("không có page…"); chiến dịch Facebook
+    -- khác không có dòng data nào (trang cá nhân) thì hẹn khung kế mà không đặt lại gì. Có data mà không đặt lại được thì hoàn thành như Zalo.
+    IF c.action_id = 'facebook_page_post' AND v_total = 0 THEN
+      RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_no_rerun_page', jsonb_build_object('suffix', v_suffix));
+    END IF;
+    IF c.action_id LIKE 'facebook\_%' AND v_total = 0 THEN
+      UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+      RETURN jsonb_build_object('ok', true, 'reason', v_mode, 'schedule', v_next, 'campaignStatus', 'chờ xử lý')
+        || CASE WHEN v_mode = 'slot_advanced' THEN jsonb_build_object('slot', v_next_slot) ELSE '{}'::jsonb END
+        || CASE WHEN v_repeat IS NOT NULL THEN jsonb_build_object('repeat', v_repeat) ELSE '{}'::jsonb END;
+    END IF;
+    RETURN public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed_no_rerun_data', jsonb_build_object('suffix', v_suffix));
+  END IF;
+  UPDATE public.auto_campaign_input_data SET status = 'chờ xử lý', note = '', date_action = NULL
+   WHERE campaign_id = c.id AND coalesce(is_delete, false) = false AND status <> 'tạm dừng';
+  UPDATE public.auto_campaigns SET status = 'chờ xử lý', schedule = v_next, note = NULL, updated_at = v_now WHERE id = c.id;
+  RETURN jsonb_build_object('ok', true, 'reason', v_mode, 'schedule', v_next, 'campaignStatus', 'chờ xử lý')
+    || CASE WHEN v_mode = 'slot_advanced' THEN jsonb_build_object('slot', v_next_slot) ELSE '{}'::jsonb END
+    || CASE WHEN v_repeat IS NOT NULL THEN jsonb_build_object('repeat', v_repeat) ELSE '{}'::jsonb END;
+END $function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_desktop_account_snapshot(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_access jsonb, p_catalog_version text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+ SET statement_timeout TO '60s'
+AS $function$
+DECLARE v_result jsonb;
+BEGIN
+  PERFORM public.auto_assert_automation_identity(p_staff_id,p_organization_id,p_auth_username,p_auth_password);
+  WITH scoped AS MATERIALIZED (
+    SELECT a.id, a.status, a.login_status, a.updated_at, a.mobile_device_last_seen_at, a.mobile_device_info,
+      a.zalo_session_updated_at, a.zalo_session_last_verified_at, a.zalo_session_last_error,
+      a.email_session_updated_at, a.email_session_last_verified_at, a.email_session_last_error,
+      a.facebook_login_claim_generation, a.facebook_random_run_enabled,
+      coalesce((a.facebook_random_run_config->>'revision')::int,0) AS facebook_random_run_revision,
+      jsonb_build_object(
+        'id',a.id,'name',a.name,'flatform_type',a.flatform_type,'facebook_uid',a.facebook_uid,
+        'facebook_login_managed',a.facebook_login_managed,
+        'is_zalo_show_web',a.is_zalo_show_web,'is_zalo_server',a.is_zalo_server,
+        'username',CASE WHEN a.flatform_type='sms' THEN a.username END,
+        'password',CASE WHEN a.flatform_type='sms' THEN a.password END,
+        'mobile_device_id',a.mobile_device_id,'mobile_device_registered_at',a.mobile_device_registered_at,
+        'is_aka_agent_enabled',a.is_aka_agent_enabled,'is_akachat_enabled',a.is_akachat_enabled,'app_access',private.app_access_flags('account',a.id),
+        'is_active',a.is_active,'rate_limit_minutes',a.rate_limit_minutes,
+        'account_group_id',a.account_group_id,'proxy_id',a.proxy_id,'zalo_account_id',a.zalo_account_id,
+        'is_delete',a.is_delete,'staff_id',a.staff_id,'organization_id',a.organization_id,'created_at',a.created_at,
+        'auto_account_groups',CASE WHEN g.id IS NOT NULL THEN jsonb_build_object('name',g.name,'settings',g.settings) END,
+        'auto_proxies',CASE WHEN pr.id IS NOT NULL THEN jsonb_build_object('name',pr.name,'protocol',pr.protocol,'host',pr.host,'port',pr.port) END,
+        'zalo_accounts',CASE WHEN z.id IS NOT NULL THEN jsonb_build_object('id',z.id,'zalo_uid',z.zalo_uid,'display_name',z.display_name,'phone',z.phone,'avatar_url',z.avatar_url) END
+      ) AS metadata
+    FROM public.auto_accounts a
+    LEFT JOIN public.auto_account_groups g ON g.id=a.account_group_id
+    LEFT JOIN public.auto_proxies pr ON pr.id=a.proxy_id
+    LEFT JOIN public.zalo_accounts z ON z.id=a.zalo_account_id
+    WHERE a.staff_id=p_staff_id AND a.organization_id=p_organization_id AND a.is_delete=false
+      AND public.aka_agent_app_access_account_allowed(a.id,'akaAgent')
+      AND coalesce((p_access->>CASE WHEN a.flatform_type='facebook' THEN 'facebookCore' WHEN a.flatform_type='web' THEN 'webScan' ELSE a.flatform_type END)::boolean,false)
+      AND (a.flatform_type<>'zalo' OR coalesce((p_access->>CASE WHEN a.is_zalo_show_web IS TRUE THEN 'web' WHEN a.is_zalo_server IS TRUE THEN 'server' ELSE 'qr' END)::boolean,false))
+  ), restricted AS MATERIALIZED (
+    SELECT DISTINCT x.account_id FROM public.auto_account_action_status x
+    JOIN scoped a ON a.id=x.account_id
+    WHERE x.is_disable=true AND (x.date_enable IS NULL OR x.date_enable>now())
+  ), catalog AS (
+    SELECT md5(coalesce(string_agg(metadata::text,',' ORDER BY id),'')) AS version FROM scoped
+  )
+  SELECT jsonb_build_object('version',c.version,
+    'catalog',CASE WHEN c.version IS DISTINCT FROM p_catalog_version THEN
+      coalesce((SELECT jsonb_agg(metadata ORDER BY (metadata->>'created_at')::timestamptz DESC,id DESC) FROM scoped),'[]') END,
+    'states',coalesce((SELECT jsonb_agg(jsonb_build_object(
+      'id',s.id,'status',s.status,'loginStatus',s.login_status,'updatedAt',s.updated_at,
+      'mobileDeviceLastSeenAt',s.mobile_device_last_seen_at,'mobileDeviceInfo',s.mobile_device_info,
+      'facebookLoginClaimGeneration',s.facebook_login_claim_generation,
+      'facebookRandomRunEnabled',s.facebook_random_run_enabled,'facebookRandomRunRevision',s.facebook_random_run_revision,
+      'zaloSessionUpdatedAt',s.zalo_session_updated_at,'zaloSessionLastVerifiedAt',s.zalo_session_last_verified_at,'zaloSessionLastError',s.zalo_session_last_error,
+      'emailSessionUpdatedAt',s.email_session_updated_at,'emailSessionLastVerifiedAt',s.email_session_last_verified_at,'emailSessionLastError',s.email_session_last_error,
+      'hasEmailSession',s.email_session_updated_at IS NOT NULL,
+      'hasZaloSession',CASE WHEN (p_access->>'chatSync')::boolean IS TRUE AND s.metadata->>'flatform_type'='zalo' AND (s.metadata->>'is_zalo_server')::boolean IS TRUE AND (s.metadata->>'is_zalo_show_web')::boolean IS NOT TRUE THEN s.login_status='đã đăng nhập' ELSE s.zalo_session_updated_at IS NOT NULL END,
+      'hasDisabledActions',r.account_id IS NOT NULL
+    ) ORDER BY s.id) FROM scoped s LEFT JOIN restricted r ON r.account_id=s.id),'[]'))
+  INTO v_result FROM catalog c;
+  RETURN v_result;
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION private.app_access_packages(p_org bigint, p_app text, p_platform text DEFAULT NULL::text)
+ RETURNS TABLE(id bigint, product_id bigint, max_accounts integer, max_staff integer)
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+  SELECT p.id,p.product_id,p.max_accounts,p.max_staff FROM public.org_organization_product p
+  WHERE p.organization_id=p_org AND p.is_deleted=false
+    AND (p.expiration_date AT TIME ZONE 'Asia/Ho_Chi_Minh')::date >=
+        (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
+    AND CASE p_app WHEN 'akaChat' THEN p.product_id=5 WHEN 'akaAgent' THEN
+      CASE p_platform WHEN 'zalo' THEN p.product_id IN (16,18)
+        WHEN 'facebook' THEN p.product_id IN (3,10) WHEN 'email' THEN p.product_id=13
+        WHEN 'sms' THEN p.product_id=17 WHEN 'web' THEN p.product_id IN (3,10,13,16,17,18) WHEN NULL THEN false
+        ELSE p_platform IS NULL AND p.product_id IN (3,10,13,16,17,18) END ELSE false END
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_campaign_drafts(p_staff_id bigint, p_organization_id bigint, p_auth_username text, p_auth_password text, p_operation text, p_draft_id uuid, p_data jsonb DEFAULT '{}'::jsonb)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+ SET statement_timeout TO '60s'
+AS $function$
+DECLARE
+  d public.auto_campaign_drafts%ROWTYPE;
+  v_form jsonb;
+  v_item jsonb;
+  v_count integer;
+  v_page integer;
+  v_items jsonb;
+  v_campaign_ids bigint[];
+BEGIN
+  PERFORM public.auto_assert_automation_identity(p_staff_id, p_organization_id, p_auth_username, p_auth_password);
+  IF NOT EXISTS (SELECT 1 FROM public.org_staff WHERE id = p_staff_id AND organization_id = p_organization_id AND is_active = true) THEN
+    RAISE EXCEPTION 'Không có quyền truy cập bản nháp.';
+  END IF;
+
+  IF p_operation = 'list' THEN
+    v_page := greatest(1, least(coalesce((p_data->>'page')::integer, 1), 100000));
+    SELECT count(*) INTO v_count FROM public.auto_campaign_drafts
+      WHERE staff_id = p_staff_id AND organization_id = p_organization_id AND NOT is_delete;
+    SELECT coalesce(jsonb_agg(x.item ORDER BY x.updated_at DESC, x.id), '[]'::jsonb) INTO v_items FROM (
+      SELECT id, updated_at, jsonb_build_object(
+        'id', id, 'name', payload #>> '{values,formData,name}',
+        'actionId', payload #>> '{values,formData,actionId}',
+        'accountIds', payload #> '{values,formData,accountIds}',
+        'schedule', payload #>> '{values,formData,schedule}',
+        'updatedAt', updated_at, 'revision', revision
+      ) AS item FROM public.auto_campaign_drafts
+      WHERE staff_id = p_staff_id AND organization_id = p_organization_id AND NOT is_delete
+      ORDER BY updated_at DESC, id LIMIT 50 OFFSET (v_page - 1) * 50
+    ) x;
+    RETURN jsonb_build_object('items', v_items, 'total', v_count);
+  END IF;
+  IF p_draft_id IS NULL THEN RAISE EXCEPTION 'Bản nháp không hợp lệ.'; END IF;
+
+  -- Serializes retries (including a save whose response was lost).
+  PERFORM pg_advisory_xact_lock(hashtextextended('campaign-draft:' || p_draft_id::text, 0));
+  SELECT * INTO d FROM public.auto_campaign_drafts WHERE id = p_draft_id FOR UPDATE;
+  IF FOUND AND (d.staff_id <> p_staff_id OR d.organization_id <> p_organization_id) THEN
+    RAISE EXCEPTION 'Không tìm thấy bản nháp.';
+  END IF;
+
+  IF p_operation = 'save' THEN
+    IF d.is_delete THEN RAISE EXCEPTION 'Bản nháp đã được xoá hoặc chuyển thành chiến dịch.'; END IF;
+    IF p_data #>> '{payload,version}' IS DISTINCT FROM '1' THEN RAISE EXCEPTION 'Phiên bản bản nháp chưa được hỗ trợ.'; END IF;
+    v_form := p_data #> '{payload,values,formData}';
+    IF jsonb_typeof(v_form) IS DISTINCT FROM 'object'
+      OR nullif(btrim(v_form->>'name'), '') IS NULL
+      OR nullif(btrim(v_form->>'actionId'), '') IS NULL
+      OR jsonb_typeof(v_form->'accountIds') IS DISTINCT FROM 'array'
+      OR jsonb_array_length(v_form->'accountIds') = 0
+      OR nullif(v_form->>'schedule', '') IS NULL THEN
+      RAISE EXCEPTION 'Vui lòng nhập Tên, Hành động, Tài khoản và lịch gửi hợp lệ.';
+    END IF;
+    PERFORM (v_form->>'schedule')::timestamptz;
+    IF NOT EXISTS (SELECT 1 FROM public.auto_campaign_actions WHERE id = v_form->>'actionId' AND NOT coalesce(is_delete, false)
+        AND (is_active = true OR (flatform_type = 'web' AND public.aka_agent_web_scan_org_enabled(p_organization_id)))) THEN
+      RAISE EXCEPTION 'Hành động không còn khả dụng.';
+    END IF;
+    FOR v_item IN SELECT value FROM jsonb_array_elements(v_form->'accountIds') LOOP
+      IF NOT EXISTS (SELECT 1 FROM public.auto_accounts a JOIN public.auto_campaign_actions act ON act.id = v_form->>'actionId'
+        WHERE a.id = (v_item #>> '{}')::bigint AND a.staff_id = p_staff_id AND a.organization_id = p_organization_id
+          AND NOT coalesce(a.is_delete, false) AND a.flatform_type = act.flatform_type) THEN
+        RAISE EXCEPTION 'Tài khoản không thuộc người dùng hoặc không phù hợp với hành động.';
+      END IF;
+    END LOOP;
+    IF d.id IS NULL THEN
+      IF coalesce((p_data->>'revision')::integer, 0) <> 0 THEN RAISE EXCEPTION 'Không tìm thấy bản nháp.'; END IF;
+      INSERT INTO public.auto_campaign_drafts(id, staff_id, organization_id, payload)
+      VALUES (p_draft_id, p_staff_id, p_organization_id, p_data->'payload') RETURNING * INTO d;
+    ELSIF d.payload IS DISTINCT FROM p_data->'payload' THEN
+      IF d.revision IS DISTINCT FROM (p_data->>'revision')::integer THEN
+        RAISE EXCEPTION 'Bản nháp đã thay đổi ở nơi khác. Vui lòng mở lại trước khi lưu.';
+      END IF;
+      UPDATE public.auto_campaign_drafts SET payload = p_data->'payload', revision = revision + 1, updated_at = now()
+        WHERE id = d.id RETURNING * INTO d;
+    END IF;
+  ELSIF d.id IS NULL THEN
+    RAISE EXCEPTION 'Không tìm thấy bản nháp.';
+  ELSIF p_operation = 'get' THEN
+    NULL;
+  ELSIF p_operation = 'delete' THEN
+    IF d.deletion_reason = 'converted' THEN RAISE EXCEPTION 'Bản nháp đã chuyển thành chiến dịch.'; END IF;
+    UPDATE public.auto_campaign_drafts SET is_delete = true, deleted_at = coalesce(deleted_at, now()),
+      deletion_reason = 'user_deleted', updated_at = now() WHERE id = d.id RETURNING * INTO d;
+  ELSIF p_operation = 'complete' THEN
+    -- Campaign creation has already succeeded through the normal campaign APIs.
+    -- This operation only records the result and soft-deletes the form snapshot.
+    IF jsonb_typeof(p_data->'campaignIds') IS DISTINCT FROM 'array'
+      OR jsonb_array_length(p_data->'campaignIds') = 0 THEN
+      RAISE EXCEPTION 'Danh sách chiến dịch đã tạo không hợp lệ.';
+    END IF;
+    SELECT array_agg(DISTINCT value::bigint ORDER BY value::bigint) INTO v_campaign_ids
+      FROM jsonb_array_elements_text(p_data->'campaignIds');
+    IF EXISTS (SELECT 1 FROM unnest(v_campaign_ids) AS ids(id)
+      LEFT JOIN public.auto_campaigns c ON c.id = ids.id
+      WHERE c.id IS NULL OR c.staff_id <> p_staff_id OR c.organization_id <> p_organization_id) THEN
+      RAISE EXCEPTION 'Chiến dịch không thuộc người dùng.';
+    END IF;
+    IF d.deletion_reason = 'converted' AND d.campaign_ids = v_campaign_ids THEN
+      NULL;
+    ELSE
+      IF d.is_delete THEN RAISE EXCEPTION 'Bản nháp đã được xoá hoặc chuyển thành chiến dịch.'; END IF;
+      IF d.revision IS DISTINCT FROM (p_data->>'revision')::integer THEN
+        RAISE EXCEPTION 'Bản nháp đã thay đổi ở nơi khác. Bản nháp được giữ lại.';
+      END IF;
+      UPDATE public.auto_campaign_drafts SET is_delete = true, deleted_at = now(),
+        deletion_reason = 'converted', campaign_ids = v_campaign_ids, updated_at = now()
+        WHERE id = d.id RETURNING * INTO d;
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'Thao tác bản nháp không hợp lệ.';
+  END IF;
+  RETURN jsonb_build_object('id', d.id, 'payload', d.payload, 'revision', d.revision, 'updatedAt', d.updated_at,
+    'name', d.payload #>> '{values,formData,name}', 'actionId', d.payload #>> '{values,formData,actionId}',
+    'accountIds', d.payload #> '{values,formData,accountIds}', 'schedule', d.payload #>> '{values,formData,schedule}',
+    'isDelete', d.is_delete,
+    'deletionReason', d.deletion_reason, 'campaignIds', to_jsonb(d.campaign_ids));
+END;
+$function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_engine_close_run_v1(p_run_id bigint, p_via text)
+ RETURNS text
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+-- V576: đóng một lượt data còn mở mà nơi chạy đã bỏ. p_via: 'stale' (lease hết hạn), 'orphan' (lượt mồ côi, B), 'desktop_reset' (Desktop
+-- đăng nhập / đăng xuất / thoát, A). Cách của close_stale V515: đã ghi dấu "sắp gửi" (hoặc có kết quả đã giao / không rõ) thì "hoàn thành",
+-- không gửi lại; chưa ghi dấu thì theo engine.stale_unsent_target_action. D1: mọi dấu đã có kết quả (không còn dấu 'pending') thì chốt theo kết
+-- quả đã ghi bằng lần chốt rỗng của report_v1, giữ nguyên chuỗi data lỗi; lỗi thì quay về cách V515.
+-- Trả 'skipped' (không còn mở), 'final' (chốt theo kết quả), 'requeued' (về hàng đợi), 'completed' (đóng "hoàn thành").
+DECLARE
+  v_now timestamptz := clock_timestamp();
+  v_unsent text := public.aka_agent_engine_setting('engine.stale_unsent_target_action', 'complete');
+  rr public.auto_engine_target_runs%ROWTYPE;
+  v_marked boolean;
+  v_code text;
+  v_msg text;
+  v_status text;
+  v_res jsonb;
+  v_es public.auto_campaign_error_state%ROWTYPE;
+  v_es_found boolean;
+  v_final_code text;
+BEGIN
+  SELECT * INTO rr FROM public.auto_engine_target_runs WHERE id = p_run_id FOR UPDATE;
+  IF NOT FOUND OR rr.completed_at IS NOT NULL THEN RETURN 'skipped'; END IF;
+  v_marked := EXISTS (SELECT 1 FROM jsonb_array_elements(rr.marks) m WHERE m.value->>'state' IN ('pending', 'delivered', 'partial', 'unknown'))
+           OR EXISTS (SELECT 1 FROM public.auto_engine_outcomes eo WHERE eo.target_run_id = rr.id AND eo.delivery_state IN ('delivered', 'partial', 'unknown'));
+  -- D1: mọi dấu đã có kết quả. Bộ cũ đã nhận lại chiến dịch (token bộ cũ) thì không đụng data, đi cách V515 (chỉ đóng sổ lượt).
+  IF v_marked AND jsonb_array_length(rr.marks) > 0
+     AND NOT EXISTS (SELECT 1 FROM jsonb_array_elements(rr.marks) m WHERE coalesce(m.value->>'state', 'pending') = 'pending')
+     AND NOT EXISTS (SELECT 1 FROM public.auto_campaigns x WHERE x.id = rr.campaign_id
+                      AND (x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL)) THEN
+    BEGIN
+      SELECT * INTO v_es FROM public.auto_campaign_error_state WHERE campaign_id = rr.campaign_id FOR UPDATE;
+      v_es_found := FOUND;
+      -- report_v1 giữ close_reason đã có (coalesce), nên lượt vẫn ghi là bị bỏ dở ('stale').
+      UPDATE public.auto_engine_target_runs SET close_reason = 'stale' WHERE id = rr.id;
+      v_res := public.aka_agent_engine_report_v1(rr.id, rr.lease_token, '[]'::jsonb, true, false);
+      SELECT x.final_error_code INTO v_final_code FROM public.auto_engine_target_runs x WHERE x.id = rr.id AND x.completed_at IS NOT NULL;
+      IF NOT FOUND OR coalesce((v_res->>'ok')::boolean, false) IS NOT TRUE THEN
+        RAISE EXCEPTION 'v576_final_from_outcomes_failed';
+      END IF;
+      -- Chuỗi data lỗi giữ như trước lần chốt này.
+      IF v_es_found THEN
+        UPDATE public.auto_campaign_error_state SET count_consecutive_bad_targets = v_es.count_consecutive_bad_targets,
+          last_input_data_id = v_es.last_input_data_id, last_reason = v_es.last_reason, last_bad_target_at = v_es.last_bad_target_at,
+          updated_at = v_es.updated_at
+        WHERE campaign_id = rr.campaign_id;
+      ELSE
+        DELETE FROM public.auto_campaign_error_state WHERE campaign_id = rr.campaign_id;
+      END IF;
+      INSERT INTO public.auto_engine_target_events (input_data_id, campaign_id, target_run_id, kind, error_code, message, data)
+      VALUES (rr.input_data_id, rr.campaign_id, rr.id, 'interrupted', v_final_code,
+              'Lượt bị bỏ dở sau khi mọi bước gửi đã có kết quả; chốt theo kết quả đã báo',
+              jsonb_build_object('marked', true, 'runnerId', rr.runner_id, 'leaseToken', rr.lease_token, 'via', p_via, 'final', 'outcomes'));
+      RETURN 'final';
+    EXCEPTION WHEN OTHERS THEN
+      NULL;
+    END;
+  END IF;
+  IF v_marked THEN
+    v_code := 'err_engine_interrupted_while_sending'; v_status := 'hoàn thành';
+  -- V515 (C): 'requeue_unstarted' chỉ trả về hàng đợi lượt data chưa có kết quả nào. Lượt đã có kết quả thì đóng như 'complete'.
+  ELSIF v_unsent = 'requeue'
+     OR (v_unsent = 'requeue_unstarted' AND NOT EXISTS (SELECT 1 FROM public.auto_engine_outcomes eo WHERE eo.target_run_id = rr.id))
+     -- Quét data website: từ khoá dở về hàng đợi (chạy lại bỏ tin đã quét), kể cả khi lượt đã có kết quả.
+     OR EXISTS (SELECT 1 FROM public.auto_campaigns xc JOIN public.auto_campaign_actions xa ON xa.id = xc.action_id
+                 WHERE xc.id = rr.campaign_id AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'web') THEN
+    v_code := 'err_engine_interrupted_before_send'; v_status := 'chờ xử lý';
+  ELSE
+    v_code := 'err_engine_interrupted_before_send'; v_status := 'hoàn thành';
+  END IF;
+  SELECT coalesce(e.customer_title, e.error_name) || CASE WHEN e.public_code IS NOT NULL THEN ' (' || e.public_code || ')' ELSE '' END
+    INTO v_msg FROM public.auto_error e WHERE e.error_code = v_code;
+  -- Bộ cũ đã nhận lại chiến dịch (cập nhật app ngược, tắt cờ): không đụng data, chỉ đóng sổ lượt của bộ mới.
+  UPDATE public.auto_campaign_input_data SET status = v_status, note = coalesce(v_msg, note), date_action = v_now
+   WHERE id = rr.input_data_id AND status = 'đang chạy'
+     AND NOT EXISTS (SELECT 1 FROM public.auto_campaigns x WHERE x.id = rr.campaign_id
+                      AND (x.runtime_claim_token IS NOT NULL OR x.runtime_unit_token IS NOT NULL));
+  INSERT INTO public.auto_engine_target_events (input_data_id, campaign_id, target_run_id, kind, error_code, message, data)
+  VALUES (rr.input_data_id, rr.campaign_id, rr.id, 'interrupted', v_code, coalesce(v_msg, v_code),
+          jsonb_build_object('marked', v_marked, 'runnerId', rr.runner_id, 'leaseToken', rr.lease_token, 'via', p_via));
+  UPDATE public.auto_engine_target_runs SET completed_at = v_now, final_target_status = v_status, final_error_code = v_code, close_reason = 'stale'
+   WHERE id = rr.id;
+  RETURN CASE WHEN v_status = 'chờ xử lý' THEN 'requeued' ELSE 'completed' END;
+END $function$
+;
+
+CREATE OR REPLACE FUNCTION public.aka_agent_ingest_data_group_v186_internal(p_staff_id bigint, p_organization_id bigint, p_request_id text, p_group_id bigint, p_kind text, p_rows jsonb, p_dataset_id bigint DEFAULT NULL::bigint, p_dataset_name text DEFAULT NULL::text, p_import_source text DEFAULT NULL::text, p_source_account_id bigint DEFAULT NULL::bigint, p_source_name text DEFAULT NULL::text, p_payload_hash text DEFAULT NULL::text)
+ RETURNS jsonb
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+DECLARE
+  v_group public.auto_account_contact_groups%ROWTYPE;
+  v_batch public.auto_data_ingest_batches%ROWTYPE;
+  v_dataset public.auto_account_contacts_dataset%ROWTYPE;
+  v_source_account public.auto_accounts%ROWTYPE;
+  v_contact public.auto_account_contacts%ROWTYPE;
+  v_member public.auto_account_contact_group_members%ROWTYPE;
+  v_row record;
+  v_source record;
+  v_raw_account_id text;
+  v_raw_contact_id text;
+  v_raw_automation_detail_id text;
+  v_origin_automation_detail_id bigint;
+  v_row_account_id bigint;
+  v_contact_type text;
+  v_platform text;
+  v_name text;
+  v_uid text;
+  v_url text;
+  v_phone text;
+  v_email text;
+  v_extra jsonb;
+  v_dataset_contact_type text;
+  v_dataset_platform text;
+  v_dataset_source_key text;
+  v_dataset_display_name text;
+  v_duplicate_in_batch boolean := false;
+  v_duplicate_conflict boolean := false;
+  v_member_found boolean := false;
+  v_batch_seen jsonb := '{}'::jsonb;
+  v_first_payload jsonb;
+  v_current_payload jsonb;
+  v_request_hash text;
+  v_revision bigint;
+  v_revision_started boolean := false;
+  v_inserted_members integer := 0;
+  v_reactivated_members integer := 0;
+  v_existing_members integer := 0;
+  v_removed_members integer := 0;
+  v_inserted_inputs integer := 0;
+  v_existing_inputs integer := 0;
+  v_incompatible integer := 0;
+  v_conflict integer := 0;
+  v_invalid integer := 0;
+  v_conflicts jsonb := '[]'::jsonb;
+  v_outcome jsonb;
+  v_result jsonb;
+  v_route_job_id bigint;
+  -- V485: phần của một phiên nhập file nhiều phần (aka_agent_append_data_group_upload đặt 2 GUC này).
+  v_upload_session_id uuid := NULLIF(current_setting('aka_agent.upload_session_id', true), '')::uuid;
+  v_upload_row_offset integer := COALESCE(
+    NULLIF(current_setting('aka_agent.upload_row_offset', true), '')::integer, 0
+  );
+  v_upload_part_batches bigint[] := '{}'::bigint[];
+BEGIN
+  PERFORM public.aka_agent_internal_require_staff_tenant(p_staff_id, p_organization_id);
+  IF NULLIF(btrim(COALESCE(p_request_id, '')), '') IS NULL
+    OR length(btrim(p_request_id)) > 500
+    OR p_kind NOT IN ('manual', 'upload', 'scan', 'automation', 'api', 'external_sync')
+    OR jsonb_typeof(COALESCE(p_rows, 'null'::jsonb)) <> 'array'
+    OR jsonb_array_length(p_rows) > 10000
+    OR (p_import_source IS NOT NULL AND p_import_source NOT IN ('textbox', 'image', 'sheet', 'excel'))
+  THEN
+    RAISE EXCEPTION 'invalid_data_group_ingest_payload';
+  END IF;
+
+  IF p_kind = 'external_sync' AND NOT EXISTS (
+    SELECT 1 FROM public.auto_data_group_external_sync_runs r
+    JOIN public.auto_data_group_external_sync_sources s ON s.id=r.source_id
+    WHERE r.token::text=current_setting('aka_agent.sheet_sync_run_token',true)
+      AND r.status='running' AND s.run_token=r.token AND s.revision=r.source_revision
+      AND s.is_enabled AND NOT s.is_delete AND r.group_id=p_group_id
+      AND r.staff_id=p_staff_id AND r.organization_id=p_organization_id
+  ) THEN RAISE EXCEPTION 'sheet_sync_unclaimed'; END IF;
+
+  SELECT * INTO v_group
+  FROM public.auto_account_contact_groups AS contact_group
+  WHERE contact_group.id = p_group_id
+    AND contact_group.staff_id = p_staff_id
+    AND contact_group.organization_id = p_organization_id
+    AND contact_group.purpose = 'data_group'
+    AND contact_group.is_delete = false
+  FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'data_group_not_found'; END IF;
+
+  IF p_source_account_id IS NOT NULL THEN
+    SELECT * INTO v_source_account
+    FROM public.auto_accounts AS account
+    WHERE account.id = p_source_account_id
+      AND account.staff_id = p_staff_id
+      AND (account.organization_id IS NULL OR account.organization_id = p_organization_id);
+    IF NOT FOUND THEN RAISE EXCEPTION 'data_group_source_account_not_found'; END IF;
+  END IF;
+
+  IF v_group.bound_zalo_account_id IS NOT NULL THEN
+    IF NOT public.aka_agent_data_group_account_available(v_group.bound_zalo_account_id,p_staff_id,p_organization_id) THEN RAISE EXCEPTION 'data_group_bound_account_invalid'; END IF;
+    IF (p_source_account_id IS NOT NULL AND p_source_account_id<>v_group.bound_zalo_account_id)
+      OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_rows) r WHERE NULLIF(r->>'source_account_id','') IS NOT NULL AND r->>'source_account_id'<>v_group.bound_zalo_account_id::text)
+      OR EXISTS(SELECT 1 FROM jsonb_array_elements(p_rows) r LEFT JOIN public.auto_account_contacts c ON c.id::text=r->>'contact_id'
+        WHERE NULLIF(r->>'contact_id','') IS NOT NULL AND (c.id IS NULL OR c.account_id IS DISTINCT FROM v_group.bound_zalo_account_id OR c.staff_id IS DISTINCT FROM p_staff_id OR c.organization_id IS DISTINCT FROM p_organization_id))
+      OR (p_dataset_id IS NOT NULL AND EXISTS(SELECT 1 FROM public.auto_account_contacts_dataset d WHERE d.id=p_dataset_id AND d.account_id IS DISTINCT FROM v_group.bound_zalo_account_id))
+    THEN RAISE EXCEPTION 'data_group_bound_source_mismatch'; END IF;
+  END IF;
+
+  v_request_hash := md5(jsonb_build_object(
+    'operation', 'ingest', 'groupId', p_group_id, 'kind', p_kind,
+    'rows', p_rows, 'datasetId', p_dataset_id, 'datasetName', p_dataset_name,
+    'importSource', p_import_source, 'sourceAccountId', p_source_account_id,
+    'sourceName', p_source_name
+  )::text);
+
+  INSERT INTO public.auto_data_ingest_batches (
+    request_id, operation, group_id, kind, dataset_id, source_account_id,
+    source_name, client_payload_hash, request_hash, status,
+    staff_id, organization_id
+  ) VALUES (
+    btrim(p_request_id), 'ingest', p_group_id, p_kind, p_dataset_id,
+    p_source_account_id, NULLIF(btrim(COALESCE(p_source_name, '')), ''),
+    NULLIF(btrim(COALESCE(p_payload_hash, '')), ''), v_request_hash, 'processing',
+    p_staff_id, p_organization_id
+  )
+  ON CONFLICT (staff_id, organization_id, request_id) DO NOTHING
+  RETURNING * INTO v_batch;
+
+  IF NOT FOUND THEN
+    SELECT * INTO v_batch
+    FROM public.auto_data_ingest_batches AS batch
+    WHERE batch.staff_id = p_staff_id
+      AND batch.organization_id = p_organization_id
+      AND batch.request_id = btrim(p_request_id)
+    FOR UPDATE;
+    IF v_batch.operation <> 'ingest' OR v_batch.group_id IS DISTINCT FROM p_group_id
+      OR v_batch.request_hash <> v_request_hash THEN
+      RAISE EXCEPTION 'data_group_request_id_conflict';
+    END IF;
+    IF v_batch.result IS NOT NULL THEN RETURN v_batch.result; END IF;
+    RAISE EXCEPTION 'data_group_request_incomplete';
+  END IF;
+
+  IF v_upload_session_id IS NOT NULL THEN
+    IF p_kind <> 'upload' OR p_dataset_id IS NULL THEN
+      RAISE EXCEPTION 'invalid_data_group_ingest_payload';
+    END IF;
+    SELECT COALESCE(array_agg(part.batch_id), '{}'::bigint[]) INTO v_upload_part_batches
+    FROM private.auto_data_group_upload_session_parts AS part
+    WHERE part.session_id = v_upload_session_id;
+  END IF;
+
+  p_source_account_id := COALESCE(p_source_account_id,v_group.bound_zalo_account_id);
+  IF p_source_account_id IS NOT NULL THEN SELECT * INTO v_source_account FROM public.auto_accounts WHERE id=p_source_account_id; END IF;
+  IF p_kind = 'upload' THEN
+    v_dataset_display_name := COALESCE(
+      NULLIF(btrim(COALESCE(p_dataset_name, '')), ''),
+      NULLIF(btrim(COALESCE(p_source_name, '')), ''),
+      v_group.name
+    );
+    IF length(v_dataset_display_name) > 255 THEN
+      RAISE EXCEPTION 'invalid_data_group_dataset_name';
+    END IF;
+    -- The explicit dataset name is the logical identity.  When absent, the
+    -- source filename/name becomes that identity. A changed physical filename
+    -- therefore still refreshes the same named dataset.
+    v_dataset_source_key := 'upload:'
+      || lower(regexp_replace(v_dataset_display_name, '[[:space:]]+', ' ', 'g'));
+
+    WITH row_types AS (
+      SELECT DISTINCT lower(btrim(item.value ->> 'contact_type')) AS value
+      FROM jsonb_array_elements(p_rows) AS item(value)
+      WHERE jsonb_typeof(item.value) = 'object'
+        AND lower(btrim(COALESCE(item.value ->> 'contact_type', ''))) IN (
+          'person', 'group', 'page', 'page_inbox_customer', 'zalo_tag',
+          'phone', 'email', 'campaign_input'
+        )
+    )
+    SELECT CASE WHEN count(*) = 1 THEN min(value) ELSE 'campaign_input' END
+    INTO v_dataset_contact_type
+    FROM row_types;
+
+    WITH row_platforms AS (
+      SELECT DISTINCT lower(btrim(COALESCE(
+        NULLIF(item.value ->> 'flatform_type', ''),
+        v_source_account.flatform_type,
+        CASE WHEN lower(btrim(item.value ->> 'contact_type')) = 'email' THEN 'email' END,
+        ''
+      ))) AS value
+      FROM jsonb_array_elements(p_rows) AS item(value)
+      WHERE jsonb_typeof(item.value) = 'object'
+    ), valid_platforms AS (
+      SELECT value FROM row_platforms
+      WHERE value IN ('facebook', 'zalo', 'email', 'sms')
+    )
+    SELECT CASE WHEN count(*) = 1 THEN min(value) ELSE 'mixed' END
+    INTO v_dataset_platform
+    FROM valid_platforms;
+  END IF;
+
+  IF p_dataset_id IS NOT NULL THEN
+    SELECT * INTO v_dataset
+    FROM public.auto_account_contacts_dataset AS dataset
+    WHERE dataset.id = p_dataset_id
+      AND dataset.staff_id = p_staff_id
+      AND dataset.organization_id = p_organization_id
+      AND dataset.is_delete = false;
+    IF NOT FOUND THEN RAISE EXCEPTION 'data_group_dataset_not_found'; END IF;
+    IF p_kind = 'upload' AND (
+      v_dataset.source <> 'upload' OR v_dataset.group_id IS DISTINCT FROM v_group.id
+    ) THEN
+      RAISE EXCEPTION 'data_group_upload_dataset_mismatch';
+    END IF;
+    IF p_kind = 'upload' AND v_upload_session_id IS NULL THEN
+      UPDATE public.auto_account_contacts_dataset_members
+      SET is_current = false, updated_at = now()
+      WHERE dataset_id = v_dataset.id AND is_current = true;
+      UPDATE public.auto_account_contact_group_member_origins
+      SET is_current = false, updated_at = now()
+      WHERE dataset_id = v_dataset.id AND is_current = true;
+    END IF;
+  ELSIF p_kind = 'upload' THEN
+    INSERT INTO public.auto_account_contacts_dataset (
+      name, link, description, source, account_id, group_id, flatform_type,
+      contact_type, scan_type, source_key, last_scanned_at, last_scan_status,
+      extra_data, contact_count, is_delete, staff_id, organization_id
+    ) VALUES (
+      v_dataset_display_name,
+      NULL, NULL, 'upload', p_source_account_id, v_group.id,
+      COALESCE(v_dataset_platform, 'mixed'),
+      COALESCE(v_dataset_contact_type, 'campaign_input'),
+      'upload_data', v_dataset_source_key, now(), 'completed',
+      jsonb_strip_nulls(jsonb_build_object(
+        'importSource', p_import_source, 'requestId', btrim(p_request_id)
+      )),
+      0, false, p_staff_id, p_organization_id
+    )
+    ON CONFLICT (
+      staff_id, organization_id, group_id, COALESCE(account_id, 0::bigint),
+      flatform_type, contact_type, scan_type, lower(btrim(source_key))
+    )
+      WHERE is_delete = false AND source = 'upload' AND group_id IS NOT NULL
+    DO UPDATE SET
+      name = EXCLUDED.name,
+      extra_data = COALESCE(auto_account_contacts_dataset.extra_data, '{}'::jsonb)
+        || EXCLUDED.extra_data,
+      updated_at = now(), last_scanned_at = now(), last_scan_status = 'completed'
+    RETURNING * INTO v_dataset;
+
+    -- Re-import refreshes one logical dataset snapshot. Historical batch and
+    -- origin rows remain, but only incoming contacts are current afterward.
+    UPDATE public.auto_account_contacts_dataset_members
+    SET is_current = false, updated_at = now()
+    WHERE dataset_id = v_dataset.id AND is_current = true;
+    UPDATE public.auto_account_contact_group_member_origins
+    SET is_current = false, updated_at = now()
+    WHERE dataset_id = v_dataset.id AND is_current = true;
+
+    UPDATE public.auto_data_ingest_batches
+    SET dataset_id = v_dataset.id, updated_at = now()
+    WHERE id = v_batch.id;
+  END IF;
+
+  -- V485: lượt nhập file một lần thay phiên nhập nhiều phần đang mở của cùng dataset.
+  IF p_kind = 'upload' AND v_upload_session_id IS NULL AND v_dataset.id IS NOT NULL THEN
+    UPDATE private.auto_data_group_upload_sessions
+    SET status = 'superseded', updated_at = now()
+    WHERE dataset_id = v_dataset.id AND status = 'open';
+  END IF;
+
+  FOR v_row IN
+    SELECT item.value AS payload, item.ordinality::integer AS row_index
+    FROM jsonb_array_elements(p_rows) WITH ORDINALITY AS item(value, ordinality)
+  LOOP
+    v_duplicate_in_batch := false;
+    v_duplicate_conflict := false;
+    v_member_found := false;
+    v_origin_automation_detail_id := NULL;
+    v_contact_type := NULL;
+    v_platform := NULL;
+    v_name := NULL;
+    v_uid := NULL;
+    v_url := NULL;
+    v_phone := NULL;
+    v_email := NULL;
+    v_extra := '{}'::jsonb;
+    IF jsonb_typeof(v_row.payload) <> 'object' THEN
+      v_invalid := v_invalid + 1;
+      CONTINUE;
+    END IF;
+
+    v_raw_account_id := NULLIF(btrim(COALESCE(v_row.payload ->> 'source_account_id', '')), '');
+    IF v_raw_account_id IS NOT NULL AND v_raw_account_id !~ '^[1-9][0-9]{0,17}$' THEN
+      v_invalid := v_invalid + 1;
+      CONTINUE;
+    END IF;
+    v_row_account_id := COALESCE(
+      CASE WHEN v_raw_account_id IS NULL THEN NULL ELSE v_raw_account_id::bigint END,
+      p_source_account_id
+    );
+    v_contact := NULL;
+
+    v_raw_contact_id := NULLIF(btrim(COALESCE(v_row.payload ->> 'contact_id', '')), '');
+    IF v_raw_contact_id IS NOT NULL AND v_raw_contact_id !~ '^[1-9][0-9]{0,17}$' THEN
+      v_invalid := v_invalid + 1;
+      CONTINUE;
+    END IF;
+    IF v_raw_contact_id IS NOT NULL THEN
+      SELECT * INTO v_contact
+      FROM public.auto_account_contacts AS contact
+      WHERE contact.id = v_raw_contact_id::bigint
+        AND contact.staff_id = p_staff_id
+        AND contact.organization_id = p_organization_id
+      FOR UPDATE;
+      IF NOT FOUND OR (
+        v_row_account_id IS NOT NULL
+        AND v_contact.account_id IS DISTINCT FROM v_row_account_id
+      ) THEN
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+      v_row_account_id := COALESCE(v_row_account_id, v_contact.account_id);
+      -- Selecting an existing source contact only changes group membership;
+      -- it must never resurrect the source contact's own lifecycle flag.
+      v_contact_type := lower(btrim(COALESCE(v_contact.contact_type, '')));
+      v_platform := NULLIF(lower(btrim(COALESCE(v_contact.flatform_type, ''))), '');
+      v_name := NULLIF(btrim(COALESCE(v_contact.name, '')), '');
+      v_uid := NULLIF(btrim(COALESCE(v_contact.uid, '')), '');
+      v_url := NULLIF(btrim(COALESCE(v_contact.url, '')), '');
+      v_phone := NULLIF(public.aka_agent_internal_normalize_phone(COALESCE(
+        NULLIF(v_contact.phone, ''), NULLIF(v_contact.extra_data ->> 'phone', ''),
+        CASE WHEN v_contact.contact_type = 'phone' THEN v_contact.uid END, ''
+      )), '');
+      v_email := NULLIF(lower(btrim(COALESCE(
+        NULLIF(v_contact.email, ''), NULLIF(v_contact.extra_data ->> 'email', ''),
+        CASE WHEN v_contact.contact_type = 'email' THEN v_contact.uid END, ''
+      ))), '');
+      v_extra := COALESCE(v_contact.extra_data, '{}'::jsonb);
+    ELSE
+      v_contact_type := lower(btrim(COALESCE(v_row.payload ->> 'contact_type', '')));
+      IF v_contact_type NOT IN (
+        'person', 'group', 'page', 'page_inbox_customer', 'zalo_tag',
+        'phone', 'email', 'campaign_input'
+      ) THEN
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+
+      IF v_row_account_id IS NOT NULL THEN
+        SELECT * INTO v_source_account
+        FROM public.auto_accounts AS account
+        WHERE account.id = v_row_account_id
+          AND account.staff_id = p_staff_id
+          AND (account.organization_id IS NULL OR account.organization_id = p_organization_id);
+        IF NOT FOUND THEN
+          v_invalid := v_invalid + 1;
+          CONTINUE;
+        END IF;
+      ELSE
+        v_source_account := NULL;
+      END IF;
+
+      v_platform := NULLIF(lower(btrim(COALESCE(
+        NULLIF(v_row.payload ->> 'flatform_type', ''),
+        v_source_account.flatform_type,
+        CASE WHEN v_contact_type = 'email' THEN 'email' ELSE NULL END,
+        ''
+      ))), '');
+      -- Accountless phone/email rows are deliberately platform-neutral.  A
+      -- campaign decides portability from the validated value, not this label.
+      IF (v_platform IS NULL AND v_contact_type NOT IN ('phone', 'email'))
+        OR (v_platform IS NOT NULL AND v_platform NOT IN ('facebook', 'zalo', 'email', 'sms')
+            -- Quét data website: SĐT tìm được mang tài khoản nguồn "Website" (nền tảng web).
+            AND NOT (v_platform = 'web' AND v_contact_type = 'phone'))
+      THEN
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+
+      v_phone := public.aka_agent_internal_normalize_phone(COALESCE(
+        NULLIF(v_row.payload ->> 'phone', ''),
+        CASE WHEN v_contact_type = 'phone' THEN v_row.payload ->> 'uid' ELSE NULL END,
+        ''
+      ));
+      v_phone := NULLIF(v_phone, '');
+      v_email := NULLIF(lower(btrim(COALESCE(
+        NULLIF(v_row.payload ->> 'email', ''),
+        CASE WHEN v_contact_type = 'email' THEN v_row.payload ->> 'uid' ELSE NULL END,
+        ''
+      ))), '');
+      IF v_email IS NOT NULL AND (v_email !~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
+          OR length(v_email) > 254) THEN
+        v_email := NULL;
+      END IF;
+      v_url := NULLIF(btrim(COALESCE(v_row.payload ->> 'url', '')), '');
+      v_uid := CASE v_contact_type
+        WHEN 'phone' THEN v_phone
+        WHEN 'email' THEN v_email
+        ELSE COALESCE(
+          NULLIF(btrim(COALESCE(v_row.payload ->> 'uid', '')), ''),
+          v_url
+        )
+      END;
+      IF v_uid IS NULL THEN
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+      v_name := COALESCE(NULLIF(btrim(COALESCE(v_row.payload ->> 'name', '')), ''), v_uid);
+      v_extra := COALESCE(v_row.payload -> 'extra_data', '{}'::jsonb);
+      IF jsonb_typeof(v_extra) <> 'object' THEN
+        v_invalid := v_invalid + 1;
+        CONTINUE;
+      END IF;
+      v_extra := v_extra || jsonb_strip_nulls(jsonb_build_object(
+        'phone', v_phone,
+        'email', v_email,
+        'info1', NULLIF(v_row.payload ->> 'info1', ''),
+        'info2', NULLIF(v_row.payload ->> 'info2', ''),
+        'info3', NULLIF(v_row.payload ->> 'info3', ''),
+        'info4', NULLIF(v_row.payload ->> 'info4', ''),
+        'info5', NULLIF(v_row.payload ->> 'info5', '')
+      ));
+
+      IF v_row_account_id IS NULL THEN
+        -- Accountless identity is intentionally NOT global. Reuse is allowed
+        -- only inside the explicitly supplied dataset; otherwise each row gets
+        -- its own canonical contact and campaign delivery dedupe happens later.
+        IF v_dataset.id IS NOT NULL THEN
+          SELECT contact.* INTO v_contact
+          FROM public.auto_account_contacts_dataset_members AS dataset_member
+          JOIN public.auto_account_contacts AS contact ON contact.id = dataset_member.contact_id
+          WHERE dataset_member.dataset_id = v_dataset.id
+            AND contact.account_id IS NULL
+            AND contact.staff_id = p_staff_id
+            AND contact.organization_id = p_organization_id
+            AND contact.flatform_type IS NOT DISTINCT FROM v_platform
+            AND contact.contact_type = v_contact_type
+            AND contact.uid = v_uid
+          ORDER BY dataset_member.created_at, contact.id
+          LIMIT 1
+          FOR UPDATE OF contact;
+        END IF;
+        IF v_contact.id IS NULL THEN
+          INSERT INTO public.auto_account_contacts (
+            account_id, flatform_type, contact_type, name, uid, url, phone, email,
+            extra_data, is_delete, staff_id, organization_id, updated_at
+          ) VALUES (
+            NULL, v_platform, v_contact_type, v_name, v_uid, v_url, v_phone, v_email,
+            v_extra, false, p_staff_id, p_organization_id, now()
+          ) RETURNING * INTO v_contact;
+        ELSE
+          UPDATE public.auto_account_contacts AS contact
+          SET name = CASE
+                WHEN NULLIF(btrim(contact.name), '') IS NULL OR contact.name = contact.uid
+                  THEN v_name ELSE contact.name END,
+              url = COALESCE(contact.url, v_url),
+              phone = COALESCE(contact.phone, v_phone),
+              email = COALESCE(contact.email, v_email),
+              -- Existing/earlier values win; this only fills absent keys.
+              extra_data = v_extra || COALESCE(contact.extra_data, '{}'::jsonb),
+              is_delete = false, updated_at = now()
+          WHERE contact.id = v_contact.id
+          RETURNING * INTO v_contact;
+        END IF;
+      ELSIF p_kind = 'external_sync' THEN
+        -- Preserve every existing contact field, including lifecycle flags.
+        INSERT INTO public.auto_account_contacts (
+          account_id, flatform_type, contact_type, name, uid, url, phone, email,
+          extra_data, is_delete, staff_id, organization_id, updated_at
+        ) VALUES (
+          v_row_account_id, v_platform, v_contact_type, v_name, v_uid, v_url, v_phone, v_email,
+          v_extra, false, p_staff_id, p_organization_id, now()
+        ) ON CONFLICT (account_id, contact_type, uid) DO NOTHING RETURNING * INTO v_contact;
+        IF v_contact.id IS NULL THEN
+          SELECT * INTO v_contact FROM public.auto_account_contacts
+          WHERE account_id=v_row_account_id AND contact_type=v_contact_type AND uid=v_uid
+            AND staff_id=p_staff_id AND organization_id=p_organization_id FOR UPDATE;
+          IF NOT FOUND THEN RAISE EXCEPTION 'sheet_sync_contact_conflict'; END IF;
+        END IF;
+      ELSE
+        INSERT INTO public.auto_account_contacts AS existing_contact (
+          account_id, flatform_type, contact_type, name, uid, url, phone, email,
+          extra_data, is_delete, staff_id, organization_id, updated_at
+        ) VALUES (
+          v_row_account_id, v_platform, v_contact_type, v_name, v_uid, v_url, v_phone, v_email,
+          v_extra, false, p_staff_id, p_organization_id, now()
+        )
+        ON CONFLICT (account_id, contact_type, uid) DO UPDATE SET
+          flatform_type = COALESCE(existing_contact.flatform_type, EXCLUDED.flatform_type),
+          name = CASE
+            WHEN NULLIF(btrim(existing_contact.name), '') IS NULL
+              OR existing_contact.name = existing_contact.uid THEN EXCLUDED.name
+            ELSE existing_contact.name END,
+          url = COALESCE(existing_contact.url, EXCLUDED.url),
+          phone = COALESCE(existing_contact.phone, EXCLUDED.phone),
+          email = COALESCE(existing_contact.email, EXCLUDED.email),
+          -- First persisted value wins; later duplicates only fill missing keys.
+          extra_data = EXCLUDED.extra_data || COALESCE(existing_contact.extra_data, '{}'::jsonb),
+          is_delete = false,
+          staff_id = EXCLUDED.staff_id,
+          organization_id = EXCLUDED.organization_id,
+          updated_at = now()
+        RETURNING * INTO v_contact;
+      END IF;
+    END IF;
+
+    IF p_kind = 'external_sync' AND v_contact.is_delete THEN
+      v_invalid := v_invalid + 1;
+      CONTINUE;
+    END IF;
+
+    SELECT * INTO v_member
+    FROM public.auto_account_contact_group_members AS member
+    WHERE member.group_id = v_group.id AND member.contact_id = v_contact.id
+    FOR UPDATE;
+    v_member_found := FOUND;
+    v_current_payload := jsonb_strip_nulls(jsonb_build_object(
+      'name', NULLIF(btrim(COALESCE(v_row.payload ->> 'name', '')), ''),
+      'uid', NULLIF(btrim(COALESCE(v_row.payload ->> 'uid', '')), ''),
+      'url', NULLIF(btrim(COALESCE(v_row.payload ->> 'url', '')), ''),
+      'phone', NULLIF(public.aka_agent_internal_normalize_phone(
+        COALESCE(v_row.payload ->> 'phone', '')
+      ), ''),
+      'email', NULLIF(lower(btrim(COALESCE(v_row.payload ->> 'email', ''))), ''),
+      'info1', NULLIF(v_row.payload ->> 'info1', ''),
+      'info2', NULLIF(v_row.payload ->> 'info2', ''),
+      'info3', NULLIF(v_row.payload ->> 'info3', ''),
+      'info4', NULLIF(v_row.payload ->> 'info4', ''),
+      'info5', NULLIF(v_row.payload ->> 'info5', ''),
+      'extra_data', CASE WHEN jsonb_typeof(v_row.payload -> 'extra_data') = 'object'
+        THEN v_row.payload -> 'extra_data' ELSE '{}'::jsonb END
+    ));
+    v_raw_automation_detail_id := NULLIF(btrim(COALESCE(
+      v_row.payload -> 'extra_data' ->> 'automationDetailId',
+      v_row.payload ->> 'automation_detail_id',
+      ''
+    )), '');
+    IF p_kind = 'automation'
+      AND v_raw_automation_detail_id ~ '^[1-9][0-9]{0,17}$'
+    THEN
+      SELECT detail.id INTO v_origin_automation_detail_id
+      FROM public.auto_automation_detail AS detail
+      WHERE detail.id = v_raw_automation_detail_id::bigint
+        AND detail.staff_id = p_staff_id
+        AND detail.organization_id = p_organization_id;
+    END IF;
+    v_duplicate_in_batch := v_batch_seen ? v_contact.id::text;
+
+    IF v_duplicate_in_batch THEN
+      v_first_payload := v_batch_seen -> v_contact.id::text;
+      SELECT EXISTS (
+        SELECT 1
+        FROM jsonb_each(v_first_payload - 'extra_data') AS first_value(key, value)
+        JOIN jsonb_each(v_current_payload - 'extra_data') AS current_value(key, value)
+          USING (key)
+        WHERE first_value.value IS DISTINCT FROM current_value.value
+      ) OR EXISTS (
+        SELECT 1
+        FROM jsonb_each(COALESCE(v_first_payload -> 'extra_data', '{}'::jsonb))
+          AS first_extra(key, value)
+        JOIN jsonb_each(COALESCE(v_current_payload -> 'extra_data', '{}'::jsonb))
+          AS current_extra(key, value)
+          USING (key)
+        WHERE first_extra.value IS DISTINCT FROM current_extra.value
+      ) INTO v_duplicate_conflict;
+
+      -- Extend the first-row snapshot only with fields it did not provide.
+      v_first_payload := v_current_payload || v_first_payload;
+      v_first_payload := jsonb_set(
+        v_first_payload,
+        '{extra_data}',
+        COALESCE(v_current_payload -> 'extra_data', '{}'::jsonb)
+          || COALESCE((v_batch_seen -> v_contact.id::text) -> 'extra_data', '{}'::jsonb),
+        true
+      );
+      v_batch_seen := jsonb_set(
+        v_batch_seen, ARRAY[v_contact.id::text], v_first_payload, true
+      );
+      IF v_duplicate_conflict THEN
+        v_conflict := v_conflict + 1;
+        v_conflicts := v_conflicts || jsonb_build_array(jsonb_build_object(
+          'rowIndex', v_row.row_index - 1 + v_upload_row_offset,
+          'code', 'duplicate_identity_conflict',
+          'message', 'Dòng trùng định danh có giá trị khác; giữ giá trị của dòng đầu.',
+          'contactId', v_contact.id
+        ));
+      END IF;
+    ELSE
+      v_batch_seen := jsonb_set(
+        v_batch_seen, ARRAY[v_contact.id::text], v_current_payload, true
+      );
+    END IF;
+
+    IF NOT v_revision_started THEN
+      UPDATE public.auto_account_contact_groups
+      SET revision = revision + 1, updated_at = now()
+      WHERE id = v_group.id
+      RETURNING revision INTO v_revision;
+      v_revision_started := true;
+    END IF;
+
+    IF NOT v_member_found THEN
+      INSERT INTO public.auto_account_contact_group_members (
+        group_id, contact_id, is_delete, change_revision, created_at, updated_at
+      ) VALUES (v_group.id, v_contact.id, false, v_revision, now(), now())
+      RETURNING * INTO v_member;
+      v_inserted_members := v_inserted_members + 1;
+    ELSIF v_duplicate_in_batch THEN
+      IF NOT v_duplicate_conflict THEN
+        v_existing_members := v_existing_members + 1;
+      END IF;
+    ELSIF v_member.is_delete THEN
+      UPDATE public.auto_account_contact_group_members
+      SET is_delete = false, change_revision = v_revision, updated_at = now()
+      WHERE id = v_member.id
+      RETURNING * INTO v_member;
+      v_reactivated_members := v_reactivated_members + 1;
+    ELSE
+      UPDATE public.auto_account_contact_group_members
+      SET change_revision = v_revision, updated_at = now()
+      WHERE id = v_member.id
+      RETURNING * INTO v_member;
+      v_existing_members := v_existing_members + 1;
+    END IF;
+
+    IF v_upload_session_id IS NULL OR NOT v_member_found OR NOT EXISTS (
+      SELECT 1 FROM public.auto_account_contact_group_member_origins AS session_origin
+      WHERE session_origin.membership_id = v_member.id
+        AND session_origin.dataset_id = v_dataset.id
+        AND session_origin.is_current = true
+        AND session_origin.batch_id = ANY(v_upload_part_batches)
+    ) THEN
+    INSERT INTO public.auto_account_contact_group_member_origins (
+      membership_id, kind, dataset_id, batch_id, source_account_id, automation_detail_id,
+      source_name_snapshot, relationship_kind, is_current, created_at, updated_at
+    ) VALUES (
+      v_member.id, p_kind, v_dataset.id, v_batch.id,
+      COALESCE(v_row_account_id, v_contact.account_id),
+      v_origin_automation_detail_id,
+      COALESCE(NULLIF(btrim(COALESCE(p_source_name, '')), ''), v_source_account.name),
+      public.aka_agent_validate_data_group_relationship_kind(
+        v_member.id,
+        COALESCE(v_row_account_id, v_contact.account_id),
+        v_dataset.id,
+        CASE
+          WHEN jsonb_typeof(v_row.payload -> 'extra_data') = 'object'
+            THEN COALESCE(
+              v_row.payload -> 'extra_data' ->> 'relationshipKind',
+              v_row.payload -> 'extra_data' ->> 'relationship_kind'
+            )
+          ELSE NULL
+        END,
+        CASE
+          WHEN jsonb_typeof(v_row.payload -> 'extra_data') = 'object'
+            THEN v_row.payload -> 'extra_data'
+          ELSE '{}'::jsonb
+        END
+      ),
+      CASE
+        WHEN v_dataset.id IS NOT NULL AND v_dataset.source = 'scan' THEN EXISTS (
+          SELECT 1 FROM public.auto_account_contacts_dataset_members AS dataset_member
+          WHERE dataset_member.dataset_id = v_dataset.id
+            AND dataset_member.contact_id = v_contact.id
+            AND dataset_member.is_current = true
+        )
+        ELSE true
+      END,
+      now(), now()
+    )
+    ON CONFLICT DO NOTHING;
+    END IF;
+
+    IF v_dataset.id IS NOT NULL AND v_dataset.source = 'upload' AND v_dataset.group_id = v_group.id THEN
+      INSERT INTO public.auto_account_contacts_dataset_members (
+        dataset_id, contact_id, sort_order, is_current,
+        first_seen_at, last_seen_at, created_at, updated_at
+      ) VALUES (
+        v_dataset.id, v_contact.id, GREATEST(v_row.row_index - 1, 0) + v_upload_row_offset, true,
+        now(), now(), now(), now()
+      )
+      ON CONFLICT (dataset_id, contact_id) DO UPDATE SET
+        sort_order = LEAST(auto_account_contacts_dataset_members.sort_order, EXCLUDED.sort_order),
+        is_current = true, last_seen_at = now(), updated_at = now();
+    END IF;
+
+    -- V484: chế độ 'async' của tổ chức ghi thành viên vào hàng đợi đẩy; 'sync' giữ nguyên vòng cũ.
+    v_route_job_id := private.aka_agent_defer_data_group_member_route(
+      v_group.id, v_member.id, v_batch.id, v_revision
+    );
+    IF v_route_job_id IS NULL THEN
+    FOR v_source IN
+      SELECT source.id
+      FROM public.auto_campaign_data_group_sources AS source
+      WHERE source.group_id = v_group.id AND source.status IN ('baselining', 'active')
+      ORDER BY source.campaign_id
+    LOOP
+      v_outcome := public.aka_agent_internal_route_data_group_member(
+        v_source.id, v_member.id, v_batch.id, v_revision
+      );
+      CASE v_outcome ->> 'status'
+        WHEN 'inserted' THEN v_inserted_inputs := v_inserted_inputs + 1;
+        WHEN 'existing' THEN v_existing_inputs := v_existing_inputs + 1;
+        WHEN 'incompatible' THEN v_incompatible := v_incompatible + 1;
+        WHEN 'conflict' THEN
+          v_conflict := v_conflict + 1;
+          v_conflicts := v_conflicts || jsonb_build_array(jsonb_build_object(
+            'rowIndex', v_row.row_index - 1 + v_upload_row_offset,
+            'code', 'canonical_alias_conflict',
+            'message', 'Các định danh của dòng đang trỏ tới nhiều target khác nhau.',
+            'aliases', COALESCE(v_outcome -> 'aliases', '[]'::jsonb)
+          ));
+        ELSE NULL;
+      END CASE;
+    END LOOP;
+    END IF;
+  END LOOP;
+
+  IF v_dataset.id IS NOT NULL AND v_dataset.source = 'upload' AND v_dataset.group_id = v_group.id
+     AND v_upload_session_id IS NULL THEN
+    SELECT count(*)::integer INTO v_removed_members
+    FROM public.auto_account_contact_group_members AS member
+    WHERE member.group_id = v_group.id AND member.is_delete = false
+      AND EXISTS (
+        SELECT 1 FROM public.auto_account_contact_group_member_origins AS historical_origin
+        WHERE historical_origin.membership_id = member.id
+          AND historical_origin.dataset_id = v_dataset.id
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM public.auto_account_contact_group_member_origins AS current_origin
+        WHERE current_origin.membership_id = member.id
+          AND current_origin.is_current = true
+      );
+    IF v_removed_members > 0 THEN
+      IF NOT v_revision_started THEN
+        UPDATE public.auto_account_contact_groups
+        SET revision = revision + 1, updated_at = now()
+        WHERE id = v_group.id
+        RETURNING revision INTO v_revision;
+        v_revision_started := true;
+      END IF;
+      UPDATE public.auto_account_contact_group_members AS member
+      SET is_delete = true, change_revision = v_revision, updated_at = now()
+      WHERE member.group_id = v_group.id AND member.is_delete = false
+        AND EXISTS (
+          SELECT 1 FROM public.auto_account_contact_group_member_origins AS historical_origin
+          WHERE historical_origin.membership_id = member.id
+            AND historical_origin.dataset_id = v_dataset.id
+        )
+        AND NOT EXISTS (
+          SELECT 1 FROM public.auto_account_contact_group_member_origins AS current_origin
+          WHERE current_origin.membership_id = member.id
+            AND current_origin.is_current = true
+        );
+    END IF;
+
+    UPDATE public.auto_account_contacts_dataset AS dataset
+    SET contact_count = (
+      SELECT count(*)::integer
+      FROM public.auto_account_contacts_dataset_members AS member
+      WHERE member.dataset_id = v_dataset.id AND member.is_current = true
+    ), updated_at = now()
+    WHERE dataset.id = v_dataset.id;
+  END IF;
+  IF NOT v_revision_started THEN v_revision := v_group.revision; END IF;
+
+  v_result := jsonb_build_object(
+    'request_id', btrim(p_request_id),
+    'batch_id', v_batch.id,
+    'group_id', v_group.id,
+    'group_revision', v_revision,
+    'inserted_membership_count', v_inserted_members,
+    'reactivated_membership_count', v_reactivated_members,
+    'already_member_count', v_existing_members,
+    'removed_membership_count', v_removed_members,
+    'inserted_input_count', v_inserted_inputs,
+    'already_seen_input_count', v_existing_inputs,
+    'incompatible_count', v_incompatible,
+    'conflict_count', v_conflict,
+    'invalid_count', v_invalid,
+    'conflicts', v_conflicts
+  );
+  IF v_route_job_id IS NOT NULL THEN
+    v_result := v_result || jsonb_build_object('routing_status', 'queued', 'routing_job_id', v_route_job_id);
+  END IF;
+  UPDATE public.auto_data_ingest_batches
+  SET status = 'completed', result = v_result, updated_at = now()
+  WHERE id = v_batch.id;
+  RETURN v_result;
+END;
+$function$
+;
+
+REVOKE ALL ON FUNCTION public.aka_agent_web_scan_org_enabled(bigint), public.aka_agent_web_scan_seen_v1(bigint,text,text[]), public.aka_agent_web_scan_record_v1(bigint,text,jsonb), public.aka_agent_web_scan_retention_v1() FROM PUBLIC;
+DO $grants$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['anon', 'authenticated', 'aka_agent_chat_api'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('REVOKE ALL ON FUNCTION public.aka_agent_web_scan_org_enabled(bigint), public.aka_agent_web_scan_seen_v1(bigint,text,text[]), public.aka_agent_web_scan_record_v1(bigint,text,jsonb), public.aka_agent_web_scan_retention_v1() FROM %I', r);
+    END IF;
+  END LOOP;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'aka_agent_desktop') THEN
+    GRANT EXECUTE ON FUNCTION public.aka_agent_web_scan_seen_v1(bigint,text,text[]), public.aka_agent_web_scan_record_v1(bigint,text,jsonb) TO aka_agent_desktop;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT EXECUTE ON FUNCTION public.aka_agent_web_scan_seen_v1(bigint,text,text[]), public.aka_agent_web_scan_record_v1(bigint,text,jsonb) TO service_role;
+  END IF;
+  -- Dọn mỗi ngày 02:41 giờ VN (19:41 UTC), ngoài giờ cao điểm.
+  IF to_regclass('cron.job') IS NOT NULL THEN
+    PERFORM cron.schedule('aka-agent-web-scan-retention', '41 19 * * *', 'SELECT public.aka_agent_web_scan_retention_v1()');
+  END IF;
+END $grants$;
+
+DO $post$
+DECLARE v_oid oid; v_acl text;
+BEGIN
+  v_oid := 'public.aka_agent_engine_claim_target_v1(jsonb)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'acf4f9d47113ae5c7ee110d96ef1b97c' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: claim %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_claim', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu claim bị đổi'; END IF;
+  v_oid := 'public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'be745999ab2d14b5b432422c1ae1bd1e' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: report %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_report', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu report bị đổi'; END IF;
+  v_oid := 'public.aka_agent_engine_action_limit(bigint,bigint,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'dc5f819d9e16e5e63d34e5b26eb10db0' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: limit %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_limit', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu limit bị đổi'; END IF;
+  v_oid := 'public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'ed7406cbccac16af32af4f329aabb170' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: finish %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_finish', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu finish bị đổi'; END IF;
+  v_oid := 'public.aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'dce1535bfecdb6dd35c3d2b7d132c99b' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: snapshot %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_snapshot', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu snapshot bị đổi'; END IF;
+  v_oid := 'private.app_access_packages(bigint,text,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '034826d2fd6431883c560f7f82a654bd' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: packages %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_packages', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu packages bị đổi'; END IF;
+  v_oid := 'public.aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'f21afaf32a95ba722947f1749998a61e' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: drafts %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_drafts', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu drafts bị đổi'; END IF;
+  v_oid := 'public.aka_agent_engine_close_run_v1(bigint,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '4de95bc591469af1b738927e5d853e0d' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: closeRun %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_closeRun', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu closeRun bị đổi'; END IF;
+  v_oid := 'public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)'::regprocedure;
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'dc8b8c7fdcba4adce08efbc17e1fb005' THEN
+    RAISE EXCEPTION 'V618 p2 postflight: ingest %', md5(pg_get_functiondef(v_oid));
+  END IF;
+  SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v618_acl_ingest', true) THEN RAISE EXCEPTION 'V618 p2 postflight: quyền / chủ sở hữu ingest bị đổi'; END IF;
+END $post$;
+
+COMMIT;

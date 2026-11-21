@@ -6,9 +6,11 @@ import {
   DataTypeCategoryCode
 } from '../../../shared/types'
 import { getSupabaseClient } from '../supabaseClient'
+import { WEB_FIND_DATA_ACTION_IDS } from '../../../shared/webScan'
 import { mapCampaignActionFromDB } from '../mappers'
 import {
   canUseCampaignActionWithEntitlements,
+  isCurrentUserWebScanEnabled,
   loadCurrentUserEffectiveEntitlements,
 } from './entitlementRepository'
 
@@ -79,7 +81,19 @@ export async function listCampaignActions(): Promise<CampaignAction[]> {
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(`Failed to list campaign actions: ${error.message}`)
-  const actions = (data || [])
+  const rows = [...(data || [])]
+  // V618: ba loại quét data website chèn is_active = false (Desktop cũ coi nền tảng lạ là Facebook); bản này đọc riêng khi tổ chức bật.
+  if (isCurrentUserWebScanEnabled()) {
+    const ids = Object.values(WEB_FIND_DATA_ACTION_IDS)
+    const { data: webRows, error: webError } = await client()
+      .from('auto_campaign_actions')
+      .select('*')
+      .in('id', ids)
+      .eq('is_delete', false)
+    if (webError) console.warn('[campaign-actions] Không đọc được loại chiến dịch quét data website:', webError.message)
+    for (const row of webRows || []) if (!rows.some(item => item.id === row.id)) rows.push(row)
+  }
+  const actions = rows
     .map(row => mapCampaignActionFromDB(row))
     .filter(action => canUseCampaignActionWithEntitlements(action.id, action.flatformType, entitlements))
   return attachActionDataTypes(actions)

@@ -3,10 +3,11 @@ import type { DiagnosticQuota } from '../../../shared/campaignDiagnostics'
 import type { CampaignAccountActionRow, CampaignActionLimitSource } from '../../../shared/campaignAccountActions'
 import { normalizePositiveActionLimit as positive, resolveAccountActionLimitConfig } from '../../../shared/accountActionLimits'
 import { getSupabaseClient } from '../supabaseClient'
-import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
+import { getCurrentUser, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { mapCampaignFromDB } from '../mappers'
 import { getCampaignAccountOverviewActionDescriptors, getCampaignActionDescriptors, getCampaignExecutableActionDescriptors } from '../../domain/campaigns/campaignActionDescriptors'
 import { getAccountActionDailySendLimit, loadCurrentUserEffectiveEntitlements } from './entitlementRepository'
+import { WEB_SCAN_DEFAULT_LIMITS, isWebScanActionCode } from '../../../shared/webScan'
 import type { DatabaseRuntimeClock } from './runtimeClockRepository'
 
 const FIND_PHONE_ACTION_CODE = 'zalo_find_phone_user'
@@ -33,6 +34,8 @@ export interface ResolvedCampaignActionLimit {
  * Giới hạn hiệu lực của một hành động như bộ chạy: `getActionLimitConfig` (Tìm SĐT cố định 1.000; cài theo mã,
  * thiếu thì khối chung) → `resolveAccountActionLimitConfig` (nhóm → chiến dịch → trần gói) → mặc định của
  * `resolveAccountRateLimitStatus` (30/ngày, 9 lượt/65 phút). Dùng chung cho Chẩn đoán và tab Hành động.
+ * Mã quét data website (V618): mặc định như hàm DB `aka_agent_engine_action_limit` (giới hạn ngày theo web_scan.campaigns, khung giờ
+ * không đặt thì bằng giới hạn ngày, 60 phút).
  */
 export function resolveCampaignActionQuotaLimit(
   code: string, limits: CampaignActionLimitSettings | undefined, groupLimit: ActionLimitConfig | undefined, cap: number | null
@@ -41,9 +44,13 @@ export function resolveCampaignActionQuotaLimit(
   const base: ActionLimitConfig | undefined = findPhone
     ? { dailyLimit: FIND_PHONE_LIMIT, rateLimitCount: FIND_PHONE_LIMIT, rateLimitMinutes: limits?.byActionCode?.[code]?.rateLimitMinutes ?? limits?.rateLimitMinutes }
     : limits?.byActionCode?.[code] ?? limits
-  const config = resolveAccountActionLimitConfig(base, groupLimit, cap)
-  const dailyLimit = positive(config?.dailyLimit) ?? 30
-  const uncappedDaily = positive(resolveAccountActionLimitConfig(base, groupLimit, null)?.dailyLimit) ?? 30
+  const web = isWebScanActionCode(code)
+  const defaultDaily = web ? positive(getCurrentUser()?.webScanLimits?.defaultDaily) ?? WEB_SCAN_DEFAULT_LIMITS.defaultDaily : 30
+  // Mã web: chưa lưu giới hạn ngày thì lấy mặc định web trước khi kẹp trần (hàm dùng chung tự điền 30 khi có trần).
+  const limitBase = web && !positive(base?.dailyLimit) ? { ...(base || {}), dailyLimit: defaultDaily } : base
+  const config = resolveAccountActionLimitConfig(limitBase, groupLimit, cap)
+  const dailyLimit = positive(config?.dailyLimit) ?? defaultDaily
+  const uncappedDaily = positive(resolveAccountActionLimitConfig(limitBase, groupLimit, null)?.dailyLimit) ?? defaultDaily
   const groupDaily = groupLimit ? positive(groupLimit.dailyLimit) : undefined
   const groupCount = groupLimit ? positive(groupLimit.rateLimitCount) : undefined
   const groupMinutes = groupLimit ? positive(groupLimit.rateLimitMinutes) : undefined
@@ -56,8 +63,8 @@ export function resolveCampaignActionQuotaLimit(
     dailyCapped: dailyLimit < uncappedDaily,
     packageDailyLimit: positive(cap) ?? null,
     campaignDailyLimit: campaignDaily ?? null,
-    rateLimitCount: positive(config?.rateLimitCount) ?? 9,
-    rateLimitMinutes: positive(config?.rateLimitMinutes) ?? 65,
+    rateLimitCount: positive(config?.rateLimitCount) ?? (web ? dailyLimit : 9),
+    rateLimitMinutes: positive(config?.rateLimitMinutes) ?? (web ? 60 : 65),
     windowSource: groupCount || groupMinutes ? 'group' : campaignCount || campaignMinutes ? 'campaign' : 'default',
     campaignRateLimitCount: campaignCount ?? null,
     campaignRateLimitMinutes: campaignMinutes ?? null
