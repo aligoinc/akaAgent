@@ -1,7 +1,27 @@
 # Thông báo mặc định cho mọi tài khoản: chào ngày mới, báo cáo 12:00/18:00, chiến dịch hoàn thành
 
 Phương án code, viết 21/11/2026 sau khi anh duyệt bản thiết kế
-(https://claude.ai/artifact/WsdfsCQkHiEapvM2yiwR3E). Chưa code, chưa migration.
+(https://claude.ai/artifact/WsdfsCQkHiEapvM2yiwR3E).
+
+**Tình trạng (21/11/2026 tối, anh: "Thực thi trên webapp"):** đã code bước 1–3 (mục 8), **chưa apply, chưa deploy, chưa merge**.
+- DB (repo này, nhánh `claude/practical-albattani-jm21p0`): [migration_v621_notification_daily_reports.sql](../migrations/migration_v621_notification_daily_reports.sql)
+  + [p2](../migrations/migration_v621_notification_daily_reports_p2.sql) + [gỡ](../migrations/rollback_v621_notification_daily_reports.sql),
+  sinh bằng `python3 scripts/build-v621-sql.py` từ thân production đọc 21/11 (`migrations/snapshots/notification-daily-reports-v621/live/`,
+  md5 khoá trước/sau) và hàm mới ở `scripts/notification-daily-reports/v621_new_functions.sql`. Sổ production lúc viết tới V620;
+  kiểm lại sổ và `git log --all` ngay trước khi apply.
+- Kiểm: `scripts/notification-daily-reports/smoke_v621.sh` (cụm Postgres tạm, nền setup + V457/V465/V466/V467/V520): bộ kiểm cũ
+  103/20/27 vẫn đạt trên V621, bộ kiểm V621 (gieo mặc định, có/không email, cài đặt Chào ngày mới, client cũ, lập lịch, rải giờ,
+  snapshot `account_actions` / `morning` / `failure_reasons` / `completedToday`, chia hạn mức theo giờ chạy, tick), apply lại bị
+  từ chối, gỡ trả đúng md5 mọi hàm và ràng buộc, apply lại, p2. Đo chỉ đọc trên production 21/11: phần "chiến dịch hôm nay"
+  của `morning` 60–125 ms/nhân viên (284, 2362, 1108, 385); `account_actions` 0,26 s khi nóng, ~4 s khi nguội (đọc riêng, lỗi thì
+  bỏ bảng).
+- Khác phương án: không sửa `capture_campaign` (bỏ "Up tin cho chiến dịch …" làm ở API khi dựng, và ở `completed_today`); rải giờ
+  là `deliver_after` + `staff_id % (notifications.report_spread_seconds + 1)` giây (cài đặt mới, mặc định 240, 0 = như cũ) thay
+  vì dời `next_run_at`; lập lịch 500 dòng/lượt (trước 200); `updated_by_client` thêm giá trị `default_seed` (mở CHECK);
+  dự kiến hôm nay tính trong DB bằng `aka_agent_engine_action_limit` (không gọi `campaign_limit_progress` từ API), chiến dịch cùng
+  tài khoản chia phần giới hạn còn lại theo giờ chạy.
+- WebApp (nhánh `claude/practical-albattani-jm21p0`): hợp đồng, worker dựng 3 loại, email ô số, thông báo nổi + chip + cài đặt Web.
+  DB chưa có V621 thì API dựng báo cáo như bản 1 (các phần đọc thêm báo lỗi → bỏ mục) và giao diện ẩn mục Chào ngày mới.
 
 Dựng trên Trung tâm thông báo đang chạy (V457/V465/V466/V467, xem
 [NOTIFICATION_CENTER.md](NOTIFICATION_CENTER.md)): DB lập lịch và giữ hàng đợi, worker trong API WebApp trên Fly dựng nội dung
