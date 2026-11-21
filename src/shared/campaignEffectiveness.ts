@@ -217,10 +217,11 @@ export const isMessageEngagementAction = (code?: string | null): boolean =>
 /** Legacy rows (report_group NULL) keep the established success text values. */
 export const LEGACY_SUCCESS_DETAIL_STATUSES = ['thành công', 'đã xem', 'đã click', 'đã gửi', 'đã nhận'] as const
 
-export type EngagementStage = 'responded' | 'reacted' | 'seen' | 'received' | 'sent' | 'friended' | 'requested'
+export type EngagementStage = 'responded' | 'reacted' | 'seen' | 'received' | 'sent' | 'friended' | 'rejected' | 'requested'
 
 /** Highest first. Approved order: a reply outranks a reaction. */
 export const MESSAGE_STAGE_ORDER: readonly EngagementStage[] = ['responded', 'reacted', 'seen', 'received', 'sent']
+// 'rejected' (V615) chỉ có ở danh sách kết quả; báo cáo hiệu quả chưa đếm nên không nằm trong thứ tự cột của báo cáo.
 export const FRIEND_STAGE_ORDER: readonly EngagementStage[] = ['friended', 'requested']
 
 export const ENGAGEMENT_STAGE_LABELS: Record<EngagementStage, string> = {
@@ -230,6 +231,7 @@ export const ENGAGEMENT_STAGE_LABELS: Record<EngagementStage, string> = {
   received: 'Đã nhận',
   sent: 'Đã gửi',
   friended: 'Đã đồng ý kết bạn',
+  rejected: 'Đã từ chối kết bạn',
   requested: 'Đã gửi lời mời'
 }
 
@@ -238,6 +240,8 @@ export interface EngagementMarks {
   responded_at?: string | null
   reacted_at?: string | null
   friended_at?: string | null
+  /** Người nhận từ chối lời mời kết bạn (V615). */
+  rejected_at?: string | null
   /** Reserved for delivery receipts; absent until runtimes record them. */
   delivered_at?: string | null
 }
@@ -266,7 +270,7 @@ export function finalEngagementStage(input: {
     if (marks.delivered_at) return 'received'
     return 'sent'
   }
-  if (input.actionCode === FRIEND_ENGAGEMENT_ACTION) return marks.friended_at ? 'friended' : 'requested'
+  if (input.actionCode === FRIEND_ENGAGEMENT_ACTION) return marks.friended_at ? 'friended' : marks.rejected_at ? 'rejected' : 'requested'
   return null
 }
 

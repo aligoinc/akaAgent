@@ -2074,6 +2074,7 @@ export default function CampaignFormModal({
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
     skipPostIfGroupRequiresApproval: campaign?.extraSettings?.skipPostIfGroupRequiresApproval ?? false,
     enableGroupPostShareToJoinedGroups: campaign?.extraSettings?.enableGroupPostShareToJoinedGroups ?? false,
+    groupPostAnonymous: campaign?.extraSettings?.groupPostAnonymous === true,
     enablePostBump: campaign?.extraSettings?.enablePostBump ?? false,
     postBumpCount: clampPostBumpCount(campaign?.extraSettings?.postBumpCount ?? DEFAULT_POST_BUMP_COUNT),
     postBumpInitialDelayMinutes: normalizeMinuteValue(
@@ -2616,6 +2617,8 @@ export default function CampaignFormModal({
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const isSourceContentMode = supportsSourceContent && contentSettingsTab === 'source'
   const isNativeGroupShareMode = isFacebookGroupPostCampaign && isSourceContentMode && formData.groupPostShareFromPost
+  // Đăng bài ẩn danh (anh chốt 21/11/2026): ẩn Kiêm comment, Kiêm up tin, Đăng bài dạng chia sẻ; lúc lưu tắt hẳn ba mục này.
+  const isGroupPostAnonymousMode = isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.groupPostAnonymous
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
@@ -3531,7 +3534,7 @@ export default function CampaignFormModal({
     if (isZaloMessageGroupCampaign) {
       if (actionCode === 'zalo_message_group') return true
     }
-    if (isFacebookGroupPostCampaign && actionCode === 'fb_comment') return formData.enableComment
+    if (isFacebookGroupPostCampaign && actionCode === 'fb_comment') return formData.enableComment && !isGroupPostAnonymousMode
     if (isCommentSeedingCampaign) {
       if (actionCode === 'fb_comment') return true
       if (actionCode === 'fb_like_post') return formData.enablePostLike
@@ -3872,15 +3875,16 @@ export default function CampaignFormModal({
     }
     if (isFacebookGroupPostCampaign) {
       const steps = ALL_STEPS.flatMap(step => {
-        if (step.id === 'content') return isNativeGroupShareMode
+        if (step.id === 'content') return isNativeGroupShareMode || isGroupPostAnonymousMode
           ? [withSourceContentField(step)]
           : [withSourceContentField(step), GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
         if (step.id === 'extra') {
           return [{
             ...step,
             fields: [
+              ...(!isNativeGroupShareMode ? [{ key: 'groupPostAnonymous', label: 'Đăng bài ẩn danh' }] : []),
               { key: 'skipPostIfGroupRequiresApproval', label: 'Không đăng bài vào group bị duyệt bài' },
-              ...(!isNativeGroupShareMode ? [{ key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' }] : []),
+              ...(!isNativeGroupShareMode && !isGroupPostAnonymousMode ? [{ key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' }] : []),
               { key: 'leaveGroupOnPendingApproval', label: 'Rời group chờ duyệt' },
               ...(!isNativeGroupShareMode ? [{ key: 'autoJoinGroupAfterPost', label: 'Tự tham gia group' }] : []),
               { key: 'shuffleGroupList', label: 'Xáo trộn danh sách group' }
@@ -5071,6 +5075,7 @@ export default function CampaignFormModal({
       case 'enablePostBump': return true  // optional
       case 'skipPostIfGroupRequiresApproval': return true
       case 'enableGroupPostShareToJoinedGroups': return true
+      case 'groupPostAnonymous': return true
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
@@ -6583,7 +6588,7 @@ export default function CampaignFormModal({
               ? advancedContentOverride.groupSnapshot
               : undefined,
             advancedContentManualDraft: isSavingGroupSnapshot ? manualDraftForSave : undefined,
-            enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
+            enableComment: isCommentSeedingCampaign ? true : isGroupPostAnonymousMode ? false : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
             commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : clampFacebookCommentCount(formData.commentCount, facebookMaxComments),
@@ -6627,8 +6632,9 @@ export default function CampaignFormModal({
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
             skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
-            enableGroupPostShareToJoinedGroups: isFacebookGroupPostCampaign ? formData.enableGroupPostShareToJoinedGroups : false,
-            enablePostBump: formData.enablePostBump,
+            enableGroupPostShareToJoinedGroups: isFacebookGroupPostCampaign && !isGroupPostAnonymousMode ? formData.enableGroupPostShareToJoinedGroups : false,
+            groupPostAnonymous: isGroupPostAnonymousMode,
+            enablePostBump: isGroupPostAnonymousMode ? false : formData.enablePostBump,
             postBumpCount: clampPostBumpCount(formData.postBumpCount),
             postBumpInitialDelayMinutes: normalizeMinuteValue(
               formData.postBumpInitialDelayMinutes,
@@ -7180,7 +7186,7 @@ export default function CampaignFormModal({
     }
     const shouldValidateBasicCommentMedia =
       (isCommentSeedingCampaign && !isAdvancedContentMode) ||
-      (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enableComment)
+      (isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && formData.enableComment)
     if (shouldValidateBasicCommentMedia) {
       if (!validateCommentMediaPool('Media comment', formData.commentImageOption, formData.commentImages)) return
       if (!validateSelectedImages('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
@@ -7589,7 +7595,7 @@ export default function CampaignFormModal({
       )
       return
     }
-    if (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enablePostBump) {
+    if (isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && formData.enablePostBump) {
       if (formData.postBumpMode === 'select' && formData.postBumpTargetCampaignIds.length === 0) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch comment vào bài post để up tin.', 'error')
         return
@@ -17438,7 +17444,7 @@ export default function CampaignFormModal({
               )}
             </div>)}</CampaignContentObserver>}
 
-            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['groupComment'] = el }}
@@ -17463,7 +17469,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['postBump'] = el }}
@@ -17927,6 +17933,17 @@ export default function CampaignFormModal({
                   {isFacebookGroupPostCampaign && (
                     <>
                       {!isNativeGroupShareMode && <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
+                            checked={formData.groupPostAnonymous}
+                            onChange={e => setFormData(p => ({ ...p, groupPostAnonymous: e.target.checked }))}
+                          />
+                          <span>Đăng bài ẩn danh</span>
+                        </label>
+                      </div>}
+
+                      {!isNativeGroupShareMode && !isGroupPostAnonymousMode && <div className="stepper-form-group">
                         <label className="schedule-checkbox-label">
                           <input
                             type="checkbox"

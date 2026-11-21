@@ -1,6 +1,6 @@
 import type { DesktopRuntimeSnapshotSource } from './desktopRuntimeSnapshot'
 import {
-  isNativeGroupPostShare, validateGroupPostShareLinks, GROUP_POST_SHARE_WORKFLOW_VERSION
+  isNativeGroupPostShare, isGroupPostAnonymous, validateGroupPostShareLinks, GROUP_POST_SHARE_WORKFLOW_VERSION
 } from '../../shared/facebookGroupPostShare'
 import * as randomRuns from '../data/repositories/facebookRandomRunRepository'
 import { chooseRandomRound, isAiRandomConfig, randomRemaining, type FacebookRandomTurn } from '../../shared/facebookRandomRun'
@@ -6682,6 +6682,7 @@ export class CampaignScheduler {
     const { account, campaign } = unit
     const none = { targets: [] as GroupPostShareTarget[], maxCount: 0 }
     if (!detail || campaign.actionId !== GROUP_POST_ACTION_ID || isNativeGroupPostShare(campaign.actionId, campaign.extraSettings)
+      || isGroupPostAnonymous(campaign.actionId, campaign.extraSettings)
       || campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true) return none
     const maxCount = await this.resolveGroupPostShareQuotaCapacity(account, campaign, campaign.extraSettings?.actionLimits,
       approval.skipPostByKnownApproval)
@@ -9231,6 +9232,7 @@ export class CampaignScheduler {
     if (
       campaign.actionId !== GROUP_POST_ACTION_ID ||
       isNativeGroupPostShare(campaign.actionId, campaign.extraSettings) ||
+      isGroupPostAnonymous(campaign.actionId, campaign.extraSettings) ||
       campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
       maxShareCount <= 0
     ) {
@@ -9287,6 +9289,7 @@ export class CampaignScheduler {
     if (
       campaign.actionId !== GROUP_POST_ACTION_ID ||
       isNativeGroupPostShare(campaign.actionId, campaign.extraSettings) ||
+      isGroupPostAnonymous(campaign.actionId, campaign.extraSettings) ||
       campaign.extraSettings?.enableGroupPostShareToJoinedGroups !== true ||
       skipMainPost
     ) {
@@ -12065,8 +12068,11 @@ export class CampaignScheduler {
     // dormant comment media participate in its run.
     const usesCommentIterations = this.campaignUsesCommentIterations(campaign)
     const usesNewsfeedComment = campaign.actionId === NEWSFEED_INTERACTION_ACTION_ID
+    // Đăng bài ẩn danh (anh chốt 21/11/2026): không comment, không đăng kèm chia sẻ; block engine bật công tắc "Đăng ẩn danh".
+    const groupPostAnonymous = isGroupPostAnonymous(campaign.actionId, extra)
     const enableComment = (usesCommentIterations || usesNewsfeedComment) &&
       (extra.enableComment ?? false) &&
+      !groupPostAnonymous &&
       !isActionSkippedByLimit('fb_comment')
     const enableCommentIterations = usesCommentIterations && enableComment
     const enablePostLike = !nativeGroupShare && (extra.enablePostLike ?? false) && !isActionSkippedByLimit('fb_like_post')
@@ -12269,7 +12275,8 @@ export class CampaignScheduler {
       skipGroupPostByKnownApproval: groupPostApproval?.skipPostByKnownApproval === true,
       groupPostRequiresPostApproval: groupPostApproval?.requiresPostApproval ?? null,
       groupPostApprovalSource: groupPostApproval?.source || '',
-      enableGroupPostShareToJoinedGroups: extra.enableGroupPostShareToJoinedGroups === true,
+      enableGroupPostShareToJoinedGroups: extra.enableGroupPostShareToJoinedGroups === true && !groupPostAnonymous,
+      groupPostAnonymous,
       groupPostShareTargets: [],
       groupPostShareMaxCount: 0,
       // Timeline/page/group post extras
@@ -16028,6 +16035,8 @@ export class CampaignScheduler {
   private async enqueuePostBumpAfterGroupPost(campaign: Campaign, rawPostUrl: string, isPending?: boolean): Promise<void> {
     const extra = campaign.extraSettings || {}
     if (campaign.actionId !== 'facebook_group_post' || extra.enablePostBump !== true) return
+    // Đăng ẩn danh không up tin (anh chốt 21/11/2026).
+    if (isGroupPostAnonymous(campaign.actionId, extra)) return
 
     const postUrl = this.cleanPostLinkForStorage(rawPostUrl)
     if (!postUrl || isPending === true || postUrl.includes('/pending_posts/')) return
