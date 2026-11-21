@@ -1,6 +1,8 @@
 # Đẩy data của chiến dịch tìm data qua DB — V608
 
-Trạng thái (21/11/2026): code + migration ở nhánh `claude/kind-pasteur-a6nwxo`. **V608 chưa apply, Desktop chưa build.**
+Trạng thái (21/11/2026): code + migration ở nhánh `claude/kind-pasteur-a6nwxo`, **Desktop chưa build**. **V608 đã apply akachat
+14:21:53 VN 21/11** theo yêu cầu ("appply v608"; sổ `20261121072153`, không apply lại, md5 sổ = file `45f944b9…`; PostgREST nạp lại
+schema 5,2 s, 0 lỗi 5xx; 365 liên kết điền sẵn đúng như chạy thử; [biên nhận](../migrations/snapshots/find-data-push-v608/apply-receipt.json)).
 Kiểm thử cục bộ đạt (xem cuối trang).
 
 ## Vì sao
@@ -67,7 +69,7 @@ App cũ (chưa gọi hàm) vẫn tự thêm dòng; hàm mới thấy các dòng 
 
 ## Thứ tự đưa vào dùng
 
-1. Apply V608 (DDL ⇒ PostgREST nạp lại schema; chọn giờ thấp điểm). Bản Desktop đang dùng không gọi hàm nên không đổi gì.
+1. Apply V608 (DDL ⇒ PostgREST nạp lại schema; chọn giờ thấp điểm). Bản Desktop đang dùng không gọi hàm nên không đổi gì. **Đã làm 14:21 VN 21/11.**
 2. Build + phát hành Desktop. Bản mới chạy được cả khi V608 chưa apply (dùng cách cũ, có câu ⚠️).
 
 Theo dõi sau khi bật:
@@ -91,7 +93,7 @@ tự quay về cách cũ. Dòng sổ migration giữ lại nên V608 không ch�
 - `node scripts/find-data-push/app-smoke.cjs`: hàm thật của bộ lập lịch gọi hàm DB thật V608 (11 nhóm: câu tiến trình, thử lại,
   chia lượt, gói, cách cũ khi chưa có V608, kiểm mã nguồn form và nhánh "Tìm data").
 - `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `electron-vite build`: sạch.
-- Chưa: chạy form trên Electron thật, gọi hàm trên DB thật.
+- Chưa: chạy form trên Electron thật, gọi hàm bằng phiên Desktop thật (hàm đã có trên DB thật từ 21/11 14:21 VN).
 
 ## Ca của khách 2481 (21/11)
 
