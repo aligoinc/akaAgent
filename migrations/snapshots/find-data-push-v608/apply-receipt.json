@@ -1,0 +1,33 @@
+{
+  "migration": "migration_v608_find_data_push_links",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "appply v608 (21/11/2026)",
+  "applied_at_vn": "2026-11-21 14:21:53",
+  "ledger_version": "20261121072153",
+  "how": "Supabase MCP apply_migration với nguyên văn file (file có BEGIN/COMMIT, preflight + postflight trong cùng giao dịch)",
+  "file_md5": "45f944b98552a0ea2977192d3405de33",
+  "ledger_statements_md5": "45f944b98552a0ea2977192d3405de33",
+  "preflight_live_14_19": {
+    "ledger_v608_rows": 0,
+    "ledger_last": "aka_customer_soft_merge (20261121041949), kgt_k114c…, kgt_k114b…, kgt_k114…, migration_v607_engine_facebook_comment_checkpoint (20261121022532)",
+    "other_branches_v608_v609_files": "chỉ migration_v608_find_data_push_links.sql của nhánh này (git log --all sau fetch)",
+    "objects_present": "không bảng auto_campaign_data_link*, không hàm aka_agent_find_data_push_v1 / 2 hàm phụ",
+    "rest_load_14_08_14_19": "~35.000 request/phút, p50 46–50 ms, 0–4 request > 1 s/phút, 0 lỗi 5xx (trừ 1 lỗi 500 lúc 14:09)"
+  },
+  "dry_run_rollback": "không chạy riêng: preflight / postflight nằm trong giao dịch của migration, lỗi thì huỷ cả giao dịch; migration không khoá ghi bảng có sẵn (không FK tới bảng nóng, chỉ đọc auto_campaigns / auto_campaign_actions / category_*)",
+  "postflight_live_14_22": {
+    "rules": 11,
+    "links": { "active": 193, "target_deleted": 153, "target_data_group_mode": 17, "target_action_mismatch": 2 },
+    "deliveries": 0,
+    "push_fn_md5_pg_get_functiondef": "ebf7251847cc026704455f5d1cdfe203",
+    "push_fn_config": ["search_path=pg_catalog, public, private", "statement_timeout=20s"],
+    "execute": { "aka_agent_desktop": true, "anon": false, "service_role": false }
+  },
+  "schema_reload": "PostgREST nhận thông báo 14:21:53.9, truy vấn schema 5.185,6 ms, nạp xong 14:21:59.5; khung 10 giây 14:21:50 có 106 request > 1 s (p50 63 ms), 14:22:00 có 5; 0 lỗi 500 / 503; postgres_logs 14:21:30–14:23:00 chỉ 1 lỗi không liên quan (invalid input syntax for type json, authenticator)",
+  "unrelated_before_apply": "14:19:50 VN (2 phút trước apply) có 1.491 request > 1 s, p50 664 ms trong 10 giây: đợt chậm lặp lại quanh phút :18–:22 (pitfall CLAUDE.md), không do V608",
+  "rollback": "migrations/rollback_v608_find_data_push_links.sql (xoá hàm, 2 hàm phụ, 3 bảng; dòng data đã thêm giữ nguyên; dòng sổ giữ lại)",
+  "not_verified": [
+    "Chưa có lượt gọi aka_agent_find_data_push_v1 nào: bản Desktop đang dùng chưa gọi hàm (code ở nhánh claude/kind-pasteur-a6nwxo, chưa build).",
+    "Chưa chạy form trên Electron thật."
+  ]
+}

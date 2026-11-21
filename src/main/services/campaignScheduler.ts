@@ -143,6 +143,16 @@ import { convertHtmlToZaloMessage } from './zaloFormattedContent'
 import { EmailRuntimeService, type EmailRecipientCheckResult } from './emailRuntimeService'
 import * as campaignRunEventRepo from '../data/repositories/campaignRunEventRepository'
 import type { ZaloGroupContactInput, ZaloUserContactInput } from '../data/repositories/accountContactRepository'
+import {
+  FIND_DATA_PUSH_MAX_ITEMS,
+  FIND_DATA_PUSH_TARGET_ACTION_IDS,
+  formatFindDataPushBlockReason,
+  type FindDataPushBlockReason,
+  type FindDataPushItem,
+  type FindDataPushResponse
+} from '../../shared/findDataPush'
+import type { FindDataOutputKind } from '../../shared/types'
+import { FindDataPushError } from '../data/repositories/findDataPushRepository'
 import { callAiUsing } from './aiRuntimeService'
 import { captureBlockScreenshot, readBlockScreenshotDataUrl } from './blockScreenshotService'
 import type { DailyMaintenanceBarrier } from './dailyMaintenanceCoordinator'
@@ -739,6 +749,31 @@ type FindDataTargetCampaignField =
 
 const FIND_DATA_GROUP_ACTION_ID = 'facebook_find_data_group'
 const FIND_DATA_SEARCH_ACTION_ID = 'facebook_find_data_search'
+/**
+ * Khoá extra_settings bật loại đầu ra và khoá chứa id chiến dịch đích nội bộ, theo auto_campaign_data_link_rules (V608).
+ * Chỉ dùng để bỏ qua lời gọi DB khi chiến dịch không liên kết đích nào; DB mới là nơi quyết định đích nào nhận được.
+ */
+const FIND_DATA_INTERNAL_LINK_FIELDS: Record<FindDataOutputKind, { flag: string; fields: string[]; searchOnly?: true }> = {
+  facebook_uid: { flag: 'isFindUid', fields: ['findUidTargetCampaignIds'] },
+  post_link: { flag: 'isFindPostLink', fields: ['findPostLinkTargetCampaignIds'] },
+  phone: { flag: 'isFindPhone', fields: ['findPhoneZaloMessagePhoneTargetCampaignIds'] },
+  zalo_group_link: { flag: 'isFindLinkGroupZalo', fields: ['findZaloGroupLinkJoinTargetCampaignIds'] },
+  facebook_group: {
+    flag: 'isFindFacebookGroup',
+    fields: ['findFacebookGroupPostTargetCampaignIds', 'findFacebookGroupCommentTargetCampaignIds', 'findFacebookGroupJoinTargetCampaignIds'],
+    searchOnly: true
+  }
+}
+/** Cảnh báo "không đẩy được sang chiến dịch đích" lặp lại cho cùng nguồn / đích / lý do: in tối đa mỗi giờ một lần. */
+const FIND_DATA_PUSH_WARNING_INTERVAL_MS = 60 * 60_000
+const FIND_DATA_PUSH_CHUNK_SIZE = 2000
+const FIND_DATA_KIND_LABELS: Record<FindDataOutputKind, string> = {
+  facebook_uid: 'UID',
+  post_link: 'link bài post',
+  phone: 'SĐT',
+  zalo_group_link: 'link group Zalo',
+  facebook_group: 'link group Facebook'
+}
 const GROUP_POST_ACTION_ID = 'facebook_group_post'
 const LIMIT_IN_DAY_ERROR_CODE = 'error_limit_in_day'
 const LIMIT_IN_HOUR_ERROR_CODE = 'error_limit_in_hour'
@@ -993,6 +1028,8 @@ export class CampaignScheduler {
   private campaignContentMediaPaths = new Map<number, string[]>()
   /** Engine v2 Facebook: chiến dịch đang báo dòng lịch sử lên engine (bộ dựng của bộ cũ chạy ở chế độ thu lại). */
   private facebookEngineSinks = new Map<number, (action: CreateCampaignDetailInput) => Promise<CampaignDetail | null>>()
+  /** Lần in gần nhất của cảnh báo "không đẩy được data sang chiến dịch đích", theo nguồn:đích:lý do. */
+  private findDataPushWarnings = new Map<string, number>()
   /** Engine v2 Facebook: câu tiến trình của bộ dựng đang thu lại (in sau khi báo kết quả). */
   private facebookEngineProgress = new Map<number, Array<{ message: string; options: { emitRealtime?: boolean; realtimeAction?: CampaignLogAction; realtimeMessage?: string } }>>()
   /** Engine v2: lấy vị trí nội dung xoay vòng theo lease engine thay cho token của bộ cũ. */
@@ -13376,8 +13413,9 @@ export class CampaignScheduler {
         ? await this.getPreviouslyFoundValues(campaign.id)
         : this.createEmptyFindDataPreviousValues()
 
+      let recordedFindDataDetailId: number | null = null
       try {
-        await createCampaignDetail({
+        const recordedFindDataDetail = await createCampaignDetail({
           inputDataId: detail?.id,
           campaignId: campaign.id,
           accountId,
@@ -13419,10 +13457,16 @@ export class CampaignScheduler {
             errorBlock: errorStep?.blockName
           }
         })
+        const recordedId = Number(recordedFindDataDetail?.id)
+        recordedFindDataDetailId = Number.isSafeInteger(recordedId) && recordedId > 0 ? recordedId : null
         if (isSuccess) await this.logCampaignProgress(campaign, `✅ ${successLog}`)
         else await this.logCampaignProgress(campaign, `❌ Lỗi tìm data ${isFindDataSearch ? 'bằng search' : 'trong group'} "${targetName}": ${errMsg}`)
         await flushScreenshotLogsForStep(summaryStep || errorStep)
-      } catch (err) { if (err instanceof ResultContractError) throw err; console.error('Failed log find data:', err) }
+      } catch (err) {
+        // Engine dừng giữa lúc báo (mất quyền chạy, DB từ chối): dừng bộ dựng, không đẩy data; data này chạy lại ở lượt sau.
+        if (err instanceof ResultContractError || err instanceof FacebookEngineReportStop) throw err
+        console.error('Failed log find data:', err)
+      }
 
       if (isSuccess) {
         const foundUidsForPush = [
@@ -13488,14 +13532,26 @@ export class CampaignScheduler {
           uidProfiles: rawUidProfiles,
           phoneProfiles: rawPhoneProfiles
         })
-        await this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid)
-        await this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal)
-        await this.pushFoundFacebookGroupsToTargetCampaigns(campaign, newFacebookGroupsForInternal)
+        // Chiến dịch đích nội bộ: DB đẩy (V608, lọc trùng theo data đang có ở đích); DB chưa có V608 thì đẩy kiểu cũ.
+        const pushContext = { sourceDetailId: recordedFindDataDetailId, sourceInputDataId: Number(detail?.id) > 0 ? Number(detail?.id) : null }
+        await this.pushFoundDataToLinkedCampaigns(campaign, 'facebook_uid',
+          this.buildFindDataUidPushItems(newUidsForInternal, groupMemberNameByUid), pushContext,
+          () => this.pushFoundUidsToTargetCampaigns(campaign, newUidsForInternal, groupMemberNameByUid))
+        await this.pushFoundDataToLinkedCampaigns(campaign, 'post_link',
+          this.buildFindDataPostLinkPushItems(newPostLinksForInternal), pushContext,
+          () => this.pushFoundPostLinksToTargetCampaigns(campaign, newPostLinksForInternal))
+        await this.pushFoundDataToLinkedCampaigns(campaign, 'facebook_group',
+          this.buildFindDataFacebookGroupPushItems(newFacebookGroupsForInternal), pushContext,
+          () => this.pushFoundFacebookGroupsToTargetCampaigns(campaign, newFacebookGroupsForInternal))
         await this.pushFoundPhonesToSmsCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundPhonesToZaloWebCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
-        await this.pushFoundPhonesToZaloMessagePhoneCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
+        await this.pushFoundDataToLinkedCampaigns(campaign, 'phone',
+          this.buildFindDataPhonePushItems(newPhonesForExternal, newPhoneProfilesForExternal), pushContext,
+          () => this.pushFoundPhonesToZaloMessagePhoneCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal))
         await this.pushFoundZaloGroupLinksToZaloWebCampaigns(campaign, newZaloGroupLinksForExternal)
-        await this.pushFoundZaloGroupLinksToJoinCampaigns(campaign, newZaloGroupLinksForExternal)
+        await this.pushFoundDataToLinkedCampaigns(campaign, 'zalo_group_link',
+          this.buildFindDataZaloGroupLinkPushItems(newZaloGroupLinksForExternal), pushContext,
+          () => this.pushFoundZaloGroupLinksToJoinCampaigns(campaign, newZaloGroupLinksForExternal))
         await this.pushFoundPhonesToAkaBizDesktopCampaigns(campaign, newPhonesForExternal, newPhoneProfilesForExternal)
         await this.pushFoundZaloGroupLinksToAkaBizDesktopCampaigns(campaign, newZaloGroupLinksForExternal)
       }
@@ -13966,6 +14022,254 @@ export class CampaignScheduler {
     return summary
   }
 
+  // ------------------------------------------------------------
+  // Đẩy data tìm được sang chiến dịch đích nội bộ (V608, docs/FIND_DATA_PUSH_LINKS_V608.md)
+  // ------------------------------------------------------------
+
+  private buildFindDataUidPushItems(rawUids: string[], nameByNormalizedUid: Map<string, string>): FindDataPushItem[] {
+    const items = new Map<string, FindDataPushItem>()
+    for (const rawUid of rawUids) {
+      const value = String(rawUid || '').trim()
+      const key = this.normalizeUidForCompare(value)
+      if (!value || !key || items.has(key)) continue
+      items.set(key, { value, key, name: nameByNormalizedUid.get(key) || null })
+    }
+    return Array.from(items.values())
+  }
+
+  private buildFindDataPostLinkPushItems(rawLinks: string[]): FindDataPushItem[] {
+    const items = new Map<string, FindDataPushItem>()
+    for (const rawLink of rawLinks) {
+      const value = this.cleanPostLinkForStorage(rawLink)
+      const key = this.normalizePostLinkForCompare(value)
+      if (!value || !key || items.has(key)) continue
+      items.set(key, { value, key })
+    }
+    return Array.from(items.values())
+  }
+
+  private buildFindDataFacebookGroupPushItems(rawGroups: FindDataFacebookGroup[]): FindDataPushItem[] {
+    const items = new Map<string, FindDataPushItem>()
+    for (const rawGroup of rawGroups) {
+      const group = this.normalizeFoundFacebookGroup(rawGroup)
+      const key = this.normalizeFacebookGroupUrlForCompare(group.url)
+      if (!group.url || !key || items.has(key)) continue
+      items.set(key, { value: group.url, key, name: group.name || group.url })
+    }
+    return Array.from(items.values())
+  }
+
+  private buildFindDataPhonePushItems(rawPhones: string[], phoneProfiles: FindDataPhoneProfile[]): FindDataPushItem[] {
+    const nameByPhone = this.getPhoneProfileNameMap(phoneProfiles, value => this.normalizeVietnamMobilePhone(value))
+    const items = new Map<string, FindDataPushItem>()
+    for (const rawPhone of rawPhones) {
+      const value = this.normalizeVietnamMobilePhone(rawPhone)
+      const key = this.normalizeExternalValueForCompare(value)
+      if (!value || !key || items.has(key)) continue
+      items.set(key, { value, key, name: nameByPhone.get(key) || null })
+    }
+    return Array.from(items.values())
+  }
+
+  private buildFindDataZaloGroupLinkPushItems(rawLinks: string[]): FindDataPushItem[] {
+    return this.uniqueExternalValues(rawLinks)
+      .map(value => ({ value, key: this.normalizeExternalValueForCompare(value) }))
+      .filter(item => !!item.key)
+  }
+
+  /** Chiến dịch tìm data có bật loại đầu ra này và có id chiến dịch đích nội bộ nào không (không thì không gọi DB). */
+  private hasFindDataInternalTargets(campaign: Campaign, kind: FindDataOutputKind): boolean {
+    const config = FIND_DATA_INTERNAL_LINK_FIELDS[kind]
+    if (config.searchOnly && campaign.actionId !== FIND_DATA_SEARCH_ACTION_ID) return false
+    const extra = (campaign.extraSettings || {}) as Record<string, unknown>
+    if (extra[config.flag] !== true) return false
+    return config.fields.some(field => this.getFindDataConfiguredTargetCampaignIds(extra[field], campaign.id).length > 0)
+  }
+
+  /** Loại chiến dịch đích mà gói của nhân viên đang dùng được (kiểm trong bộ nhớ, không gọi DB). */
+  private async getFindDataAllowedTargetActionIds(): Promise<string[]> {
+    const allowed: string[] = []
+    for (const actionId of FIND_DATA_PUSH_TARGET_ACTION_IDS) {
+      try {
+        await ensureCurrentUserCanUseCampaignAction(actionId)
+        allowed.push(actionId)
+      } catch {
+        // Gói hiện tại không có loại chiến dịch này: DB trả target_not_entitled.
+      }
+    }
+    return allowed
+  }
+
+  /**
+   * Gọi lại khi lỗi mạng / máy chủ tạm thời (1 s, 3 s, 9 s) cho các lệnh gửi lại an toàn của nhánh "Tìm data" (cùng mã yêu cầu thì DB
+   * trả lại kết quả cũ). Lỗi khác (dữ liệu sai, xung đột mã yêu cầu, hết quyền) ném ngay.
+   */
+  private async retryFindDataTransient<T>(run: () => Promise<T>): Promise<T> {
+    const retryDelaysMs = [1_000, 3_000, 9_000]
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await run()
+      } catch (error) {
+        const message = getErrorMessage(error)
+        const transient = /fetch failed|network|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|timed? ?out|\b50[234]\b|JWT expired/i.test(message)
+          && !/request_id_conflict|statement timeout|canceling statement/i.test(message)
+        if (!transient || attempt >= retryDelaysMs.length || !this.running) throw error
+        await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]))
+      }
+    }
+  }
+
+  /** Gọi hàm đẩy của DB, thử lại lỗi tạm thời (hàm không thêm trùng nên gọi lại an toàn). null = DB chưa có V608. */
+  private async callFindDataPush(request: Parameters<SupabaseService['pushFindDataToLinkedCampaigns']>[0]): Promise<FindDataPushResponse | null> {
+    const retryDelaysMs = [1_000, 3_000]
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.supabase.pushFindDataToLinkedCampaigns(request)
+      } catch (error) {
+        const code = error instanceof FindDataPushError ? error.code : null
+        const permanent = code === '22023' || code === 'P0002' || code === '42501' || code === 'invalid_response'
+        if (permanent || attempt >= retryDelaysMs.length || !this.running) throw error
+        await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]))
+      }
+    }
+  }
+
+  /**
+   * Đẩy một loại data tìm được sang các chiến dịch đích nội bộ. DB (V608) kiểm từng đích, lọc trùng theo data đang có ở đích (mọi nguồn),
+   * thêm dòng, mở lại đích "hoàn thành", ghi sổ đẩy; đích không nhận được thì báo lý do. DB chưa có V608 thì chạy legacyPush (cách cũ).
+   */
+  private async pushFoundDataToLinkedCampaigns(
+    sourceCampaign: Campaign,
+    kind: FindDataOutputKind,
+    items: FindDataPushItem[],
+    context: { sourceDetailId: number | null; sourceInputDataId: number | null },
+    legacyPush: () => Promise<void>
+  ): Promise<void> {
+    if (items.length === 0 || !this.hasFindDataInternalTargets(sourceCampaign, kind)) return
+    const allowedTargetActionIds = await this.getFindDataAllowedTargetActionIds()
+    const merged = new Map<number, FindDataPushResponse['targets'][number]>()
+    let failure: unknown = null
+    const chunkSize = Math.min(FIND_DATA_PUSH_CHUNK_SIZE, FIND_DATA_PUSH_MAX_ITEMS)
+    for (let offset = 0; offset < items.length; offset += chunkSize) {
+      let response: FindDataPushResponse | null
+      try {
+        response = await this.callFindDataPush({
+          sourceCampaignId: sourceCampaign.id,
+          outputKind: kind,
+          items: items.slice(offset, offset + chunkSize),
+          sourceDetailId: context.sourceDetailId,
+          sourceInputDataId: context.sourceInputDataId,
+          allowedTargetActionIds
+        })
+      } catch (error) {
+        failure = error
+        break
+      }
+      if (response === null) {
+        if (offset === 0) {
+          await legacyPush()
+          return
+        }
+        failure = new Error('Hệ thống đẩy data chưa sẵn sàng')
+        break
+      }
+      for (const target of response.targets) {
+        const previous = merged.get(target.targetCampaignId)
+        merged.set(target.targetCampaignId, previous && previous.status === 'delivered' && target.status === 'delivered'
+          ? {
+              ...target,
+              inserted: previous.inserted + target.inserted,
+              existing: previous.existing + target.existing,
+              reopened: previous.reopened || target.reopened
+            }
+          : target)
+      }
+    }
+    await this.logFindDataPushResults(sourceCampaign, Array.from(merged.values()))
+    if (failure) {
+      console.error('Failed to push found data to linked campaigns:', failure)
+      await this.logCampaignProgress(sourceCampaign,
+        `⚠️ Không đẩy được ${FIND_DATA_KIND_LABELS[kind]} sang chiến dịch khác: ${getErrorMessage(failure)}`)
+    }
+  }
+
+  private async logFindDataPushResults(
+    sourceCampaign: Campaign,
+    targets: FindDataPushResponse['targets']
+  ): Promise<void> {
+    for (const target of targets) {
+      const targetLabel = target.targetCampaignName ? `"${target.targetCampaignName}"` : `#${target.targetCampaignId}`
+      if (target.status === 'blocked') {
+        await this.warnFindDataPushTarget(sourceCampaign, target.targetCampaignId, target.reason,
+          `⚠️ Không đẩy được ${target.label} sang chiến dịch ${targetLabel}: ${formatFindDataPushBlockReason(target.reason, target.label)}.`)
+        continue
+      }
+      if (target.inserted > 0) {
+        const skipped = target.existing > 0 ? ` (bỏ qua ${target.existing} ${target.label} đã có ở chiến dịch đó)` : ''
+        await this.logCampaignProgress(sourceCampaign, `✅ Đã đẩy ${target.inserted} ${target.label} sang chiến dịch ${targetLabel}${skipped}`)
+        await this.logCampaignProgress(target.targetCampaignId,
+          `✅ Đã nhận ${target.inserted} ${target.label} từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
+        if (target.reopened) {
+          try {
+            const reopened = await this.supabase.getCampaign(target.targetCampaignId)
+            if (reopened) this.broadcastCampaignUpdate(reopened)
+          } catch (error) {
+            console.error('Failed to load reopened find-data target campaign:', error)
+          }
+        }
+      } else if (target.existing > 0) {
+        await this.logCampaignProgress(sourceCampaign,
+          `ℹ️ ${target.label}: ${target.existing} ${target.label} đã có ở chiến dịch ${targetLabel} nên không thêm lại.`)
+      }
+    }
+  }
+
+  /** Cảnh báo đích không nhận được data: in tối đa mỗi giờ một lần cho cùng nguồn / đích / lý do (mỗi data nguồn đều đẩy một lần). */
+  private async warnFindDataPushTarget(
+    sourceCampaign: Campaign,
+    targetCampaignId: number,
+    reason: FindDataPushBlockReason | string | null,
+    message: string
+  ): Promise<void> {
+    const key = `${sourceCampaign.id}:${targetCampaignId}:${reason ?? 'error'}`
+    const now = Date.now()
+    const last = this.findDataPushWarnings.get(key)
+    if (last !== undefined && now - last < FIND_DATA_PUSH_WARNING_INTERVAL_MS) return
+    this.findDataPushWarnings.set(key, now)
+    if (this.findDataPushWarnings.size > 2000) {
+      for (const [entryKey, at] of this.findDataPushWarnings) {
+        if (now - at >= FIND_DATA_PUSH_WARNING_INTERVAL_MS) this.findDataPushWarnings.delete(entryKey)
+      }
+    }
+    await this.logCampaignProgress(sourceCampaign, message)
+  }
+
+  /** Cách đẩy cũ (DB chưa có V608): đích không nhận được thì báo cho khách thay vì chỉ ghi console. */
+  private getLegacyFindDataTargetBlockReason(
+    targetCampaign: Campaign | null,
+    expectedActionId: string
+  ): FindDataPushBlockReason | null {
+    if (!targetCampaign) return 'target_missing'
+    if (targetCampaign.isDelete) return 'target_deleted'
+    if (targetCampaign.actionId !== expectedActionId) return 'target_action_mismatch'
+    if (targetCampaign.dataTargetSourceMode === 'data_group') return 'target_data_group_mode'
+    return null
+  }
+
+  private async warnLegacyFindDataTarget(
+    sourceCampaign: Campaign,
+    targetCampaignId: number,
+    targetCampaign: Campaign | null,
+    label: string,
+    reason: FindDataPushBlockReason | null,
+    error?: unknown
+  ): Promise<void> {
+    const targetLabel = targetCampaign?.name ? `"${targetCampaign.name}"` : `#${targetCampaignId}`
+    const detail = reason ? formatFindDataPushBlockReason(reason, label) : getErrorMessage(error)
+    await this.warnFindDataPushTarget(sourceCampaign, targetCampaignId, reason ?? 'error',
+      `⚠️ Không đẩy được ${label} sang chiến dịch ${targetLabel}: ${detail}.`)
+  }
+
   private async pushFoundUidsToTargetCampaigns(sourceCampaign: Campaign, rawUids: string[], uidNameByNormalizedUid: Map<string, string> = new Map()): Promise<void> {
     if (!sourceCampaign.extraSettings?.isFindUid) return
 
@@ -13987,9 +14291,15 @@ export class CampaignScheduler {
     if (uids.length === 0) return
 
     for (const targetCampaignId of targetCampaignIds) {
+      let loadedTargetCampaign: Campaign | null = null
       try {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-        if (!targetCampaign || targetCampaign.actionId !== MESSAGE_UID_ACTION_ID) continue
+        loadedTargetCampaign = targetCampaign
+        const blockReason = this.getLegacyFindDataTargetBlockReason(targetCampaign, MESSAGE_UID_ACTION_ID)
+        if (blockReason || !targetCampaign) {
+          await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, targetCampaign, 'UID', blockReason)
+          continue
+        }
 
         await this.supabase.createCampaignInputDataBatch(
           uids.map<Partial<CampaignInputData>>(uid => {
@@ -14013,6 +14323,7 @@ export class CampaignScheduler {
         if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
       } catch (err) {
         console.error('Failed to push found UIDs to target campaign:', err)
+        await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, loadedTargetCampaign, 'UID', null, err)
       }
     }
   }
@@ -14038,9 +14349,15 @@ export class CampaignScheduler {
     if (postLinks.length === 0) return
 
     for (const targetCampaignId of targetCampaignIds) {
+      let loadedTargetCampaign: Campaign | null = null
       try {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-        if (!targetCampaign || targetCampaign.actionId !== COMMENT_SEEDING_POST_ACTION_ID) continue
+        loadedTargetCampaign = targetCampaign
+        const blockReason = this.getLegacyFindDataTargetBlockReason(targetCampaign, COMMENT_SEEDING_POST_ACTION_ID)
+        if (blockReason || !targetCampaign) {
+          await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, targetCampaign, 'link bài post', blockReason)
+          continue
+        }
 
         await this.supabase.createCampaignInputDataBatch(
           postLinks.map<Partial<CampaignInputData>>(postLink => ({
@@ -14060,6 +14377,7 @@ export class CampaignScheduler {
         if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
       } catch (err) {
         console.error('Failed to push found post links to target campaign:', err)
+        await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, loadedTargetCampaign, 'link bài post', null, err)
       }
     }
   }
@@ -14109,9 +14427,15 @@ export class CampaignScheduler {
 
     for (const config of targetConfigs) {
       for (const targetCampaignId of config.ids) {
+        let loadedTargetCampaign: Campaign | null = null
         try {
           const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-          if (!targetCampaign || targetCampaign.actionId !== config.actionId) continue
+          loadedTargetCampaign = targetCampaign
+          const blockReason = this.getLegacyFindDataTargetBlockReason(targetCampaign, config.actionId)
+          if (blockReason || !targetCampaign) {
+            await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, targetCampaign, 'link group Facebook', blockReason)
+            continue
+          }
 
           await this.supabase.createCampaignInputDataBatch(
             groups.map<Partial<CampaignInputData>>(group => ({
@@ -14132,6 +14456,7 @@ export class CampaignScheduler {
           if (reopenedTarget) this.broadcastCampaignUpdate(reopenedTarget)
         } catch (err) {
           console.error('Failed to push found Facebook groups to target campaign:', err)
+          await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, loadedTargetCampaign, 'link group Facebook', null, err)
         }
       }
     }
@@ -14210,7 +14535,7 @@ export class CampaignScheduler {
 
     let dataTypeIdByCode: Map<DataTypeCategoryCode, number>
     try {
-      const dataTypes = await this.supabase.listDataTypeCategoryItems()
+      const dataTypes = await this.retryFindDataTransient(() => this.supabase.listDataTypeCategoryItems())
       dataTypeIdByCode = new Map(
         dataTypes
           .filter(item => Number.isSafeInteger(Number(item.id)) && Number(item.id) > 0)
@@ -14367,7 +14692,9 @@ export class CampaignScheduler {
           const chunkIndex = Math.floor(offset / maxRowsPerRequest)
           const rows = spec.rows.slice(offset, offset + maxRowsPerRequest)
           const payloadHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
-          const result = await this.supabase.ingestDataGroup({
+          // Lỗi mạng tạm thời: gửi lại cùng mã yêu cầu (DB trả lại kết quả lô đã ghi, không thêm trùng). Trước đây báo khách
+          // "thử lại để thêm tiếp" mà không có lần thử lại nào, phần còn lại không bao giờ vào nhóm (rà 21/11/2026: 7/2.223 lượt).
+          const result = await this.retryFindDataTransient(() => this.supabase.ingestDataGroup({
             requestId: [
               'find-data',
               sourceCampaign.id,
@@ -14386,7 +14713,7 @@ export class CampaignScheduler {
             sourceName,
             payloadHash,
             dataTypeCategoryItemId
-          })
+          }))
           addedCount += result.insertedMembershipCount + result.reactivatedMembershipCount
           alreadyMemberCount += result.alreadyMemberCount
           skippedCount += result.invalidCount + result.incompatibleCount + result.conflictCount
@@ -15437,9 +15764,15 @@ export class CampaignScheduler {
     const phoneNameByValue = this.getPhoneProfileNameMap(phoneProfiles, value => this.normalizeVietnamMobilePhone(value))
 
     for (const targetCampaignId of targetCampaignIds) {
+      let loadedTargetCampaign: Campaign | null = null
       try {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-        if (!targetCampaign || targetCampaign.actionId !== ZALO_MESSAGE_PHONE_ACTION_ID) continue
+        loadedTargetCampaign = targetCampaign
+        const blockReason = this.getLegacyFindDataTargetBlockReason(targetCampaign, ZALO_MESSAGE_PHONE_ACTION_ID)
+        if (blockReason || !targetCampaign) {
+          await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, targetCampaign, 'SĐT', blockReason)
+          continue
+        }
 
         await this.supabase.createCampaignInputDataBatch(
           phones.map<Partial<CampaignInputData>>(phone => ({
@@ -15461,6 +15794,7 @@ export class CampaignScheduler {
         await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${phones.length} SĐT từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
       } catch (err) {
         console.error('Failed to push found phones to Zalo phone campaign:', err)
+        await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, loadedTargetCampaign, 'SĐT', null, err)
       }
     }
   }
@@ -15515,9 +15849,15 @@ export class CampaignScheduler {
     if (links.length === 0) return
 
     for (const targetCampaignId of targetCampaignIds) {
+      let loadedTargetCampaign: Campaign | null = null
       try {
         const targetCampaign = await this.supabase.getCampaign(targetCampaignId)
-        if (!targetCampaign || targetCampaign.actionId !== ZALO_JOIN_GROUP_LINK_ACTION_ID) continue
+        loadedTargetCampaign = targetCampaign
+        const blockReason = this.getLegacyFindDataTargetBlockReason(targetCampaign, ZALO_JOIN_GROUP_LINK_ACTION_ID)
+        if (blockReason || !targetCampaign) {
+          await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, targetCampaign, 'link group Zalo', blockReason)
+          continue
+        }
 
         await this.supabase.createCampaignInputDataBatch(
           links.map<Partial<CampaignInputData>>(link => ({
@@ -15538,6 +15878,7 @@ export class CampaignScheduler {
         await this.logCampaignProgress(targetCampaign, `✅ Đã nhận ${links.length} link group Zalo từ chiến dịch "${sourceCampaign.name}"`, { emitRealtime: false })
       } catch (err) {
         console.error('Failed to push found Zalo group links to join campaign:', err)
+        await this.warnLegacyFindDataTarget(sourceCampaign, targetCampaignId, loadedTargetCampaign, 'link group Zalo', null, err)
       }
     }
   }
