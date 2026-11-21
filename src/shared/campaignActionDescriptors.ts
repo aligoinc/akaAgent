@@ -1,4 +1,5 @@
 import type { Campaign, CampaignAction } from './types'
+import { WEB_SCAN_ACTION_CODES, WEB_SCAN_ACTION_NAMES, getWebScanSite, getWebScanSiteByActionCode } from './webScan'
 
 type CampaignActionConfiguration = Pick<Campaign, 'actionId' | 'extraSettings'>
 
@@ -48,6 +49,9 @@ export function isNewsfeedCommentConfigured(extra: Campaign['extraSettings']): b
 }
 
 export function getAccountActionName(actionCode: string): string {
+  // Quét data website (V618): "Hiện SĐT Nhà Tốt", "Hiện SĐT Batdongsan", "Mở trang Trang Vàng".
+  const webSite = getWebScanSiteByActionCode(actionCode)
+  if (webSite) return WEB_SCAN_ACTION_NAMES[webSite]
   switch (actionCode) {
     case 'fb_post_group': return 'Đăng bài group'
     case 'fb_post_my_profile': return 'Đăng bài trang cá nhân'
@@ -193,6 +197,10 @@ function filterQuotaActionDescriptors(
 function getDefaultCampaignActionDescriptors(campaign: Pick<Campaign, 'actionId' | 'extraSettings'>, includeOptional = false): CampaignActionDescriptor[] {
   const extra = campaign.extraSettings || {}
   const actions: CampaignActionDescriptor[] = []
+  // Quét data website (V618): một thao tác của trang (mỗi lần hiện SĐT / mở trang tính một lượt). Bộ chạy engine đọc mã từ DB; ở đây chỉ để
+  // tab Hành động, cột Giới hạn lượt, báo cáo hiện đúng.
+  const webSite = getWebScanSite(campaign.actionId)
+  if (webSite) return [{ code: WEB_SCAN_ACTION_CODES[webSite], name: WEB_SCAN_ACTION_NAMES[webSite] }]
 
   switch (campaign.actionId) {
     case 'facebook_group_post':

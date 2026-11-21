@@ -1283,7 +1283,8 @@ export class CampaignScheduler {
       engineReason: (account, campaign) => {
         const observation = this.engineObservations.get(campaign.id)
         if (!observation || observation.accountId !== account.id) return null
-        const label = account.flatformType === 'facebook' ? 'Facebook' : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
+        const label = account.flatformType === 'facebook' ? 'Facebook' : isWebAccountPlatform(account.flatformType) ? 'Website'
+          : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
         return engineWaitMessage(observation, Date.now(), label)
       }
     }

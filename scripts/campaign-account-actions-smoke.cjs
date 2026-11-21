@@ -14,7 +14,8 @@ function load(file, imports = {}) {
 }
 
 const limitsModule = load('src/shared/accountActionLimits.ts')
-const descriptors = load('src/shared/campaignActionDescriptors.ts')
+const webScan = load('src/shared/webScan.ts')
+const descriptors = load('src/shared/campaignActionDescriptors.ts', { './webScan': webScan })
 const shared = load('src/shared/campaignAccountActions.ts')
 
 let queries = []
@@ -44,9 +45,11 @@ const caps = { zalo_message_stranger: 40, zalo_add_friend: 40, sms_send: 25 }
 const repo = load('src/main/data/repositories/campaignDiagnosticsRepository.ts', {
   '../../../shared/accountActionLimits': limitsModule,
   '../supabaseClient': { getSupabaseClient: () => client },
-  '../currentUser': { requireCurrentUser: () => ({ staffId: 9, organizationId: 1 }), requireCurrentUserCredentials: () => ({ username: 'fixture', password: 'fixture' }) },
+  '../currentUser': { requireCurrentUser: () => ({ staffId: 9, organizationId: 1 }), requireCurrentUserCredentials: () => ({ username: 'fixture', password: 'fixture' }),
+    getCurrentUser: () => ({ staffId: 9, organizationId: 1, webScanLimits: { defaultDaily: 120, maxDaily: 500, defaultSleepSeconds: 15, minSleepSeconds: 10 } }) },
   '../mappers': { mapCampaignFromDB: row => row },
   '../../domain/campaigns/campaignActionDescriptors': descriptors,
+  '../../../shared/webScan': webScan,
   './entitlementRepository': {
     getAccountActionDailySendLimit: code => code === 'zalo_find_phone_user' ? null : caps[code] ?? null,
     loadCurrentUserEffectiveEntitlements: async () => ({})
@@ -181,6 +184,32 @@ async function chatAndEdges() {
   console.log('PASS akaChat explicit-only counts and saved code filter, unverifiable counter/enable date, SMS legacy counts and cap, empty campaigns, DB errors')
 }
 
+async function webScanRows() {
+  // Quét data website (V618): mỗi loại một thao tác của trang, tên đã duyệt; mặc định như hàm DB (ngày theo web_scan.campaigns, khung giờ = ngày,
+  // 60 phút) khi chiến dịch chưa lưu giới hạn.
+  const resolveLimit = repo.resolveCampaignActionQuotaLimit
+  const unsaved = resolveLimit('web_nhatot_phone', undefined, undefined, 500)
+  assert.deepEqual([unsaved.dailyLimit, unsaved.dailySource, unsaved.rateLimitCount, unsaved.rateLimitMinutes, unsaved.windowSource], [120, 'default', 120, 60, 'default'])
+  const saved = resolveLimit('web_nhatot_phone', { byActionCode: { web_nhatot_phone: { dailyLimit: 80, rateLimitCount: 80, rateLimitMinutes: 65 } } }, undefined, 500)
+  assert.deepEqual([saved.dailyLimit, saved.rateLimitCount, saved.rateLimitMinutes, saved.dailySource], [80, 80, 65, 'campaign'])
+  assert.deepEqual([resolveLimit('fb_comment', undefined, undefined, null).dailyLimit, resolveLimit('fb_comment', undefined, undefined, null).rateLimitCount], [30, 9],
+    'mặc định của loại khác không đổi')
+  const webAccount = { id: 31, flatformType: 'web', isDelete: false, accountGroupSettings: null }
+  for (const [site, code, name] of [['nhatot', 'web_nhatot_phone', 'Hiện SĐT Nhà Tốt'], ['batdongsan', 'web_batdongsan_phone', 'Hiện SĐT Batdongsan'],
+    ['yellowpages', 'web_yellowpages_page', 'Mở trang Trang Vàng']]) {
+    reset()
+    statusRows = [{ action_code: code, count_action_in_day: 37, count_date: CLOCK.vietnamDateKey, is_disable: false, date_enable: null }]
+    counts = { [`${code}:explicit`]: 12 }
+    const campaign = { id: 201, accountId: 31, actionId: `web_find_data_${site}`, extraSettings: { webScan: { site },
+      actionLimits: { sleepBetweenActions: 15, enabledActionCodes: [code], byActionCode: { [code]: { dailyLimit: 100, rateLimitCount: 100, rateLimitMinutes: 65 } } } } }
+    const rows = await repo.readCampaignAccountActionRows(webAccount, campaign, { id: campaign.actionId, limitCheckActionCodes: [code] }, CLOCK, false, signal())
+    assert.deepEqual(rows.map(row => [row.code, row.name, row.limited, row.dayUsed, row.dayLimit, row.windowUsed, row.windowLimit, row.windowMinutes]),
+      [[code, name, true, 37, 100, 12, 100, 65]], site)
+    assert.equal(descriptors.getAccountActionName(code), name)
+  }
+  console.log('PASS quét data website: tab Hành động có thao tác của trang (tên đã duyệt), mặc định giới hạn như DB, loại khác không đổi')
+}
+
 async function service() {
   const clock = { ...CLOCK }
   let campaignRow = { campaign: { ...phoneCampaign(), isDelete: false } }
@@ -265,6 +294,7 @@ async function ipcBoundary() {
 ;(async () => {
   await limitFormula()
   await schedulerRows()
+  await webScanRows()
   await chatAndEdges()
   await service()
   await ipcBoundary()

@@ -47,6 +47,7 @@ const service = load('src/main/services/campaignPendingReasonService.ts', {
   '../../shared/campaignPendingReason': shared,
   '../../shared/facebookRandomRunDiagnostics': randomChecks,
   '../../shared/zaloShareRepeat': load('src/shared/zaloShareRepeat.ts'),
+  '../../shared/webScan': load('src/shared/webScan.ts'),
   '../data/currentUser': { requireCurrentUser: () => user, requireCurrentUserCredentials: () => ({ username: 'fixture', password: 'fixture' }) },
   '../data/repositories/runtimeClockRepository': { getDatabaseRuntimeClock: async () => ({ dbNow: clock }) },
   '../data/repositories/entitlementRepository': { canUseCampaignActionWithEntitlements: () => authorized,
@@ -179,6 +180,13 @@ async function main() {
   console.log('PASS three random configuration notes, disabled/unknown, busy/schedule/data priority, changed configuration and invalid/duplicate rules')
   reset(); await assert.rejects(service.inspectPendingCampaign(1, runtime, AbortSignal.abort()))
   console.log('PASS read-only diagnosis: DB time/cutoff, no-data rules, mobile/server, busy/permissions, real-note and configuration races')
+  // Quét data website (V618): loại chiến dịch chạy bằng engine, không có workflow; không được báo "chưa có cấu hình chạy hợp lệ".
+  reset(); campaign = { ...base, actionId: 'web_find_data_nhatot' }; account.flatformType = 'web'
+  action = { id: 'web_find_data_nhatot', name: 'Tìm data Nhà Tốt', workflowId: null }
+  assert.match((await inspect()).message, /Chưa phát hiện điều kiện chặn/)
+  reset(); action = { ...action, workflowId: null }
+  assert.equal((await inspect()).message, 'Loại chiến dịch chưa có cấu hình chạy hợp lệ.', 'loại khác thiếu workflow vẫn báo')
+  console.log('PASS quét data website: không đòi workflow; loại chiến dịch khác thiếu workflow vẫn báo')
   await verifyIpcBoundary()
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

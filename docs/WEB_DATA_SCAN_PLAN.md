@@ -332,7 +332,8 @@ Anh yêu cầu "Bắt đầu code" sau khi chốt hai câu hỏi của 7.4.
   `remainingWindow`), report (dòng "Tìm data" nhận cả `web`), action_limit (mã `web_*` mặc định 100 / ngày, trần 500 theo setting, khung giờ = ngày
   trong 60 phút), finish (chạy lại sau N giờ), snapshot tài khoản Desktop (khoá `webScan`), gói (nền tảng `web` theo gói Facebook / Zalo), nháp
   chiến dịch (`aka_agent_campaign_drafts` nhận ba loại web dù `is_active = false`), dọn lượt bỏ dở (`aka_agent_engine_close_run_v1`: lượt quét
-  web bị bỏ dở thì từ khoá về hàng đợi dù đã có kết quả; loại khác giữ nguyên).
+  web bị bỏ dở thì từ khoá về hàng đợi dù đã có kết quả; loại khác giữ nguyên), nạp Nhóm data (`aka_agent_ingest_data_group_v186_internal`,
+  md5 `dc8ccc8c…` → `dc8b8c7f…`: nhận dòng SĐT của tài khoản nền tảng `web`; anh chốt "Vá hàm trong V618" tối 21/11, xem 8.4).
 - p3: setting `web_scan.campaigns` (tổ chức 1, giới hạn anh chốt), 3 mã thao tác (`operation_class = read`), 3 loại chiến dịch (`is_active = false`),
   8 block `[engine] web_*`, 8 element, mã lỗi WB01–WB04 + chính sách, chặn theo thao tác (mỗi lần dùng tính một lượt), 3 quy tắc đẩy SĐT sang
   "Nhắn tin theo SĐT" (V608).
@@ -420,8 +421,23 @@ Anh yêu cầu "Bắt đầu code" sau khi chốt hai câu hỏi của 7.4.
   vào một đích không trùng, sổ đẩy đúng từng nguồn, gói không có Zalo thì đích không nhận, lỗi mạng gửi lại không trùng, Nhóm data lỗi vẫn đẩy
   sang chiến dịch Zalo, bản gỡ p3 xoá quy tắc / liên kết / sổ đẩy của nguồn web và giữ của Facebook. Dòng gửi lên Nhóm data: loại SĐT (mã 34),
   Info1–5 theo lựa chọn, email, `extra_data` có site / link / trường / cờ số dùng lại, cùng lô thì cùng mã yêu cầu. Hàm nạp Nhóm data không có
-  trong DB thử: đọc chỉ đọc thân production `aka_agent_ingest_data_group_v186_internal` (md5 `prosrc` `f1bdba98…`) thì hàm đọc `info1`–`info5`,
-  `extra_data` của dòng loại `phone`; bản ghi đã có thì giữ `extra_data` cũ (`v_extra || cũ`). Form (`form-ui-smoke`, 9 ca): chọn chiến dịch
+  trong DB thử. **Lỗi tìm ra khi đọc chỉ đọc thân production `aka_agent_ingest_data_group_v186_internal` (md5 `prosrc` `f1bdba98…`, tối
+  21/11; đã sửa trong V618 p2, anh chốt "Vá hàm trong V618"): mọi SĐT web đẩy sang Nhóm data đều bị hàm bỏ là "không hợp lệ".** App gửi tài khoản Website làm tài khoản nguồn
+  (`sourceAccountId`), dòng không ghi nền tảng, nên hàm lấy nền tảng của tài khoản (`web`) rồi chỉ nhận `facebook` / `zalo` / `email` / `sms`
+  (`v_platform NOT IN (…)` → `v_invalid + 1`, `CONTINUE`). Khách sẽ thấy "✅ Đã đẩy N SĐT sang Nhóm data … (0 mới · N không hợp lệ/không tương
+  thích)". Bỏ tài khoản nguồn không được: dòng không tài khoản thì mỗi lần nạp tạo liên hệ mới (chỉ gộp trong cùng một dataset), số bị lặp
+  trong nhóm. Production không có CHECK nào trên `flatform_type` của liên hệ / dataset; cùng danh sách nền tảng còn ở
+  `aka_agent_save_upload_contact_datasets_v205_internal`; chưa có liên hệ nào của tài khoản web. Bài kiểm `desktop-web-sim` và `push-smoke` đều
+  giả hàm nạp nên không bắt được. Phần hàm đọc được: `info1`–`info5`, `extra_data` của dòng loại `phone`; liên hệ đã có thì giữ `extra_data` cũ
+  (`v_extra || cũ`). Sửa: hàm nhận thêm nền tảng `web`, chỉ cho dòng SĐT (thân production lưu ở `live-20261121/`, md5 kiểm lúc sinh và lúc apply,
+  gỡ p2 trả lại thân cũ). Kiểm bằng hàm nạp thật: `python3 scripts/web-scan/ingest-realfn-smoke.py --fetch <thư mục>` (đọc chỉ đọc production:
+  md5 mọi hàm, định nghĩa 1.086 hàm lệch bản chụp, cột) rồi `LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3
+  scripts/web-scan/ingest-realfn-smoke.py <thư mục>` (fixture nhóm data + V483–V486 + nạp đè hàm production, lịch giả thay pg_cron; 14 kiểm):
+  41 hàm trên đường nạp / đẩy nhóm data đúng bản production; thân production bỏ 3/3 SĐT web; sau hàm vá nguyên văn của V618 p2, SĐT vào nhóm,
+  liên hệ gắn tài khoản Website (nền tảng `web`, giữ Info1–5), đi tiếp vào chiến dịch "Nhắn tin theo SĐT" nhận data từ nhóm, lần nạp sau gộp số
+  đã có, gửi lại cùng mã yêu cầu không thêm gì; dòng loại khác của tài khoản web và nền tảng lạ vẫn bị bỏ; dòng Zalo / Facebook như cũ.
+  `aka_agent_save_upload_contact_datasets_v205_internal` (lưu dataset nhập file) có cùng danh sách nền tảng nhưng không nằm trên đường của
+  chiến dịch web, không vá. Form (`form-ui-smoke`, 9 ca): chọn chiến dịch
   Zalo đích và Nhóm data ở chiến dịch web lưu đúng `findPhoneZaloMessagePhoneTargetCampaignIds` / `findDataTargetDataGroups.phone`, sửa chiến
   dịch hiện lại và giữ. Câu có sẵn khi nguồn bị xoá giữa lượt in mã thô `find_data_push_source_not_found` (đường chung với Tìm data Facebook,
   không sửa).
@@ -455,3 +471,22 @@ Anh yêu cầu "Bắt đầu code" sau khi chốt hai câu hỏi của 7.4.
 - Chưa chạy trong app thật với DB có V618 (chưa apply). Chưa thử đăng nhập batdongsan thật và bấm hiện số khi đã đăng nhập.
 - Nút "Mở trình duyệt" trên ghi chú chiến dịch khi WB01 / WB02 chưa có (câu nháp hướng dẫn mở tab Website).
 - Báo cáo, tab Hành động, lý do đang chờ: chưa rà riêng cho ba loại web.
+- V618 p2 nay vá 9 hàm (thêm hàm nạp Nhóm data): lúc apply kiểm lại md5 production cả 9 hàm (hàm nạp đọc tối 21/11 là `dc8ccc8c…`).
+- Rà tab Hành động / Lý do đang chờ / báo cáo (tối 21/11, anh: "Rà ngay"; anh chốt "Sửa luôn", đã sửa, xem dòng "Sửa" cuối mục):
+  - `src/shared/campaignActionDescriptors.ts` không có ba loại web (chạy thử: danh sách thao tác của chiến dịch web rỗng) và không có tên ba mã
+    thao tác web (`getAccountActionName` trả mã thô). Bộ chạy engine không dùng hàm này nên chạy vẫn đúng; chỉ hiển thị sai: tab "Hành động" của
+    chiến dịch web trống, cột "Giới hạn lượt" ở danh sách trống, bảng thao tác ở "Thông tin tài khoản" của tài khoản Website trống, tab "Báo cáo"
+    hiện tên thô `web_nhatot_phone` (tab "Kết quả chạy" lấy tên đã ghi trên lượt nên đúng), phần dự kiến của báo cáo theo tài khoản thiếu.
+  - "Lý do đang chờ" (`campaignPendingReasonService`): loại chiến dịch web không có workflow (V618 để `workflow_id` NULL, engine chạy không qua
+    workflow) mà nút vẫn đòi workflow, nên khi engine chưa có kết quả nhận lượt gần nhất thì báo sai "Loại chiến dịch chưa được liên kết workflow".
+  - Nhỏ: tab Hành động tính giới hạn mặc định 30 / ngày, 9 lượt / 65 phút khi chiến dịch chưa lưu giới hạn, còn engine mặc định 100 / ngày (form
+    luôn lưu giới hạn nên chỉ gặp với chiến dịch tạo đường khác).
+  - Đúng: tab "Kết quả chạy", chặn chạy khi tab Website chưa mở (tab Trình duyệt có cả tài khoản Website), các câu chờ của engine (hạn mức,
+    lượt chưa xong).
+  - Sửa (chỉ code Desktop, không đổi DB): `campaignActionDescriptors.ts` thêm ba loại web (một thao tác mỗi loại) và tên ba mã (lấy từ
+    `src/shared/webScan.ts`); `campaignPendingReasonService` không đòi workflow với chiến dịch web; `resolveCampaignActionQuotaLimit` (tab Hành
+    động, cột Giới hạn lượt, Chẩn đoán) dùng mặc định web khi chiến dịch chưa lưu giới hạn (ngày theo `webScanLimits.defaultDaily`, khung giờ =
+    ngày, 60 phút; điền mặc định trước khi kẹp trần vì hàm dùng chung tự điền 30); câu chờ "giới hạn số tài khoản chạy đồng thời" gọi
+    "Website". Bộ chạy engine không dùng các hàm này. Kiểm: `node scripts/campaign-account-actions-smoke.cjs` (thêm ca ba loại web),
+    `node scripts/campaign-pending-reason-smoke.cjs` (thêm ca web không đòi workflow; phần ranh giới IPC hỏng sẵn), `node
+    scripts/campaign-limit-progress-smoke.cjs`, form 9/9, runner 14/14, push 11/11, giả lập 3 ca cục bộ đạt.

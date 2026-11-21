@@ -9,6 +9,7 @@ import * as reads from '../data/repositories/campaignPendingReasonRepository'
 import { readChatPendingLimitReason } from '../data/repositories/campaignPendingChatLimitRepository'
 import { checkFacebookRandomConfiguration } from '../../shared/facebookRandomRunDiagnostics'
 import { parseZaloShareRepeatMinutes } from '../../shared/zaloShareRepeat'
+import { isWebFindDataAction } from '../../shared/webScan'
 
 export interface PendingReasonRuntime {
   /** RAM-only observations; never start/claim/recover a runtime from this endpoint. */
@@ -146,7 +147,8 @@ export async function inspectPendingCampaign(
   if (!action || isChatManaged && (!action.isActive || action.isDelete || action.flatformType !== 'zalo')) {
     return finish('Loại chiến dịch chưa có cấu hình chạy hợp lệ.')
   }
-  const requiresWorkflow = !mobileManaged(campaign) && !isChatManaged
+  // Quét data website (V618) chạy bằng engine, không qua workflow (loại chiến dịch để workflow_id NULL).
+  const requiresWorkflow = !mobileManaged(campaign) && !isChatManaged && !isWebFindDataAction(campaign.actionId)
   const configuration = runtime.configurationReason(campaign, action, requiresWorkflow)
   if (configuration) return finish(configuration)
   if (requiresWorkflow) {
