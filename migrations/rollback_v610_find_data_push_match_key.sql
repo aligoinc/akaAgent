@@ -1,5 +1,5 @@
--- Gỡ V609: trả aka_agent_find_data_push_v1 về đúng thân V608, xoá hàm khoá. Dòng sổ migration giữ lại.
--- Sổ đẩy ghi sau V609 mang khoá V609; V608 so khoá app gửi nên có thể không nhận ra vài data đã đẩy (đích vẫn kiểm theo dòng đang có).
+-- Gỡ V610: trả aka_agent_find_data_push_v1 về đúng thân V608, xoá hàm khoá. Dòng sổ migration giữ lại.
+-- Sổ đẩy ghi sau V610 mang khoá V610; V608 so khoá app gửi nên có thể không nhận ra vài data đã đẩy (đích vẫn kiểm theo dòng đang có).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 
@@ -233,7 +233,7 @@ DROP FUNCTION IF EXISTS private.aka_agent_find_data_coarse_key(text, text);
 DO $post$
 BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_find_data_push_v1(jsonb)'::regprocedure) <> 'd04c4711cbdadeffca7238cff5f5f5cd' THEN
-    RAISE EXCEPTION 'gỡ V609: thân hàm không về đúng bản V608';
+    RAISE EXCEPTION 'gỡ V610: thân hàm không về đúng bản V608';
   END IF;
 END $post$;
 

@@ -1,4 +1,4 @@
--- V609: hàm đẩy data của chiến dịch tìm data (V608) nhận ra "cùng một data" dù viết khác.
+-- V610: hàm đẩy data của chiến dịch tìm data (V608) nhận ra "cùng một data" dù viết khác.
 --
 -- Vì sao (lô kiểm "cách viết khác" 21/11/2026, scripts/find-data-push/replay-realdata.cjs --variants, data thật của đích):
 --   V608 so data gửi lên với data đang có ở đích bằng nguyên chuỗi (chỉ bỏ khoảng trắng, chữ hoa). Đích có data viết khác thì
@@ -14,7 +14,7 @@
 --      so theo khoá này; trước đó lọc dòng của đích bằng khoá thô (private.aka_agent_find_data_coarse_key, SQL thuần) nên chỉ tính khoá
 --      đầy đủ cho dòng có thể trùng (đích 60.000 dòng: xem đo ở docs/FIND_DATA_PUSH_LINKS_V608.md).
 -- Sổ đẩy production lúc viết: 0 dòng (Desktop chưa gọi hàm), nên đổi nghĩa khoá không cần chuyển dữ liệu.
--- Sinh bằng: python3 scripts/find-data-push/build-v609-sql.py. Gỡ: migrations/rollback_v609_find_data_push_match_key.sql.
+-- Sinh bằng: python3 scripts/find-data-push/build-v610-sql.py. Gỡ: migrations/rollback_v610_find_data_push_match_key.sql.
 
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -23,22 +23,22 @@ SET LOCAL statement_timeout = '60s';
 DO $pre$
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v609_%') THEN
-      RAISE EXCEPTION 'V609 đã có trong sổ migration, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v610_%') THEN
+      RAISE EXCEPTION 'V610 đã có trong sổ migration, không chạy lại';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v608_find_data_push_links') THEN
-      RAISE EXCEPTION 'V609: cần V608 trước';
+      RAISE EXCEPTION 'V610: cần V608 trước';
     END IF;
   END IF;
   IF to_regprocedure('public.aka_agent_find_data_push_v1(jsonb)') IS NULL THEN
-    RAISE EXCEPTION 'V609: thiếu aka_agent_find_data_push_v1 của V608';
+    RAISE EXCEPTION 'V610: thiếu aka_agent_find_data_push_v1 của V608';
   END IF;
   IF to_regprocedure('private.aka_agent_find_data_match_key(text, text)') IS NOT NULL
     OR to_regprocedure('private.aka_agent_find_data_coarse_key(text, text)') IS NOT NULL THEN
-    RAISE EXCEPTION 'V609: hàm khoá của V609 đã có';
+    RAISE EXCEPTION 'V610: hàm khoá của V610 đã có';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_find_data_push_v1(jsonb)'::regprocedure) <> 'd04c4711cbdadeffca7238cff5f5f5cd' THEN
-    RAISE EXCEPTION 'V609: thân aka_agent_find_data_push_v1 khác bản V608 đã kiểm';
+    RAISE EXCEPTION 'V610: thân aka_agent_find_data_push_v1 khác bản V608 đã kiểm';
   END IF;
 END $pre$;
 
@@ -191,7 +191,7 @@ BEGIN
   END IF;
   v_note := 'Đã thêm từ chiến dịch "' || left(COALESCE(v_source.name, ''), 200) || '"';
 
-  -- Data gửi lên: khoá do DB tính (V609, không dùng khoá app gửi), bỏ dòng thiếu giá trị / khoá, mỗi khoá giữ dòng đầu tiên.
+  -- Data gửi lên: khoá do DB tính (V610, không dùng khoá app gửi), bỏ dòng thiếu giá trị / khoá, mỗi khoá giữ dòng đầu tiên.
   SELECT COALESCE(jsonb_agg(jsonb_build_object('ord', y.ord, 'value', y.value, 'value_key', y.value_key, 'name', y.name)
                             ORDER BY y.ord), '[]'::jsonb)
     INTO v_items
@@ -253,7 +253,7 @@ BEGIN
 
       SELECT c.id, c.name, c.status INTO v_target FROM public.auto_campaigns AS c WHERE c.id = v_target_id;
 
-      -- Data đích đã có (already): sổ đẩy của đích (mọi nguồn) hoặc dòng data đang có cùng khoá (V609: khoá DB tính, nên data khách
+      -- Data đích đã có (already): sổ đẩy của đích (mọi nguồn) hoặc dòng data đang có cùng khoá (V610: khoá DB tính, nên data khách
       -- nhập kiểu khác vẫn nhận ra). Khoá đầy đủ chỉ tính cho dòng có khoá thô trùng data gửi lên (khoá thô: SQL thuần, rẻ; cùng khoá
       -- đầy đủ thì chắc chắn cùng khoá thô), đích 60.000 dòng không phải tính khoá đầy đủ cho từng dòng.
       WITH item_coarse AS MATERIALIZED (
@@ -361,7 +361,7 @@ BEGIN
       ('phone', '0985794636', '+84 985 794 636')
     ) AS c(kind, a, b)
    WHERE private.aka_agent_find_data_match_key(c.kind, c.a) IS DISTINCT FROM private.aka_agent_find_data_match_key(c.kind, c.b);
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V609 postflight: khoá khác nhau: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V610 postflight: khoá khác nhau: %', v_bad; END IF;
   SELECT string_agg(format('%s:%s', c.kind, c.a), '; ') INTO v_bad
     FROM (VALUES
       ('facebook_group', 'https://www.facebook.com/groups/12345/', 'https://m.facebook.com/groups/12345?ref=share'),
@@ -372,25 +372,25 @@ BEGIN
       ('phone', '0985794636', '+84 985 794 636')
     ) AS c(kind, a, b)
    WHERE private.aka_agent_find_data_coarse_key(c.kind, c.a) IS DISTINCT FROM private.aka_agent_find_data_coarse_key(c.kind, c.b);
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V609 postflight: khoá thô khác nhau: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V610 postflight: khoá thô khác nhau: %', v_bad; END IF;
   -- Khác data thì khác khoá.
   IF private.aka_agent_find_data_match_key('facebook_group', 'https://www.facebook.com/groups/1/')
      = private.aka_agent_find_data_match_key('facebook_group', 'https://www.facebook.com/groups/12/')
     OR private.aka_agent_find_data_match_key('post_link', 'https://www.facebook.com/permalink.php?story_fbid=a&id=1')
      = private.aka_agent_find_data_match_key('post_link', 'https://www.facebook.com/permalink.php?story_fbid=b&id=1')
   THEN
-    RAISE EXCEPTION 'V609 postflight: hai data khác nhau ra cùng khoá';
+    RAISE EXCEPTION 'V610 postflight: hai data khác nhau ra cùng khoá';
   END IF;
   SELECT string_agg(rolname, ', ' ORDER BY rolname) INTO v_bad
     FROM pg_roles
    WHERE rolname IN ('anon', 'authenticated', 'service_role', 'aka_agent_chat_api')
      AND has_function_privilege(rolname, 'public.aka_agent_find_data_push_v1(jsonb)', 'EXECUTE');
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V609 postflight: role không được gọi hàm: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V610 postflight: role không được gọi hàm: %', v_bad; END IF;
   IF NOT has_function_privilege('aka_agent_desktop', 'public.aka_agent_find_data_push_v1(jsonb)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'V609 postflight: aka_agent_desktop chưa gọi được hàm';
+    RAISE EXCEPTION 'V610 postflight: aka_agent_desktop chưa gọi được hàm';
   END IF;
   IF has_function_privilege('aka_agent_desktop', 'private.aka_agent_find_data_match_key(text, text)', 'EXECUTE') THEN
-    RAISE EXCEPTION 'V609 postflight: aka_agent_desktop không được gọi thẳng hàm khoá';
+    RAISE EXCEPTION 'V610 postflight: aka_agent_desktop không được gọi thẳng hàm khoá';
   END IF;
 END $post$;
 

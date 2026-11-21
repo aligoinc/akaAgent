@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Đo thời gian aka_agent_find_data_push_v1 (V608 + V609) trên đích lớn (PG16 cục bộ): 2.000 group vào đích 7.745 dòng + 60.000 dòng,
+# Đo thời gian aka_agent_find_data_push_v1 (V608 + V610) trên đích lớn (PG16 cục bộ): 2.000 group vào đích 7.745 dòng + 60.000 dòng,
 # 2.000 link bài vào đích 60.000 dòng có tham số theo dõi. Kiểm luôn số dòng thêm đúng (894 / 0 / 65).
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"; repo="$(cd "$here/../.." && pwd)"
@@ -10,12 +10,12 @@ cleanup() { as_pg "LC_ALL=C '$PGBIN/pg_ctl' -D '$work/data' -m immediate stop" >
 trap cleanup EXIT
 as_pg "LC_ALL=C '$PGBIN/initdb' -D '$work/data' -U postgres -A trust >/dev/null"
 as_pg "LC_ALL=C '$PGBIN/pg_ctl' -D '$work/data' -o '-p $port -k $work' -l '$work/log' start -w >/dev/null"
-cp "$here/fixture_v608.sql" "$repo/migrations/migration_v608_find_data_push_links.sql" "$repo/migrations/migration_v609_find_data_push_match_key.sql" "$work/"
+cp "$here/fixture_v608.sql" "$repo/migrations/migration_v608_find_data_push_links.sql" "$repo/migrations/migration_v610_find_data_push_match_key.sql" "$work/"
 cat > "$work/perf.sql" <<'SQL'
 \set ON_ERROR_STOP 1
 \set QUIET 1
 INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('1', 'migration_v608_find_data_push_links');
-\i migration_v609_find_data_push_match_key.sql
+\i migration_v610_find_data_push_match_key.sql
 INSERT INTO public.auto_campaigns (id, name, action_id, staff_id, organization_id, extra_settings) VALUES
  (1, 'Nguồn', 'facebook_find_data_search', 1, 100, '{"isFindFacebookGroup":true,"findFacebookGroupJoinTargetCampaignIds":[2,3],"isFindPostLink":true,"findPostLinkTargetCampaignIds":[4]}'),
  (2, 'Đích 7745', 'facebook_join_group', 1, 100, '{}'), (3, 'Đích 60000', 'facebook_join_group', 1, 100, '{}'),

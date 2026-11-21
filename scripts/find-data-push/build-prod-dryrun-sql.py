@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Sinh câu kiểm V608 / V609 trên DB thật mà KHÔNG lưu gì: cả bài nằm trong một khối DO kết thúc bằng RAISE EXCEPTION mang kết quả,
-nên Postgres huỷ toàn bộ (dòng thêm vào đích, sổ đẩy, hàm V609 tạo tạm). Gọi hàm như phiên Desktop thật của nhân viên chủ chiến dịch.
+"""Sinh câu kiểm V608 / V610 trên DB thật mà KHÔNG lưu gì: cả bài nằm trong một khối DO kết thúc bằng RAISE EXCEPTION mang kết quả,
+nên Postgres huỷ toàn bộ (dòng thêm vào đích, sổ đẩy, hàm V610 tạo tạm). Gọi hàm như phiên Desktop thật của nhân viên chủ chiến dịch.
     python3 scripts/find-data-push/build-prod-dryrun-sql.py <auth_user_id> <nguồn> <đích> <outputKind> <file giá trị thật.json> > dryrun.sql
-File giá trị thật: mảng giá trị đang có ở đích (đọc chỉ đọc trước đó). Nửa đầu dùng cho V608, nửa sau cho V609, đẩy ở dạng viết khác.
+File giá trị thật: mảng giá trị đang có ở đích (đọc chỉ đọc trước đó). Nửa đầu dùng cho V608, nửa sau cho V610, đẩy ở dạng viết khác.
 """
 import json
 import pathlib
@@ -28,10 +28,10 @@ def items(vals, fresh):
     return json.dumps({'sourceCampaignId': int(source), 'outputKind': kind, 'items': out}, ensure_ascii=False)
 
 
-mig = (root / 'migrations/migration_v609_find_data_push_match_key.sql').read_text(encoding='utf-8')
+mig = (root / 'migrations/migration_v610_find_data_push_match_key.sql').read_text(encoding='utf-8')
 functions = re.findall(r'(CREATE (?:OR REPLACE )?FUNCTION .*?\$function\$;)', mig, re.S)
 assert len(functions) == 3, len(functions)
-body = '\n'.join(f"  EXECUTE $v609_{i}${fn[:-1]}$v609_{i}$;" for i, fn in enumerate(functions))
+body = '\n'.join(f"  EXECUTE $v610_{i}${fn[:-1]}$v610_{i}$;" for i, fn in enumerate(functions))
 fresh_a = 'https://www.facebook.com/groups/dryrun608/posts/1/'
 fresh_b = 'https://www.facebook.com/groups/dryrun609/posts/1/'
 
@@ -59,9 +59,9 @@ BEGIN
   RESET ROLE;
   SELECT count(*) INTO n_609 FROM public.auto_campaign_input_data WHERE campaign_id = {int(target)};
   RAISE EXCEPTION 'DRYRUN %', jsonb_build_object(
-    'rows_before', n_before, 'v608_added', n_608 - n_before, 'v609_added', n_609 - n_608,
-    'v608_ms', round(ms608), 'v609_ms', round(ms609),
-    'v608', r608 -> 'targets', 'v609', r609 -> 'targets', 'v609_again', r609again -> 'targets');
+    'rows_before', n_before, 'v608_added', n_608 - n_before, 'v610_added', n_609 - n_608,
+    'v608_ms', round(ms608), 'v610_ms', round(ms609),
+    'v608', r608 -> 'targets', 'v610', r609 -> 'targets', 'v610_again', r609again -> 'targets');
 END $dry$;
 """
 assert 'COMMIT' not in sql.upper().replace('COMMENT', '')
