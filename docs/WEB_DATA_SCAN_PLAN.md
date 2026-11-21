@@ -319,7 +319,7 @@ Một dòng `auto_system_settings` (ví dụ `web_scan.campaigns` = `{"organizat
 2. Apply migration buổi tối (p1 → p2 → p3; p2 đổi thân claim / report nên làm PostgREST nạp lại schema). Công tắc `web_scan.campaigns` để tổ chức 1. Trước khi apply p3 kiểm bằng bản Desktop đang phát hành và Web / iOS rằng ba loại không hiện ra (dòng `is_active = false`).
 3. Thử thật bằng app dev trên tổ chức 1, rồi build Desktop.
 
-## 8. Tình trạng code (21/11/2026, worktree `.claude/worktrees/web-data-scan`, nhánh `claude/web-data-scan`; chưa commit, chưa apply, chưa build)
+## 8. Tình trạng code (21/11/2026, nhánh `claude/web-data-scan`; đã merge `dev_3` qua PR #770 lúc 21:03 VN 21/11, V618 đã apply production 21:05–21:06 VN 21/11 ([biên nhận](../migrations/snapshots/web-data-scan-v618/apply-receipt.json)), chưa build Desktop)
 
 Anh yêu cầu "Bắt đầu code" sau khi chốt hai câu hỏi của 7.4.
 

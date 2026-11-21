@@ -1,0 +1,132 @@
+{
+  "migration": "V618 quét data website (p1–p3)",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "requestedBy": "anh, 21/11/2026 tối: \"Apply V618 đi\"",
+  "code": "dev_3 7f6cba63 (PR #770); file migration trùng dev_3",
+  "method": "scripts/make-migration-ledger-apply.cjs + supabase db query --linked -f (dòng sổ ghi trong cùng giao dịch)",
+  "precheck": {
+    "at": "2026-11-21T14:05:23Z",
+    "ledgerMax": "migration_v617_engine_facebook_group_post_anonymous_switch",
+    "v618InLedger": false,
+    "patchedFunctionsMatchLive": 9,
+    "v618ObjectsPresent": false,
+    "activeBackends": 2
+  },
+  "applied": [
+    {
+      "part": "p1",
+      "version": "20261121140533",
+      "name": "migration_v618_web_data_scan_p1",
+      "fileMd5": "3c83d11292aa1d758602e9eefa224c8c",
+      "ledgerMd5Matches": true,
+      "window": "14:05:33–14:05:36Z"
+    },
+    {
+      "part": "p2",
+      "version": "20261121140547",
+      "name": "migration_v618_web_data_scan_p2",
+      "fileMd5": "c773559b1a81324ae076ecde14e934b1",
+      "ledgerMd5Matches": true,
+      "window": "14:05:47–14:06:00Z"
+    },
+    {
+      "part": "p3",
+      "version": "20261121140618",
+      "name": "migration_v618_web_data_scan_p3",
+      "fileMd5": "4331ab9bca9ec18f61ab7d92294023c4",
+      "ledgerMd5Matches": true,
+      "window": "14:06:18–14:06:26Z"
+    }
+  ],
+  "patchedFunctions": {
+    "claim": {
+      "sig": "public.aka_agent_engine_claim_target_v1(jsonb)",
+      "before": "1ea2f16387985542b48dfbda6965c790",
+      "after": "acf4f9d47113ae5c7ee110d96ef1b97c",
+      "afterMatches": true
+    },
+    "report": {
+      "sig": "public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)",
+      "before": "09fe52a53d9f419207506f1033bdb800",
+      "after": "be745999ab2d14b5b432422c1ae1bd1e",
+      "afterMatches": true
+    },
+    "limit": {
+      "sig": "public.aka_agent_engine_action_limit(bigint,bigint,text)",
+      "before": "5c7e8c79040723a3c6f21f7565d58d81",
+      "after": "dc5f819d9e16e5e63d34e5b26eb10db0",
+      "afterMatches": true
+    },
+    "finish": {
+      "sig": "public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)",
+      "before": "92c119f20d47ea5eee0770b5e6498d41",
+      "after": "ed7406cbccac16af32af4f329aabb170",
+      "afterMatches": true
+    },
+    "snapshot": {
+      "sig": "public.aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)",
+      "before": "e4dbe2f2dba71e96c0b669ef1a79179b",
+      "after": "dce1535bfecdb6dd35c3d2b7d132c99b",
+      "afterMatches": true
+    },
+    "packages": {
+      "sig": "private.app_access_packages(bigint,text,text)",
+      "before": "4f2251c2a5848ae174481a97fe02fe72",
+      "after": "034826d2fd6431883c560f7f82a654bd",
+      "afterMatches": true
+    },
+    "drafts": {
+      "sig": "public.aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)",
+      "before": "a943ffce5b3bb36020a3cf5c7f548b85",
+      "after": "f21afaf32a95ba722947f1749998a61e",
+      "afterMatches": true
+    },
+    "closeRun": {
+      "sig": "public.aka_agent_engine_close_run_v1(bigint,text)",
+      "before": "72b8c9698e7176640b0e1911c8c5c49f",
+      "after": "4de95bc591469af1b738927e5d853e0d",
+      "afterMatches": true
+    },
+    "ingest": {
+      "sig": "public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)",
+      "before": "dc8ccc8c8502ee0e463d911f71ee497e",
+      "after": "dc8b8c7fdcba4adce08efbc17e1fb005",
+      "afterMatches": true
+    }
+  },
+  "postcheck": {
+    "aclOwnerUnchanged": true,
+    "newFunctions": [
+      "aka_agent_web_scan_org_enabled",
+      "aka_agent_web_scan_seen_v1",
+      "aka_agent_web_scan_record_v1",
+      "aka_agent_web_scan_retention_v1"
+    ],
+    "cron": "aka-agent-web-scan-retention 41 19 * * * (02:41 VN)",
+    "setting": "web_scan.campaigns organizationIds [1], defaultDaily 100, maxDaily 500, sleep 15/10, batdongsanLoginCookies []",
+    "campaignActions": "3, is_active = false",
+    "accountActions": 3,
+    "blocks": 8,
+    "elements": 8,
+    "errors": "WB01–WB04",
+    "policies": 7,
+    "linkRules": 3,
+    "orgEnabled": {
+      "1": true,
+      "2": false
+    },
+    "postgrestSchemaReload": [
+      "p1: queried 2012.1 ms (14:05:35)",
+      "p2: queried 1161.7 ms (14:05:59)",
+      "p3: không nạp lại (chỉ dữ liệu)"
+    ],
+    "edge": "14:00–14:06Z 0 lỗi 5xx / 503; phút 14:05 có 184 request > 1 giây (lúc nạp lại schema), p50 47 ms",
+    "engineAfter": "14:06–14:07Z: claim_target_v1 75 lượt 0 lỗi, report_v1 25 lượt 0 lỗi, desktop_account_snapshot 53 lượt 0 lỗi; lượt engine mới mở / báo bình thường",
+    "postgresErrors": "chỉ lỗi quyền của máy Desktop < 9.1 (anon), không liên quan"
+  },
+  "notes": [
+    "Không apply lại: mỗi phần tự từ chối khi đã có trong sổ.",
+    "Gỡ: rollback_v618_web_data_scan_p3 → p2 → p1 (p3 từ chối khi còn chiến dịch web; khi đó chỉ tắt công tắc web_scan.campaigns).",
+    "Desktop chưa build: chưa máy nào chạy được chiến dịch web; ba loại chiến dịch is_active = false nên bản Desktop đang phát hành không thấy."
+  ]
+}
