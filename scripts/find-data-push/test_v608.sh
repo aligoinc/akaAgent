@@ -15,12 +15,19 @@ as_pg "LC_ALL=C '$PGBIN/initdb' -D '$work/data' -U postgres -A trust >/dev/null"
 as_pg "LC_ALL=C '$PGBIN/pg_ctl' -D '$work/data' -o '-p $port -k $work' -l '$work/log' start -w >/dev/null"
 psql_run() { as_pg "'$PGBIN/psql' -X -q -v ON_ERROR_STOP=1 -h '$work' -p $port -U postgres -d postgres $*"; }
 cp "$here"/fixture_v608.sql "$here"/seed_v608.sql "$here"/test_v608_cases.sql "$repo/migrations/migration_v608_find_data_push_links.sql" \
-   "$repo/migrations/rollback_v608_find_data_push_links.sql" "$work/"
+   "$repo/migrations/rollback_v608_find_data_push_links.sql" "$repo/migrations/migration_v609_find_data_push_match_key.sql" \
+   "$repo/migrations/rollback_v609_find_data_push_match_key.sql" "$work/"
 [ "$(id -u)" = "0" ] && chown postgres "$work"/*.sql
 psql_run "-f '$work/fixture_v608.sql'"
 psql_run "-f '$work/seed_v608.sql'"
 psql_run "-f '$work/migration_v608_find_data_push_links.sql'"
 echo "== apply V608: ok"
+if [ "${WITH_V609:-1}" = "1" ]; then
+  # Các ca của V608 phải vẫn đúng sau V609 (khoá DB tính thay khoá app gửi).
+  psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121072153', 'migration_v608_find_data_push_links')\""
+  psql_run "-f '$work/migration_v609_find_data_push_match_key.sql'"
+  echo "== apply V609: ok"
+fi
 psql_run "-f '$work/test_v608_cases.sql'" 2>&1 | sed -n 's/^.*NOTICE:  //p'
 echo "== hai nguồn đẩy cùng lúc vào một đích"
 cat > "$work/concurrent_a.sql" <<'SQL'
@@ -48,6 +55,14 @@ wait "$pid_a"
 race_rows="$(psql_run "-t -A -c \"SELECT count(*) FROM public.auto_campaign_input_data WHERE campaign_id = 21 AND uid ILIKE '%groups/race%'\"")"
 if [ "$race_rows" != "1" ]; then echo "FAIL: hai nguồn đẩy cùng lúc tạo $race_rows dòng"; exit 1; fi
 echo "PASS: hai nguồn đẩy cùng lúc: đích chỉ có 1 dòng"
+if [ "${WITH_V609:-1}" = "1" ]; then
+  echo "== gỡ V609 (về đúng thân V608), apply lại V609 bị sổ chặn"
+  psql_run "-f '$work/rollback_v609_find_data_push_match_key.sql'"
+  psql_run "-c \"INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121090000', 'migration_v609_find_data_push_match_key')\""
+  if psql_run "-f '$work/migration_v609_find_data_push_match_key.sql'" >/dev/null 2>&1; then echo "FAIL: có dòng sổ mà V609 vẫn chạy lại"; exit 1; fi
+  psql_run "-c \"DELETE FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v60%'\""
+  echo "PASS: gỡ V609 về V608; có dòng sổ thì V609 không chạy lại"
+fi
 echo "== rollback"
 psql_run "-f '$work/rollback_v608_find_data_push_links.sql'"
 echo "== apply lại sau rollback (chưa có dòng sổ): ok"

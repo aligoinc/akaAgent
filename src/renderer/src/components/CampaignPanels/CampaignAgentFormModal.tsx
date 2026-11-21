@@ -8087,8 +8087,14 @@ export default function CampaignAgentFormModal({
             ]))
           }
 
+          // Chiến dịch đích nhận data tìm được luôn nhập data trực tiếp (chạy bằng Nhóm data thì DB không đẩy data vào, V608):
+          // form mới không cho chọn Nhóm data cho đích tạo kèm; nháp lưu từ bản cũ vẫn có thể mang lựa chọn đó.
+          const findDataTargetDraft = FIND_DATA_TARGET_PICKER_SOURCE_TYPES.has(draft.sourceType ?? '')
+          const draftPayload = findDataTargetDraft && draftItem.campaignPayload.dataTargetSourceMode === 'data_group'
+            ? { ...draftItem.campaignPayload, dataTargetSourceMode: 'direct' as const, dataGroupId: null }
+            : draftItem.campaignPayload
           const savedDraftCampaign = await createCampaignWithInputDataSafely({
-            ...draftItem.campaignPayload,
+            ...draftPayload,
             extraSettings: payloadExtraSettings
           }, draftItem.details, draftItem.dataGroupSnapshots, progressStartIndex === undefined
             ? undefined

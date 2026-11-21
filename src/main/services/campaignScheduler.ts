@@ -14100,6 +14100,25 @@ export class CampaignScheduler {
     return allowed
   }
 
+  /**
+   * Gọi lại khi lỗi mạng / máy chủ tạm thời (1 s, 3 s, 9 s) cho các lệnh gửi lại an toàn của nhánh "Tìm data" (cùng mã yêu cầu thì DB
+   * trả lại kết quả cũ). Lỗi khác (dữ liệu sai, xung đột mã yêu cầu, hết quyền) ném ngay.
+   */
+  private async retryFindDataTransient<T>(run: () => Promise<T>): Promise<T> {
+    const retryDelaysMs = [1_000, 3_000, 9_000]
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await run()
+      } catch (error) {
+        const message = getErrorMessage(error)
+        const transient = /fetch failed|network|socket hang up|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND|timed? ?out|\b50[234]\b|JWT expired/i.test(message)
+          && !/request_id_conflict|statement timeout|canceling statement/i.test(message)
+        if (!transient || attempt >= retryDelaysMs.length || !this.running) throw error
+        await new Promise(resolve => setTimeout(resolve, retryDelaysMs[attempt]))
+      }
+    }
+  }
+
   /** Gọi hàm đẩy của DB, thử lại lỗi tạm thời (hàm không thêm trùng nên gọi lại an toàn). null = DB chưa có V608. */
   private async callFindDataPush(request: Parameters<SupabaseService['pushFindDataToLinkedCampaigns']>[0]): Promise<FindDataPushResponse | null> {
     const retryDelaysMs = [1_000, 3_000]
@@ -14516,7 +14535,7 @@ export class CampaignScheduler {
 
     let dataTypeIdByCode: Map<DataTypeCategoryCode, number>
     try {
-      const dataTypes = await this.supabase.listDataTypeCategoryItems()
+      const dataTypes = await this.retryFindDataTransient(() => this.supabase.listDataTypeCategoryItems())
       dataTypeIdByCode = new Map(
         dataTypes
           .filter(item => Number.isSafeInteger(Number(item.id)) && Number(item.id) > 0)
@@ -14673,7 +14692,9 @@ export class CampaignScheduler {
           const chunkIndex = Math.floor(offset / maxRowsPerRequest)
           const rows = spec.rows.slice(offset, offset + maxRowsPerRequest)
           const payloadHash = createHash('sha256').update(JSON.stringify(rows)).digest('hex')
-          const result = await this.supabase.ingestDataGroup({
+          // Lỗi mạng tạm thời: gửi lại cùng mã yêu cầu (DB trả lại kết quả lô đã ghi, không thêm trùng). Trước đây báo khách
+          // "thử lại để thêm tiếp" mà không có lần thử lại nào, phần còn lại không bao giờ vào nhóm (rà 21/11/2026: 7/2.223 lượt).
+          const result = await this.retryFindDataTransient(() => this.supabase.ingestDataGroup({
             requestId: [
               'find-data',
               sourceCampaign.id,
@@ -14692,7 +14713,7 @@ export class CampaignScheduler {
             sourceName,
             payloadHash,
             dataTypeCategoryItemId
-          })
+          }))
           addedCount += result.insertedMembershipCount + result.reactivatedMembershipCount
           alreadyMemberCount += result.alreadyMemberCount
           skippedCount += result.invalidCount + result.incompatibleCount + result.conflictCount

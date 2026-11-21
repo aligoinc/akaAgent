@@ -1,6 +1,6 @@
 # Đẩy data của chiến dịch tìm data qua DB — V608
 
-Trạng thái (21/11/2026): code + migration ở nhánh `claude/kind-pasteur-a6nwxo`, **Desktop chưa build**. **V608 đã apply akachat
+Trạng thái (21/11/2026): code + migration ở nhánh `claude/kind-pasteur-a6nwxo`, **Desktop chưa build, V609 chưa apply**. **V608 đã apply akachat
 14:21:53 VN 21/11** theo yêu cầu ("appply v608"; sổ `20261121072153`, không apply lại, md5 sổ = file `45f944b9…`; PostgREST nạp lại
 schema 5,2 s, 0 lỗi 5xx; 365 liên kết điền sẵn đúng như chạy thử; [biên nhận](../migrations/snapshots/find-data-push-v608/apply-receipt.json)).
 Kiểm thử cục bộ đạt (xem cuối trang).
@@ -48,6 +48,21 @@ Gọi lại cùng data không thêm trùng (sổ + kiểm đích), nên app th�
 
 App cũ (chưa gọi hàm) vẫn tự thêm dòng; hàm mới thấy các dòng đó qua phần kiểm "đã có ở đích".
 
+## V609 — nhận ra cùng một data dù viết khác (`migrations/migration_v609_find_data_push_match_key.sql`, CHƯA apply)
+
+Tìm ra khi kiểm thử 21/11 (lô "cách viết khác"): V608 so data gửi lên với data đang có ở đích bằng nguyên chuỗi, nên đích có data viết
+khác thì thêm trùng. Thử trên DB thật trong giao dịch huỷ (đích 4168, 5 link bài thật viết kiểu m.facebook.com + tham số theo dõi):
+V608 thêm 6 dòng (5 trùng), V609 thêm 1 (đúng), gọi lại thêm 0.
+
+- `private.aka_agent_find_data_match_key(kind, value)`: khoá so sánh theo loại đầu ra (group = mã sau `/groups/`; link bài = bỏ giao thức,
+  m./web. → www., bỏ "/" cuối, bỏ tham số `__*` / `mibextid` / `ref` / `locale` / `comment_id`; link Zalo = bỏ giao thức / www. / "/";
+  UID = bỏ "/" cuối; SĐT = `normalize_phone`), không phân biệt hoa thường. Khoá của sổ đẩy và bỏ trùng trong lượt dùng khoá này (không
+  dùng khoá app gửi).
+- `private.aka_agent_find_data_coarse_key`: khoá thô SQL thuần để lọc dòng của đích trước khi tính khoá đầy đủ (cùng khoá đầy đủ ⇒ cùng
+  khoá thô). Đích 60.000 dòng, 2.000 data: 0,36 s (group) / 0,47 s (link bài); không lọc thô: 4,8 s / 6,3 s (`scripts/find-data-push/perf_v609.sh`).
+- Chỉ thay thân hàm đẩy (kiểm `md5(prosrc)` V608 `d04c4711…`), không đổi bảng / quyền / khuôn trả về; sổ đẩy production 0 dòng nên đổi
+  nghĩa khoá không cần chuyển dữ liệu. Sinh bằng `python3 scripts/find-data-push/build-v609-sql.py`; gỡ: `rollback_v609_…` (về đúng thân V608).
+
 ## App (Desktop)
 
 - **Lưu form** (`CampaignFormModal.tsx`, `CampaignAgentFormModal.tsx`): chỉ chiến dịch thuộc gói của lần lưu gửi mã gói khi gắn
@@ -64,7 +79,11 @@ App cũ (chưa gọi hàm) vẫn tự thêm dòng; hàm mới thấy các dòng 
   DB chưa có V608 (PGRST202, nhớ 10 phút) ⇒ cách đẩy cũ, nhưng đích không nhận được thì cũng in câu ⚠️ thay vì chỉ ghi console.
   Engine dừng giữa lúc báo (`FacebookEngineReportStop`) thì không đẩy (data chạy lại ở lượt sau); ghi dòng "Tìm data" lỗi vì lý
   do khác vẫn đẩy (DB lọc trùng nên không còn rủi ro trùng).
-- Không đổi: đẩy sang Nhóm data (`pushFoundDataToDataGroups`), đẩy sang akaBiz ngoài (SMS / Zalo Web / akaBiz Desktop; đã ẩn
+- **Nhóm data gửi lại khi lỗi mạng** (`retryFindDataTransient`, 1 s / 3 s / 9 s, cùng mã yêu cầu nên DB trả lại lô đã ghi): đối chiếu
+  production 30 ngày 2.216/2.223 lượt nạp khớp đúng nhóm, đúng số; 7 lượt lệch đều do `fetch failed` mà không có lần gửi lại nào
+  (app báo khách "thử lại để thêm tiếp", phần còn lại không bao giờ vào nhóm vì lượt sau coi data đó đã thấy).
+- **Nháp cũ có đích tạo kèm chạy bằng Nhóm data**: lưu thành nhập data trực tiếp (đích chạy bằng Nhóm data không nhận data tìm được).
+- Không đổi: cách đẩy sang Nhóm data (`pushFoundDataToDataGroups`), đẩy sang akaBiz ngoài (SMS / Zalo Web / akaBiz Desktop; đã ẩn
   khỏi form, 24 chiến dịch cũ vẫn đẩy), lọc theo lịch sử của chính nguồn trước khi gửi.
 
 ## Thứ tự đưa vào dùng
@@ -86,14 +105,31 @@ select result, count(*) from public.auto_campaign_data_link_deliveries where cre
 `migrations/rollback_v608_find_data_push_links.sql` (xoá hàm, 2 hàm phụ, 3 bảng; dòng data đã thêm giữ nguyên). Desktop bản mới
 tự quay về cách cũ. Dòng sổ migration giữ lại nên V608 không chạy lại được nếu chưa xoá dòng sổ.
 
+## Kiểm thử bằng dữ liệu thật (21/11/2026)
+
+Theo yêu cầu ("kiểm thử theo lô… đến khi không còn nhầm lẫn"). Dữ liệu xuất chỉ đọc (không commit): 31 chiến dịch tìm data có đích nội bộ,
+35 đích + 13.862 dòng data đích, 1.128 lượt "Tìm data" thành công (từ 20/10).
+
+| Lô | Cách kiểm | Kết quả |
+|---|---|---|
+| 1–2 phát lại | `node scripts/find-data-push/replay-realdata.cjs <dữ liệu>`: dòng "Tìm data" thật → `logMilestonesV2` thật (nạp nguyên lớp bằng `load-scheduler.cjs`) → hàm DB thật; bộ kiểm độc lập tính kết quả đúng theo data đang có ở đích sau mỗi lượt; đích đã xoá chỉ tính từ lúc sửa cuối | 1.128 lượt, 1.381 lượt đẩy, 0 vấn đề (dòng "Tìm data" khớp data thật, câu ✅ / ⚠️ đúng số, đích "hoàn thành" mở lại). Số dòng mỗi đích bằng app cũ trừ dòng trùng app cũ đã thêm (54699: 334, 51047 / 51048: 72); đích 41716 app cũ hụt 336 group (một lượt đẩy lỗi im lặng), mã mới đủ |
+| 3 cách viết khác | `--variants`: data thật của đích viết kiểu khác, đẩy qua bộ dựng data + `pushFoundDataToLinkedCampaigns` | V608: group / UID / link bài / link Zalo thêm trùng (SĐT đúng) → **V609**; với V609 15/15 ca đúng |
+| 4 trạng thái | `--states`: 5 lý do chặn (câu ⚠️ đúng, đích người khác không lộ tên), cảnh báo mỗi giờ một lần, engine dừng giữa lúc báo (không đẩy), engine ghi dòng (sổ có id dòng), lượt lỗi, ghi dòng lỗi vì lý do khác, Nhóm data lỗi mạng / lỗi cố định, hai nguồn cùng lúc (hai kết nối DB) | 24/24 |
+| 5 Nhóm data production | đối chiếu chỉ đọc từng dòng "Tìm data" (94 nguồn, 30 ngày) với `auto_data_ingest_batches` | 2.216/2.223 khớp; 7 lệch do lỗi mạng → thêm gửi lại |
+| 6 form thật | `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/find-data-push/run-form-bundle-ui-smoke.cjs` (Electron, IPC giả theo luật DB: mã gói, gói / chiến dịch theo mã yêu cầu); `--form <bản cũ>` chạy bản trước sửa | 10/10; bản cũ hiện đúng lỗi của khách 2481 |
+| 7 DB thật | `build-prod-dryrun-sql.py` → khối DO kết thúc bằng RAISE (huỷ hết), phiên Desktop thật của nhân viên chủ chiến dịch | V608 thêm 5 trùng, V609 đúng; sau đó DB không đổi (đích 2.454 dòng, sổ 0, hàm V608) |
+
+Chạy lại: `PG_MODULE=<node_modules/pg> node scripts/find-data-push/replay-realdata.cjs <dữ liệu> --variants --states --migrations migration_v609_find_data_push_match_key.sql`.
+
 ## Kiểm thử
 
-- `scripts/find-data-push/test_v608.sh` (PG16 cục bộ, fixture theo định nghĩa production 21/11): 42 ca SQL + hai nguồn đẩy cùng
-  lúc (bỏ khoá theo đích thì ca này hỏng: 2 dòng) + gỡ + chặn chạy lại theo sổ.
+- `scripts/find-data-push/test_v608.sh` (PG16 cục bộ, fixture theo định nghĩa production 21/11): 42 ca SQL chạy trên V608 + V609
+  (`WITH_V609=0` để chỉ V608) + hai nguồn đẩy cùng lúc (bỏ khoá theo đích thì ca này hỏng: 2 dòng) + gỡ V609 về V608 + gỡ V608 + chặn chạy
+  lại theo sổ (44 PASS).
 - `node scripts/find-data-push/app-smoke.cjs`: hàm thật của bộ lập lịch gọi hàm DB thật V608 (11 nhóm: câu tiến trình, thử lại,
   chia lượt, gói, cách cũ khi chưa có V608, kiểm mã nguồn form và nhánh "Tìm data").
 - `npx tsc --noEmit -p tsconfig.node.json`, `-p tsconfig.web.json`, `electron-vite build`: sạch.
-- Chưa: chạy form trên Electron thật, gọi hàm bằng phiên Desktop thật (hàm đã có trên DB thật từ 21/11 14:21 VN).
+- Chưa: chạy trong app Desktop thật với Facebook thật (bản Desktop chưa build).
 
 ## Ca của khách 2481 (21/11)
 

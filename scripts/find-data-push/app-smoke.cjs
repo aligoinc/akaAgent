@@ -286,6 +286,8 @@ check('mã nguồn form: chỉ chiến dịch thuộc gói gửi mã gói khi g�
     assert.match(code, /\}, \{ discardOnFailure: true \}\)/, file)
     assert.match(code, /const canUseDataGroupSource = actionSupportsDataGroup\(formData\.actionId\) && !isFindDataTargetDraft/, file)
     assert.match(code, /linkedDraftCampaignIdsRef\.current\?\.requestId === saveRequestId/, file)
+    assert.match(code, /const findDataTargetDraft = FIND_DATA_TARGET_PICKER_SOURCE_TYPES\.has\(draft\.sourceType \?\? ''\)/, file)
+    assert.match(code, /\{ \.\.\.draftItem\.campaignPayload, dataTargetSourceMode: 'direct' as const, dataGroupId: null \}/, file)
   }
 })
 
