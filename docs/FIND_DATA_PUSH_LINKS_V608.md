@@ -99,7 +99,13 @@ Kiểm (21/11/2026), lặp tới khi sạch:
 | 4 | lô 2 (chiến dịch cũ hơn, hạt chọn mẫu khác) 58.127 giá trị; gộp hai lô 110.914 giá trị | 0 cách viết ra khoá khác, 0 gộp nhầm, 0 bỏ sót, 0 vi phạm mảnh, 0 lỗi với giá trị lạ |
 | 5 | `test_v608.sh` (V608 → V610 → V614, gỡ V614 về V610, chặn chạy lại, câu đối chiếu), phát lại 1.128 lượt thật `--reconcile --variants --states` với V610 + V614, `perf_v614.sh` | 46 PASS; phát lại 0 vấn đề, 13.514 dòng thêm như trước; đích 60.000 dòng: group 0,62 s, link bài cùng một group 3,2 s (mọi dòng chung mảnh mã group), UID 2,6 s (UID số nhận ra dạng `profile.php?id=`); đích thật lớn nhất 7.745 dòng |
 
-Chưa: chạy thử nguyên migration trên DB thật trong giao dịch huỷ (hộp xác nhận của MCP chưa được bấm); chạy trong app Desktop thật.
+Apply: `apply_migration` của MCP hỏi xác nhận; 21/11 17:16 VN hộp hỏi hết hạn, không chạy gì (kiểm lại: sổ chưa có V614, khoá vẫn
+bản V610). Đường dự phòng: dán `migrations/tests/migration_v614_find_data_push_match_key_v2_guarded_apply.sql` vào SQL Editor (sinh bằng
+`node scripts/make-migration-ledger-apply.cjs`; nguyên migration + dòng sổ `migration_v614_find_data_push_match_key_v2` trong cùng
+giao dịch, `statements[1]` md5 `b36e9013…` = file; dán lần hai bị sổ chặn). Kiểm trên PG16: `test_v608.sh` với bản dán thay file gốc,
+47 PASS. Sau apply kiểm `md5(statements[1])` và md5 ba thân hàm như postflight.
+
+Chưa: chạy trong app Desktop thật.
 
 ## App (Desktop)
 
