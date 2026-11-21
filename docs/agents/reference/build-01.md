@@ -95,6 +95,18 @@ theo giờ chạy coi từ 22:00 VN là "quá giờ trong ngày", nhưng chiến
 (đúng V558): chạy bộ kiểm trước 22:00 hoặc sau 23:00. Smoke mới cần Chrome: `run-upgrade-portal-ui-smoke.cjs` qua `UPGRADE_UI_CHROMIUM`,
 `v591/v597/v598/v603-smoke` và `facebook-messages-smoke` qua `CHROMIUM_PATH`. Giả lập dừng app: `scenarios.cjs --seeds 12 --interrupt 0.08 --pages 3`.
 
+**Build 10.3.0 (21/11/2026, Desktop + App Server).** `dist/build-10.3.0-work/` của repo chính, script sinh từ 10.2.0 (đổi worktree, số bản,
+`(10<<16)+3`); đối chứng là main / renderer giải nén từ bộ cài 10.2.0 đang trên feed. **Không chạy bộ kiểm song song với build:** `build:win`,
+`build:mac:intel` và `build:server:win:private` thay `node_modules/better-sqlite3` của worktree bằng bản Windows / x64 trong lúc đóng gói (dựng lại
+khi xong), nên các bài dùng SQLite cùng lúc lỗi `dlopen` hoặc báo đạt mà không chạy gì (phát lại Facebook ra 0 dòng khớp, thoát 0). Build trước
+thì xong mọi build rồi mới chạy toàn bộ bộ kiểm. Bài kiểm dựng hàm của bộ lập lịch trong VM / harness phải được thêm hàm import mới mỗi khi PR thêm
+lời gọi vào hàm được dựng (10.3.0: `isWebAccountPlatform` trong `server-rest-request-reduction-smoke`, `isGroupPostAnonymous` trong harness
+`post-bump-content-rotation`); bài dò mã nguồn theo cửa sổ ký tự cố định vỡ khi hàm dài ra (`post-bump-fixes-smoke`, cửa sổ 6.000). Nhánh theo giờ
+chạy của `campaign-repeat-v561-smoke` còn hỏng ở khoảng 23:3x VN (gửi lặp lại x phút sang ngày mới): chạy bộ kiểm trước 22:00 hoặc sau 00:00.
+`zalo-campaign-engagement-smoke-test` và `campaign-pending-reason-smoke` hỏng sẵn trên `dev_3` (cũng hỏng trên `37efb347`). App Server: chụp
+`dist-server/private/verification-before.json` (mọi `.exe` dưới `dist-server/` + module gốc, đường dẫn tương đối gốc worktree) ngay trước build,
+bản build tự lấy khoá backend bằng `supabase projects api-keys` của phiên đã đăng nhập.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
