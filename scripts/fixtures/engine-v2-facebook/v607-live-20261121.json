@@ -1,0 +1,103 @@
+{
+ "readAt": "2026-11-21T02:06:51Z",
+ "note": "Đọc chỉ đọc production 21/11/2026 (câu 533 / 602 của bộ kiểm lỗi). Code block 2869 = bản V598 (md5 1c885e94…); bộ cũ 2616 = bản V472. Mã / chính sách / luật của FB04 và FB43 có sẵn từ V559, đang bật; engine chưa ra lượt nào hai mã này trong 4 ngày trước 21/11.",
+ "block": {
+  "id": 2869,
+  "md5": "1c885e941698b696816bbeca7281311f",
+  "name": "[engine] fb_comment_current_post",
+  "updatedAt": "2026-11-20T06:52:01.650417+00:00"
+ },
+ "source": {
+  "id": 2616,
+  "md5": "83bcdb4081685f2c858f4e0937348767",
+  "name": "fb_comment_current_post"
+ },
+ "copy": {
+  "engineBlockId": 2869,
+  "engineMd5AtCopy": "83bcdb4081685f2c858f4e0937348767",
+  "sourceBlockId": 2616,
+  "sourceMd5AtCopy": "83bcdb4081685f2c858f4e0937348767"
+ },
+ "steps": [
+  {
+   "actionCode": "fb_comment",
+   "blockId": 2869,
+   "commitLevel": 2,
+   "id": 8,
+   "reviewedMd5": "1c885e941698b696816bbeca7281311f",
+   "sendOps": [
+    "press:Enter"
+   ],
+   "stepKind": "delivery"
+  }
+ ],
+ "workflowsUsing": {
+  "2616": [
+   207,
+   244
+  ],
+  "2869": [
+   317
+  ]
+ },
+ "errors": [
+  {
+   "active": true,
+   "errorClass": "auth",
+   "errorCode": "err_engine_fb_logged_out",
+   "publicCode": "FB43"
+  },
+  {
+   "active": true,
+   "errorClass": "auth",
+   "errorCode": "err_fb_checkpoint",
+   "publicCode": "FB04"
+  },
+  {
+   "active": true,
+   "errorClass": "ui_changed",
+   "errorCode": "err_fb_comment_box_not_found",
+   "publicCode": "FB41"
+  }
+ ],
+ "policies": [
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "detailMode": "suppress",
+   "errorCode": "err_fb_checkpoint",
+   "id": 281,
+   "loginEffect": "checkpoint",
+   "runEffect": "stop_account",
+   "streak": "ignore",
+   "targetEffect": "requeue"
+  },
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "detailMode": "suppress",
+   "errorCode": "err_engine_fb_logged_out",
+   "id": 341,
+   "loginEffect": "logged_out",
+   "runEffect": "stop_account",
+   "streak": "ignore",
+   "targetEffect": "requeue"
+  }
+ ],
+ "rules": [
+  {
+   "errorCode": "err_fb_checkpoint",
+   "id": 107,
+   "kind": "engine",
+   "pattern": "fb_checkpoint"
+  },
+  {
+   "errorCode": "err_engine_fb_logged_out",
+   "id": 108,
+   "kind": "engine",
+   "pattern": "fb_logged_out"
+  }
+ ]
+}
