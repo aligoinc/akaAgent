@@ -12,7 +12,7 @@ và gửi email/APNs, Web/Desktop/iOS đọc hộp thư. Nội dung được d�
 
 | Mục | Chốt |
 |---|---|
-| Ai nhận | Mọi nhân viên đang hoạt động, tổ chức còn gói, bật sẵn; ai đã tự lưu cài đặt thì giữ nguyên |
+| Ai nhận | Mọi nhân viên đang hoạt động, tổ chức còn gói **kể cả gói dùng thử** (`org_organization_product` chưa xoá, `expiration_date` chưa qua, bất kể `is_paid`), bật sẵn; khách mới được gieo trong vòng 1 giờ sau khi tạo; ai đã tự lưu cài đặt thì giữ nguyên |
 | Chào ngày mới | 07:00 mặc định, khách chọn 06:00–08:00; không gửi khi hôm qua không có kết quả **và** hôm nay không có chiến dịch |
 | Báo cáo tổng hợp | 12:00 + 18:00, hằng ngày; không gửi khi trong ngày chưa có kết quả và không có vấn đề |
 | Chiến dịch | Chỉ "Hoàn thành"; không báo chiến dịch "Up tin cho chiến dịch …" |
@@ -208,6 +208,9 @@ trong `packages/control-api/src/campaignLimitProgress.ts`; kèm nhãn "giới h�
 - Việc phải xong trước khi bật cho tất cả: hộp thư tên miền akabiz.net (hoặc dịch vụ gửi thư) có SPF/DKIM/DMARC, gắn cờ
   `is_send_noti_akabiz` sang tài khoản đó (không cần code). Trần `notifications.email.hourly_cap` (20/giờ/nhân viên) giữ nguyên.
 - Lời mời nhập email: Web/Desktop/iOS hiện ở trang Thông báo khi `channels.email.recipients` rỗng.
+- Khách dùng thử gần như không có email: 30 ngày tới 21/11/2026 có 218 tổ chức dùng thử mới, chỉ 16 có email (nhân viên hoặc
+  tổ chức), 122 đã tạo chiến dịch, 2 đăng nhập iOS. Họ vẫn được bật mặc định nhưng thực tế chỉ nhận trong chuông và thông báo nổi
+  Desktop/Web. Muốn email tới được nhóm này thì phải xin email lúc đăng ký dùng thử (việc riêng, chưa nằm trong phương án).
 
 ## 8. Thứ tự làm và triển khai
 
