@@ -42,6 +42,22 @@ function cacheTests(shared) {
       finish(rows()); await realSettle()
       return { events, applied: cache.lastKnown() !== undefined }
     },
+    async staleWhileRefreshing() {
+      // Lỗi 60 giây: lượt đầu tiên sau khi cấu hình hết hạn phải vẫn có cấu hình (bản vừa hết hạn) trong lúc đọc lại.
+      let now = 0, reads = 0, fail = false
+      const cache = new shared.EngagementConfigCache(async () => { reads++; if (fail) throw new Error('offline'); return rows() }, () => now, { maxReadMs: READ_BOUND_MS })
+      await cache.get()
+      now += 61_000
+      const firstAfterExpiry = cache.currentOrRefresh()?.enabled === true
+      await realSettle()
+      const readsAfterFirst = reads
+      // Đọc lỗi kéo dài: dùng bản cũ thêm tối đa 24 giờ rồi thôi.
+      fail = true; now += 61_000; cache.currentOrRefresh(); await realSettle()
+      const insideGrace = cache.currentOrRefresh()?.enabled === true
+      now += 24 * 3_600_000; cache.currentOrRefresh(); await realSettle()
+      const afterGrace = cache.currentOrRefresh() === undefined
+      return { firstAfterExpiry, readsAfterFirst, insideGrace, afterGrace }
+    },
     async hostClockJump() {
       // Đồng hồ máy nhảy tới 3 ngày đúng lúc một lần đọc lỗi rồi được chỉnh lại; 61 giây thật sau đó phải đọc lại được.
       let mono = 1_000, reads = 0
@@ -121,6 +137,36 @@ async function serviceTests(shared, root) {
     out.rpcRetried = h.calls.filter(c => c.name.includes('register') && c.items.some(item => item.detailId === '456')).length > first
     out.writerStuckAfterRpc = h.api.testWriting()
   }
+  // Lượt gửi đầu tiên sau 61 giây không gửi gì (Desktop gửi thưa) phải được theo dõi.
+  {
+    const h = serviceHarness(path.join(root, 'first-after-idle'), shared)
+    await h.api.attachServerCampaignEngagementOwner(1, 1); await realSettle()
+    for (let i = 0; i < 6; i++) await h.tick(5_000)
+    await h.tick(61_000)
+    const send = h.api.beginCampaignEngagementSend({ id: 1, zaloUid: 'own' }, 'target-idle')
+    out.firstSendAfterIdleTracked = !!send.operationId
+    if (send.operationId) {
+      h.api.recordCampaignEngagementDetail(321, { version: 1, operationId: send.operationId, accountZaloUid: 'own', targetZaloUid: 'target-idle', actionType: 'message', sentAt: send.sentAt, messageIds: ['m'], revision: send.revision })
+      for (let i = 0; i < 3; i++) await h.tick(5_000)
+    }
+    out.firstSendAfterIdleRegistered = h.calls.some(c => c.name.includes('register') && c.items.some(item => item.detailId === '321'))
+  }
+  // Tắt khẩn cấp đúng lúc cấu hình vừa hết hạn: lượt gửi dùng tạm bản cũ, nhưng không được ghi gì xuống DB.
+  {
+    const h = serviceHarness(path.join(root, 'toggle-off'), shared)
+    await h.api.attachServerCampaignEngagementOwner(1, 1); await realSettle()
+    for (let i = 0; i < 6; i++) await h.tick(5_000)
+    const off = shared.ENGAGEMENT_KEYS.map((key, i) => ({ key, value: ['false', '5', '100', '48'][i], updated_at: '2026-11-21T01:00:00Z', is_active: true, is_secret: false }))
+    h.read(() => ({ data: off }))
+    await h.tick(61_000)
+    const send = h.api.beginCampaignEngagementSend({ id: 1, zaloUid: 'own' }, 'target-off')
+    await realSettle()
+    if (send.operationId) h.api.recordCampaignEngagementDetail(654, { version: 1, operationId: send.operationId, accountZaloUid: 'own', targetZaloUid: 'target-off', actionType: 'message', sentAt: send.sentAt, messageIds: ['m'], revision: send.revision })
+    const callsBefore = h.calls.length
+    for (let i = 0; i < 4; i++) await h.tick(5_000)
+    out.toggleOffWrites = h.calls.slice(callsBefore).filter(c => c.items.some(item => item.detailId === '654')).length
+    out.toggleOffNextSendTracked = !!h.api.beginCampaignEngagementSend({ id: 1, zaloUid: 'own' }, 'target-off-2').operationId
+  }
   return out
 }
 
@@ -128,7 +174,8 @@ async function main() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'engagement-bound-'))
   const shared = load('src/shared/zaloCampaignEngagement.ts')
   const cache = cacheTests(shared)
-  const result = { neverSettles: await cache.neverSettles(), lateSettle: await cache.lateSettle(), hostClockJump: await cache.hostClockJump(), service: await serviceTests(shared, root) }
+  const result = { neverSettles: await cache.neverSettles(), lateSettle: await cache.lateSettle(), staleWhileRefreshing: await cache.staleWhileRefreshing(),
+    hostClockJump: await cache.hostClockJump(), service: await serviceTests(shared, root) }
   const logs = warnings.map(args => String(args[0]))
   result.logs = [...new Set(logs)]
   fs.rmSync(root, { recursive: true, force: true })
@@ -139,6 +186,14 @@ async function main() {
   assert.equal(result.neverSettles.enabled, true)
   assert.deepEqual(result.lateSettle.events, ['stalled', 'late:resolved'])
   assert.equal(result.lateSettle.applied, false, 'kết quả về muộn không được dùng')
+  assert.equal(result.staleWhileRefreshing.firstAfterExpiry, true, 'lượt đầu sau khi hết hạn vẫn có cấu hình')
+  assert.equal(result.staleWhileRefreshing.readsAfterFirst, 2, 'và lượt đó khởi động lần đọc lại')
+  assert.equal(result.staleWhileRefreshing.insideGrace, true)
+  assert.equal(result.staleWhileRefreshing.afterGrace, true, 'đọc lỗi quá 24 giờ sau hạn thì thôi dùng bản cũ')
+  assert.equal(result.service.firstSendAfterIdleTracked, true, 'lượt gửi đầu tiên sau 61 giây phải được theo dõi')
+  assert.equal(result.service.firstSendAfterIdleRegistered, true)
+  assert.equal(result.service.toggleOffWrites, 0, 'cấu hình đã tắt thì không ghi gì xuống DB')
+  assert.equal(result.service.toggleOffNextSendTracked, false, 'sau khi đọc lại thấy tắt thì lượt sau không theo dõi')
   assert.equal(result.hostClockJump.second, 'read again: enabled=true', 'giờ máy nhảy không được đẩy lần đọc sau ra xa')
   assert.equal(result.service.writerStuckAfterHang, false, 'luồng ghi không được kẹt khi lần đọc cấu hình treo')
   assert.equal(result.service.registerSent, true, 'lượt gửi giữ chỗ trước lúc treo vẫn phải được ghi khi cấu hình đọc lại được')
@@ -149,7 +204,7 @@ async function main() {
     assert.ok(result.logs.includes(line), 'thiếu log: ' + line)
   const stalled = warnings.find(args => args[0] === '[ZaloEngagement] config read stalled; giving up on it')[1]
   assert.equal(stalled.call, 'config'); assert.equal(stalled.requestMs, null, 'mock không qua fetch thật nên chưa có request')
-  console.log('PASS: lần đọc cấu hình treo được thả sau giới hạn và đọc lại; kết quả về muộn bị bỏ; giờ máy nhảy không chặn lần đọc sau; ' +
+  console.log('PASS: lần đọc cấu hình treo được thả sau giới hạn và đọc lại; kết quả về muộn bị bỏ; lượt đầu sau khi hết hạn vẫn được theo dõi (tối đa 24 giờ quá hạn, tắt khẩn cấp không ghi gì); giờ máy nhảy không chặn lần đọc sau; ' +
     'luồng ghi không kẹt khi cấu hình treo (ca 18/11) và khi RPC treo; có log bước treo')
 }
 main().catch(error => { console.error(error); process.exitCode = 1 })

@@ -197,4 +197,73 @@ Log chỉ ghi đường dẫn, không ghi header hay dữ liệu.
   - supabase-js và fetch thật trên Node của Electron 33. Ba ca: không trả lời, trả lời dở nội dung, kẹt trước khi gửi request.
 - `zalo-campaign-engagement-lifecycle-smoke.cjs` và `zalo-campaign-engagement-clock-queue-smoke.cjs` vẫn đạt.
 
-**Phạm vi.** Bản chép ở ChatApi (`packages/runtime-protocol/src/zaloCampaignEngagement.ts`, Fly) chưa đổi. App Server và Desktop chỉ có bản sửa sau khi build và cài.
+**Phạm vi.** App Server và Desktop chỉ có bản sửa sau khi build và cài. Từ bản sửa mất dấu 60 giây (mục dưới), bản chép ở ChatApi (`packages/runtime-protocol/src/zaloCampaignEngagement.ts`, Fly) giống hệt bản này; ChatApi không truyền `onReadEvent` nên chỉ có chốt chặn, không có log.
+
+## Lượt gửi đầu tiên sau khi cấu hình hết hạn (21/11/2026)
+
+**Lỗi.** `currentOrRefresh()` trả rỗng ngay khi cấu hình quá 60 giây. Lượt gửi hoặc sự kiện đầu tiên sau đó vì vậy không được ghi dấu, dù lần đọc lại thường xong trong vài trăm mili giây.
+- Lượt gửi không mang `zaloEngagementSource`; sự kiện đi vào `waiting_config` thay vì `record`.
+- Desktop gửi thưa nên mất khoảng 1/3 lượt (20/11, 3.000 lô): có dấu 94% khi lượt trước của cùng nhân viên cách dưới 20 giây, khoảng 40% khi cách trên 55 giây. Fly mất 3,4%.
+
+**Sửa.** Quá hạn 60 giây thì vẫn trả bản vừa hết hạn và đọc lại ở nền, thêm tối đa `ENGAGEMENT_CONFIG_STALE_MS` (24 giờ). Đọc lại vẫn lỗi quá mốc đó thì thôi theo dõi như trước. Bộ đồng bộ trạng thái tin nhắn (`zaloMessageStatusRuntime.ts`) đã làm theo cách này từ trước.
+
+Bản đầu đặt 2 phút, nhưng giả lập theo nhịp gửi thật cho thấy Desktop vẫn mất khoảng 4%: ngày 20/11, 4,9% khoảng nghỉ giữa hai lượt gửi của một tiến trình Desktop dài hơn 3 phút, 0,17% dài hơn 1 giờ, 0,01% dài hơn 6 giờ.
+
+Giá phải trả: sau khi công tắc tắt rồi bật lại, lượt gửi đầu tiên của một tiến trình gửi thưa vẫn mang revision của lần bật trước, nên DB từ chối. Mỗi tiến trình mất khoảng một lượt cho mỗi lần tắt rồi bật. Bản cũ cũng mất đúng lượt này, vì nó bỏ mọi lượt đầu tiên sau khi hết hạn.
+
+Dùng tạm bản cũ không cho ghi sai, vì cả hai bên đều so lại cấu hình mới trước khi ghi:
+- **Desktop / App Server:** `flush()` chỉ giữ mục có `revision` trùng cấu hình mới đọc, và mỗi RPC còn được V510 kiểm lại công tắc cùng `revision` đang có trên DB. Tắt khẩn cấp đúng lúc đang đọc lại thì lượt gửi đó vẫn được giữ chỗ, nhưng không có gì được ghi xuống DB.
+- **ChatApi:** `reconcileConfigWork` bỏ các mục `pending` có `revision` lệch hoặc cấu hình đã tắt.
+
+`get()` của luồng ghi vẫn đòi bản còn hạn.
+
+**Kiểm.**
+- `node scripts/zalo-campaign-engagement-config-bound-smoke.cjs` có các ca:
+  - lượt đầu sau khi hết hạn;
+  - đọc lỗi kéo dài (bản cũ chỉ dùng thêm tối đa 24 giờ);
+  - lượt gửi đầu tiên sau 61 giây không gửi gì được theo dõi và đăng ký;
+  - tắt khẩn cấp đúng lúc hết hạn (0 lần ghi).
+
+  Thêm `--ref origin/dev_3` thì thấy bản cũ bỏ lượt đầu.
+- ChatApi: `npm run verify` đạt 3.034 bài kiểm.
+  - `campaignEngagementConfig.test.ts` sửa ca hết hạn theo hành vi mới và thêm ca lần đọc treo.
+  - `campaignEngagement.integration.test.ts` giả cả `performance.now`, vì bộ đệm đo bằng đồng hồ đơn điệu từ PR #762.
+
+**Giả lập dài** (`node scripts/zalo-campaign-engagement-chaos-sim.cjs [--seeds 4] [--from 1] [--only desktop|vps] [--kind healthy|chaos] [--ref <git ref>]`):
+- **Cách chạy:** code thật của hai file trên một đồng hồ giả, với nhịp gửi thật ngày 20/11/2026 (`scripts/fixtures/zalo-engagement-sim/cadence-20261120.json`, chỉ đọc, đã bỏ mã nhân viên):
+  - Desktop: 94 tiến trình, 31 nghìn lượt gửi;
+  - VPS: một tiến trình chung cho 314 nhân viên, 72 nghìn lượt gửi.
+- **DB giả** theo luật V510: từ chối khi tắt hoặc lệch revision, đăng ký trùng bỏ qua, request bị huỷ giữa chừng có thể đã được ghi.
+- **Hai kịch bản:**
+  - `healthy`: không lỗi.
+  - `chaos`: mỗi ngày 4 đợt mất mạng 1–8 phút, 2 lần tắt rồi bật công tắc, 3 lần giờ máy nhảy. Mỗi request có 0,4% (đọc cấu hình) / 0,05% (RPC) khả năng treo hẳn bỏ qua tín hiệu huỷ, cùng 1% lỗi và 0,5% chậm hơn tín hiệu huỷ.
+- **Điều kiện phải đạt:**
+  - không có lỗi JS;
+  - không lượt ghi nào chạy liền quá 120 giây;
+  - không có chuỗi lượt gửi liền không được theo dõi dài hơn 180 giây lúc DB ổn;
+  - không lượt giữ chỗ nào sau khi tắt được ghi xuống DB;
+  - hàng đợi xả hết sau 8 giờ;
+  - lúc khoẻ theo dõi và đăng ký ≥ 99,9%, ghi được trả lời và đã xem ≥ 99,5%.
+- **Thời gian:** VPS 3–8 phút mỗi kịch bản, Desktop khoảng 1 phút.
+
+Kết quả 21/11/2026:
+
+| Bản | Desktop khoẻ | Desktop nhiều lỗi | VPS khoẻ | VPS nhiều lỗi |
+|---|---|---|---|---|
+| Trước PR #762 (`4e2c6a3f`) | theo dõi 71% | 41–60%, luồng ghi kẹt hơn 24 giờ, tồn 2.700–5.100 mục | 99,1% | **0,2–11%**, luồng ghi kẹt 31 giờ, hàng đợi đầy |
+| `dev_3` (có chốt chặn) | 71%, có chuỗi 12 giờ không theo dõi | 69% | 99,1% | 94–95% |
+| Bản này (4 hạt giống) | **100%** | 99,8–99,9% | **100%** | 99,9% |
+
+- **Ở bản này:**
+  - trả lời / đã xem được ghi 99,8–99,9% lúc khoẻ và ≥ 99% lúc nhiều lỗi;
+  - lượt ghi dài nhất 30 giây (đúng chốt chặn đọc cấu hình);
+  - 0 lượt ghi sau khi tắt.
+- **Mất lúc DB ổn:**
+  - Desktop chỉ mất do revision cũ sau khi tắt rồi bật (110–160 lượt mỗi ngày giả lập có 2 lần tắt);
+  - VPS mất 0–3 lượt trong 72 nghìn, phần nhỏ còn lại của ngân sách phục hồi 5 phút khi bước ghi kết quả gửi lỗi đường truyền. Bản `dev_3` cũng có lỗi này.
+- **Đối chiếu production:** số của bản cũ khớp với số đo thật. Desktop mất khoảng 1/3. Ở VPS, một lần treo đầu ngày làm cả ngày còn 0,18%, đúng như sự cố 18/11.
+- **Không phủ:**
+  - nguyên nhân làm lần đọc treo;
+  - Fly (luồng ghi của ChatApi khác, chỉ dùng chung lớp bộ đệm; có bài kiểm riêng ở ChatApi);
+  - App Server thật sau khi cài.
+
