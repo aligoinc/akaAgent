@@ -38,7 +38,7 @@ import { normalizePositiveActionLimit, resolveAccountActionLimitConfig } from '.
 import CampaignSaveControls, { waitForNextBrowserPaint, type CampaignSaveControlsHandle } from './CampaignSaveControls'
 import { useState, useEffect, useMemo, useRef, useId, useCallback, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
-import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
+import { X, Plus, Trash2, ChevronUp, ChevronDown, ChevronLeft, ChevronRight, Check, Calendar, Image, Users, Sparkles, RefreshCw, FileText, FolderOpen, FolderPlus, FolderCog, Save, Search, Settings2, Heart, MessageCircle, Loader2, Eye, Edit3, ListChecks, Braces, Copy, LayoutGrid, List, Rows3, Shuffle, Share2, ThumbsUp, AlertTriangle } from 'lucide-react'
 import { useCampaignStore } from '../../stores/campaignStore'
 import { refreshContentTemplateLibrary, useContentTemplateStore } from '../../stores/contentTemplateStore'
 import ContentTemplateLoadNotice from '../ContentTemplates/ContentTemplateLoadNotice'
@@ -67,6 +67,8 @@ import {
   DataGroup,
   DataGroupCampaignTargetPreview,
   FindDataOutputKind,
+  FindDataGroupDestinationKind,
+  DataTypeCategoryCode,
   FindDataTargetDataGroup,
   ContentTemplate,
   ContentTemplateChannelName,
@@ -88,6 +90,7 @@ import {
 } from '../../../../shared/mediaTypes'
 import DataScanModal, { DataScanAction } from '../DataScan/DataScanModal'
 import DataGroupPickerModal from '../DataGroups/DataGroupPickerModal'
+import QuickCreateDataGroupDialog from '../DataGroups/QuickCreateDataGroupDialog'
 import { useUiStore } from '../../stores/uiStore'
 import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
@@ -779,38 +782,55 @@ const VOICE_CALL_MAX_TTS_INPUT_CHARS = 4096
 const DATA_GROUP_BUNDLE_RETRY_STORAGE_PREFIX = 'aka-agent:data-group-bundle-retry:'
 
 const FIND_DATA_GROUP_DESTINATION_CONFIG: Record<
-  FindDataOutputKind,
-  { actionId: string; label: string }
+  FindDataGroupDestinationKind,
+  { actionId: string; label: string; dataTypeCode: DataTypeCategoryCode; typeLabel: string; quickCreate: boolean; defaultGroupName: string }
 > = {
   phone: {
     actionId: ZALO_MESSAGE_PHONE_ACTION_ID,
-    label: 'Đẩy SĐT sang Nhóm data'
+    label: 'Đẩy SĐT sang Nhóm data',
+    dataTypeCode: 'phone', typeLabel: 'Số điện thoại', quickCreate: true, defaultGroupName: 'SĐT tìm được'
   },
   zalo_group_link: {
     actionId: ZALO_JOIN_GROUP_LINK_ACTION_ID,
-    label: 'Đẩy link group Zalo sang Nhóm data'
+    label: 'Đẩy link group Zalo sang Nhóm data',
+    // Nhóm link group Zalo gắn tài khoản Zalo: tạo ở màn Nhóm data.
+    dataTypeCode: 'zalo_group', typeLabel: 'Group Zalo', quickCreate: false, defaultGroupName: 'Link group Zalo tìm được'
   },
   facebook_uid: {
     actionId: MESSAGE_UID_ACTION_ID,
-    label: 'Đẩy UID Facebook sang Nhóm data'
+    label: 'Đẩy UID Facebook sang Nhóm data',
+    dataTypeCode: 'facebook_person', typeLabel: 'User Facebook', quickCreate: true, defaultGroupName: 'UID Facebook tìm được'
   },
   post_link: {
     actionId: COMMENT_SEEDING_POST_ACTION_ID,
-    label: 'Đẩy link bài post sang Nhóm data'
+    label: 'Đẩy link bài post sang Nhóm data',
+    dataTypeCode: 'facebook_post_url', typeLabel: 'Link bài post Facebook', quickCreate: true, defaultGroupName: 'Link bài post tìm được'
   },
   facebook_group: {
     actionId: FACEBOOK_JOIN_GROUP_ACTION_ID,
-    label: 'Đẩy group Facebook sang Nhóm data'
+    label: 'Đẩy group Facebook sang Nhóm data',
+    dataTypeCode: 'facebook_group', typeLabel: 'Group Facebook', quickCreate: true, defaultGroupName: 'Group Facebook tìm được'
+  },
+  // Quản trị viên group (chỉ khi bật "Lấy thông tin quản trị viên của group"): hai Nhóm data riêng, src/shared/findDataGroupAdminRows.ts.
+  facebook_group_admin_uid: {
+    actionId: MESSAGE_UID_ACTION_ID,
+    label: 'Đẩy UID quản trị viên sang Nhóm data',
+    dataTypeCode: 'facebook_person', typeLabel: 'User Facebook', quickCreate: true, defaultGroupName: 'UID quản trị viên group'
+  },
+  facebook_group_admin_phone: {
+    actionId: ZALO_MESSAGE_PHONE_ACTION_ID,
+    label: 'Đẩy SĐT quản trị viên sang Nhóm data',
+    dataTypeCode: 'phone', typeLabel: 'Số điện thoại', quickCreate: true, defaultGroupName: 'SĐT quản trị viên group'
   }
 }
 
-type FindDataTargetDataGroups = Partial<Record<FindDataOutputKind, FindDataTargetDataGroup>>
-type FindDataTargetDataGroupEnabledState = Record<FindDataOutputKind, boolean>
-type FindDataTargetDataGroupDetails = Partial<Record<FindDataOutputKind, DataGroup>>
+type FindDataTargetDataGroups = Partial<Record<FindDataGroupDestinationKind, FindDataTargetDataGroup>>
+type FindDataTargetDataGroupEnabledState = Record<FindDataGroupDestinationKind, boolean>
+type FindDataTargetDataGroupDetails = Partial<Record<FindDataGroupDestinationKind, DataGroup>>
 
 const removeFindDataTargetDataGroup = (
   destinations: FindDataTargetDataGroups,
-  kind: FindDataOutputKind
+  kind: FindDataGroupDestinationKind
 ): FindDataTargetDataGroups => {
   const next = { ...destinations }
   delete next[kind]
@@ -820,18 +840,22 @@ const removeFindDataTargetDataGroup = (
 const getFindDataTargetDataGroupsForSave = (
   destinations: FindDataTargetDataGroups,
   flags: FindDataGoalFlagState,
-  isSearchCampaign: boolean
+  isSearchCampaign: boolean,
+  groupAdminsEnabled = false
 ): FindDataTargetDataGroups | undefined => {
-  const enabledByKind: Record<FindDataOutputKind, boolean> = {
+  const adminsOn = isSearchCampaign && flags.isFindFacebookGroup && groupAdminsEnabled
+  const enabledByKind: Record<FindDataGroupDestinationKind, boolean> = {
     phone: flags.isFindPhone,
     zalo_group_link: flags.isFindLinkGroupZalo,
     facebook_uid: flags.isFindUid,
     post_link: flags.isFindPostLink,
-    facebook_group: isSearchCampaign && flags.isFindFacebookGroup
+    facebook_group: isSearchCampaign && flags.isFindFacebookGroup,
+    facebook_group_admin_uid: adminsOn,
+    facebook_group_admin_phone: adminsOn
   }
   const normalized: FindDataTargetDataGroups = {}
 
-  for (const kind of Object.keys(enabledByKind) as FindDataOutputKind[]) {
+  for (const kind of Object.keys(enabledByKind) as FindDataGroupDestinationKind[]) {
     if (!enabledByKind[kind]) continue
     const destination = destinations[kind]
     const groupId = Number(destination?.groupId)
@@ -2072,6 +2096,7 @@ export default function CampaignFormModal({
     shuffleGroupList: campaign?.extraSettings?.shuffleGroupList ?? false,
     skipPostIfGroupRequiresApproval: campaign?.extraSettings?.skipPostIfGroupRequiresApproval ?? false,
     enableGroupPostShareToJoinedGroups: campaign?.extraSettings?.enableGroupPostShareToJoinedGroups ?? false,
+    groupPostAnonymous: campaign?.extraSettings?.groupPostAnonymous === true,
     enablePostBump: campaign?.extraSettings?.enablePostBump ?? false,
     postBumpCount: clampPostBumpCount(campaign?.extraSettings?.postBumpCount ?? DEFAULT_POST_BUMP_COUNT),
     postBumpInitialDelayMinutes: normalizeMinuteValue(
@@ -2404,13 +2429,16 @@ export default function CampaignFormModal({
   const [campaignPickerModal, setCampaignPickerModal] = useState<CampaignPickerModalState | null>(null)
   const [dataGroupPickerOpen, setDataGroupPickerOpen] = useState(false)
   const [dataGroupPickerMode, setDataGroupPickerMode] = useState<'source' | 'append'>('source')
-  const [findDataGroupPickerKind, setFindDataGroupPickerKind] = useState<FindDataOutputKind | null>(null)
+  const [findDataGroupPickerKind, setFindDataGroupPickerKind] = useState<FindDataGroupDestinationKind | null>(null)
+  const [findDataQuickCreateKind, setFindDataQuickCreateKind] = useState<FindDataGroupDestinationKind | null>(null)
   const [findDataTargetDataGroupEnabled, setFindDataTargetDataGroupEnabled] = useCampaignDraftField<FindDataTargetDataGroupEnabledState>(draftPayload, draftValuesRef, 'findDataTargetDataGroupEnabled', () => ({
     phone: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.phone),
     zalo_group_link: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.zalo_group_link),
     facebook_uid: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_uid),
     post_link: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.post_link),
-    facebook_group: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_group)
+    facebook_group: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_group),
+    facebook_group_admin_uid: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_group_admin_uid),
+    facebook_group_admin_phone: Boolean(campaign?.extraSettings?.findDataTargetDataGroups?.facebook_group_admin_phone)
   }))
   const [findDataTargetDataGroupDetails, setFindDataTargetDataGroupDetails] = useState<FindDataTargetDataGroupDetails>({})
   const [resolvedFindDataTargetDataGroupIdsKey, setResolvedFindDataTargetDataGroupIdsKey] = useState('')
@@ -2612,6 +2640,8 @@ export default function CampaignFormModal({
   const supportsSourceContent = isTimelinePostCampaign || isFacebookGroupPostCampaign
   const isSourceContentMode = supportsSourceContent && contentSettingsTab === 'source'
   const isNativeGroupShareMode = isFacebookGroupPostCampaign && isSourceContentMode && formData.groupPostShareFromPost
+  // Đăng bài ẩn danh (anh chốt 21/11/2026): ẩn Kiêm comment, Kiêm up tin, Đăng bài dạng chia sẻ; lúc lưu tắt hẳn ba mục này.
+  const isGroupPostAnonymousMode = isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.groupPostAnonymous
   const isNewsfeedInteractionCampaign = formData.actionId === NEWSFEED_INTERACTION_ACTION_ID
   const isFindDataGroupCampaign = FIND_DATA_GROUP_ACTIONS.has(formData.actionId)
   const isFindDataSearchCampaign = FIND_DATA_SEARCH_ACTIONS.has(formData.actionId)
@@ -3277,7 +3307,7 @@ export default function CampaignFormModal({
     status: selectedPrimaryAccount ? accountActionSnapshot.status : 'idle',
     rows: selectedPrimaryAccount ? Array.from(accountActionSnapshot.byAccount.get(selectedPrimaryAccount.id)?.values() || []) : []
   }
-  const findDataTargetDataGroupIdsKey = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
+  const findDataTargetDataGroupIdsKey = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataGroupDestinationKind[])
     .map(kind => {
       const groupId = Number(formData.findDataTargetDataGroups[kind]?.groupId)
       return Number.isSafeInteger(groupId) && groupId > 0 ? `${kind}:${groupId}` : ''
@@ -3286,12 +3316,12 @@ export default function CampaignFormModal({
     .join('|')
 
   useEffect(() => {
-    const selectedEntries = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataOutputKind[])
+    const selectedEntries = (Object.keys(FIND_DATA_GROUP_DESTINATION_CONFIG) as FindDataGroupDestinationKind[])
       .map(kind => ({
         kind,
         groupId: Number(formData.findDataTargetDataGroups[kind]?.groupId)
       }))
-      .filter((entry): entry is { kind: FindDataOutputKind; groupId: number } => (
+      .filter((entry): entry is { kind: FindDataGroupDestinationKind; groupId: number } => (
         Number.isSafeInteger(entry.groupId) && entry.groupId > 0
       ))
 
@@ -3540,7 +3570,7 @@ export default function CampaignFormModal({
     if (isZaloMessageGroupCampaign) {
       if (actionCode === 'zalo_message_group') return true
     }
-    if (isFacebookGroupPostCampaign && actionCode === 'fb_comment') return formData.enableComment
+    if (isFacebookGroupPostCampaign && actionCode === 'fb_comment') return formData.enableComment && !isGroupPostAnonymousMode
     if (isCommentSeedingCampaign) {
       if (actionCode === 'fb_comment') return true
       if (actionCode === 'fb_like_post') return formData.enablePostLike
@@ -3893,15 +3923,16 @@ export default function CampaignFormModal({
     }
     if (isFacebookGroupPostCampaign) {
       const steps = ALL_STEPS.flatMap(step => {
-        if (step.id === 'content') return isNativeGroupShareMode
+        if (step.id === 'content') return isNativeGroupShareMode || isGroupPostAnonymousMode
           ? [withSourceContentField(step)]
           : [withSourceContentField(step), GROUP_POST_COMMENT_STEP, GROUP_POST_BUMP_STEP]
         if (step.id === 'extra') {
           return [{
             ...step,
             fields: [
+              ...(!isNativeGroupShareMode ? [{ key: 'groupPostAnonymous', label: 'Đăng bài ẩn danh' }] : []),
               { key: 'skipPostIfGroupRequiresApproval', label: 'Không đăng bài vào group bị duyệt bài' },
-              ...(!isNativeGroupShareMode ? [{ key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' }] : []),
+              ...(!isNativeGroupShareMode && !isGroupPostAnonymousMode ? [{ key: 'enableGroupPostShareToJoinedGroups', label: 'Đăng bài dạng chia sẻ' }] : []),
               { key: 'leaveGroupOnPendingApproval', label: 'Rời group chờ duyệt' },
               ...(!isNativeGroupShareMode ? [{ key: 'autoJoinGroupAfterPost', label: 'Tự tham gia group' }] : []),
               { key: 'shuffleGroupList', label: 'Xáo trộn danh sách group' }
@@ -5106,6 +5137,7 @@ export default function CampaignFormModal({
       case 'enablePostBump': return true  // optional
       case 'skipPostIfGroupRequiresApproval': return true
       case 'enableGroupPostShareToJoinedGroups': return true
+      case 'groupPostAnonymous': return true
       case 'leaveGroupOnPendingApproval': return true
       case 'autoJoinGroupAfterPost': return true
       case 'shuffleGroupList': return true
@@ -6429,7 +6461,8 @@ export default function CampaignFormModal({
         ? getFindDataTargetDataGroupsForSave(
           formData.findDataTargetDataGroups,
           normalizedFindData,
-          isFindDataSearchCampaign
+          isFindDataSearchCampaign,
+          formData.isFindFacebookGroupAdmins === true
         )
         : undefined
       const useZaloFriendSourceTags = isZaloMessageFriendCampaign && formData.zaloFriendTargetMode === 'tagged_friends'
@@ -6619,7 +6652,7 @@ export default function CampaignFormModal({
               ? advancedContentOverride.groupSnapshot
               : undefined,
             advancedContentManualDraft: isSavingGroupSnapshot ? manualDraftForSave : undefined,
-            enableComment: isCommentSeedingCampaign ? true : formData.enableComment,
+            enableComment: isCommentSeedingCampaign ? true : isGroupPostAnonymousMode ? false : formData.enableComment,
             commentGroupMode: formData.commentGroupMode,
             commentType: formData.commentType,
             commentCount: isCommentSeedingCampaign ? effectivePostsPerTarget : clampFacebookCommentCount(formData.commentCount, facebookMaxComments),
@@ -6665,8 +6698,9 @@ export default function CampaignFormModal({
             autoJoinGroupAfterPost: formData.autoJoinGroupAfterPost,
             shuffleGroupList: formData.shuffleGroupList,
             skipPostIfGroupRequiresApproval: formData.skipPostIfGroupRequiresApproval,
-            enableGroupPostShareToJoinedGroups: isFacebookGroupPostCampaign ? formData.enableGroupPostShareToJoinedGroups : false,
-            enablePostBump: formData.enablePostBump,
+            enableGroupPostShareToJoinedGroups: isFacebookGroupPostCampaign && !isGroupPostAnonymousMode ? formData.enableGroupPostShareToJoinedGroups : false,
+            groupPostAnonymous: isGroupPostAnonymousMode,
+            enablePostBump: isGroupPostAnonymousMode ? false : formData.enablePostBump,
             postBumpCount: clampPostBumpCount(formData.postBumpCount),
             postBumpInitialDelayMinutes: normalizeMinuteValue(
               formData.postBumpInitialDelayMinutes,
@@ -7220,7 +7254,7 @@ export default function CampaignFormModal({
     }
     const shouldValidateBasicCommentMedia =
       (isCommentSeedingCampaign && !isAdvancedContentMode) ||
-      (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enableComment)
+      (isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && formData.enableComment)
     if (shouldValidateBasicCommentMedia) {
       if (!validateCommentMediaPool('Media comment', formData.commentImageOption, formData.commentImages)) return
       if (!validateSelectedImages('Media comment', formData.commentImageOption, formData.commentImages, 'image-video')) return
@@ -7426,7 +7460,7 @@ export default function CampaignFormModal({
         return
       }
       const requiredDataGroupDestinations: Array<{
-        kind: FindDataOutputKind
+        kind: FindDataGroupDestinationKind
         label: string
         enabled: boolean
       }> = [
@@ -7440,6 +7474,18 @@ export default function CampaignFormModal({
           enabled: isFindDataSearchCampaign
             && normalizedFindData.isFindFacebookGroup
             && findDataTargetDataGroupEnabled.facebook_group
+        },
+        {
+          kind: 'facebook_group_admin_uid',
+          label: 'UID quản trị viên',
+          enabled: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup
+            && formData.isFindFacebookGroupAdmins === true && findDataTargetDataGroupEnabled.facebook_group_admin_uid
+        },
+        {
+          kind: 'facebook_group_admin_phone',
+          label: 'SĐT quản trị viên',
+          enabled: isFindDataSearchCampaign && normalizedFindData.isFindFacebookGroup
+            && formData.isFindFacebookGroupAdmins === true && findDataTargetDataGroupEnabled.facebook_group_admin_phone
         }
       ]
       for (const item of requiredDataGroupDestinations) {
@@ -7626,7 +7672,7 @@ export default function CampaignFormModal({
       )
       return
     }
-    if (isFacebookGroupPostCampaign && !isNativeGroupShareMode && formData.enablePostBump) {
+    if (isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && formData.enablePostBump) {
       if (formData.postBumpMode === 'select' && formData.postBumpTargetCampaignIds.length === 0) {
         showAlert('Vui lòng chọn ít nhất một chiến dịch comment vào bài post để up tin.', 'error')
         return
@@ -9112,7 +9158,7 @@ export default function CampaignFormModal({
       if (handleFoundZaloGroupLinkWebData || handleFoundZaloGroupLinkJoinData || handleFoundZaloGroupLinkAkaBizDesktopData || destinations.zalo_group_link) lockedFields.push('isFindLinkGroupZalo')
       if (isDraftAutoLinkedFindUid || handleFoundUidData || destinations.facebook_uid) lockedFields.push('isFindUid')
       if (isDraftAutoLinkedPostLink || handleFoundPostLinkData || destinations.post_link) lockedFields.push('isFindPostLink')
-      if (isDraftAutoLinkedFacebookGroup || handleFoundFacebookGroupPostData || handleFoundFacebookGroupCommentData || handleFoundFacebookGroupJoinData || destinations.facebook_group) lockedFields.push('isFindFacebookGroup')
+      if (isDraftAutoLinkedFacebookGroup || handleFoundFacebookGroupPostData || handleFoundFacebookGroupCommentData || handleFoundFacebookGroupJoinData || destinations.facebook_group || destinations.facebook_group_admin_uid || destinations.facebook_group_admin_phone) lockedFields.push('isFindFacebookGroup')
     }
     const snapshot = {
       kind, actionId: formData.actionId, lockedFields,
@@ -12399,7 +12445,7 @@ export default function CampaignFormModal({
   }
 
   const setFindDataTargetDataGroup = (
-    kind: FindDataOutputKind,
+    kind: FindDataGroupDestinationKind,
     destination: FindDataTargetDataGroup | null
   ) => {
     if (!destination) {
@@ -12420,7 +12466,7 @@ export default function CampaignFormModal({
     }))
   }
 
-  const renderFindDataGroupDestinationOption = (kind: FindDataOutputKind) => {
+  const renderFindDataGroupDestinationOption = (kind: FindDataGroupDestinationKind) => {
     const config = FIND_DATA_GROUP_DESTINATION_CONFIG[kind]
     const destination = formData.findDataTargetDataGroups[kind]
     const selectedGroup = findDataTargetDataGroupDetails[kind]
@@ -12494,6 +12540,15 @@ export default function CampaignFormModal({
               >
                 <Plus size={15} /> {hasSelection ? 'Đổi nhóm' : 'Chọn nhóm'}
               </button>
+              {config.quickCreate && (
+                <button
+                  type="button"
+                  className="btn btn-secondary campaign-data-group-pick-button"
+                  onClick={() => setFindDataQuickCreateKind(kind)}
+                >
+                  <FolderPlus size={15} /> Tạo nhóm mới
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -13027,6 +13082,15 @@ export default function CampaignFormModal({
             {formData.isFindFacebookGroupAdmins && (
               <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginLeft: 24 }}>
                 Mở thêm trang quản trị viên của từng group và trang cá nhân của từng người nên chạy lâu hơn. Group riêng tư chưa tham gia thì Facebook không hiện danh sách quản trị viên.
+              </div>
+            )}
+            {formData.isFindFacebookGroupAdmins && (
+              <div style={{ marginLeft: 24, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {renderFindDataGroupDestinationOption('facebook_group_admin_uid')}
+                {renderFindDataGroupDestinationOption('facebook_group_admin_phone')}
+                <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
+                  UID: mỗi quản trị viên một dòng. SĐT: mỗi số một dòng, chỉ số di động Việt Nam. Bỏ qua chính tài khoản Facebook chạy chiến dịch.
+                </div>
               </div>
             )}
           </div>
@@ -17505,7 +17569,7 @@ export default function CampaignFormModal({
               )}
             </div>)}</CampaignContentObserver>}
 
-            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['groupComment'] = el }}
@@ -17530,7 +17594,7 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && (
+            {isFacebookGroupPostCampaign && !isNativeGroupShareMode && !isGroupPostAnonymousMode && (
               <div
                 className="stepper-section"
                 ref={el => { sectionRefs.current['postBump'] = el }}
@@ -17997,6 +18061,17 @@ export default function CampaignFormModal({
                         <label className="schedule-checkbox-label">
                           <input
                             type="checkbox"
+                            checked={formData.groupPostAnonymous}
+                            onChange={e => setFormData(p => ({ ...p, groupPostAnonymous: e.target.checked }))}
+                          />
+                          <span>Đăng bài ẩn danh</span>
+                        </label>
+                      </div>}
+
+                      {!isNativeGroupShareMode && !isGroupPostAnonymousMode && <div className="stepper-form-group">
+                        <label className="schedule-checkbox-label">
+                          <input
+                            type="checkbox"
                             checked={formData.enableGroupPostShareToJoinedGroups}
                             onChange={e => setFormData(p => ({ ...p, enableGroupPostShareToJoinedGroups: e.target.checked }))}
                           />
@@ -18209,6 +18284,28 @@ export default function CampaignFormModal({
             setFindDataGroupPickerKind(null)
           }}
           onClose={() => setFindDataGroupPickerKind(null)}
+        />
+      )}
+      {findDataQuickCreateKind && (
+        <QuickCreateDataGroupDialog
+          dataTypeCode={FIND_DATA_GROUP_DESTINATION_CONFIG[findDataQuickCreateKind].dataTypeCode}
+          typeLabel={FIND_DATA_GROUP_DESTINATION_CONFIG[findDataQuickCreateKind].typeLabel}
+          subtitle={`Cho ô "${FIND_DATA_GROUP_DESTINATION_CONFIG[findDataQuickCreateKind].label}"`}
+          defaultName={`${FIND_DATA_GROUP_DESTINATION_CONFIG[findDataQuickCreateKind].defaultGroupName} ${new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}`}
+          onCreated={group => {
+            const kind = findDataQuickCreateKind
+            setFindDataQuickCreateKind(null)
+            const targetAction = campaignActions.find(action => action.id === FIND_DATA_GROUP_DESTINATION_CONFIG[kind].actionId)
+            if (!isDataGroupCompatibleWithCampaignAction(group, targetAction)) {
+              showAlert('Đã tạo nhóm data nhưng nhóm không tương thích với loại dữ liệu này. Vui lòng chọn nhóm khác.', 'error')
+              return
+            }
+            setFindDataTargetDataGroup(kind, { groupId: group.id, groupName: group.name })
+            setFindDataTargetDataGroupEnabled(previous => ({ ...previous, [kind]: true }))
+            setFindDataTargetDataGroupDetails(previous => ({ ...previous, [kind]: group }))
+            showAlert('Đã tạo nhóm data và chọn cho ô này.', 'success')
+          }}
+          onClose={() => setFindDataQuickCreateKind(null)}
         />
       )}
       {!draftFormConfig && renderCampaignPickerModal()}

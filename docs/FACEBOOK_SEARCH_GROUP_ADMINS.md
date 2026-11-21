@@ -27,7 +27,7 @@
 | Lấy ai | Chỉ quản trị viên (không lấy người kiểm duyệt) |
 | Số người mỗi group | Lấy hết quản trị viên Facebook hiện |
 | Nguồn SĐT / email | Mục "Thông tin liên hệ" của trang cá nhân, tên, và dòng giới thiệu (bio) dưới tên |
-| Dùng kết quả | Chỉ xem ở tab "Data tìm được" và xuất Excel; không đẩy sang chiến dịch khác / nhóm data |
+| Dùng kết quả | Xem ở tab "Data tìm được" và xuất Excel; tab có cách xem "Danh sách quản trị viên" nối thông tin group, xuất Excel toàn bộ quản trị viên ([FIND_DATA_GROUP_ADMIN_VIEW.md](FIND_DATA_GROUP_ADMIN_VIEW.md)). Từ 21/11/2026 (anh chốt): đẩy được vào hai Nhóm data riêng, UID và SĐT ([FIND_DATA_GROUP_ADMIN_DATA_GROUPS.md](FIND_DATA_GROUP_ADMIN_DATA_GROUPS.md)); không đẩy thẳng sang chiến dịch |
 
 ## Facebook hiện gì (xem trang thật 18/11/2026, giao diện tiếng Việt)
 

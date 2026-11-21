@@ -187,6 +187,9 @@ const problem = (type, info) => { problems.push({ ...info, type }); if (problems
     for (const extra of (argValue('--migrations') || '').split(',').filter(Boolean)) {
       await db.query(`INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261121072153', 'migration_v608_find_data_push_links') ON CONFLICT DO NOTHING`)
       await db.query(fs.readFileSync(path.join(root, 'migrations', extra), 'utf8'))
+      // Ghi sổ như khi apply thật, để bản sau (V614 cần V610) qua được bước kiểm sổ.
+      await db.query(`INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+        [String(Date.now()), extra.replace(/\.sql$/, '')])
       console.log(`đã nạp thêm ${extra}`)
     }
     console.log(`dữ liệu: ${campaigns.length} chiến dịch, ${linkPlan.length} liên kết, ${details.length}/${detailsAll.length} lượt "Tìm data",`,

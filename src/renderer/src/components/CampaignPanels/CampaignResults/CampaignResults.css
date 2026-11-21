@@ -59,6 +59,7 @@
   color: var(--accent-info); background: var(--bg-tertiary); font-size: 11px; font-weight: 600; white-space: nowrap;
 }
 .crm-stage.is-responded, .crm-stage.is-friended { color: var(--accent-success); }
+.crm-stage.is-rejected { color: var(--accent-danger, #dc2626); }
 .crm-time { color: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
 .crm-note { max-width: 100%; overflow: hidden; color: var(--text-secondary); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .crm-none { color: var(--text-tertiary); }

@@ -23,6 +23,8 @@ const V563 = require('../build-v563-sql.cjs')
 const V575 = require('../build-v575-sql.cjs')
 const V597 = require('../build-v597-sql.cjs')
 const V603 = require('../build-v603-sql.cjs')
+const V616 = require('../build-v616-sql.cjs')
+const V617 = require('../build-v617-sql.cjs')
 const PORT = Number(process.env.FB_DESKTOP_TEST_PORT || 55555)
 let checks = 0, failed = 0
 // FB_DESKTOP_ONLY=<chữ trong tên ca>: chỉ chạy các ca có tên chứa chữ đó (soạn / dò một ca); để trống thì chạy hết.
@@ -153,7 +155,11 @@ class FakePage {
     if (this.scenario.missing?.includes(sel)) throw new Error('waitForSelector timeout: ' + sel)
     return true
   }
-  async $(sel) { return this.scenario.missing?.includes(sel) ? null : { xpath: sel } }
+  async $(sel) {
+    // V616: nút OK của bảng giới thiệu "Bài viết ẩn danh" chỉ có sau khi bấm công tắc (kịch bản đặt anon.okVisible).
+    if (sel === ELEMENTS.fb_group_post_anonymous_intro_ok) return this.scenario.anon?.okVisible ? { xpath: sel } : null
+    return this.scenario.missing?.includes(sel) ? null : { xpath: sel }
+  }
   async click(sel) {
     if (this.destroyed) throw new Error('Browser page is not connected')
     if (this.scenario.hangOn === sel) return this.hang()
@@ -170,6 +176,8 @@ class FakePage {
   async evaluate(code) {
     if (this.destroyed) throw new Error('Browser page is not connected')
     this.scenario.onEvaluate?.(code)
+    // V616: block đọc trạng thái công tắc "Đăng ẩn danh" (missing / off / on) bằng XPath trong trang.
+    if (String(code).includes("getAttribute('aria-checked')")) return this.scenario.anon?.state ?? 'missing'
     // Thời gian block chờ (helpers.sleep có tín hiệu huỷ) trước khi làm tiếp: ca lượt bị ngắt từ ngoài khi block đang chờ.
     if (code === 'typeWaitMs' || code === 'verifyWaitMs' || code === 'sendWaitMs') return this.scenario[code] ?? null
     if (code === 'formClosed') return this.scenario.formClosed !== false
@@ -195,7 +203,8 @@ const ELEMENTS = {
   fb_composer_editor: '//div[@contenteditable="true"][@role="textbox"]',
   fb_post_button: '//div[@aria-label="Đăng"][@role="button"]',
   fb_comment_box: '(//div[@role="textbox"][@aria-label="Viết bình luận"])[1]',
-  fb_group_feed: '//div[@role="feed"]'
+  fb_group_feed: '//div[@role="feed"]',
+  ...Object.fromEntries(V616.ELEMENTS.map(e => [e.name, e.xpath]))
 }
 
 // Block giả có cùng hình dạng đầu ra với block production (đọc 16/11/2026: 27, 30, 2624, 34).
@@ -1648,6 +1657,145 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
       assert.deepEqual(r.inputs, ['hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành'])
       assert.equal(r.streak, 0); assert.equal(r.quota, 0)
       assert.notEqual(r.campaign.status, 'tạm dừng')
+    })
+
+    // V616 (anh chốt 21/11/2026): đăng bài nhóm ẩn danh. Workflow như production sau V616: mở ô đăng bài → block bật ẩn danh (code thật của
+    // V616) → cổng anonymousReady → gõ → chia sẻ kèm → Đăng → xác nhận → link → cổng comment như production → vòng comment.
+    await db.query(`BEGIN;\n${V616.CODES_POLICIES_SQL}\nCOMMIT;`)
+    const ANON_BLOCK = { id: 2930, name: 'fb_enable_group_anonymous_post', code: V616.BLOCK_CODE }
+    await db.query(`INSERT INTO public.auto_blocks (id, name, code) VALUES ($1, $2, $3) ON CONFLICT (id) DO NOTHING`, [ANON_BLOCK.id, ANON_BLOCK.name, ANON_BLOCK.code])
+    globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, configSchema: [], defaultConfig: {}, isBuiltin: false })
+    const anonWorkflow = () => ({
+      id: WORKFLOW_ID, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
+        { id: 'n1', source: 'open', target: 'gate' }, { id: 'n2', source: 'gate', target: 'anon', sourceHandle: 'true' },
+        { id: 'n3', source: 'anon', target: 'anon_gate' }, { id: 'n4', source: 'anon_gate', target: 'type', sourceHandle: 'true' },
+        { id: 'n5', source: 'type', target: 'share' }, { id: 'n6', source: 'share', target: 'post' }, { id: 'n7', source: 'post', target: 'verify' },
+        { id: 'n8', source: 'verify', target: 'link' }, { id: 'n9', source: 'link', target: 'if_comment' },
+        { id: 'n10', source: 'if_comment', target: 'loop_comment', sourceHandle: 'true' },
+        { id: 'n11', source: 'loop_comment', target: 'comment', sourceHandle: 'body' }
+      ],
+      nodes: [
+        { id: 'open', blockId: 27, blockName: 'fb_open_composer', config: { composerActionCode: 'fb_post_group' } },
+        { id: 'gate', blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition: 'input.opened === true' } },
+        { id: 'anon', blockId: ANON_BLOCK.id, blockName: 'fb_enable_group_anonymous_post', config: { screenshotCaptureOn: 'failure', screenshotCaptureTiming: 'after' } },
+        { id: 'anon_gate', blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition: 'input.anonymousReady !== false' } },
+        { id: 'type', blockId: 28, blockName: 'fb_type_post_content', config: {} },
+        { id: 'share', blockId: 2794, blockName: 'fb_select_group_post_share_targets', config: {} },
+        { id: 'post', blockId: 30, blockName: 'fb_click_post_button', config: { composerActionCode: 'fb_post_group' } },
+        { id: 'verify', blockId: 2626, blockName: 'fb_verify_group_post_form_closed', config: {} },
+        { id: 'link', blockId: 2833, blockName: 'fb_get_first_group_post_link', config: {} },
+        { id: 'if_comment', blockId: 0, blockName: 'if_else', systemType: 'ifElse',
+          config: { condition: 'vars.enableComment === true && Array.isArray(vars.commentIterations) && vars.commentIterations.length > 0' } },
+        { id: 'loop_comment', blockId: 0, blockName: 'loop', systemType: 'loop', config: { loopType: 'forEach', itemsExpr: 'vars.commentIterations' } },
+        { id: 'comment', blockId: 34, blockName: 'fb_comment_at_position', config: {} }
+      ]
+    })
+    const SWITCH = ELEMENTS.fb_group_post_anonymous_switch
+    const OK_BUTTON = ELEMENTS.fb_group_post_anonymous_intro_ok
+    // anon: state missing / off / on; needsOk: bấm công tắc thì hiện bảng OK (như Facebook 21/11); stuck: bấm gì công tắc cũng không bật.
+    const anonScenario = anon => ({ anon, onClick: sel => {
+      if (sel === SWITCH) { if (anon.stuck) return; if (anon.needsOk) anon.okVisible = true; else anon.state = 'on' }
+      if (sel === OK_BUTTON && !anon.stuck) anon.state = 'on'
+    } })
+    const v616Run = async ({ extra, anon, targets = 1 }) => {
+      const workflows = globalThis.__fbTest.workflows
+      const original = workflows.get(WORKFLOW_ID)
+      workflows.set(WORKFLOW_ID, anonWorkflow())
+      try {
+        const entry = await makeCampaign({ targets, extra })
+        const { page: fake } = await run(entry, { ...anonScenario(anon), postLink: 'https://www.facebook.com/groups/g1/posts/7123/' })
+        const campaign = await one(`SELECT status, note FROM public.auto_campaigns WHERE id = $1`, [entry.campaign.id])
+        const streak = await one(`SELECT coalesce(max(count_consecutive_bad_targets), 0)::int AS n FROM public.auto_campaign_error_state
+          WHERE campaign_id = $1`, [entry.campaign.id])
+        const quota = await one(`SELECT coalesce(max(count_action_in_day), 0)::int AS n FROM public.auto_account_action_status
+          WHERE account_id = $1 AND action_code = 'fb_post_group'`, [entry.account.id])
+        return { rows: (await details(entry.campaign.id)).map(r => [r.action_code, r.status, r.log]),
+          out: (await outcomes(entry.campaign.id)).map(o => [o.action_code, o.phase, o.error_code]),
+          inputs: (await inputs(entry.campaign.id)).map(r => [r.status, r.note]), campaign, streak: streak.n, quota: quota.n,
+          clicks: fake.clicks, vars: globalThis.__fbTest.runs.at(-1)?.variables ?? {}, progress: [...progress], campaignId: entry.campaign.id }
+      } finally {
+        workflows.set(WORKFLOW_ID, original)
+      }
+    }
+
+    await check('V616: nhóm không cho đăng ẩn danh (không có công tắc) → FB51: data tạm dừng kèm câu, dòng "bỏ qua", không bấm Đăng, không tính lượt, không cộng chuỗi, chạy hết các nhóm', async () => {
+      const r = await v616Run({ extra: { groupPostAnonymous: true, enableComment: true, commentCount: 2, commentType: 'all' },
+        anon: { state: 'missing' }, targets: 5 })
+      assert.deepEqual(r.out, Array.from({ length: 5 }, () => ['fb_post_group', 'before_send', V616.FB51.code]))
+      assert.equal(r.rows.length, 5, JSON.stringify(r.rows))
+      for (const row of r.rows) {
+        assert.deepEqual(row.slice(0, 2), ['fb_post_group', 'bỏ qua'])
+        assert.match(row[2], /^Nhóm này không cho đăng bài ẩn danh/)
+      }
+      for (const [status, note] of r.inputs) { assert.equal(status, 'tạm dừng'); assert.match(String(note), /Nhóm này không cho đăng bài ẩn danh/) }
+      assert.deepEqual(r.clicks.filter(c => c === SWITCH || c === ELEMENTS.fb_post_button || c === ELEMENTS.fb_comment_box), [])
+      assert.equal(r.quota, 0); assert.equal(r.streak, 0)
+      assert.notEqual(r.campaign.status, 'tạm dừng')
+      assert.ok(r.progress.some(p => p.includes('Nhóm này không cho đăng bài ẩn danh')), r.progress.join('\n'))
+      console.log(`  dòng lịch sử: ${r.rows[0][2]} | ghi chú data: ${r.inputs[0][1]}`)
+      console.log(`  tiến trình: ${r.progress.filter(p => p.includes('ẩn danh')).slice(0, 1).join(' | ')}`)
+    })
+
+    await check('V616: nhóm cho đăng ẩn danh → bấm công tắc, bấm OK, rồi mới gõ và bấm Đăng; không comment, không chia sẻ kèm dù chiến dịch còn lưu bật', async () => {
+      const r = await v616Run({ extra: { groupPostAnonymous: true, enableComment: true, commentCount: 2, commentType: 'all',
+        enableGroupPostShareToJoinedGroups: true }, anon: { state: 'off', needsOk: true } })
+      const order = r.clicks.filter(c => [SWITCH, OK_BUTTON, ELEMENTS.fb_post_button].includes(c))
+      assert.deepEqual(order, [SWITCH, OK_BUTTON, ELEMENTS.fb_post_button])
+      assert.equal(r.clicks.filter(c => c === ELEMENTS.fb_comment_box).length, 0)
+      assert.deepEqual(r.rows.map(x => x.slice(0, 2)), [['fb_post_group', 'thành công']])
+      assert.deepEqual(r.inputs.map(x => x[0]), ['hoàn thành'])
+      assert.equal(r.vars.groupPostAnonymous, true)
+      assert.equal(r.vars.enableComment, false)
+      assert.deepEqual(r.vars.commentIterations, [])
+      assert.equal(r.vars.enableGroupPostShareToJoinedGroups, false)
+      assert.equal(r.quota, 1)
+    })
+
+    await check('V616: chiến dịch không bật ẩn danh chạy workflow mới như trước (không bấm công tắc, vẫn comment 2 lượt)', async () => {
+      const r = await v616Run({ extra: { enableComment: true, commentCount: 2, commentType: 'all' }, anon: { state: 'off', needsOk: true } })
+      assert.equal(r.clicks.filter(c => c === SWITCH || c === OK_BUTTON).length, 0)
+      assert.deepEqual(r.rows.map(x => x.slice(0, 2)), [['fb_post_group', 'thành công'], ['fb_comment', 'thành công'], ['fb_comment', 'thành công']])
+      assert.equal(r.vars.groupPostAnonymous, false)
+    })
+
+    await check('V616: bấm công tắc mà Facebook không bật → không bấm Đăng; lỗi như block khác (SYS99), không đăng bằng tên thật', async () => {
+      const r = await v616Run({ extra: { groupPostAnonymous: true }, anon: { state: 'off', stuck: true } })
+      assert.equal(r.clicks.filter(c => c === ELEMENTS.fb_post_button).length, 0)
+      assert.ok(r.clicks.includes(SWITCH))
+      assert.equal(r.out.length, 1, JSON.stringify(r.out))
+      assert.equal(r.out[0][2], 'err_undefined')
+      // SYS99 ghi câu chung của chính sách (như mọi block lỗi khác); câu của block nằm trong tín hiệu (signal.message).
+      assert.deepEqual(r.rows, [['fb_post_group', 'lỗi', 'Có lỗi xảy ra (SYS99)']])
+      assert.deepEqual(r.inputs.map(x => x[0]), ['hoàn thành'])
+      assert.equal(r.streak, 1)
+      assert.equal(r.quota, 0)
+      console.log(`  kết quả: ${JSON.stringify(r.out[0])} | data: ${JSON.stringify(r.inputs[0])} | chuỗi lỗi: ${r.streak}`)
+    })
+
+    // V617 (anh chốt 21/11/2026): có công tắc mà không bật được thì block bản V617 trả FB52 (không ném lỗi): ghi thất bại, data về hàng đợi,
+    // không tính lượt, cộng chuỗi; 4 data liền thì tạm dừng chiến dịch theo ngưỡng chung.
+    await db.query(`BEGIN;\n${V617.CODES_POLICIES_SQL}\nCOMMIT;`)
+    await check('V617: không bật được công tắc → FB52: dòng "thất bại" kèm câu, không bấm Đăng, data về hàng đợi, không tính lượt, chuỗi lỗi +1, có ảnh lỗi', async () => {
+      globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, code: V617.NEW_CODE, configSchema: [], defaultConfig: {}, isBuiltin: false })
+      try {
+        const r = await v616Run({ extra: { groupPostAnonymous: true }, anon: { state: 'off', stuck: true }, targets: 4 })
+        console.log(`  kết quả: ${JSON.stringify(r.out.slice(0, 2))} | dòng: ${JSON.stringify(r.rows[0])} | data: ${JSON.stringify(r.inputs)} | chuỗi: ${r.streak} | chiến dịch: ${JSON.stringify(r.campaign)}`)
+        assert.ok(r.out.length >= 4, JSON.stringify(r.out))
+        assert.ok(r.out.every(o => o[0] === 'fb_post_group' && o[1] === 'before_send' && o[2] === V617.FB52.code), JSON.stringify(r.out))
+        assert.equal(r.clicks.filter(c => c === ELEMENTS.fb_post_button).length, 0)
+        assert.deepEqual(r.rows[0].slice(0, 2), ['fb_post_group', 'thất bại'])
+        assert.match(r.rows[0][2], /Không bật được chế độ đăng bài ẩn danh/)
+        assert.ok(r.inputs.every(([status]) => status === 'chờ xử lý'), JSON.stringify(r.inputs))
+        assert.equal(r.quota, 0)
+        assert.equal(r.campaign.status, 'tạm dừng', 'dừng sau 4 data liền')
+        assert.ok(r.progress.some(p => p.includes('Không bật được chế độ đăng bài ẩn danh')), r.progress.join('\n'))
+        // Block trả ok: false nên engine chụp ảnh lỗi (mã ảnh trong tín hiệu) để biết Facebook đổi gì.
+        const shots = (await db.query(`SELECT signal->>'screenshotId' AS s FROM public.auto_engine_outcomes WHERE campaign_id = $1 AND error_code = $2`,
+          [r.campaignId, V617.FB52.code])).rows.map(x => x.s)
+        assert.ok(shots.length > 0 && shots.every(Boolean), JSON.stringify(shots))
+      } finally {
+        globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, configSchema: [], defaultConfig: {}, isBuiltin: false })
+      }
     })
   } finally {
     await db.end().catch(() => {})

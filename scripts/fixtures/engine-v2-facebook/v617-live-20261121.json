@@ -1,0 +1,67 @@
+{
+ "block": {
+  "id": 2923,
+  "md5": "0687856f3663282482914025fc606aa0",
+  "name": "[engine] fb_enable_group_anonymous_post"
+ },
+ "codeTaken": 0,
+ "fb49Resolved": {
+  "after_send": {
+   "account_effect": "none",
+   "campaign_effect": "none",
+   "detail_mode": "write",
+   "detail_status_id": 21,
+   "error_class": "transient",
+   "lock_action_codes": [],
+   "lock_mode": "fixed_minutes",
+   "log_template": "{message}",
+   "login_effect": "none",
+   "pace_mode": "full",
+   "quota_effect": "no_count",
+   "remaining_steps": "skip",
+   "run_effect": "continue",
+   "target_effect": "requeue",
+   "target_streak_effect": "increment"
+  },
+  "before_send": {
+   "account_effect": "none",
+   "campaign_effect": "none",
+   "detail_mode": "write",
+   "detail_status_id": 21,
+   "error_class": "transient",
+   "lock_action_codes": [],
+   "lock_mode": "fixed_minutes",
+   "log_template": "{message}",
+   "login_effect": "none",
+   "pace_mode": "full",
+   "quota_effect": "no_count",
+   "remaining_steps": "skip",
+   "run_effect": "continue",
+   "target_effect": "requeue",
+   "target_streak_effect": "increment"
+  },
+  "in_flight": {
+   "account_effect": "none",
+   "campaign_effect": "none",
+   "detail_mode": "write",
+   "detail_status_id": 21,
+   "error_class": "transient",
+   "lock_action_codes": [],
+   "lock_mode": "fixed_minutes",
+   "log_template": "{message}",
+   "login_effect": "none",
+   "pace_mode": "full",
+   "quota_effect": "no_count",
+   "remaining_steps": "skip",
+   "run_effect": "continue",
+   "target_effect": "requeue",
+   "target_streak_effect": "increment"
+  }
+ },
+ "fb51": {
+  "class": "target_permanent",
+  "id": 178
+ },
+ "maxFb": 51,
+ "readAt": "2026-11-21 18:31:07"
+}

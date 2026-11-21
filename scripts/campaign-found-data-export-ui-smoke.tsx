@@ -43,6 +43,26 @@ const adminDetails = [
       joinState: 'not_joined', cardVersion: 2, adminScan: 'not_listed', admins: [] }
   ] } }
 ]
+// Cách xem "Danh sách quản trị viên": hai lượt; group trùng giữa hai lượt (lượt sau không đọc lại quản trị viên), người quản trị hai group,
+// group chưa đọc được, group Facebook không hiện.
+const multiAdminDetails = [
+  { id: 6, campaignId: 91, accountId: 41, createdAt: secondRunAt, data: { groupUrl: 'hội an', searchKeyword: 'hội an', facebookGroups: [
+    { url: 'https://www.facebook.com/groups/admins-listed/', name: 'Có quản trị viên', memberCount: 137000, postsPerDay: 90, privacy: 'Công khai',
+      postsText: '90+', joinState: 'not_joined', cardVersion: 2 },
+    { url: 'https://www.facebook.com/groups/admins-second/', name: 'Nhóm thứ hai', memberCount: 4200, postsPerDay: 3, privacy: 'Riêng tư', postsText: '3',
+      joinState: 'joined', cardVersion: 2, adminScan: 'listed', admins: [
+        { uid: '100044882776478', name: 'Trần Mỹ Trinh', url: 'https://www.facebook.com/profile.php?id=100044882776478', phones: ['0912000111', '0912000222'], emails: [], profileRead: true },
+        { uid: '100099900000001', name: 'Người chưa đọc', url: 'https://www.facebook.com/profile.php?id=100099900000001', phones: [], emails: [], profileRead: false }] },
+    { url: 'https://www.facebook.com/groups/admins-failed/', name: 'Đọc lỗi', memberCount: 900, postsPerDay: 1, privacy: 'Công khai', postsText: '1',
+      joinState: 'not_joined', cardVersion: 2, adminScan: 'failed', admins: [] }
+  ] } },
+  ...adminDetails
+]
+// Nhiều quản trị viên: 350 group × 10 người = 3.500 dòng, quá giới hạn vẽ bảng (1.000).
+const hugeAdminDetails = [{ id: 7, campaignId: 91, accountId: 41, createdAt: firstRunAt, data: { groupUrl: 'lớn', searchKeyword: 'lớn',
+  facebookGroups: Array.from({ length: 350 }, (_, g) => ({ url: `https://www.facebook.com/groups/huge-${g}/`, name: `Nhóm ${g}`, cardVersion: 2,
+    adminScan: 'listed', admins: Array.from({ length: 10 }, (_, a) => ({ uid: String(100000000000000 + g * 10 + a), name: `Người ${g}-${a}`,
+      url: `https://www.facebook.com/profile.php?id=${100000000000000 + g * 10 + a}`, phones: [], emails: [], profileRead: true })) })) } }]
 const cards = [
   { key: 'facebook.com/groups/english', seenAt: firstRunAt, card: { name: 'Nhóm tiếng Anh', privacy: 'Công khai', memberCount: 7500,
     postsPerDay: 90, postsText: '90+', friendMemberCount: 2, joinState: 'not_joined' } },
@@ -61,7 +81,7 @@ const handlers: Record<string, any> = {
     total: 2, campaignTotal: 2, page: 1, pageSize: 100, actionOptions: [] }),
   getCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
   getDesktopCampaignConfig: (id: number) => campaigns.find((row: any) => row.id === id),
-  listCampaignDetailsByCampaign: (id: number) => id === 91 ? (state.adminDetails ? adminDetails : details) : [{
+  listCampaignDetailsByCampaign: (id: number) => id === 91 ? (state.adminDetails === 'huge' ? hugeAdminDetails : state.adminDetails === 'multi' ? multiAdminDetails : state.adminDetails ? adminDetails : details) : [{
     id: 3, campaignId: 92, accountId: 41, data: { phones: ['0901234567'], uids: ['12345678901234567890'],
       phoneProfiles: [{ phone: '0901234567', name: 'Người đăng', uid: '100000000000001', url: 'https://www.facebook.com/profile.php?id=100000000000001', source: 'post' }],
       uidProfiles: [{ uid: '12345678901234567890', name: '', url: '', source: 'mystery_source' }],

@@ -329,3 +329,114 @@ export const buildFoundDataWorkbook = (
 
   return workbook
 }
+
+// Cách xem "Danh sách quản trị viên" của tab Data tìm được (chiến dịch tìm group bằng search có lấy quản trị viên):
+// mỗi dòng là một quản trị viên trong một group, kèm thông tin group. Bảng và file Excel dùng chung hàm dựng dòng.
+export const FOUND_GROUP_ADMIN_SHEET_NAME = 'Quản trị viên'
+const FOUND_GROUP_ADMIN_HEADERS = [
+  'Tên quản trị viên', 'UID', 'Link trang cá nhân', 'Số điện thoại', 'Email', 'Đã đọc trang cá nhân',
+  'Tên group', 'Link group', 'Số thành viên', 'Số bài/ngày', 'Privacy', 'Trạng thái tham gia', 'Từ khóa', 'Tài khoản tìm', 'Thời gian tìm'
+]
+const FOUND_GROUP_ADMIN_COLUMN_WIDTHS = [32, 20, 50, 26, 34, 18, 40, 50, 14, 12, 12, 18, 30, 26, 22]
+
+export interface FoundGroupAdminRow {
+  key: string
+  admin: FacebookGroupAdmin
+  groupName: string
+  groupUrl: string
+  group: FacebookGroupDisplay
+  keywords: string
+  accountNames: string
+  foundAt?: string
+}
+
+export interface FoundGroupAdminList {
+  rows: FoundGroupAdminRow[]
+  /** Số người không trùng (theo UID, không có thì theo link). */
+  people: number
+  peopleWithPhone: number
+  peopleWithEmail: number
+  /** Số group (không trùng) đã quét quản trị viên / đọc được danh sách / Facebook không hiện / chưa đọc được. */
+  groupsScanned: number
+  groupsListed: number
+  groupsNotListed: number
+  groupsFailed: number
+}
+
+/**
+ * Dòng quản trị viên của các group tìm được. Group trùng giữa các lượt được gộp như file Excel (lấy lượt đọc được danh sách); một người quản
+ * trị nhiều group ra nhiều dòng. Truyền vào group đã trộn thẻ log (`applyFacebookGroupCard`) để cột số liệu group đủ.
+ */
+export const buildFoundGroupAdminList = (items: readonly FoundDataExportItem[]): FoundGroupAdminList => {
+  const groups = getUniqueItems(items.filter(item => item.kind === 'facebookGroup' && item.facebookGroup))
+  const rows: FoundGroupAdminRow[] = []
+  const people = new Map<string, { phone: boolean; email: boolean }>()
+  const totals = { groupsScanned: 0, groupsListed: 0, groupsNotListed: 0, groupsFailed: 0 }
+  for (const item of groups) {
+    const display = describeFacebookGroup(item.facebookGroup)
+    if (!display.adminScan) continue
+    totals.groupsScanned += 1
+    if (display.adminScan === 'not_listed') totals.groupsNotListed += 1
+    if (display.adminScan === 'failed') totals.groupsFailed += 1
+    if (display.adminScan !== 'listed') continue
+    totals.groupsListed += 1
+    const keywords = groupKeywords(item)
+    const accountNames = (item.accountNames || []).join(', ')
+    for (const admin of display.admins) {
+      const personKey = (admin.uid || admin.url).toLowerCase()
+      const seen = people.get(personKey) || { phone: false, email: false }
+      people.set(personKey, { phone: seen.phone || admin.phones.length > 0, email: seen.email || admin.emails.length > 0 })
+      rows.push({
+        key: `${facebookGroupUrlKey(item.value) || item.value}|${personKey}`,
+        admin,
+        groupName: item.name || item.facebookGroup?.name || '',
+        groupUrl: item.value,
+        group: display,
+        keywords,
+        accountNames,
+        foundAt: item.foundAt
+      })
+    }
+  }
+  const values = Array.from(people.values())
+  return {
+    rows,
+    people: values.length,
+    peopleWithPhone: values.filter(value => value.phone).length,
+    peopleWithEmail: values.filter(value => value.email).length,
+    ...totals
+  }
+}
+
+const profileReadLabel = (admin: FacebookGroupAdmin): string =>
+  admin.profileRead === true ? 'Có' : admin.profileRead === false ? 'Không' : ''
+
+/** File Excel của cách xem "Danh sách quản trị viên": một sheet, toàn bộ quản trị viên, mỗi người một dòng trong mỗi group. */
+export const buildFoundGroupAdminWorkbook = (items: readonly FoundDataExportItem[]): WorkBook => {
+  const { rows } = buildFoundGroupAdminList(items)
+  const sheet = utils.aoa_to_sheet([
+    FOUND_GROUP_ADMIN_HEADERS,
+    ...rows.map(row => [
+      row.admin.name,
+      row.admin.uid || '',
+      row.admin.url,
+      row.admin.phones.join(', '),
+      row.admin.emails.join(', '),
+      profileReadLabel(row.admin),
+      row.groupName,
+      row.groupUrl,
+      row.group.memberCount ?? '',
+      row.group.postsPerDay ?? '',
+      row.group.privacy,
+      row.group.joinState,
+      row.keywords,
+      row.accountNames,
+      formatFoundAt(row.foundAt)
+    ])
+  ])
+  sheet['!cols'] = FOUND_GROUP_ADMIN_COLUMN_WIDTHS.map(wch => ({ wch }))
+  sheet['!autofilter'] = { ref: sheet['!ref']! }
+  const workbook = utils.book_new()
+  utils.book_append_sheet(workbook, sheet, FOUND_GROUP_ADMIN_SHEET_NAME)
+  return workbook
+}

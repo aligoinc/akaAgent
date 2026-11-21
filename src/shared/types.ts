@@ -550,6 +550,9 @@ export type FindDataOutputKind =
   | 'post_link'
   | 'facebook_group'
 
+/** Nơi nhận Nhóm data của chiến dịch tìm data: các loại kết quả, cộng hai loại quản trị viên group (chỉ Nhóm data, src/shared/findDataGroupAdminRows.ts). */
+export type FindDataGroupDestinationKind = FindDataOutputKind | 'facebook_group_admin_uid' | 'facebook_group_admin_phone'
+
 export interface FindDataTargetDataGroup {
   groupId: number
   groupName: string
@@ -640,6 +643,7 @@ export interface CampaignExtraSettings {
   shuffleGroupList?: boolean               // Xáo trộn danh sách group trước khi chạy chiến dịch
   skipPostIfGroupRequiresApproval?: boolean // Không đăng bài vào group đã biết cần duyệt bài; vẫn có thể kiêm comment
   groupPostShareFromPost?: boolean // Native share of one source post into the current group
+  groupPostAnonymous?: boolean // Đăng bài vào nhóm dưới dạng ẩn danh (anh chốt 21/11/2026): không comment, không up tin, không đăng kèm chia sẻ
   groupPostShareCaption?: string // Optional plain-text caption for native group share
   enableGroupPostShareToJoinedGroups?: boolean // Đăng bài group dạng chia sẻ thêm vào tối đa 3 nhóm khác trong campaign
   enablePostBump?: boolean                 // Sau khi đăng group thành công, thêm link bài vào campaign comment-post để up tin
@@ -760,7 +764,7 @@ export interface CampaignExtraSettings {
   findZaloGroupLinkJoinTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign Zalo tham gia group nội bộ đã chọn
   findPhoneAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm SĐT, đẩy sang campaign akaBiz Desktop đã chọn
   findZaloGroupLinkAkaBizDesktopTargetCampaignIds?: number[] // Khi tìm link group Zalo, đẩy sang campaign akaBiz Desktop đã chọn
-  findDataTargetDataGroups?: Partial<Record<FindDataOutputKind, FindDataTargetDataGroup>> // Nhóm data nhận từng loại kết quả tìm kiếm
+  findDataTargetDataGroups?: Partial<Record<FindDataGroupDestinationKind, FindDataTargetDataGroup>> // Nhóm data nhận từng loại kết quả tìm kiếm
   // Tìm kiếm data bằng Facebook Search — UI/config phase
   countSearchPostFindData?: number
   countSearchGroupFindData?: number

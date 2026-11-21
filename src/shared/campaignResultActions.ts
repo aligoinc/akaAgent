@@ -332,7 +332,7 @@ export function campaignResultColumnName(code: string, options: readonly Campaig
   return code
 }
 
-const STAGE_RANK: readonly EngagementStage[] = ['responded', 'reacted', 'seen', 'received', 'friended', 'sent', 'requested']
+const STAGE_RANK: readonly EngagementStage[] = ['responded', 'reacted', 'seen', 'received', 'friended', 'rejected', 'sent', 'requested']
 const earliest = (values: Array<string | null | undefined>): string | null => values
   .filter((value): value is string => !!value && Number.isFinite(Date.parse(value)))
   .sort((a, b) => Date.parse(a) - Date.parse(b))[0] ?? null
