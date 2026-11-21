@@ -66,6 +66,13 @@ export const ENGAGEMENT_CONFIG_TTL_MS = 60_000
  * not: production App Server 18/11/2026 kept one read pending for days, which
  * silently disabled tracking for the whole process. */
 export const ENGAGEMENT_CONFIG_READ_MAX_MS = 30_000
+/** How long past its TTL a config may still be used while a refresh is due.
+ * Every DB write (register/record/read) rechecks the live enabled flag and
+ * revision, so this only keeps capture going; it never authorizes a write.
+ * A day, not minutes: Desktop sends are sparse (20/11/2026: 4.9% of the gaps
+ * between sends exceed 3 minutes, 0.01% exceed 6 hours), and every first send
+ * after such a gap would otherwise be untracked. */
+export const ENGAGEMENT_CONFIG_STALE_MS = 24 * 3_600_000
 // Every runtime of this module has performance; the Date fallback is only for
 // script harnesses that evaluate the file in a bare VM context.
 const engagementMonotonicNow = (): number => typeof performance === 'undefined' ? Date.now() : performance.now()
@@ -108,11 +115,15 @@ export class EngagementConfigCache {
     }).finally(() => { this.pending = undefined })
     return this.pending
   }
-  /** Optional tracking must never make a campaign wait for configuration IO. */
+  /** Optional tracking must never make a campaign wait for configuration IO.
+   * Once the TTL passes, the refresh starts and the just-expired value is kept
+   * for up to ENGAGEMENT_CONFIG_STALE_MS: returning nothing made the first send
+   * after every expiry untracked (Desktop lost ~1/3 of sends, Fly 3.4%). */
   currentOrRefresh(): EngagementConfig | undefined {
-    const current = this.cached && this.now() - this.cached.at < ENGAGEMENT_CONFIG_TTL_MS ? this.cached.value : undefined
-    if (!current) void this.get().catch(() => undefined)
-    return current
+    const age = this.cached ? this.now() - this.cached.at : Number.POSITIVE_INFINITY
+    if (age < ENGAGEMENT_CONFIG_TTL_MS) return this.cached!.value
+    void this.get().catch(() => undefined)
+    return age < ENGAGEMENT_CONFIG_TTL_MS + ENGAGEMENT_CONFIG_STALE_MS ? this.cached!.value : undefined
   }
   /** Only for fencing deferred metadata; never authorizes work with stale settings. */
   lastKnown(): EngagementConfig | undefined { return this.cached?.value }
