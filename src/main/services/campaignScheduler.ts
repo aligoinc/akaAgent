@@ -732,6 +732,17 @@ interface FindDataPreviousValues {
   detailCount: number
 }
 
+/** Câu cho khách khi nạp Nhóm data của chiến dịch tìm data lỗi: mã lỗi của DB thành câu tiếng Việt, câu khác giữ nguyên. */
+function describeFindDataGroupIngestError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+  if (/data_group_not_found/.test(message)) return 'Nhóm data đã bị xoá hoặc không còn quyền dùng. Vui lòng chọn nhóm khác trong chiến dịch.'
+  if (/data_group_ingest_semantic_type_mismatch|invalid_data_type_category_item/.test(message)) {
+    return 'Nhóm data không còn đúng loại dữ liệu này. Vui lòng chọn nhóm khác trong chiến dịch.'
+  }
+  if (/data_group_request_id_conflict/.test(message)) return 'Lượt đẩy trùng mã với lượt trước. Lượt sau sẽ đẩy lại.'
+  return message.replace(/^Failed to ingest data group:\s*/, '') || 'Lỗi không xác định.'
+}
+
 type FindDataGroupOutputKind =
   | 'phone'
   | 'zalo_group_link'
@@ -14763,7 +14774,7 @@ export class CampaignScheduler {
         const groupName = String(destination?.groupName || '').trim() || `Nhóm #${groupId}`
         await this.logCampaignProgress(
           sourceCampaign,
-          `⚠️ Không thể đẩy ${spec.label} sang Nhóm data "${groupName}": ${err instanceof Error ? err.message : String(err)}`
+          `⚠️ Không thể đẩy ${spec.label} sang Nhóm data "${groupName}": ${describeFindDataGroupIngestError(err)}`
         )
       }
     }

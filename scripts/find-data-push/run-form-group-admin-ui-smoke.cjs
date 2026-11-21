@@ -87,6 +87,15 @@ async function main() {
     check(dest.facebook_group_admin_uid?.groupId === 8100 && dest.facebook_group_admin_phone?.groupId === 8101 && saved.extraSettings.isFindFacebookGroupAdmins === true,
       'lưu: hai nơi nhận quản trị viên vào cài đặt chiến dịch', { dest, alerts: s.alerts })
     check(s.errors.length === 0, 'không lỗi giao diện', { errors: s.errors })
+    if (process.env.E2E_FORM_OUT) {
+      // Cài đặt chiến dịch và yêu cầu tạo nhóm đúng như form gửi, cho bài kiểm đầu-cuối (e2e-group-admin-realdata.cjs).
+      const codeOf = { 38: 'facebook_person', 40: 'phone' }
+      const createdIds = s.groups.filter(g => g.requestId).map(g => g.id)
+      require('node:fs').writeFileSync(process.env.E2E_FORM_OUT, JSON.stringify({
+        createDataGroup: creates.map((c, i) => ({ ...c.args[0], dataTypeCode: codeOf[c.args[0].dataTypeCategoryItemId], fakeGroupId: createdIds[i] })),
+        campaign: { actionId: saved.actionId, extraSettings: saved.extraSettings }
+      }, null, 1))
+    }
 
     // Ca 2: bật ô UID mà chưa chọn nhóm thì báo.
     await page.evaluate(() => { window.adminSmoke.reset(); window.adminSmoke.open(true) })
