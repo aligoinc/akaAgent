@@ -59,12 +59,14 @@ export class BackgroundPageManager {
     })
 
     win.setMenuBarVisibility(false)
-    win.webContents.setUserAgent(DEFAULT_USER_AGENT)
+    // V618: tài khoản Website giữ UA thật của Electron (Cloudflare của batdongsan bắt xác minh mãi với UA giả; cookie xác minh gắn với UA).
+    if (platformType !== 'web') win.webContents.setUserAgent(DEFAULT_USER_AGENT)
     win.webContents.setBackgroundThrottling(false)
     win.webContents.on('render-process-gone', () => this.destroy(accountId))
     win.on('closed', () => this.pages.delete(accountId))
 
-    const page = new PageController(win.webContents)
+    // Tài khoản Website: script chạy ngay, không đợi trang tải xong hẳn (xem PageControllerOptions.immediateScripts).
+    const page = new PageController(win.webContents, { immediateScripts: platformType === 'web' })
     this.pages.set(accountId, { win, page })
 
     const initialUrl = PLATFORM_URLS[platformType] || 'about:blank'

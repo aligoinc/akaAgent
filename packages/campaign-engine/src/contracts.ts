@@ -129,6 +129,9 @@ export interface GateDecision {
   required: boolean
   /** Câu cho khách khi phải chờ (tên lý do, giờ chạy tiếp, mã), không có emoji. */
   note?: string | null
+  /** Quét data website (V618): số lượt còn lại trong ngày / trong khung giờ của mã thao tác web (block dừng đúng lúc). */
+  remainingDaily?: number
+  remainingWindow?: number
 }
 
 /** Cấu hình một cổng kiểm (auto_engine_gates): open = lỗi kiểm vẫn cho gửi; closed = chờ rồi thử lại. */

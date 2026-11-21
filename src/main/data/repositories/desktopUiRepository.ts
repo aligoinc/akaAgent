@@ -27,7 +27,8 @@ async function scope() {
     // `chatSync` chỉ dùng ở `aka_agent_desktop_account_snapshot` để tính `hasZaloSession` của tài khoản Server: true thì theo
     // `login_status` (phiên nằm ở ChatApi), false thì theo `auto_accounts.zalo_session` (phiên App Server). Tài khoản Server của
     // tổ chức chạy trên Fly theo cờ cũng giữ phiên ở ChatApi, nên dùng cùng điều kiện với `mapAccountFromDB`.
-    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: serverAccountsUseChatApi(user) }
+    // `webScan`: tài khoản Website (quét data website, V618) hiện khi tổ chức bật web_scan.campaigns (chốt lúc đăng nhập); khoá `web` là Zalo Web.
+    p_access: { ...entitlements, ...loadCurrentUserZaloAccountCapabilities(), chatSync: serverAccountsUseChatApi(user), webScan: user.webScanEnabled === true }
   }
 }
 

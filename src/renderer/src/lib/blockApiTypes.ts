@@ -15,6 +15,8 @@ declare const signal: AbortSignal;
 interface PageController {
   // Navigation
   navigate(url: string): Promise<void>;
+  /** Mở trang, xong khi DOM dựng xong (không chờ mọi tài nguyên như navigate). Quá timeoutMs (mặc định 30000) thì lỗi. */
+  open(url: string, timeoutMs?: number): Promise<void>;
   reload(): Promise<void>;
   goBack(): Promise<void>;
   goForward(): Promise<void>;

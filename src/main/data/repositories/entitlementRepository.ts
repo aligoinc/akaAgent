@@ -20,6 +20,7 @@ import {
 import { classifyRenewalRequirement, type RenewalRequirement } from '../../../shared/renewalPortal'
 import { getVietnamDayStart } from '../../../shared/vietnamTime'
 import { getCurrentUser, requireCurrentUser } from '../currentUser'
+import { isWebAccountPlatform, isWebFindDataAction, isWebScanActionCode } from '../../../shared/webScan'
 import { getSupabaseClient } from '../supabaseClient'
 
 const client = () => getSupabaseClient()
@@ -706,6 +707,7 @@ export function getCampaignActionDailySendLimit(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): number | null {
+  if (isWebFindDataAction(actionId)) return getCurrentUser()?.webScanLimits?.maxDaily ?? null
   return getFeatureDailySendLimit(entitlements, getCampaignActionFeature(actionId, flatformType))
 }
 
@@ -716,13 +718,21 @@ export function getAccountActionDailySendLimit(
 ): number | null {
   const normalizedActionCode = String(actionCode || '').trim()
   if (normalizedActionCode === ZALO_FIND_PHONE_ACTION_CODE) return null
+  // Quét data website: trần theo web_scan.campaigns.limits (DB kẹt ở aka_agent_engine_action_limit), không theo gói.
+  if (isWebScanActionCode(normalizedActionCode)) return getCurrentUser()?.webScanLimits?.maxDaily ?? null
   return getFeatureDailySendLimit(entitlements, getAccountActionFeature(normalizedActionCode, flatformType))
+}
+
+/** Quét data website: tổ chức bật web_scan.campaigns (chốt lúc đăng nhập, AuthUser.webScanEnabled); không theo gói sản phẩm. */
+export function isCurrentUserWebScanEnabled(): boolean {
+  return getCurrentUser()?.webScanEnabled === true
 }
 
 export function canUseAccountPlatformWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
+  if (isWebAccountPlatform(flatformType)) return isCurrentUserWebScanEnabled()
   const normalized = normalizeAuthEntitlements(entitlements)
   const platform = String(flatformType || '').trim().toLowerCase()
   if (platform === 'sms') return normalized.sms
@@ -739,6 +749,10 @@ export async function canCurrentUserUseAccountPlatform(flatformType?: string | n
 
 export async function ensureCurrentUserCanUseAccountPlatform(flatformType?: string | null): Promise<void> {
   const platform = String(flatformType || '').trim().toLowerCase()
+  if (isWebAccountPlatform(platform)) {
+    if (!isCurrentUserWebScanEnabled()) throw new Error('Tính năng này chưa được kích hoạt hoặc đã hết hạn.')
+    return
+  }
   if (platform === 'facebook') {
     const entitlements = await loadCurrentUserEffectiveEntitlements()
     if (!canUseAccountPlatformWithEntitlements(platform, entitlements)) {
@@ -753,10 +767,15 @@ export async function ensureCurrentUserCanUseAccountPlatform(flatformType?: stri
 }
 
 export async function canCurrentUserUseCampaignAction(actionId?: string | null, flatformType?: string | null): Promise<boolean> {
+  if (isWebFindDataAction(actionId) || isWebAccountPlatform(flatformType)) return isCurrentUserWebScanEnabled()
   return canCurrentUserUseFeature(getCampaignActionFeature(actionId, flatformType))
 }
 
 export async function ensureCurrentUserCanUseCampaignAction(actionId?: string | null, flatformType?: string | null): Promise<void> {
+  if (isWebFindDataAction(actionId) || isWebAccountPlatform(flatformType)) {
+    if (!isCurrentUserWebScanEnabled()) throw new Error('Tính năng này chưa được kích hoạt hoặc đã hết hạn.')
+    return
+  }
   return ensureCurrentUserFeatureActive(getCampaignActionFeature(actionId, flatformType))
 }
 
@@ -765,6 +784,7 @@ export function canUseCampaignActionWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
+  if (isWebFindDataAction(actionId) || isWebAccountPlatform(flatformType)) return isCurrentUserWebScanEnabled()
   const normalized = normalizeAuthEntitlements(entitlements)
   return normalized[getCampaignActionFeature(actionId, flatformType)]
 }
@@ -774,6 +794,7 @@ export function canUseAccountActionWithEntitlements(
   flatformType: string | null | undefined,
   entitlements: Partial<AuthEntitlements> | null | undefined
 ): boolean {
+  if (isWebScanActionCode(actionCode) || isWebAccountPlatform(flatformType)) return isCurrentUserWebScanEnabled()
   const normalized = normalizeAuthEntitlements(entitlements)
   return normalized[getAccountActionFeature(actionCode, flatformType)]
 }

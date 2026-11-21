@@ -13,6 +13,15 @@ const PLATFORM_URLS: Record<string, string> = {
   instagram: 'https://www.instagram.com',
 }
 const ALWAYS_BROWSERLESS_PLATFORMS = new Set(['email', 'sms'])
+// Tài khoản Website (quét data website): trang không có ô địa chỉ, nên trang đầu là danh sách link tới ba trang để khách đăng nhập batdongsan
+// hoặc qua bước kiểm tra của trang (không tải trang nào lúc mở app).
+const WEB_ACCOUNT_HOME = 'data:text/html;charset=utf-8,' + encodeURIComponent(`<!doctype html><html lang="vi"><head><meta charset="utf-8">
+<title>Tài khoản Website</title><style>body{font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:640px;margin:48px auto;padding:0 16px;color:#1f2937}
+a{display:block;margin:10px 0;padding:12px 14px;border:1px solid #d1d5db;border-radius:8px;color:#1d4ed8;text-decoration:none}a:hover{background:#eff6ff}
+p{color:#4b5563;line-height:1.5}</style></head><body><h2>Tài khoản Website</h2>
+<p>Trình duyệt này dùng chung với chiến dịch Tìm data. Đăng nhập batdongsan.com.vn ở đây để lấy được SĐT của Batdongsan.</p>
+<a href="https://batdongsan.com.vn/">batdongsan.com.vn</a><a href="https://www.nhatot.com/">nhatot.com</a><a href="https://www.yellowpages.vn/">yellowpages.vn (Trang Vàng)</a>
+</body></html>`)
 
 export interface BrowserOpenRequest {
   requestId: number
@@ -199,6 +208,7 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
   }, [])
 
   const getInitialUrl = (account: AutoAccount) => {
+    if (account.flatformType === 'web') return WEB_ACCOUNT_HOME
     return PLATFORM_URLS[account.flatformType] || 'about:blank'
   }
 
@@ -476,8 +486,9 @@ export default function BrowserPage({ openRequest, onRequestHandled }: BrowserPa
               }}
               /* @ts-ignore */
               allowpopups="true"
+              /* V618: tab Website giữ UA thật của Electron (Cloudflare của batdongsan bắt xác minh mãi với UA giả; cửa sổ chạy ngầm cũng vậy). */
               /* @ts-ignore */
-              useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+              {...(account.flatformType === 'web' ? {} : { useragent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' })}
             />
           ))
         )}

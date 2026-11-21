@@ -35,6 +35,12 @@ export function setCurrentUser(user: AuthUser | null): void {
     user.chatWebEnabledAtLogin = _currentUser.chatWebEnabledAtLogin
     user.chatWebSessionId = _currentUser.chatWebSessionId
   }
+  if (user && _currentUser && user.staffId === _currentUser.staffId && user.organizationId === _currentUser.organizationId &&
+    user.webScanEnabled === undefined) {
+    // Vòng kiểm phiên dựng lại AuthUser từ gói: cờ quét data website chốt lúc đăng nhập giữ nguyên.
+    user.webScanEnabled = _currentUser.webScanEnabled
+    user.webScanLimits = _currentUser.webScanLimits
+  }
   if (
     !user ||
     (_currentUser && (

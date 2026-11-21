@@ -117,11 +117,31 @@ export interface ApiCallResult {
  * Khác với engine cũ (executeAction switch theo enum), pageController có
  * method tường minh per primitive — đọc trong block dễ hơn, intellisense tốt.
  */
+export interface PageControllerOptions {
+  /**
+   * Chạy script ngay trên khung chính (WebFrameMain.executeJavaScript) thay cho webContents.executeJavaScript: bản của webContents đợi trang
+   * hết "đang tải" mới chạy, trang có tài nguyên tải chậm / treo (quảng cáo của nhatot treo 30 giây, thử 21/11/2026) thì mỗi lần đọc trang chờ
+   * theo. Chỉ cửa sổ chạy ngầm của tài khoản Website bật (block web tự chờ trang sẵn sàng); Facebook / Zalo giữ cách cũ.
+   */
+  immediateScripts?: boolean
+}
+
 export class PageController {
   private wc: WebContents
+  private readonly immediateScripts: boolean
 
-  constructor(wc: WebContents) {
+  constructor(wc: WebContents, options: PageControllerOptions = {}) {
     this.wc = wc
+    this.immediateScripts = options.immediateScripts === true
+  }
+
+  private runScript(code: string): Promise<any> {
+    if (this.immediateScripts) {
+      const frame = this.wc.mainFrame
+      if (!frame) return Promise.reject(new Error('Browser page is not connected'))
+      return frame.executeJavaScript(code, true)
+    }
+    return this.wc.executeJavaScript(code, true)
   }
 
   isConnected(): boolean {
@@ -148,7 +168,7 @@ export class PageController {
         }
       })()
     `
-    const result: any = await this.wc.executeJavaScript(wrapped, true)
+    const result: any = await this.runScript(wrapped)
     if (result && typeof result === 'object' && result.__error) {
       throw new Error(result.message)
     }
@@ -183,6 +203,41 @@ export class PageController {
     } finally {
       this.wc.removeListener('will-prevent-unload', onWillPreventUnload)
     }
+  }
+
+  /**
+   * Mở trang, xong khi trang mới dựng xong DOM (dom-ready), không chờ mọi tài nguyên như navigate: trang có tài nguyên tải mãi (nhatot, thử
+   * 21/11/2026: trang danh sách mất 31 giây, trang tin không bao giờ xong) làm navigate treo. Lỗi mở trang (mất mạng…) ném câu như loadURL;
+   * quá timeoutMs thì ném lỗi. Dữ liệu dựng sau dom-ready thì block tự chờ phần tử.
+   */
+  async open(url: string, timeoutMs = 30000): Promise<void> {
+    if (!this.isConnected()) throw new Error('Browser page is not connected')
+    const wc = this.wc
+    await new Promise<void>((resolve, reject) => {
+      let done = false
+      const finish = (error?: Error): void => {
+        if (done) return
+        done = true
+        clearTimeout(timer)
+        wc.removeListener('dom-ready', onDomReady)
+        wc.removeListener('did-fail-load', onFail)
+        wc.removeListener('destroyed', onDestroyed)
+        if (error) reject(error)
+        else resolve()
+      }
+      const onDomReady = (): void => finish()
+      const onFail = (_event: unknown, code: number, description: string, validatedUrl: string, isMainFrame: boolean): void => {
+        if (isMainFrame && code !== -3) finish(new Error(`${description} (${code}) loading '${validatedUrl}'`))
+      }
+      const onDestroyed = (): void => finish(new Error('Browser page is not connected'))
+      const timer = setTimeout(() => finish(new Error(`Mở trang quá ${Math.round(timeoutMs / 1000)} giây: ${url}`)), timeoutMs)
+      wc.on('dom-ready', onDomReady)
+      wc.on('did-fail-load', onFail)
+      wc.once('destroyed', onDestroyed)
+      wc.loadURL(url).catch(error => {
+        if (!isNavigationAbortError(error)) finish(error instanceof Error ? error : new Error(String(error)))
+      })
+    })
   }
 
   async reload(): Promise<void> {
@@ -651,7 +706,7 @@ export class PageController {
         ${code}
       })()
     `
-    return await this.wc.executeJavaScript(wrapped, true)
+    return await this.runScript(wrapped)
   }
 
   // =========== NETWORK ===========

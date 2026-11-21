@@ -55,6 +55,8 @@ export async function checkFacebookWebviewAccounts(
 
     try {
       const account = accounts.find(a => a.id === accountId)
+      // Tab của tài khoản khác Facebook (Website…) có thể mở facebook.com: không đổi trạng thái đăng nhập của tài khoản đó.
+      if (account && account.flatformType !== 'facebook') continue
       if (account?.flatformType === 'facebook' && facebookLogin?.isLoggingIn(accountId)) continue
       if (account?.flatformType === 'facebook' && account.facebookLoginManaged) {
         const wc = webContents.fromId(wcId)

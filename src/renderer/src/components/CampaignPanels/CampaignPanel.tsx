@@ -58,6 +58,8 @@ import {
   type FacebookGroupDisplay, type FoundDataExportItem, type FoundDataKind, type FoundFacebookGroup
 } from './foundDataExport'
 import { useFoundFacebookGroupCards } from './useFoundFacebookGroupCards'
+import { buildWebScanWorkbook, collectWebScanRecords, webScanFieldColumns } from './webScanFoundData'
+import { getWebScanSite, isWebFindDataAction, normalizeWebScanCampaignSettings, WEB_SCAN_SITE_LABELS } from '../../../../shared/webScan'
 import { facebookGroupUrlKey } from '../../../../shared/facebookSearchGroupCard'
 import { appendFacebookGroupExportColumns, canExportFacebookGroupMetadata } from '../../../../shared/facebookGroupExport'
 import CampaignFormModal from './CampaignFormModal'
@@ -724,7 +726,8 @@ const CAMPAIGN_PLATFORM_SORT_ORDER = new Map<string, number>([
   ['facebook', 0],
   ['zalo', 1],
   ['email', 2],
-  ['sms', 3]
+  ['sms', 3],
+  ['web', 4]
 ])
 
 const DETAIL_DOCK_MIN_HEIGHT = 220
@@ -1391,6 +1394,7 @@ const inferCampaignPlatformFromActionId = (actionId: string) => {
   if (normalized.startsWith('zalo_')) return 'zalo'
   if (normalized.startsWith('sms_')) return 'sms'
   if (normalized.startsWith('email_')) return 'email'
+  if (normalized.startsWith('web_')) return 'web'
   return ''
 }
 
@@ -3411,6 +3415,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     ? accounts.find(account => account.id === addDataCampaign.accountId) || null
     : null
   const isSelectedFindDataCampaign = !!selectedCampaignSummary && FIND_DATA_ACTION_IDS.has(selectedCampaignSummary.actionId)
+  // Quét data website (V618): tab "Data tìm được" riêng, đọc data.webRecords của các dòng lịch sử.
+  const isSelectedWebFindDataCampaign = !!selectedCampaignSummary && isWebFindDataAction(selectedCampaignSummary.actionId)
+  const selectedWebScanSite = selectedCampaignSummary ? getWebScanSite(selectedCampaignSummary.actionId) : null
   const isSelectedEmailCampaign = selectedCampaignSummary?.actionId === EMAIL_SEND_ACTION_ID
   const isSelectedSmsCampaign = selectedCampaignSummary?.actionId === SMS_SEND_ACTION_ID
   const isSelectedVoiceCallCampaign = selectedCampaignSummary?.actionId === VOICE_CALL_ACTION_ID
@@ -3561,6 +3568,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     return map
   }, [runLogScreenshotEvents])
 
+  const webFoundRecords = useMemo(
+    () => isSelectedWebFindDataCampaign ? collectWebScanRecords(campaignDetails) : [],
+    [isSelectedWebFindDataCampaign, campaignDetails]
+  )
+  const webFoundColumns = useMemo(
+    () => selectedWebScanSite ? webScanFieldColumns(selectedWebScanSite, webFoundRecords) : [],
+    [selectedWebScanSite, webFoundRecords]
+  )
   const foundDataItems = useMemo<FoundDataItem[]>(() => {
     return campaignDetails.flatMap(detail => {
       const payload = getFindDataPayload(detail)
@@ -3778,7 +3793,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
   )
 
   useEffect(() => {
-    if (detailTab === 'foundData' && !isSelectedFindDataCampaign) {
+    if (detailTab === 'foundData' && !isSelectedFindDataCampaign && !isSelectedWebFindDataCampaign) {
       setDetailTab('actions')
       return
     }
@@ -3801,7 +3816,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     if (detailTab === 'sourceCampaigns' && linkedFindDataTargetCampaignIds.length === 0) {
       setDetailTab('info')
     }
-  }, [detailTab, isSelectedFindDataCampaign, isSelectedEmailClickTrackingCampaign, isSelectedCommentSeedingFeedCampaign, linkedFindDataSourceCampaignIds.length, linkedFindDataTargetCampaignIds.length])
+  }, [detailTab, isSelectedFindDataCampaign, isSelectedWebFindDataCampaign, isSelectedEmailClickTrackingCampaign, isSelectedCommentSeedingFeedCampaign, linkedFindDataSourceCampaignIds.length, linkedFindDataTargetCampaignIds.length])
 
   useEffect(() => {
     if (!selectedCampaignId) return
@@ -4332,6 +4347,24 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       showAlert('Không thể xuất file Excel data tìm được.', 'error')
     } finally {
       setExportingFoundData(false)
+    }
+  }
+
+  const handleExportWebFoundData = () => {
+    if (!selectedCampaign || !selectedWebScanSite) return
+    if (webFoundRecords.length === 0) {
+      showAlert('Chưa có data để xuất.', 'info')
+      return
+    }
+    try {
+      const settings = normalizeWebScanCampaignSettings(selectedCampaignConfig?.extraSettings?.webScan, selectedWebScanSite)
+      const workbook = buildWebScanWorkbook(selectedWebScanSite, webFoundRecords, settings.infoMap)
+      const name = sanitizeFileSegment(selectedCampaign.name || `campaign-${selectedCampaign.id}`)
+      writeFile(workbook, `found-data-${selectedCampaign.id}-${name}-${formatExportTimestamp()}.xlsx`)
+      showAlert('Đã xuất data tìm được ra Excel.', 'success')
+    } catch (err) {
+      console.error('Failed to export web scan data:', err)
+      showAlert('Không thể xuất file Excel data tìm được.', 'error')
     }
   }
 
@@ -6441,7 +6474,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                     Link email
                   </button>
                 )}
-                {isSelectedFindDataCampaign && (
+                {(isSelectedFindDataCampaign || isSelectedWebFindDataCampaign) && (
                   <button
                     className={`detail-dock-tab ${detailTab === 'foundData' ? 'active' : ''}`}
                     onClick={() => {
@@ -6449,7 +6482,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       if (selectedCampaignId) loadCampaignDetails(selectedCampaignId)
                     }}
                   >
-                    Data tìm được ({foundDataItems.length})
+                    Data tìm được ({isSelectedWebFindDataCampaign ? webFoundRecords.length : foundDataItems.length})
                   </button>
                 )}
                 {linkedFindDataSourceCampaignIds.length > 0 && (
@@ -7717,8 +7750,65 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                 />
               )}
 
+              {/* Tab: Data tìm được của chiến dịch quét data website (SĐT hiện đầy đủ, anh chốt 21/11/2026) */}
+              {detailTab === 'foundData' && isSelectedWebFindDataCampaign && selectedWebScanSite && (
+                <>
+                  <div className="find-data-export-bar">
+                    <div className="find-data-export-options">
+                      <span>{webFoundRecords.length.toLocaleString('vi-VN')} SĐT từ {WEB_SCAN_SITE_LABELS[selectedWebScanSite]}</span>
+                    </div>
+                    <button
+                      className="btn btn-secondary btn-sm"
+                      disabled={loadingCampaignDetails || webFoundRecords.length === 0}
+                      onClick={handleExportWebFoundData}
+                    >
+                      Xuất Excel
+                    </button>
+                  </div>
+                  {loadingCampaignDetails ? (
+                    <div className="empty-state-text">Đang tải data...</div>
+                  ) : webFoundRecords.length === 0 ? (
+                    <div className="empty-state-text">Chưa có data nào.</div>
+                  ) : (
+                    <div className="stepper-grid-container">
+                      <table className="campaign-grid">
+                        <thead>
+                          <tr>
+                            <th className="campaign-grid-index-col">STT</th>
+                            <th>SĐT</th>
+                            <th>{selectedWebScanSite === 'yellowpages' ? 'Tên doanh nghiệp' : 'Tên người đăng'}</th>
+                            {webFoundColumns.map(column => <th key={column.key}>{column.label}</th>)}
+                            <th>Từ khoá</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {webFoundRecords.slice(0, 1000).map((record, index) => (
+                            <tr key={record.phone}>
+                              <td className="campaign-grid-index-col">{index + 1}</td>
+                              <td>{record.phone}</td>
+                              <td>{record.name || '-'}</td>
+                              {webFoundColumns.map(column => (
+                                <td key={column.key} title={record.fields[column.key] || ''}>
+                                  {column.key === 'link' && record.fields.link
+                                    ? <a href={record.fields.link} target="_blank" rel="noreferrer">{record.fields.link}</a>
+                                    : (record.fields[column.key] || '-').slice(0, 200)}
+                                </td>
+                              ))}
+                              <td>{record.keyword || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {webFoundRecords.length > 1000 && (
+                        <div className="schedule-hint">Đang hiện 1.000 SĐT đầu tiên; bấm Xuất Excel để lấy đủ {webFoundRecords.length.toLocaleString('vi-VN')} SĐT.</div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
+
               {/* Tab: Found data extracted by facebook_find_data_group */}
-              {detailTab === 'foundData' && (
+              {detailTab === 'foundData' && !isSelectedWebFindDataCampaign && (
                 <>
                   <div className="find-data-export-bar">
                     <div className="find-data-export-options">

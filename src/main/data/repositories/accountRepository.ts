@@ -111,6 +111,7 @@ function getPlatformDisplayName(flatformType: string | null | undefined): string
   if (platform === 'facebook') return 'Facebook'
   if (platform === 'zalo') return 'Zalo'
   if (platform === 'email') return 'Email'
+  if (platform === 'web') return 'Website'
   return String(flatformType || 'nền tảng').trim() || 'nền tảng'
 }
 
@@ -404,7 +405,8 @@ export async function createAccount(account: Partial<AutoAccount>): Promise<Auto
     flatform_type: flatformType,
     is_zalo_show_web: isZaloShowWeb,
     is_zalo_server: isZaloServer,
-    login_status: account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
+    // V618: tài khoản Website không có đăng nhập (trình duyệt riêng để quét data), luôn sẵn sàng.
+    login_status: flatformType === 'web' ? '\u0111\u00e3 \u0111\u0103ng nh\u1eadp' : account.loginStatus || 'ch\u01b0a \u0111\u0103ng nh\u1eadp',
     status: account.status || 'ch\u1edd x\u1eed l\u00fd',
     is_active: account.isActive ?? true,
     rate_limit_minutes: normalizeRateLimitMinutes(account.rateLimitMinutes),
