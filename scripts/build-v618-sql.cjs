@@ -6,7 +6,8 @@
 // Ba phần, apply đúng thứ tự, mỗi phần một giao dịch:
 //   p1 (DDL ngắn): bảng private.auto_web_scan_seen (tin đã quét theo chiến dịch) + private.auto_web_scan_listings (số đã hiện theo tổ chức).
 //   p2 (hàm): hàm mới (công tắc tổ chức, RPC Desktop đọc / ghi tin đã quét, dọn) + vá thân production của claim / report / hạn mức / kết thúc
-//       lượt / snapshot tài khoản Desktop / gói quyền dùng app (kiểm md5 pg_get_functiondef trước / sau, giữ chủ sở hữu + quyền).
+//       lượt / snapshot tài khoản Desktop / gói quyền dùng app / nháp / dọn lượt bỏ dở / nạp Nhóm data (kiểm md5 pg_get_functiondef trước / sau,
+//       giữ chủ sở hữu + quyền).
 //   p3 (dữ liệu): công tắc web_scan.campaigns (tổ chức 1), 3 mã thao tác, 3 loại chiến dịch (is_active = false: Desktop đang phát hành coi
 //       nền tảng lạ là Facebook nên dòng bật sẵn sẽ hiện cho mọi tổ chức có gói Facebook), block + element, mã lỗi WB01–WB04 + chính sách.
 //
@@ -63,7 +64,10 @@ const LIVE = {
   snapshot: { sig: 'public.aka_agent_desktop_account_snapshot(bigint,bigint,text,text,jsonb,text)', file: 'aka_agent_desktop_account_snapshot.sql', md5: 'e4dbe2f2dba71e96c0b669ef1a79179b' },
   packages: { sig: 'private.app_access_packages(bigint,text,text)', file: 'app_access_packages.sql', md5: '4f2251c2a5848ae174481a97fe02fe72' },
   drafts: { sig: 'public.aka_agent_campaign_drafts(bigint,bigint,text,text,text,uuid,jsonb)', file: 'aka_agent_campaign_drafts.sql', md5: 'a943ffce5b3bb36020a3cf5c7f548b85' },
-  closeRun: { sig: 'public.aka_agent_engine_close_run_v1(bigint,text)', file: 'aka_agent_engine_close_run_v1.sql', md5: '72b8c9698e7176640b0e1911c8c5c49f' }
+  closeRun: { sig: 'public.aka_agent_engine_close_run_v1(bigint,text)', file: 'aka_agent_engine_close_run_v1.sql', md5: '72b8c9698e7176640b0e1911c8c5c49f' },
+  // Đọc tối 21/11/2026 (bài kiểm đẩy tìm ra hàm bỏ mọi dòng của tài khoản nền tảng web).
+  ingest: { sig: 'public.aka_agent_ingest_data_group_v186_internal(bigint,bigint,text,bigint,text,jsonb,bigint,text,text,bigint,text,text)',
+    file: 'aka_agent_ingest_data_group_v186_internal.sql', md5: 'dc8ccc8c8502ee0e463d911f71ee497e' }
 }
 
 function readLive(key) {
@@ -176,6 +180,15 @@ const CLOSE_RUN_TO = `  ELSIF v_unsent = 'requeue'
      -- Quét data website: từ khoá dở về hàng đợi (chạy lại bỏ tin đã quét), kể cả khi lượt đã có kết quả.
      OR EXISTS (SELECT 1 FROM public.auto_campaigns xc JOIN public.auto_campaign_actions xa ON xa.id = xc.action_id
                  WHERE xc.id = rr.campaign_id AND lower(btrim(coalesce(xa.flatform_type, ''))) = 'web') THEN`
+// nạp Nhóm data: SĐT tìm được đi kèm tài khoản nguồn "Website" (để cùng số gộp về một liên hệ qua các lần nạp, như Tìm data Facebook gắn tài
+// khoản Facebook); hàm lấy nền tảng của tài khoản nguồn khi dòng không ghi nền tảng rồi chỉ nhận facebook / zalo / email / sms, nên mọi dòng web
+// bị đếm "không hợp lệ" và bỏ. Nhận thêm nền tảng web, chỉ cho dòng SĐT (anh chốt 21/11/2026 "Vá hàm trong V618"). Nhập file (upload) không đổi.
+const INGEST_FROM = `        OR (v_platform IS NOT NULL AND v_platform NOT IN ('facebook', 'zalo', 'email', 'sms'))
+      THEN`
+const INGEST_TO = `        OR (v_platform IS NOT NULL AND v_platform NOT IN ('facebook', 'zalo', 'email', 'sms')
+            -- Quét data website: SĐT tìm được mang tài khoản nguồn "Website" (nền tảng web).
+            AND NOT (v_platform = 'web' AND v_contact_type = 'phone'))
+      THEN`
 const live = Object.fromEntries(Object.keys(LIVE).map(key => [key, readLive(key)]))
 const next = {
   claim: patch(patch(patch(live.claim, CLAIM_DECLARE, CLAIM_DECLARE_NEW, 'claim: khai báo'), CLAIM_FB_GATE, CLAIM_WEB_GATE, 'claim: cổng web'),
@@ -186,7 +199,8 @@ const next = {
   snapshot: patch(live.snapshot, SNAPSHOT_FROM, SNAPSHOT_TO, 'snapshot: khoá webScan'),
   packages: patch(live.packages, PACKAGES_FROM, PACKAGES_TO, 'packages: nền tảng web'),
   drafts: patch(live.drafts, DRAFTS_FROM, DRAFTS_TO, 'drafts: loại chiến dịch web'),
-  closeRun: patch(live.closeRun, CLOSE_RUN_FROM, CLOSE_RUN_TO, 'closeRun: lượt web về hàng đợi')
+  closeRun: patch(live.closeRun, CLOSE_RUN_FROM, CLOSE_RUN_TO, 'closeRun: lượt web về hàng đợi'),
+  ingest: patch(live.ingest, INGEST_FROM, INGEST_TO, 'ingest: dòng SĐT của tài khoản web')
 }
 const NEXT_MD5 = Object.fromEntries(Object.entries(next).map(([key, text]) => [key, md5(text)]))
 
@@ -470,7 +484,7 @@ const NEW_SIGS = [
   'public.aka_agent_web_scan_record_v1(bigint,text,jsonb)',
   'public.aka_agent_web_scan_retention_v1()'
 ]
-const PATCH_ORDER = ['claim', 'report', 'limit', 'finish', 'snapshot', 'packages', 'drafts', 'closeRun']
+const PATCH_ORDER = ['claim', 'report', 'limit', 'finish', 'snapshot', 'packages', 'drafts', 'closeRun', 'ingest']
 
 const preflightPatched = (from, labelPrefix) => PATCH_ORDER.map(key => `  v_oid := to_regprocedure('${LIVE[key].sig}');
   IF v_oid IS NULL THEN RAISE EXCEPTION '${labelPrefix}: không có ${LIVE[key].sig}'; END IF;
@@ -488,7 +502,7 @@ const postflightPatched = (to, labelPrefix) => PATCH_ORDER.map(key => `  v_oid :
 
 const LIVE_MD5 = Object.fromEntries(PATCH_ORDER.map(key => [key, LIVE[key].md5]))
 
-const P2 = header('p2: hàm quét data website + vá claim / report / hạn mức / kết thúc lượt / snapshot tài khoản / gói quyền / nháp / dọn lượt bỏ dở', [
+const P2 = header('p2: hàm quét data website + vá claim / report / hạn mức / kết thúc lượt / snapshot tài khoản / gói quyền / nháp / dọn lượt bỏ dở / nạp Nhóm data', [
   'Nguồn = pg_get_functiondef production 21/11/2026 (md5 trước → sau):',
   ...PATCH_ORDER.map(key => `  ${key}: ${LIVE_MD5[key]} → ${NEXT_MD5[key]}`),
   'Đổi thân claim / report nên PostgREST nạp lại schema: apply buổi tối. Gỡ: ' + NAMES.r2 + '.sql.'
