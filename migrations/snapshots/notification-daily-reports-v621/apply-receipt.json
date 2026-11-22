@@ -1,0 +1,22 @@
+{
+  "migration": "migration_v621_notification_daily_reports",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_by": "anh tự dán bản gọn migrations/tests/migration_v621_notification_daily_reports_paste.sql vào SQL Editor (2 lần hộp xác nhận MCP hết hạn)",
+  "ledger_version": "20261122004939",
+  "applied_at_vn": "2026-11-22 07:49:39",
+  "ledger_md5_equals_file": true,
+  "file_md5": "72f45c390df6d44736f83ab92addd5ab",
+  "post_checks_0750_vn": {
+    "replaced_functions_md5_ok": 9,
+    "new_functions": 6,
+    "new_functions_exec_for_anon_authenticated_desktop": 0,
+    "constraints_contain_new_values": true,
+    "assistant_result_kept": true,
+    "default_reports": "{\"audience\":\"off\",\"batch\":200}",
+    "report_spread_seconds": "240",
+    "dispatch_mode": "fly",
+    "seeded_rows": 0
+  },
+  "logs_0744_0750_vn": {"http_5xx": 0, "http_503": 0, "schema_reloads": "1 lần lúc 07:49", "notification_tick_errors": 0},
+  "p2": "chưa chạy lúc ghi biên nhận"
+}
