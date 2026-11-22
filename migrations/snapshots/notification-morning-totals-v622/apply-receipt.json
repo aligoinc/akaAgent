@@ -1,0 +1,21 @@
+{
+  "migration": "migration_v622_notification_morning_totals",
+  "project": "cgjbsmqtfhqvttudyjzq (akachat)",
+  "appliedAt": "2026-11-22T01:21:51Z",
+  "appliedAtVN": "2026-11-22 08:21:51",
+  "requestedBy": "anh yêu cầu \"Hãy tự run sql\"",
+  "method": "Supabase MCP execute_sql với bản dán migrations/tests/migration_v622_notification_morning_totals_paste.sql (một giao dịch, tự ghi sổ)",
+  "ledger": { "version": "20261122012151", "name": "migration_v622_notification_morning_totals", "md5StatementsEqualsFile": true, "fileMd5": "4c3b9eb621ab93a16a3e3e76f379fcc7" },
+  "function": {
+    "signature": "private.aka_agent_notification_morning(bigint,text,timestamp with time zone)",
+    "md5Before": "94392489bb0b5f3c25bd281c2fe1eb06",
+    "md5After": "a3ff4875140d65498f0e10327d5f8952",
+    "owner": "postgres", "securityDefiner": true, "acl": "{postgres=X/postgres}", "serviceRoleExecute": false, "anonExecute": false
+  },
+  "postCheck": {
+    "snapshotMorning (staff: total/needsData/pending/expected)": { "2362": "116/116/1948/420", "836": "30/0/0/0", "385": "51/51/16720/1202" },
+    "edgeLogs 01:18–01:22 UTC": "0 lỗi 5xx, 0 lỗi 503, trung bình 46–58 ms"
+  },
+  "doNotReapply": true,
+  "rollback": "migrations/rollback_v622_notification_morning_totals.sql"
+}
