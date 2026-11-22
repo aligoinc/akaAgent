@@ -3,7 +3,8 @@
 Yêu cầu (22/11/2026): "Tôi muốn tất cả các thông báo này nó sẽ gửi vào mục trợ lý AK để cho khách hàng đọc. Khi ứng dụng
 nhận được một tin nhắn trợ lý AK thì hệ thống cũng sẽ tự động báo cho khách hàng thông qua Notify app."
 
-**Tình trạng:** phương án, chưa code, chưa đổi DB. Đọc mã `dev_3` (akaAgent) và `dev_1` (WebApp) cùng DB thật (chỉ đọc) ngày 22/11/2026.
+**Tình trạng:** anh chốt Q1–Q4 và cho code ("Bạn hãy thực thi cho đến khi nào xong thì thôi", 22/11/2026). Đã code xong cả
+bốn phần (DB, API + Web, iOS, Desktop), chưa apply V624, chưa deploy, chưa phát hành, chưa mở PR. Xem mục 6.
 
 ## 1. Hiện trạng (đã kiểm)
 
@@ -111,3 +112,52 @@ Các câu hỏi gốc:
   Trợ lý aka chỉ đọc trên Desktop. Đề xuất: giữ chuông, làm sau.
 - **Q4. Mời bật đẩy trên iPhone:** mời ngay lần đầu mở Trợ lý aka sau khi cập nhật app; hay chỉ để công tắc trong Cài đặt như hiện
   nay (gần như không ai bật). Đề xuất: mời ngay.
+
+## 6. Tình trạng code (22/11/2026)
+
+| Phần | Ở đâu | Đã kiểm | Chưa |
+| --- | --- | --- | --- |
+| DB V624 | akaAgent nhánh `claude/practical-albattani-jm21p0`: [migration](../migrations/migration_v624_notification_assistant_inbox.sql), [gỡ](../migrations/rollback_v624_notification_assistant_inbox.sql), bản dán SQL Editor `migrations/tests/migration_v624_notification_assistant_inbox_paste.sql`; sinh bằng `python3 scripts/build-v624-sql.py` từ thân production đọc 22/11 (`migrations/snapshots/notification-assistant-inbox-v624/live/`) | `scripts/notification-assistant-inbox/smoke_v624.sh` (PG16, nền Trợ lý aka chép từ production, 6 hàm sẽ thay = md5 production): PASS, có hai phiên song song, apply lại bị từ chối, gỡ trả đúng hàm / cột, bản dán | Apply |
+| API + Web + hợp đồng | akaAgentWebApp nhánh `claude/notification-assistant-inbox` (nền `dev_1` `097ffa57`, commit `748441ce`) | `npm run typecheck` 8 workspace, `npm test` mọi workspace, build Web | Deploy, PR |
+| iOS | cùng nhánh WebApp (commit `9de489c4`) | test mobile | Bản 0.7.0 (0.6.0 đang chờ Apple duyệt) |
+| Desktop | akaAgent cùng nhánh V624 | hai typecheck, `node scripts/notification-toast-desktop/smoke.cjs` (10 ca), `electron-vite build` | Chạy trong Electron thật, phát hành |
+
+**DB (V624).** Cột `ai_message.notification_id` (khoá ngoại `ON DELETE CASCADE`: dọn thông báo 90 ngày là dọn luôn mục), một hội thoại
+"thông báo" cho mỗi nhân viên (`intake_data.kind = 'notices'`, chỉ mục duy nhất), trigger `trg_aka_agent_ai_assistant_notice` chép
+thông báo khi `content_status` thành `ready` (cùng giao dịch, lỗi chép bị nuốt, không làm hỏng thông báo), hàm
+`private.aka_agent_ai_assistant_notice*` (chỉ chủ sở hữu gọi được). `item` / `stream` / `sync` / `read` chỉ trả và đánh dấu mục
+`notice` khi app gửi `includeNotices`; đọc mục ở Trợ lý aka thì đánh dấu thông báo đã đọc và hủy lượt đẩy chưa gửi (khoá theo thứ
+tự thông báo → hội thoại, không khoá chéo). Công tắc `notifications.assistant_inbox` (V624 đặt `{"audience":"off"}`;
+`admin_akabiz` / `orgs` + `organizationIds` / `all`). Thông báo cũ không được chép.
+
+**API / Web.** `AiAssistantItem.kind = 'notice'` + `notice` (hợp đồng `packages/control-api/src/aiAssistant.ts`), client gửi
+`notices=1` / `includeNotices`. Lượt đẩy mở `/aka?item=<mục>` khi iPhone chạy bản ≥ `AI_ASSISTANT_NOTICE_MIN_IOS_VERSION` (0.7.0),
+bản cũ giữ đường mở cũ. Web: thẻ thông báo trong Trợ lý aka, thông báo nổi mở `/assistant?notification=<id>&next=<đường cũ>` (chưa
+có mục sau 4 giây thì về chỗ mở cũ, nên deploy Web trước khi bật công tắc vẫn đúng).
+
+**iOS.** Thẻ thông báo trong Trợ lý aka, mời bật thông báo đẩy lần đầu mở Trợ lý aka (từ chối thì mời lại sau 7 ngày), mở đúng mục
+khi bấm đẩy.
+
+**Desktop (Q3).** Chuông và trang Thông báo giữ nguyên; thêm thông báo nổi góc phải
+([NotificationToast.tsx](../src/renderer/src/components/Notifications/NotificationToast.tsx), luật ở
+[notificationToastModel.ts](../src/renderer/src/components/Notifications/notificationToastModel.ts), giống Web): Chào ngày mới, báo
+cáo 12:00 / 18:00, chiến dịch hoàn thành chưa đọc, mới trong 3 giờ, máy chưa hiện (id lưu `localStorage` theo phiên); 12 giây, rê
+chuột thì giữ; nút "Xem báo cáo" / "Xem chiến dịch" mở thông báo ở trang Thông báo; đang ở trang Thông báo thì không hiện; cửa sổ thu
+nhỏ / khoá màn hình thì để dành tới khi khách quay lại. Không thêm nhịp đọc DB: đọc danh sách (3 dòng) chỉ khi số chưa đọc của chuông
+tăng; hỏi số chưa đọc ở mốc `nextRunAt` của cài đặt + 1 và + 5 phút (đọc cài đặt lúc đăng nhập và sau mỗi đợt mốc), và 1 phút sau khi
+một chiến dịch đang hiện chuyển sang "hoàn thành". Thêm: nhãn "Chào ngày mới" / "Trợ lý aka", phần nội dung `display: 'tiles'` vẽ
+thành ô số, nội dung loại `assistant`.
+
+**Thứ tự đưa lên** (mỗi bước chờ anh yêu cầu):
+1. Apply V624 buổi tối (sửa 6 hàm + thêm cột / chỉ mục trên `ai_message` = PostgREST nạp lại schema). Trước khi apply kiểm sổ còn
+   trống số 624 và 6 hàm còn đúng md5 (migration tự kiểm, sai thì dừng).
+2. Merge + deploy API / Web từ nhánh WebApp (bản đang chạy không gửi `includeNotices` nên không thấy mục thông báo; deploy trước
+   hay sau V624 đều được, API mới gặp DB chưa có V624 thì DB bỏ qua khoá lạ).
+3. iOS 0.7.0 (đổi `version` / `buildNumber` trong `app.config.ts` lúc phát hành).
+4. Bật `notifications.assistant_inbox` = `admin_akabiz`, thử một báo cáo thật + một lượt đẩy thật, rồi `all` cùng lúc bật
+   `notifications.default_reports`.
+5. Desktop theo bản phát hành kế tiếp (độc lập với các bước trên: chỉ đọc trung tâm thông báo có sẵn).
+
+Gỡ: `notifications.assistant_inbox` = `off` (không DDL, có hiệu lực ngay với thông báo sau đó); gỡ hẳn: [rollback](../migrations/rollback_v624_notification_assistant_inbox.sql)
+(xoá hội thoại / mục thông báo, trả 6 hàm về bản cũ).
+

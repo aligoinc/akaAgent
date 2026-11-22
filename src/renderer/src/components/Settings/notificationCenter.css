@@ -197,6 +197,12 @@
 .nc-detail-row.tone-warn dd { color: color-mix(in srgb, var(--accent-warning) 75%, var(--text-primary)); }
 .nc-detail-row.tone-bad dd { color: var(--accent-error); }
 .nc-detail-row.tone-muted dd { color: var(--text-tertiary); }
+/* Ô số của Chào ngày mới / báo cáo (section.display = 'tiles', V621). */
+.nc-detail-tiles { grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
+.nc-detail-tiles .nc-detail-row { display: flex; flex-direction: column-reverse; gap: 2px; padding: 8px 10px; border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm); background: var(--bg-secondary); }
+.nc-detail-tiles .nc-detail-row dt { font-size: 11.5px; }
+.nc-detail-tiles .nc-detail-row dd { font-size: 16px; font-weight: 700; }
 .nc-detail-note { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--text-secondary); }
 .nc-period-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; }
 .nc-period-card { padding: 8px 10px; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-secondary); }

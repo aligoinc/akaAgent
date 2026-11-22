@@ -39,6 +39,7 @@ import { useRenewalReminderStore } from './stores/renewalReminderStore'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
 import type { NotificationTarget } from './components/Notifications/notificationTargets'
 import { useNotificationUnreadSync } from './stores/notificationCenterStore'
+import NotificationToast from './components/Notifications/NotificationToast'
 import type { ContentTemplateChannelName, DataGroupCampaignNavigationRequest } from '../../shared/types'
 import { canAccessAdmin } from '../../shared/admin'
 import { canManageStaff } from '../../shared/staffManagement'
@@ -697,6 +698,11 @@ export default function App() {
       )}
       <CustomerFeedbackLauncher />
       <RenewalReminderHost scope={`${user.organizationId}:${user.staffId}`} />
+      <NotificationToast
+        scope={`${user.organizationId}:${user.staffId}`}
+        suppressed={activePage === 'notifications'}
+        onOpen={openNotifications}
+      />
       <UpgradePortalHost scope={`${user.organizationId}:${user.staffId}`} />
     </div>
   )

@@ -149,7 +149,7 @@ function NotificationContentView({ content, format, title }: { content: Notifica
         <section key={`${index}:${section.title}`} className={`nc-detail-section tone-${section.tone ?? 'info'}`}>
           {section.title && <h4>{section.title}</h4>}
           {section.rows && section.rows.length > 0 && (
-            <dl className="nc-detail-rows">
+            <dl className={section.display === 'tiles' ? 'nc-detail-rows nc-detail-tiles' : 'nc-detail-rows'}>
               {section.rows.map((row, rowIndex) => (
                 <div key={rowIndex} className={`nc-detail-row ${row.tone ? `tone-${row.tone}` : ''}`}>
                   <dt>{row.label}</dt>

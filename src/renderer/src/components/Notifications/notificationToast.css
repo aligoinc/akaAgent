@@ -1,0 +1,18 @@
+/* Thông báo nổi góc phải của Desktop (Chào ngày mới, báo cáo, chiến dịch hoàn thành). */
+.nc-toast { position: fixed; right: 20px; bottom: 20px; z-index: 10040; display: flex; align-items: flex-start; gap: 12px;
+  width: min(380px, calc(100vw - 32px)); box-sizing: border-box; padding: 14px 10px 14px 14px;
+  border: 1px solid var(--border-default); border-left: 4px solid var(--accent-primary); border-radius: 12px;
+  background: var(--bg-secondary); color: var(--text-primary); font-family: var(--font-family);
+  box-shadow: var(--shadow-lg), 0 0 0 1px rgba(0, 0, 0, 0.05); animation: nc-toast-in .18s ease-out; }
+.nc-toast * { box-sizing: border-box; }
+.nc-toast-icon { display: flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-primary) 12%, transparent); color: var(--accent-primary); }
+.nc-toast-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 4px; font-size: 13px; line-height: 1.45; }
+.nc-toast-copy > strong { font-weight: 700; }
+.nc-toast-copy > span { color: var(--text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.nc-toast-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.nc-toast-close { display: flex; flex: none; align-items: center; justify-content: center; width: 30px; height: 30px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-secondary); cursor: pointer; }
+.nc-toast-close:hover { background: var(--bg-tertiary); color: var(--text-primary); }
+@keyframes nc-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .nc-toast { animation: none; } }
