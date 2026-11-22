@@ -153,11 +153,16 @@ thành ô số, nội dung loại `assistant`.
 1. ~~Apply V624~~: đã apply 11:57:58 VN 22/11/2026 theo yêu cầu ("Apply luôn"), qua bản dán (MCP), sổ `20261122061101`, md5 sổ = file
    `7a47a5b8…`, không apply lại. PostgREST nạp lại schema 5,3 giây, 0 lỗi 5xx; thử trên thông báo thật trong giao dịch rồi huỷ: đạt
    ([biên nhận](../migrations/snapshots/notification-assistant-inbox-v624/apply-receipt.json)).
-2. Merge + deploy API / Web từ nhánh WebApp (bản đang chạy không gửi `includeNotices` nên không thấy mục thông báo; deploy trước
-   hay sau V624 đều được, API mới gặp DB chưa có V624 thì DB bỏ qua khoá lạ).
+2. ~~Merge~~: akaAgent [PR #776](https://github.com/aligoinc/akaAgent/pull/776) vào `dev_3`, WebApp
+   [aligoinc/akaAgentWebApp#287](https://github.com/aligoinc/akaAgentWebApp/pull/287) vào `dev_1`, lúc 13:17 VN 22/11/2026 theo yêu cầu ("Pr và mege").
+   **Deploy API / Web: chưa.** Bản đang chạy production (API khởi động tối 21/11) chưa có PR #285 (báo cáo mặc định) lẫn #287: không gửi
+   `includeNotices` nên khách chưa thấy mục thông báo, và chưa có bản sửa đọc lại mục (lựa chọn bấm nhanh của Trợ lý aka đang mất).
 3. iOS 0.7.0 (đổi `version` / `buildNumber` trong `app.config.ts` lúc phát hành).
-4. Bật `notifications.assistant_inbox` = `admin_akabiz`, thử một báo cáo thật + một lượt đẩy thật, rồi `all` cùng lúc bật
-   `notifications.default_reports`.
+4. ~~Bật `notifications.assistant_inbox`~~ = `{"audience":"all"}` lúc 13:18:26 VN 22/11/2026 theo yêu cầu ("Đây là tính năng cơ bản nên
+   hãy bật áp dụng cho mọi khách hàng"; bỏ bước thử admin). Trước khi bật đã kiểm bản app cũ không bị ảnh hưởng: mục chỉ trả khi app gửi
+   `includeNotices`, hạn mức lượt trao đổi đếm bằng bộ đếm riêng, ngữ cảnh gửi cho AI chỉ lấy hội thoại trao đổi và các việc.
+   `notifications.default_reports` vẫn `off`: bật sau khi deploy API có phần dựng báo cáo mặc định (bản đang chạy chưa có, bật trước
+   thì khách nhận báo cáo / email dựng sai).
 5. Desktop theo bản phát hành kế tiếp (độc lập với các bước trên: chỉ đọc trung tâm thông báo có sẵn).
 
 Gỡ: `notifications.assistant_inbox` = `off` (không DDL, có hiệu lực ngay với thông báo sau đó); gỡ hẳn: [rollback](../migrations/rollback_v624_notification_assistant_inbox.sql)
