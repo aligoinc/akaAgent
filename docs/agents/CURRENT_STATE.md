@@ -46,6 +46,14 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop 10.4.0](../audits/akaagent-10.4.0-20261122/README.md):
+**Đã build Desktop Windows x64, Mac ARM64, Mac Intel x64 lúc 22:23:07–22:28:49 VN, 22/11/2026. Chưa upload/phát hành/feed (anh tự phát
+hành). Không build App Server** (sau 10.3.0 gói Server chỉ đổi kiểu ở `src/shared/types.ts`). Nguồn worktree `release-10.4.0`, nhánh
+`codex/release-10.4.0` `4621949a` (chỉ đổi version) trên `origin/dev_3` `993b5b9f` sau PR #777. Mới so với 10.3.0: đồng bộ akaBiz Auto sang
+akaAgent (#775, V623 / V625; API WebApp chưa deploy nên nút Đồng bộ báo máy chủ chưa hỗ trợ), thông báo nổi Desktop và nhãn Chào ngày mới
+(#776, V624). 105/119 bước kiểm đạt, 14 lỗi đã giải thích (bài kiểm chưa theo code mới, hỏng sẵn, theo giờ chạy, hoặc bash 3.2 của Mac).
+Không DB/deploy service trong bước build. [Receipt](../audits/akaagent-10.4.0-20261122/build-receipt.json).
+
 [Build akaAgent Desktop + App Server 10.3.0](../audits/akaagent-10.3.0-20261121/README.md):
 **Đã build Desktop Windows x64, Mac ARM64, Mac Intel x64 lúc 23:26:35–23:30:28 VN và App Server nội bộ 23:34:00–23:35:05 VN, 21/11/2026. Chưa
 upload/phát hành/feed (anh tự phát hành); App Server chưa cài VPS.** Nguồn worktree `release-10.3.0`, nhánh `codex/release-10.3.0` `120d54a7` (chỉ

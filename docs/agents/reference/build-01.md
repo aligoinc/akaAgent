@@ -107,6 +107,15 @@ chạy của `campaign-repeat-v561-smoke` còn hỏng ở khoảng 23:3x VN (g�
 `dist-server/private/verification-before.json` (mọi `.exe` dưới `dist-server/` + module gốc, đường dẫn tương đối gốc worktree) ngay trước build,
 bản build tự lấy khoá backend bằng `supabase projects api-keys` của phiên đã đăng nhập.
 
+**Build 10.4.0 (22/11/2026, chỉ Desktop).** `dist/build-10.4.0-work/` của repo chính, script sinh từ 10.3.0 (đổi worktree, số bản,
+`(10<<16)+4`); đối chứng là main / renderer giải nén từ bộ cài 10.3.0 đang trên feed. Typecheck trước build, build xong cả ba bản rồi mới chạy
+toàn bộ bộ kiểm. Bản chép đã vá của các bài kiểm hỏng ở 10.3.0 (`server-rest`, `post-bump-*`, `upgrade-portal`) chạy luôn trong `run-checks.sh`
+dưới tên `*-patched`, khỏi chạy lại riêng. Bài kiểm DB dùng `scripts/notification-daily-reports/pgenv.sh` (V621 / V622 / V624) không chạy được
+trên bash 3.2 của Mac (`"${AS[@]}"` rỗng dưới `set -u`, `declare -A`): dùng bản chép `dist/build-10.4.0-work/bash32/`. Ngoài
+`campaign-repeat-v561-smoke` (22:00–22:59 VN), bài kiểm V621 / V622 cũng hỏng theo giờ chạy từ 23:00 VN (fixture đặt lịch `now() + 1 giờ`):
+chạy bộ kiểm trước 22:00 hoặc từ 00:02 (lúc 00:00:44 `campaign-repeat-v561-smoke` còn hỏng ở nhóm engine kết thúc lượt, 00:01:13 thì đạt). `akabiz-auto-sync-desktop-smoke` cần `better-sqlite3` cho Node: chạy bằng
+`ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron …` thay vì `npm rebuild` (rebuild đổi module của worktree mà build đang dùng).
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
