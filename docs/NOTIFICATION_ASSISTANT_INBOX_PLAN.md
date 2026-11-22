@@ -121,7 +121,7 @@ Các câu hỏi gốc:
 | DB V624 | akaAgent nhánh `claude/practical-albattani-jm21p0`: [migration](../migrations/migration_v624_notification_assistant_inbox.sql), [gỡ](../migrations/rollback_v624_notification_assistant_inbox.sql), bản dán SQL Editor `migrations/tests/migration_v624_notification_assistant_inbox_paste.sql`; sinh bằng `python3 scripts/build-v624-sql.py` từ thân production đọc 22/11 (`migrations/snapshots/notification-assistant-inbox-v624/live/`) | `scripts/notification-assistant-inbox/smoke_v624.sh` (PG16, nền Trợ lý aka chép từ production, 6 hàm sẽ thay = md5 production): PASS, có hai phiên song song, apply lại bị từ chối, gỡ trả đúng hàm / cột, bản dán | **Đã apply** 11:57:58 VN 22/11 (sổ `20261122061101`, không apply lại; [biên nhận](../migrations/snapshots/notification-assistant-inbox-v624/apply-receipt.json)) |
 | API + Web + hợp đồng | akaAgentWebApp nhánh `claude/notification-assistant-inbox` (nền `dev_1` `097ffa57`, commit `748441ce`) | `npm run typecheck` 8 workspace, `npm test` mọi workspace, build Web | Deploy, PR |
 | iOS | cùng nhánh WebApp (commit `9de489c4`) | test mobile | Bản 0.7.0 (0.6.0 đang chờ Apple duyệt) |
-| Desktop | akaAgent cùng nhánh V624 | hai typecheck, `node scripts/notification-toast-desktop/smoke.cjs` (10 ca), `electron-vite build` | Chạy trong Electron thật, phát hành |
+| Desktop | akaAgent cùng nhánh V624 | hai typecheck, `node scripts/notification-toast-desktop/smoke.cjs` (10 ca), `node scripts/notification-toast-desktop/run-toast-ui-smoke.cjs` (13 nhóm giao diện), `electron-vite build` | Chạy trong Electron thật, phát hành |
 
 **DB (V624).** Cột `ai_message.notification_id` (khoá ngoại `ON DELETE CASCADE`: dọn thông báo 90 ngày là dọn luôn mục), một hội thoại
 "thông báo" cho mỗi nhân viên (`intake_data.kind = 'notices'`, chỉ mục duy nhất), trigger `trg_aka_agent_ai_assistant_notice` chép
@@ -162,4 +162,35 @@ thành ô số, nội dung loại `assistant`.
 
 Gỡ: `notifications.assistant_inbox` = `off` (không DDL, có hiệu lực ngay với thông báo sau đó); gỡ hẳn: [rollback](../migrations/rollback_v624_notification_assistant_inbox.sql)
 (xoá hội thoại / mục thông báo, trả 6 hàm về bản cũ).
+
+### 6.1. Kiểm thử 22/11/2026 (anh: "Hãy kiểm thử tính năng này")
+
+**DB thật, trong giao dịch rồi huỷ** (khối `DO` kết thúc bằng `RAISE`, công tắc bật tạm trong giao dịch; hậu kiểm: công tắc `off`,
+0 mục, 0 hội thoại thông báo, số chưa đọc không đổi):
+- Phát lại toàn bộ thông báo `ready` 7 ngày theo thứ tự: 1.959 mục chép đúng (campaign 1.033, gói 650, tài khoản 191, báo cáo 85),
+  0 bỏ sót (466 nhân viên đều có quyền Trợ lý aka), 17 `assistant.result` không chép. Mỗi lần chép trung bình 1,5 ms, p95 1,9 ms,
+  lâu nhất 14 ms. Gọi lại lần hai: trả đúng mục cũ, không thêm mục. 462 hội thoại "Thông báo" (một mỗi nhân viên), đếm / thứ tự / chủ
+  sở hữu đúng, luôn "đã xem" ở mức hội thoại.
+- Công tắc: `off` không chép; `orgs` chỉ chép tổ chức trong danh sách; `admin_akabiz` chép của admin, không chép của khách; tắt lại thì
+  thông báo mới không chép.
+- App cũ (không `includeNotices`): `stream` / `sync` của 6 nhân viên mẫu giống hệt trước khi chép, 0 mục thông báo; app mới thấy đủ.
+- Đọc: app cũ gọi `read` không đánh dấu thông báo; app mới đọc tới mục giữa thì chỉ các thông báo tới mục đó thành đã đọc, lượt đẩy
+  chờ gửi bị hủy (`read_in_app`), trả `notificationUnreadCount` đúng số của chuông.
+- Trigger: thông báo vừa dựng xong qua `complete_render` thành mục mới cuối hộp; `claim_deliveries` của lượt đẩy mang
+  `assistantItemId` đúng mục, lượt email không mang.
+- Phiên agent "/" đang mở: thông báo xen vào không làm đứt phiên (luật cũ sẽ làm đứt).
+
+**Desktop** `node scripts/notification-toast-desktop/run-toast-ui-smoke.cjs` (13 nhóm; component thật + store thật trên Chromium của
+Playwright, IPC giả, đồng hồ giả; `TOAST_UI_SHOTS=<thư mục>` để chụp): hiện / tự ẩn 12 giây / rê chuột giữ / bấm mở / "Để sau" / nút X,
+loại không nổi và thông báo quá 3 giờ không hiện, trang Thông báo không đọc danh sách, cửa sổ ẩn thì để dành, đăng nhập lại không hiện
+lại, hỏi số chưa đọc đúng mốc báo cáo + 1 / + 5 phút và 1 phút sau khi chiến dịch hoàn thành, một giờ để yên 0 lượt đọc DB. Cố ý làm
+hỏng 3 luật trong `notificationToastModel.ts` thì bài kiểm bắt cả 3.
+
+**Web** (WebApp cùng nhánh): 1.961 mục thông báo thật (dựng bằng chính `private.aka_agent_ai_assistant_item`, chỉ đọc) đi qua
+`parseAiAssistantItem` / `aiAssistantNoticeContent` / `assistantNoticeAction`: 0 lỗi, nút mở đúng chiến dịch / tài khoản. Tìm ra lỗi:
+API gửi mục **đã đọc** (không còn `answerJson`) và app đọc lại bằng cùng `parseAiAssistantItem`, nên thẻ thông báo mất loại, nội dung,
+nút mở và việc mở đúng mục từ lượt đẩy; cùng lỗi làm mất lựa chọn bấm nhanh, kết quả lịch, agent, bản nháp của lượt trao đổi (có từ
+18/11, lúc API bắt đầu đọc kết quả DB; 7 ngày tới 22/11 có 7 lượt có lựa chọn và 4 lượt có lịch). Đã sửa: hàm nhận cả hai dạng; bài
+kiểm đơn vị "đọc lại ra cùng mục" (hỏng trên code cũ) và e2e `apps/web/e2e/assistant-notices.spec.ts` (API giả trả đúng dạng API thật;
+code cũ hỏng 2/3 ca; `AKA_NOTICE_ITEMS=<tệp>` chạy thêm với thông báo thật). Toàn bộ 1.961 mục thật: đọc lại ra y hệt.
 
