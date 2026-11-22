@@ -34,6 +34,7 @@ import {
   waitForDailyMaintenanceGate
 } from '../services/dailyMaintenanceCoordinator'
 import { AutomationProcessor } from '../services/automationProcessor'
+import { listAutomations as listLegacyAutomations } from '../data/repositories/automationRepository'
 import { startAccountPoller, type AccountPollerController } from '../domain/accounts/accountPoller'
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
@@ -50,6 +51,7 @@ import { registerRenewalReminderHandlers } from './handlers/renewalReminderHandl
 import { createUpgradePortalWebControl } from './handlers/upgradePortalHandlers'
 import { renewalReminderService } from '../services/renewalReminderService'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
+import { registerJourneyWebHandlers } from './handlers/journeyWebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
 import { registerStaffManagementHandlers } from './handlers/staffManagementHandlers'
@@ -78,6 +80,7 @@ import { registerNotificationCenterHandlers } from './handlers/notificationCente
 import { registerAffPartnerHandlers } from './handlers/affPartnerHandlers'
 import { registerEngineErrorReviewHandlers } from './handlers/engineErrorReviewHandlers'
 import { registerAiChatHandlers } from './handlers/aiChatHandlers'
+import { registerCampaignResultGroupsHandlers } from './handlers/campaignResultGroupsHandlers'
 import { emitAutomationUpdated, registerAutomationHandlers } from './handlers/automationHandlers'
 import {
   getCurrentUser,
@@ -181,6 +184,7 @@ export function registerIpcHandlers(
   options: IpcHandlerRuntimeOptions = {}
 ): void {
   const chatWeb = registerChatWebHandlers(mainWindow)
+  const journeyWeb = registerJourneyWebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
   registerStaffManagementHandlers(mainWindow)
@@ -194,6 +198,7 @@ export function registerIpcHandlers(
   registerCampaignTypeVisibilityHandlers(mainWindow)
   registerNotificationCenterHandlers(mainWindow)
   registerAiChatHandlers(mainWindow)
+  registerCampaignResultGroupsHandlers(mainWindow)
   registerAffPartnerHandlers(mainWindow)
   registerEngineErrorReviewHandlers(mainWindow)
   const supabase = new SupabaseService()
@@ -404,6 +409,20 @@ export function registerIpcHandlers(
     runtimeTarget: 'desktop',
     onUpdated: event => emitAutomationUpdated(mainWindow, event)
   })
+  /**
+   * Quy tắc tự động hóa cũ (`auto_automation`): bộ xử lý gọi 3 RPC mỗi 5 giây nên chỉ chạy khi nhân viên còn quy tắc
+   * (đọc một lần lúc đăng nhập). Việc mới làm bằng khung "Sau khi chạy" hoặc Quy trình của Web, chạy trên máy chủ.
+   * Không đọc được thì chạy như trước để không bỏ sót quy tắc đang bật.
+   */
+  const startAutomationProcessorIfNeeded = async (): Promise<void> => {
+    let hasRules = true
+    try {
+      hasRules = (await listLegacyAutomations({ page: 1, pageSize: 1 })).total > 0
+    } catch {
+      hasRules = true
+    }
+    if (hasRules) await automationProcessor.start()
+  }
   campaignScheduler.setPageRegistry(pageRegistry)
   const contactLoader = new ContactLoader(supabase, webviewRegistry, mainWindow, proxyRuntime, zaloRuntime)
   chatContactLoader = new ContactLoader(
@@ -850,7 +869,7 @@ export function registerIpcHandlers(
     const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     await facebookStopped
-    await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
+    await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
 
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
@@ -1326,7 +1345,7 @@ export function registerIpcHandlers(
     void (async () => {
       try {
         await facebookStopped
-        await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
+        await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1404,7 +1423,7 @@ export function registerIpcHandlers(
     afterLogin: async ({ username, password }) => {
       campaignDiagnostics.stop()
       campaignFormAi.stop()
-      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
       const handoffAckGeneration = desktopHandoffAckGeneration
@@ -1454,7 +1473,7 @@ export function registerIpcHandlers(
         facebookLogin.startSession()
         void refreshSleepGuardSwitch()
         campaignScheduler.start({ initialDelayMs: CAMPAIGN_SCHEDULER_START_DELAY_MS })
-        await automationProcessor.start()
+        await startAutomationProcessorIfNeeded()
         crmWeb.startSession()
         admin.startSession()
         campaignSupport.startSession()
@@ -1501,7 +1520,7 @@ export function registerIpcHandlers(
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)
       await facebookStopped
-      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1524,6 +1543,7 @@ export function registerIpcHandlers(
       await facebookStopped
       facebookLogin.startSession(false)
       chatWeb.credentialsChanged()
+      journeyWeb.credentialsChanged()
       if (!runtimeCredentials) return
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
       const user = getCurrentUser()

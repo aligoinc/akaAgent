@@ -12,10 +12,12 @@ const COLORS = ['#6366f1', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#8b5cf6'
  * Chỉ dùng cho loại không gắn tài khoản Zalo (tạo nhóm gắn tài khoản vẫn qua màn Nhóm data).
  */
 export default function QuickCreateDataGroupDialog({
-  dataTypeCode,
-  typeLabel,
+  dataTypeCode: initialTypeCode,
+  typeLabel: initialTypeLabel,
   subtitle,
   defaultName,
+  typeChoices,
+  boundZaloAccountIdFor,
   onCreated,
   onClose
 }: {
@@ -23,9 +25,15 @@ export default function QuickCreateDataGroupDialog({
   typeLabel: string
   subtitle?: string
   defaultName: string
+  /** Nhiều loại nhận được (khung "Sau khi chạy"): cho chọn loại thay vì khoá một loại. */
+  typeChoices?: Array<{ code: DataTypeCategoryCode; label: string }>
+  /** Loại gắn tài khoản Zalo (theo UID): tài khoản gắn với nhóm mới; null = không gắn. */
+  boundZaloAccountIdFor?: (code: DataTypeCategoryCode) => number | null
   onCreated: (group: DataGroup) => void
   onClose: () => void
 }) {
+  const [dataTypeCode, setDataTypeCode] = useState<DataTypeCategoryCode>(initialTypeCode)
+  const typeLabel = typeChoices?.find(choice => choice.code === dataTypeCode)?.label ?? initialTypeLabel
   const [name, setName] = useState(defaultName)
   const [color] = useState(() => COLORS[Math.floor(Math.random() * COLORS.length)])
   const [typeId, setTypeId] = useState<number | null>(null)
@@ -38,6 +46,8 @@ export default function QuickCreateDataGroupDialog({
 
   useEffect(() => {
     let disposed = false
+    setTypeId(null)
+    setTypeError('')
     void (async () => {
       try {
         const items = await window.electronAPI.listDataTypeCategoryItems()
@@ -70,7 +80,7 @@ export default function QuickCreateDataGroupDialog({
       const created = await api.createDataGroup({
         name: trimmed,
         color,
-        boundZaloAccountId: null,
+        boundZaloAccountId: boundZaloAccountIdFor ? boundZaloAccountIdFor(dataTypeCode) : null,
         dataTypeCategoryItemId: typeId,
         requestId
       })
@@ -91,14 +101,21 @@ export default function QuickCreateDataGroupDialog({
             <input id="quick-data-group-name" className="stepper-input" value={name}
               onChange={event => setName(event.target.value)} maxLength={255} required disabled={busy} />
           </label>
-          <div className="data-group-form-field">
+          {typeChoices && typeChoices.length > 1 ? <label className="data-group-form-field" htmlFor="quick-data-group-type">
+            <span>Loại nhóm</span>
+            <select id="quick-data-group-type" className="stepper-input" value={dataTypeCode} disabled={busy}
+              onChange={event => setDataTypeCode(event.target.value as DataTypeCategoryCode)}>
+              {typeChoices.map(choice => <option key={choice.code} value={choice.code}>{choice.label}</option>)}
+            </select>
+            <small className="schedule-hint">Chỉ các loại nhận được data của chiến dịch này.</small>
+          </label> : <div className="data-group-form-field">
             <span>Loại nhóm</span>
             <div className="stepper-input" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, opacity: 0.85 }}>
               <span>{typeName}</span>
               <Lock size={14} aria-hidden="true" />
             </div>
             <small className="schedule-hint">Khoá theo ô đang chọn để nhóm mới nhận được data này.</small>
-          </div>
+          </div>}
           {(typeError || error) && <div className="schedule-hint" role="alert" style={{ color: 'var(--danger, #b91c1c)' }}>{typeError || error}</div>}
         </div>
         <footer className="data-group-form-actions">

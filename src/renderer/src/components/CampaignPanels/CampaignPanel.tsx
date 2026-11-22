@@ -2037,13 +2037,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     const request = dataGroupCampaignRequest
     if (!request || handledNavigationRequestRef.current === request.requestId) return
 
-    if (request.mode === 'create' && request.group) {
+    // Tạo chiến dịch: từ Nhóm data (kèm nhóm) hoặc từ Tự động hóa (form trống).
+    if (request.mode === 'create') {
       handledNavigationRequestRef.current = request.requestId
       setEditingCampaign(null)
       setCloneFromId(undefined)
       setCampaignFormInitialActionId(undefined)
       setCampaignFormInitialDetails(undefined)
-      setCampaignFormInitialDataGroup(request.group)
+      setCampaignFormInitialDataGroup(request.group ?? undefined)
       setCampaignFormModalZIndex(3800)
       setShowForm(true)
       onDataGroupCampaignRequestHandled?.(request.requestId)

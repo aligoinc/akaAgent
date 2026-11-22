@@ -1,0 +1,43 @@
+{
+  "migration": "migrations/migration_v627_group_adds_facebook.sql",
+  "also_at": "akaAgentWebApp scripts/sql/campaign-result-groups/migration_v627_group_adds_facebook.sql (cùng md5)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V627 đi",
+  "applied_via": "Supabase MCP apply_migration (một giao dịch)",
+  "applied_at_vn": "2026-11-22 22:28:57",
+  "ledger": { "version": "20261122152857", "name": "migration_v627_group_adds_facebook", "statements": 1, "statements_md5": "6504433cbb02a42a43aaaf8096efb19d", "file_md5": "6504433cbb02a42a43aaaf8096efb19d" },
+  "do_not_apply_again": true,
+  "rollback": "migrations/rollback_v627_group_adds_facebook.sql (md5 a82c1a100af9d2b7406dd467b6cc5b9a)",
+  "preflight_live_22_25_vn": {
+    "ledger_v626_or_later_rows": 0,
+    "group_adds_prosrc_md5_before": "f063f517ca87e00d4d24b7c2b3d36c2c",
+    "helper_exists_before": false,
+    "active_campaign_groups_journeys": 2,
+    "note": "Chủ nhật 22:25 VN, DB rảnh"
+  },
+  "dry_run_before_apply": {
+    "how": "Khối DO chạy nguyên văn migration bằng EXECUTE rồi RAISE EXCEPTION mang kết quả (tự huỷ, không NOTIFY)",
+    "sql_md5_checked": "6504433cbb02a42a43aaaf8096efb19d",
+    "group_adds_prosrc_md5_after": "297717e6918e2c5282ddaadb3d57ec3f",
+    "helper_on_5_real_facebook_details": "đúng contact_type / platform / url / tên / tài khoản cho group (2), post_url, person, page_inbox_customer; sai loại nhóm trả group_type; lượt Zalo trả group_type; thiếu dòng trả invalid",
+    "leftover_rows_after_dry_run": 0
+  },
+  "postflight_live_22_29_vn": {
+    "group_adds_prosrc_md5": "297717e6918e2c5282ddaadb3d57ec3f",
+    "group_adds_metadata": "owner postgres, SECURITY DEFINER, search_path=pg_catalog, public, acl {postgres=X/postgres} (không đổi)",
+    "helper": "private.aka_agent_journey_facebook_group_row(bigint,text,bigint), prosrc md5 dd759ec65c489a9970fa0d071d895234, STABLE, SECURITY DEFINER, chỉ postgres EXECUTE (service_role / anon / aka_agent_desktop không gọi được)",
+    "aka_agent_journey_engine_service_role_can_execute": true,
+    "ledger_rows_after_v627_at_22_30_vn": 0
+  },
+  "postgrest_reload": {
+    "schema_cache_query_ms": 2167.5,
+    "loaded_at_utc": "15:28:59",
+    "minute_15_28_utc": { "rest_requests": 13659, "over_1s": 1, "p50_ms": 46, "http_5xx": 0, "http_503": 0 },
+    "minute_15_29_utc": { "rest_requests": 14381, "over_1s": 2, "p50_ms": 47, "http_5xx": 0, "http_503": 0 },
+    "baseline_15_24_to_15_27_utc": "12.556–14.185 request/phút, 2–3 request > 1 giây/phút, p50 46–47 ms"
+  },
+  "not_yet": [
+    "API/Web chưa deploy nên chưa có quy trình campaign_groups nào của chiến dịch Facebook; nhánh Facebook của group_adds chưa chạy với lượt thật",
+    "Desktop chưa build/phát hành"
+  ]
+}

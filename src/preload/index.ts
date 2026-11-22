@@ -24,6 +24,10 @@ import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
+import { JOURNEY_WEB_IPC, type JourneyWebOutside, type JourneyWebState, type JourneyWebTheme } from '../shared/journeyWebDesktop'
+import {
+  CAMPAIGN_RESULT_GROUPS_IPC, type CampaignResultGroupsDesktopAction, type CampaignResultGroupsIpcResult
+} from '../shared/campaignResultGroupsDesktop'
 import { CAMPAIGN_ADD_DATA_PREVIEW_IPC, type CampaignAddDataPreviewRequest, type CampaignAddDataPreviewResponse } from '../shared/campaignAppendData'
 import {
   DATA_GROUP_MEMBER_MATCHES_IPC, type DataGroupMemberMatchesIpcRequest, type DataGroupMemberMatchesIpcResponses,
@@ -121,6 +125,20 @@ const electronAPI = {
 
   prepareChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_PREPARE),
   reloadChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_RELOAD),
+  // Tự động hóa › Quy trình: trang Web nhúng; main đăng nhập và đặt cookie phiên trong phân vùng riêng.
+  journeyWebPrepare: (theme: JourneyWebTheme, path?: string | null): Promise<JourneyWebState> =>
+    ipcRenderer.invoke(JOURNEY_WEB_IPC.prepare, theme, path ?? null),
+  journeyWebReload: (): Promise<JourneyWebState> => ipcRenderer.invoke(JOURNEY_WEB_IPC.reload),
+  onJourneyWebState: (callback: (state: JourneyWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: JourneyWebState) => callback(state)
+    ipcRenderer.on(JOURNEY_WEB_IPC.state, handler)
+    return () => ipcRenderer.removeListener(JOURNEY_WEB_IPC.state, handler)
+  },
+  onJourneyWebNavigateOut: (callback: (target: JourneyWebOutside) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, target: JourneyWebOutside) => callback(target)
+    ipcRenderer.on(JOURNEY_WEB_IPC.navigateOut, handler)
+    return () => ipcRenderer.removeListener(JOURNEY_WEB_IPC.navigateOut, handler)
+  },
   onChatWebState: (callback: (state: ChatWebState) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: ChatWebState) => callback(state)
     ipcRenderer.on(IPC_EVENTS.CHAT_WEB_STATE, handler)
@@ -257,6 +275,10 @@ const electronAPI = {
   // Ảnh đính kèm câu hỏi của Hỏi đáp AI: tiến trình chính cất ảnh vào kho media rồi trả URL.
   aiChatUploadImage: (image: AiChatImageUpload): Promise<AiChatIpcResult> =>
     ipcRenderer.invoke(AI_CHAT_IPC.uploadImage, image),
+
+  // Khung "Sau khi chạy: đưa khách vào nhóm" và Tự động hóa › Từ chiến dịch: tiến trình chính gọi API Web bằng token phiên.
+  campaignResultGroupsCall: (action: CampaignResultGroupsDesktopAction, payload?: Record<string, unknown>): Promise<CampaignResultGroupsIpcResult> =>
+    ipcRenderer.invoke(CAMPAIGN_RESULT_GROUPS_IPC, action, payload),
 
   // Giới thiệu nhận hoa hồng (docs/AFF_PARTNER_DESKTOP.md): đọc DB chỉ khi mở hộp thoại / bấm mở trang quản lý.
   affPartnerSummary: (): Promise<AffPartnerIpcResult<AffPartnerResponse>> =>

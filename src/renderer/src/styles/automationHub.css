@@ -1,0 +1,31 @@
+/* Trang Tự động hóa nhiều thẻ (Quy trình nhúng Web, Từ chiến dịch, Quy tắc cũ). */
+.automation-hub { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.automation-hub-tabs { display: flex; gap: 4px; padding: 8px 12px 0; border-bottom: 1px solid var(--border-default); background: var(--bg-secondary); }
+.automation-hub-tab { display: inline-flex; align-items: center; gap: 6px; padding: 8px 14px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; }
+.automation-hub-tab:hover { color: var(--text-primary); }
+.automation-hub-tab.is-active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+.automation-hub-body { position: relative; display: flex; flex: 1; min-height: 0; }
+.automation-hub-panel { flex: 1; min-width: 0; min-height: 0; flex-direction: column; }
+.automation-hub-panel.is-scroll { overflow: auto; }
+
+.journeys-embed { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.journeys-embed-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border-default); color: var(--text-secondary); font-size: 12px; }
+.journeys-embed-bar > span { flex: 1; min-width: 0; }
+.journeys-embed-frame { position: relative; flex: 1; min-height: 0; }
+.journeys-embed-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--bg-primary); color: var(--text-secondary); }
+
+.from-campaigns-tab { display: grid; gap: 14px; align-content: start; width: min(1100px, 100%); margin: 0 auto; padding: 18px 20px 40px; box-sizing: border-box; }
+.from-campaigns-head { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+.from-campaigns-head p { margin: 0; max-width: 680px; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.from-campaigns-actions { display: flex; gap: 8px; }
+.from-campaigns-empty { display: grid; justify-items: center; gap: 10px; padding: 32px 20px; border: 1px dashed var(--border-default); border-radius: 12px; text-align: center; color: var(--text-secondary); }
+.from-campaigns-empty h2 { margin: 0; font-size: 15px; color: var(--text-primary); }
+.from-campaigns-empty p { margin: 0; max-width: 560px; font-size: 13px; line-height: 1.5; }
+.from-campaigns-kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.from-campaigns-kpis > div { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-secondary); }
+.from-campaigns-kpis span { color: var(--text-tertiary); font-size: 12px; }
+.from-campaigns-kpis strong { font-size: 18px; }
+.from-campaigns-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.from-campaigns-search { display: flex; align-items: center; gap: 6px; flex: 1 1 260px; padding: 0 10px; border: 1px solid var(--border-default); border-radius: 8px; background: var(--bg-primary); color: var(--text-tertiary); }
+.from-campaigns-search input { flex: 1; min-width: 0; height: 34px; border: 0; background: none; color: var(--text-primary); outline: none; }
+.from-campaigns-filters { display: flex; gap: 6px; flex-wrap: wrap; }
