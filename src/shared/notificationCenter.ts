@@ -122,7 +122,10 @@ export const NOTIFICATION_PACKAGE_EXPIRING = RENEWAL_BELL_EVENT_TYPE
 
 /** Nhãn của các loại chỉ để hiển thị (không lọc được). */
 export const NOTIFICATION_DISPLAY_ONLY_LABELS: Readonly<Record<string, string>> = {
-  [NOTIFICATION_PACKAGE_EXPIRING]: 'Gói dịch vụ'
+  [NOTIFICATION_PACKAGE_EXPIRING]: 'Gói dịch vụ',
+  // Chào ngày mới (V621): Desktop chưa có nút lọc riêng cho loại này, chỉ hiện nhãn.
+  'report.morning': 'Chào ngày mới',
+  'assistant.result': 'Trợ lý aka'
 }
 
 /** Nhãn loại thông báo; loại máy chủ thêm sau mà bản app chưa biết thì hiện nhãn chung. */
@@ -358,8 +361,17 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings | 
         devices: Array.isArray(push.devices) ? push.devices.map(parseDevice).filter((item): item is NotificationDevice => item !== null) : []
       }
     },
-    subscriptions: parseSubscriptions(raw.subscriptions)
+    subscriptions: parseSubscriptions(raw.subscriptions),
+    upcomingRunAts: upcomingRunAts(raw.subscriptions)
   }
+}
+
+/** `nextRunAt` của mọi đăng ký theo lịch (kể cả loại Desktop chưa có màn cài đặt, như Chào ngày mới), đã sắp xếp. */
+function upcomingRunAts(raw: Record<string, unknown>): string[] {
+  const values = Object.values(raw)
+    .map(item => (isObject(item) ? text(item.nextRunAt) : null))
+    .filter((value): value is string => !!value && !Number.isNaN(Date.parse(value)))
+  return Array.from(new Set(values)).sort((a, b) => Date.parse(a) - Date.parse(b))
 }
 
 const SEVERITIES: readonly NotificationSeverity[] = ['info', 'warning', 'critical']
@@ -429,13 +441,14 @@ function parseSection(raw: unknown): NotificationContentSection | null {
       rows: raw.table.rows.filter(Array.isArray).map(row => (row as unknown[]).map(cell))
     }
   }
+  if (raw.display === 'tiles') section.display = 'tiles'
   const note = text(raw.note)
   if (note) section.note = note
   return section
 }
 
 // 'package': nội dung "Gói sắp hết hạn" (V520), hiển thị chung như các loại khác (tiêu đề + các phần).
-const CONTENT_KINDS: readonly NotificationContent['kind'][] = ['campaign', 'account', 'report', 'data_group', 'test', 'verify_email', 'package']
+const CONTENT_KINDS: readonly NotificationContent['kind'][] = ['campaign', 'account', 'report', 'data_group', 'test', 'verify_email', 'package', 'assistant']
 
 function parseContent(raw: unknown): NotificationContent | null {
   if (!isObject(raw)) return null

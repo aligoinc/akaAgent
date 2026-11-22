@@ -2894,6 +2894,11 @@ export interface NotificationSettings {
     push: { enabled: boolean; devices: NotificationDevice[] }
   }
   subscriptions: NotificationSubscriptions
+  /**
+   * Mốc gửi kế tiếp của các thông báo theo lịch (báo cáo 12:00 / 18:00, Chào ngày mới; V621), để Desktop hỏi số chưa đọc đúng lúc
+   * có báo cáo mới (thông báo nổi). Chỉ đọc, không gửi lại khi lưu. Máy chủ cũ không có thì rỗng.
+   */
+  upcomingRunAts?: string[]
 }
 
 export interface SaveNotificationSettingsRequest {
@@ -2956,13 +2961,15 @@ export interface NotificationContentSection {
   title: string
   tone?: 'activity' | 'result' | 'issue' | 'info'
   rows?: Array<{ label: string; value: string; tone?: 'ok' | 'warn' | 'bad' | 'muted' }>
+  /** `tiles`: các hàng vẽ thành ô số (Chào ngày mới, báo cáo; WebApp hợp đồng V621). Thiếu: danh sách nhãn – giá trị. */
+  display?: 'tiles'
   table?: { columns: string[]; rows: string[][] }
   note?: string
 }
 
 /** Dữ liệu đã chốt lúc dựng (contentSnapshot); email và chi tiết trong app cùng dùng. */
 export interface NotificationContent {
-  kind: 'campaign' | 'account' | 'report' | 'data_group' | 'test' | 'verify_email' | 'package'
+  kind: 'campaign' | 'account' | 'report' | 'data_group' | 'test' | 'verify_email' | 'package' | 'assistant'
   headline: string
   countedAt?: string | null
   sections: NotificationContentSection[]
