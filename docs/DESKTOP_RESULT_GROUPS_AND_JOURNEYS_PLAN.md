@@ -179,7 +179,8 @@ Mỗi bước deploy, migration, phát hành đều hỏi người dùng trướ
 - `node scripts/run-campaign-result-groups-ui-smoke.cjs` (8 nhóm, Chromium của Playwright, IPC giả): khung với chiến dịch đăng nhóm Facebook, thêm dòng một lượt `options`, chỉ nhóm đúng loại, Comment theo Kiêm comment, kiểm lỗi, nháp, lưu, bảng lỗi ba nút, ẩn theo loại, API chưa sẵn sàng, thẻ Từ chiến dịch.
 - `node scripts/journey-web-embed-electron-smoke.cjs` (8 nhóm, Electron thật dưới xvfb, máy chủ cục bộ đóng vai API + trang nhúng): đăng nhập native và cookie, trang đọc `/me`, chặn link ra ngoài, trang không tự đăng nhập, đăng nhập lại khi hết phiên, không lặp khi hết phiên liên tiếp (bài kiểm tìm ra vòng đăng nhập lại vô hạn, đã sửa: chỉ cho tự đăng nhập lại sau khi `/me` của trang thành công), thu hồi phiên khi đăng xuất.
 - Hai typecheck, `electron-vite build`.
-- Chưa: chạy form thật trong Electron, chạy trang Web thật (bản nhúng) trong webview với API thật, phát lại kết quả Facebook thật qua bộ máy trên DB thật.
+- **End-to-end (22/11, "Kiểm thử luồng dữ liệu end to end")**: akaAgentWebApp `AKA_AGENT_REPO=<akaAgent> npx tsx scripts/campaign-result-groups-desktop-e2e.mts <seed>`: mã thật của Desktop (`src/shared/campaignResultGroups.ts`, `src/main/services/campaignResultGroupsApi.ts`) → API Fastify thật (đường Desktop) → dịch vụ → RPC trên Postgres tạm có V473 + V609 + V613 + V627 → bộ máy quy trình → `group_adds`, so từng trường với đáp án độc lập; 8 loại chiến dịch Facebook + Zalo, seed 1–6 đạt. Hàm nạp nhóm thật của production nhận đúng 5 dạng dòng Facebook của V627 (khối tự hủy, không lưu gì); thân `group_adds` production đúng md5 V627 chờ.
+- Chưa: chạy form thật trong Electron, chạy trang Web thật (bản nhúng) trong webview với API thật, chạy V627 trên DB thật với kết quả Facebook thật.
 
 ### Thứ tự đưa vào dùng
 
