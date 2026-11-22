@@ -1,0 +1,103 @@
+/* Đồng bộ akaBiz Auto → akaAgent (AkaBizAutoSyncModal). Nằm trên hộp Cài đặt chung (z-index 3400). */
+.aas-overlay { z-index: 3500; }
+/* Hai lớp để thắng `.modal` / `.modal-header` của global.css dù thứ tự nạp CSS thế nào. */
+.modal.aas-modal { width: min(1040px, calc(100vw - 32px)); max-width: none; height: min(820px, calc(100vh - 32px)); max-height: none; display: flex; flex-direction: column; padding: 0; overflow: hidden; }
+.modal-header.aas-header { padding: 14px 16px 14px 24px; border-bottom: 1px solid var(--border-default); margin: 0; }
+.aas-body { flex: 1; display: flex; min-height: 0; }
+.aas-steps { width: 232px; flex: none; box-sizing: border-box; padding: 20px 12px; border-right: 1px solid var(--border-default); background: var(--bg-tertiary); display: flex; flex-direction: column; gap: 4px; }
+.aas-step { display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-radius: 8px; color: var(--text-secondary); }
+.aas-step.active { background: var(--bg-accent-subtle); color: var(--text-primary); }
+.aas-step.done { color: var(--text-primary); }
+.aas-step-dot { width: 26px; height: 26px; flex: none; box-sizing: border-box; border-radius: 50%; border: 1.5px solid var(--border-default); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; }
+.aas-step.active .aas-step-dot { border: 2px solid var(--accent-primary); color: var(--accent-primary); }
+.aas-step.done .aas-step-dot { border: 0; background: var(--accent-primary); color: #fff; }
+.aas-step-text { display: flex; flex-direction: column; }
+.aas-step-text strong { font-size: 13px; }
+.aas-step-text small { font-size: 11px; color: var(--text-secondary); }
+.aas-step-meta { margin-top: auto; padding: 12px; border-top: 1px solid var(--border-default); display: grid; gap: 2px; font-size: 12px; color: var(--text-secondary); }
+.aas-step-meta strong { color: var(--text-primary); font-weight: 500; margin-bottom: 6px; overflow-wrap: anywhere; }
+.aas-main { flex: 1; min-width: 0; overflow: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 18px; }
+.aas-title { margin: 0; font-size: 20px; }
+.aas-lead { margin: 4px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.6; }
+.aas-card { border: 1px solid var(--border-default); border-radius: 10px; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+.aas-card h3, .aas-section h3 { margin: 0; font-size: 14px; }
+.aas-section { display: flex; flex-direction: column; gap: 10px; }
+.aas-sub { color: var(--text-secondary); font-size: 12px; }
+.aas-note { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-secondary); }
+.aas-row { display: flex; align-items: center; gap: 10px; }
+.aas-row.space { justify-content: space-between; }
+.aas-row.wrap { flex-wrap: wrap; }
+.aas-col { display: flex; flex-direction: column; gap: 2px; }
+.aas-col.gap8 { gap: 8px; }
+.aas-grow { flex: 1; min-width: 0; }
+.aas-break { overflow-wrap: anywhere; color: var(--text-secondary); }
+.aas-indent { padding-left: 28px; }
+.aas-grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.aas-grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.aas-grid4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.aas-field { display: flex; flex-direction: column; gap: 6px; font-size: 12px; font-weight: 500; }
+.aas-readonly { min-height: 38px; box-sizing: border-box; display: flex; align-items: center; padding: 0 12px; border-radius: 8px; background: var(--bg-tertiary); border: 1px solid var(--border-default); font-size: 13px; }
+.aas-pill { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 12px; font-size: 12px; }
+.aas-pill.ok, .aas-ok { color: var(--accent-success); }
+.aas-pill.ok { background: rgba(52, 211, 153, 0.12); }
+.aas-muted { color: var(--text-secondary); font-size: 12px; }
+.aas-choice { display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; border: 1.5px solid var(--border-default); cursor: pointer; }
+.aas-choice.column { flex-direction: column; gap: 6px; }
+.aas-choice.selected { border-color: var(--accent-primary); background: var(--bg-accent-subtle); }
+.aas-choice.disabled { opacity: 0.6; cursor: not-allowed; border-style: dashed; }
+.aas-choice span { display: flex; flex-direction: column; gap: 2px; }
+.aas-choice span.aas-row { flex-direction: row; }
+.aas-choice small { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
+.aas-chips { display: flex !important; flex-direction: row !important; flex-wrap: wrap; gap: 6px; }
+.aas-chip { display: inline-block; padding: 2px 8px; border-radius: 10px; background: var(--bg-tertiary); font-size: 11px; color: var(--text-secondary); }
+.aas-chip.accent { background: var(--bg-accent-subtle); color: var(--accent-primary); }
+.aas-table { border: 1px solid var(--border-default); border-radius: 10px; overflow: hidden; }
+.aas-tr { display: grid; grid-template-columns: 40px minmax(0, 1.5fr) 100px minmax(0, 1.5fr); align-items: center; min-height: 46px; padding: 0 12px; border-top: 1px solid var(--border-default); font-size: 13px; cursor: pointer; }
+.aas-tr.two { grid-template-columns: minmax(0, 1fr) auto; cursor: default; }
+.aas-tr:first-child { border-top: 0; }
+.aas-tr.head { min-height: 36px; background: var(--bg-tertiary); font-size: 12px; font-weight: 600; cursor: default; }
+.aas-tr small { color: var(--text-secondary); font-size: 11px; }
+.aas-empty { padding: 14px; color: var(--text-secondary); font-size: 13px; }
+.aas-days { width: 72px; text-align: right; }
+.aas-preset { min-height: 36px; padding: 0 12px; border-radius: 18px; border: 1px solid var(--border-default); background: transparent; color: var(--text-primary); cursor: pointer; font-size: 12px; }
+.aas-preset.selected { border-color: var(--accent-primary); background: var(--bg-accent-subtle); color: var(--accent-primary); font-weight: 600; }
+.aas-banner { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; font-size: 13px; line-height: 1.5; }
+.aas-banner.info { background: var(--bg-tertiary); }
+.aas-banner.warn { background: rgba(251, 191, 36, 0.12); }
+.aas-banner.error { background: rgba(244, 63, 94, 0.12); color: var(--accent-error); }
+.aas-bullets { margin: 0; padding: 12px 14px 12px 30px; border-radius: 8px; background: var(--bg-tertiary); font-size: 12px; line-height: 1.7; color: var(--text-secondary); }
+.aas-bar { height: 8px; border-radius: 4px; background: var(--bg-tertiary); overflow: hidden; }
+.aas-bar div { height: 100%; background: var(--accent-primary); transition: width 0.3s; }
+.aas-percent { font-size: 22px; font-weight: 700; color: var(--accent-primary); }
+.aas-log { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 8px; background: var(--bg-tertiary); font-size: 12px; }
+.aas-log span { color: var(--text-secondary); margin-right: 10px; }
+.aas-warn-text { color: var(--accent-warning); }
+.aas-tile { display: flex; flex-direction: column; gap: 2px; padding: 14px; border-radius: 10px; border: 1px solid var(--border-default); }
+.aas-tile strong { font-size: 24px; }
+.aas-tile small { color: var(--text-secondary); font-size: 11px; }
+.aas-tile.warn { border-color: var(--accent-warning); }
+.aas-item { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--border-default); font-size: 13px; }
+.aas-item small { color: var(--text-secondary); }
+.aas-item.warn { border-color: var(--accent-warning); }
+.aas-item.info { flex-direction: row; gap: 12px; background: var(--bg-tertiary); border: 0; }
+.aas-todo { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; }
+.aas-todo li { display: flex; flex-direction: column; gap: 2px; }
+.aas-todo li small { color: var(--text-secondary); }
+.aas-todo li.warn strong { color: var(--accent-warning); }
+.aas-done-icon { color: var(--accent-success); }
+.aas-footer { height: 64px; flex: none; box-sizing: border-box; padding: 0 20px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid var(--border-default); }
+.aas-footer .btn { display: inline-flex; align-items: center; gap: 6px; }
+.aas-spin { animation: aas-spin 1s linear infinite; }
+@keyframes aas-spin { to { transform: rotate(360deg); } }
+@media (max-width: 760px) {
+  .aas-steps { display: none; }
+  .aas-grid3, .aas-grid4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+/* Khối "Đồng bộ tài khoản và chiến dịch" trong thẻ akaBiz Desktop (GeneralSettingsModal). */
+.akabiz-auto-sync-block { margin-top: 10px; padding: 12px 14px; border-radius: 8px; background: var(--bg-accent-subtle); display: flex; align-items: center; gap: 12px; }
+.akabiz-auto-sync-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12px; line-height: 1.5; }
+.akabiz-auto-sync-text strong { font-size: 13px; }
+.akabiz-auto-sync-text span { color: var(--text-secondary); }
+.akabiz-auto-sync-badge { margin-left: 6px; padding: 1px 6px; border-radius: 8px; background: var(--accent-primary); color: #fff !important; font-size: 10px; font-weight: 600; }
+.akabiz-auto-sync-button { flex: none; display: inline-flex; align-items: center; gap: 6px; }
