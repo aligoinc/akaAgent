@@ -18506,7 +18506,10 @@ button.campaign-advanced-group-refresh.btn-icon:not(.btn) {
 /* Nút "Mở trình duyệt" của Quét data chuyển sang trang Trình duyệt; các cửa sổ gắn trên document.body tạm ẩn ở trang đó. */
 body[data-active-page="browsers"] .campaign-form-modal-overlay,
 body[data-active-page="browsers"] .data-group-manager-backdrop,
-body[data-active-page="browsers"] .data-group-scan-layer {
+body[data-active-page="browsers"] .data-group-scan-layer,
+/* Link "Tự động hóa › Từ chiến dịch" / "Xem tự động hóa" trong form chiến dịch: form tạm ẩn ở trang Tự động hóa. */
+body[data-active-page="automations"] .campaign-form-modal-overlay,
+body[data-active-page="automations"] .data-group-manager-backdrop {
   display: none;
 }
 

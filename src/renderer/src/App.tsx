@@ -7,7 +7,8 @@ import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import EffectivenessReportsHub from './components/EffectivenessReports/EffectivenessReportsHub'
 import type { EffectivenessNavigation } from './components/EffectivenessReports/effectivenessApi'
-import AutomationPage from './pages/AutomationPage'
+import AutomationHub from './pages/AutomationHub'
+import { useAutomationNavStore } from './stores/automationNavStore'
 import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
 import RenewalPage from './pages/RenewalPage'
@@ -214,6 +215,44 @@ export default function App() {
     }
     setActivePage(target.kind === 'contentTemplates' ? 'content-templates' : 'campaigns')
   }, [])
+
+  // Tự động hóa: nút "Thêm chiến dịch" mở form trống ở trang Chiến dịch.
+  const openNewCampaignForm = useCallback(() => {
+    setActivePage('campaigns')
+    setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'create' })
+  }, [])
+
+  // Link "Tự động hóa › Từ chiến dịch" / "Xem tự động hóa" ở form chiến dịch và dòng nhóm.
+  useEffect(() => {
+    useAutomationNavStore.getState().setShowPage(() => setActivePage('automations'))
+    return () => useAutomationNavStore.getState().setShowPage(null)
+  }, [])
+
+  // Trang Quy trình nhúng (Web) bấm link ra ngoài Tự động hóa: mở màn tương ứng của Desktop.
+  useEffect(() => {
+    const subscribe = window.electronAPI?.onJourneyWebNavigateOut
+    if (!subscribe) return
+    return subscribe(target => {
+      if (target.kind === 'campaign') {
+        setActivePage('campaigns')
+        setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'open', campaignId: target.campaignId, openFormIfEditable: target.edit })
+      } else if (target.kind === 'newCampaign') {
+        openNewCampaignForm()
+      } else if (target.kind === 'campaigns') {
+        setActivePage('campaigns')
+      } else if (target.kind === 'dataGroup') {
+        setDataGroupInitialId(target.groupId)
+        setShowDataGroups(true)
+      } else if (target.kind === 'account') {
+        setActivePage('campaigns')
+        setAccountOpenRequest({ accountId: target.accountId, requestId: ++accountOpenRequestSeq.current })
+      } else if (target.kind === 'accounts') {
+        setActivePage('campaigns')
+      } else if (target.kind === 'fromCampaigns') {
+        useAutomationNavStore.getState().open('campaigns')
+      }
+    })
+  }, [openNewCampaignForm])
 
   useEffect(() => {
     const handleDataGroupCampaignNavigation = (event: Event) => {
@@ -599,7 +638,7 @@ export default function App() {
           </div>
 
           <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <AutomationPage isActive={activePage === 'automations'} />
+            <AutomationHub isActive={activePage === 'automations'} onNewCampaign={openNewCampaignForm} />
           </div>
 
           <div style={{ display: activePage === 'content-templates' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>

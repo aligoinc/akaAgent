@@ -1,0 +1,83 @@
+/* Khung "Sau khi chạy: đưa khách vào nhóm" (form chiến dịch, form Agent) và thẻ Tự động hóa › Từ chiến dịch.
+   Chuyển từ akaAgentWebApp apps/web/src/features/campaignResultGroups/CampaignResultGroups.css, đổi biến màu theo Desktop. */
+.crg { display: grid; gap: 12px; min-width: 0; }
+.crg-lead { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.5; }
+.crg-lead a, .crg-state a { color: var(--accent-primary); }
+.crg-hint { margin: 0; color: var(--text-tertiary); font-size: 12px; line-height: 1.45; }
+.crg-note { margin: 0; padding: 8px 10px; border-radius: 8px; background: var(--bg-tertiary); color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.crg-note-warn { background: color-mix(in srgb, var(--accent-warning) 12%, transparent); color: var(--accent-warning); }
+.crg-error { margin: 0; color: var(--accent-error); font-size: 12px; line-height: 1.45; }
+.crg-error .btn, .crg-note .btn { margin-left: 6px; }
+
+.crg-row { display: grid; gap: 10px; min-width: 0; padding: 12px; border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-secondary); }
+.crg-row.has-error { border-color: var(--accent-error); }
+.crg-row-head { display: flex; align-items: center; gap: 8px; min-width: 0; flex-wrap: wrap; }
+.crg-row-head > strong { font-size: 13px; min-width: 0; overflow-wrap: anywhere; }
+.crg-row-tools { display: inline-flex; align-items: center; gap: 6px; margin-left: auto; }
+.crg-remove { margin-left: auto; color: var(--text-secondary); }
+.crg-row-tools .crg-remove { margin-left: 0; }
+.crg-badge { padding: 1px 8px; border-radius: 999px; background: var(--bg-accent-subtle); color: var(--accent-primary); font-size: 12px; font-weight: 600; }
+.crg-badge-warn { background: color-mix(in srgb, var(--accent-error) 12%, transparent); color: var(--accent-error); }
+
+.crg-group-line { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.crg-group-line select { flex: 1 1 auto; min-width: 0; }
+.crg-group-line .btn { flex: none; }
+
+.crg-actions { display: grid; gap: 10px; }
+.crg-action { display: grid; gap: 6px; min-width: 0; }
+.crg-action-name { font-size: 12px; font-weight: 600; color: var(--text-secondary); }
+.crg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.crg-chip { min-height: 30px; padding: 4px 12px; border: 1px solid var(--border-default); border-radius: 999px; background: var(--bg-primary); color: var(--text-primary); font-size: 12px; cursor: pointer; }
+.crg-chip:hover:not(:disabled) { border-color: var(--accent-primary); }
+.crg-chip.on { border-color: var(--accent-primary); background: var(--bg-accent-subtle); color: var(--accent-primary); font-weight: 600; }
+.crg-chip.late { border-style: dashed; }
+.crg-chip.late.on { border-style: solid; }
+.crg-chip:disabled { cursor: not-allowed; opacity: .55; }
+.crg-late { display: grid; gap: 6px; padding-left: 10px; border-left: 2px solid var(--border-default); }
+.crg-late-label { font-size: 12px; color: var(--text-tertiary); }
+
+.crg-summary { margin: 0; font-size: 12px; color: var(--text-primary); line-height: 1.45; overflow-wrap: anywhere; }
+.crg-summary > span { color: var(--text-tertiary); }
+
+.crg-footer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.crg-check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.crg-check input { margin-top: 3px; }
+.crg-check span { display: grid; gap: 2px; }
+.crg-check small { color: var(--text-tertiary); font-size: 12px; }
+
+.crg-existing { display: grid; gap: 10px; }
+.crg-row-existing { border-left: 4px solid var(--border-default); }
+.crg-row-existing.tone-running { border-left-color: var(--accent-success); }
+.crg-row-existing.tone-paused { border-left-color: var(--accent-warning); }
+.crg-state { margin: 0; font-size: 12px; color: var(--text-secondary); display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+.crg-state a { display: inline-flex; align-items: center; gap: 3px; }
+.crg-switch { display: inline-flex; align-items: center; gap: 6px; padding: 2px 4px; border: 0; background: none; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+.crg-switch i { position: relative; width: 32px; height: 18px; border-radius: 999px; background: var(--border-default); transition: background .15s; }
+.crg-switch i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.crg-switch.on i { background: var(--accent-success); }
+.crg-switch.on i::after { transform: translateX(14px); }
+.crg-switch:disabled { cursor: not-allowed; opacity: .55; }
+.crg-resume { display: grid; gap: 8px; padding: 10px; border-radius: 8px; background: var(--bg-tertiary); font-size: 12px; }
+.crg-resume p { margin: 0; }
+.crg-resume-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.crg-save-issue { display: grid; gap: 8px; margin: 0 0 12px; padding: 12px 14px; border: 1px solid var(--accent-error); border-radius: 10px; background: var(--bg-secondary); font-size: 13px; }
+.crg-save-issue strong { color: var(--accent-error); }
+.crg-save-issue p { margin: 0; color: var(--text-secondary); line-height: 1.5; }
+.crg-save-issue small { color: var(--text-tertiary); font-size: 12px; }
+
+@media (max-width: 719px) {
+  .crg-group-line { flex-wrap: wrap; }
+  .crg-group-line select { flex-basis: 100%; }
+  .crg-chip { min-height: 44px; padding: 8px 14px; }
+  .crg-switch { min-height: 44px; }
+}
+.crg-campaign { margin: 0; font-size: 12px; color: var(--text-secondary); overflow-wrap: anywhere; }
+.crg-campaign a { color: var(--accent-primary); }
+
+.crg-link { padding: 0; border: 0; background: none; color: var(--accent-primary); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
+.crg-link:disabled { cursor: default; opacity: .6; }
+.crg-row select.stepper-input { height: 36px; }
+.campaign-form-result-groups-issue { padding: 0 20px; }
+.campaign-form-result-groups-issue:empty { display: none; }
+.campaign-form-result-groups-issue .crg-save-issue { margin: 8px 0; }

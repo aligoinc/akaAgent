@@ -197,6 +197,7 @@ import {
   resolveContentTemplate
 } from './contentTemplateCampaignUtils'
 import type { ContentTemplateGroupCandidate } from './contentTemplateCampaignUtils'
+import { useCampaignFormResultGroups, CampaignResultGroupSaveError } from '../CampaignResultGroups/useCampaignFormResultGroups'
 
 const FIND_DATA_TARGET_FIELDS = [
   'findUidTargetCampaignIds',
@@ -2604,6 +2605,17 @@ export default function CampaignAgentFormModal({
   const canUseRerunAfterCompletion = isFindDataCampaign || isCommentSeedingFeedCampaign || isNewsfeedInteractionCampaign
   const canUseSleepBetweenActions = formData.actionId !== 'facebook_timeline_post' && !isNewsfeedInteractionCampaign && !isFacebookGroupInviteCampaign
   const isEditingSavedCampaign = !!campaign?.id && !cloneFromId
+  // "Sau khi chạy: đưa khách vào nhóm": như form thường (useCampaignFormResultGroups).
+  const resultGroups = useCampaignFormResultGroups({
+    draftPayload, draftValuesRef, actionId: formData.actionId, accountIds: formData.accountIds,
+    accounts: formData.accountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}` })),
+    flags: { enableMessage: formData.enableMessage, enableAddFriend: formData.enableAddFriend, enableComment: formData.enableComment,
+      enableZaloTag: formData.enableZaloTag, enableZaloAlias: formData.enableZaloAlias },
+    allowed: !draftMode,
+    campaignId: isEditingSavedCampaign ? campaign?.id ?? null : null,
+    cloneFromCampaignId: cloneFromId && !savedDraft ? cloneFromId : null
+  })
+  const showResultGroupsSection = resultGroups.visible
   const isSavedDataGroupIdentityLocked = isEditingSavedCampaign && campaign?.dataTargetSourceMode === 'data_group'
   const hasPendingDirectDataGroupSnapshots = canUseDataGroupSource && !isDataGroupSource && directDataGroupSnapshots.length > 0
   const hasZaloFriendRecommendationMaterialized = isZaloMessageFriendRecommendationCampaign && isEditingSavedCampaign && Boolean(campaign?.extraSettings?.zaloFriendRecommendationDataMaterializedAt)
@@ -3869,7 +3881,7 @@ export default function CampaignAgentFormModal({
     }
     return ALL_STEPS.filter(s => s.id !== 'extra' || showExtraSection)
   })())
-  const STEPS = canUseDataGroupSource && !isSimpleCampaign
+  const stepsWithoutResultGroups = canUseDataGroupSource && !isSimpleCampaign
     ? baseSteps.flatMap(step => {
       if (step.id === 'findDataSources') return [DATA_TARGET_SOURCE_STEP, step]
       if (step.id === 'details') {
@@ -3881,6 +3893,9 @@ export default function CampaignAgentFormModal({
       return [step]
     })
     : baseSteps
+  const STEPS: StepDef[] = showResultGroupsSection
+    ? [...stepsWithoutResultGroups, { id: 'resultGroups', title: resultGroups.title, fields: [{ key: 'resultGroups', label: 'Nhóm theo kết quả' }] }]
+    : stepsWithoutResultGroups
   const getSectionNumber = (stepId: string) => Math.max(1, STEPS.findIndex(s => s.id === stepId) + 1)
   const stepIdsKey = STEPS.map(s => s.id).join('|')
 
@@ -6884,8 +6899,11 @@ export default function CampaignAgentFormModal({
     if (saveCompletion.hasPending()) {
       setSavingCampaign(true)
       try { await saveCompletion.retry() }
-      catch (error) { if (!saveSignal.aborted) showAlert(savedCampaignCompletionError + formatIpcErrorMessage(error, 'Không thể hoàn tất.'), 'error') }
-      finally { if (!saveSignal.aborted) setSavingCampaign(false) }
+      catch (error) {
+        // Lỗi bật đồng bộ nhóm: bảng ở chân form đã nói rõ và có nút xử lý.
+        if (!saveSignal.aborted && !(error instanceof CampaignResultGroupSaveError)) showAlert(savedCampaignCompletionError + formatIpcErrorMessage(error, 'Không thể hoàn tất.'), 'error')
+      }
+      finally { if (!saveSignal.aborted) { setSavingCampaign(false); setSaveProgress(null) } }
       return
     }
     if (formAiBusy || generalSettingsOpen || exclusionEditing) return
@@ -6930,6 +6948,15 @@ export default function CampaignAgentFormModal({
     if (!formData.name.trim() || !formData.actionId || formData.accountIds.length === 0) {
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
+    }
+    if (showResultGroupsSection) {
+      const resultGroupsError = resultGroups.validate()
+      if (resultGroupsError) {
+        setCollapsedSections(prev => ({ ...prev, resultGroups: false }))
+        sectionRefs.current['resultGroups']?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        showAlert(`${resultGroups.title}: ${resultGroupsError}`, 'error')
+        return
+      }
     }
     if (cloneFromId && !cloneAccountCatalogReady) {
       showAlert('Chưa tải xong danh sách tài khoản. Vui lòng tải lại danh sách trước khi lưu chiến dịch.', 'error')
@@ -7843,6 +7870,8 @@ export default function CampaignAgentFormModal({
       const savedCampaignIds: number[] = []
       const savedCampaignPayloadById = new Map<number, Partial<Campaign>>()
       const stagedCampaignFinalStatusById = new Map<number, string>()
+      // Chiến dịch chạy bằng Nhóm data trong gói tạo kèm được tạo thẳng ở trạng thái cuối: đồng bộ nhóm áp cả kết quả đã có.
+      const createdAtFinalStatusIds = new Set<number>()
       const emptySnapshotCampaigns: Array<{ campaignId: number; campaignName: string }> = []
       const campaignWorkProgressByIndex = new Map<number, number>()
       const campaignLinkSyncWeight = 0.1
@@ -7922,6 +7951,7 @@ export default function CampaignAgentFormModal({
           ...campaignPayload,
           status: usesAtomicProvisioningBarrier && !selectedSaveStatus ? finalStatus : 'tạm dừng'
         }, { refresh: false })
+        if (usesAtomicProvisioningBarrier && !selectedSaveStatus) createdAtFinalStatusIds.add(savedCampaign.id)
         setItemProgress(
           0.12,
           campaignNumberLabel
@@ -8394,6 +8424,19 @@ export default function CampaignAgentFormModal({
         if (saveSignal.aborted) return
         await saveCompletion.finish(async () => {
           if (saveSignal.aborted) return
+          // Bật đồng bộ vào nhóm TRƯỚC khi bật chiến dịch: lỗi thì chiến dịch giữ tạm dừng, bảng ở chân form cho thử lại.
+          if (showResultGroupsSection) {
+            await resultGroups.saveForCampaigns(
+              savedCampaignIds,
+              saveRequestId,
+              // Chiến dịch đang sửa: theo ô "Áp cả cho kết quả đã có"; chiến dịch mới tạo thì chỉ áp kết quả đã có khi nó đã chạy
+              // ngay lúc tạo (Nhóm data trong gói tạo kèm).
+              campaignId => isEditingSavedCampaign && campaignId === campaign?.id ? resultGroups.includeExisting : createdAtFinalStatusIds.has(campaignId),
+              saveSignal,
+              label => updateSaveProgress(96, label)
+            )
+            if (saveSignal.aborted) return
+          }
           if (isEditingSavedCampaign && selectedSaveStatus === 'chờ xử lý' && campaign?.id) {
             await resumeAfterCampaignSave([campaign.id], saveSignal)
           }
@@ -8442,6 +8485,7 @@ export default function CampaignAgentFormModal({
       console.error('Failed to save campaign:', err)
       setSavingCampaign(false)
       setSaveProgress(null)
+      if (err instanceof CampaignResultGroupSaveError) return
       showAlert((saveCompletion.hasPending() ? savedCampaignCompletionError : '') + formatIpcErrorMessage(err, 'Có lỗi xảy ra khi lưu chiến dịch.'), 'error')
     }
   }
@@ -18270,6 +18314,30 @@ export default function CampaignAgentFormModal({
                 )}
               </div>
             )}
+
+            {showResultGroupsSection && (
+              <div
+                className="stepper-section"
+                ref={el => { sectionRefs.current['resultGroups'] = el }}
+              >
+                <div
+                  className="stepper-section-header"
+                  onClick={() => toggleSection('resultGroups')}
+                >
+                  <div className="stepper-section-header-left">
+                    <span className="stepper-section-num">{getSectionNumber('resultGroups')}</span>
+                    <span className="stepper-section-title">{resultGroups.title}</span>
+                    {resultGroups.rows.length > 0 && <span className="crg-badge">{resultGroups.rows.length}</span>}
+                  </div>
+                  {collapsedSections['resultGroups'] ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+                </div>
+                {!collapsedSections['resultGroups'] && (
+                  <div className="stepper-section-body">
+                    {resultGroups.element({ disabled: saveBusy || saveCompletion.pending })}
+                  </div>
+                )}
+              </div>
+            )}
               </>
             )}
           </div>
@@ -18277,6 +18345,11 @@ export default function CampaignAgentFormModal({
 
           <CampaignAgentChat agent={agent} />
           </div>
+        {showResultGroupsSection && <div className="campaign-form-result-groups-issue">{resultGroups.saveIssue({
+          pending: saveCompletion.pending, busy: saveBusy,
+          campaignCount: isEditingSavedCampaign ? 1 : Math.max(1, formData.accountIds.length),
+          onRetry: () => { void handleSave() }
+        })}</div>}
         {/* Footer */}
         <div className="modal-footer campaign-form-save-footer">
           {!draftMode && !isEditingSavedCampaign && <button type="button" className="btn btn-secondary"

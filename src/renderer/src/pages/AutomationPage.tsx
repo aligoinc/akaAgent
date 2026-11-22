@@ -47,6 +47,10 @@ import '../styles/automation.css'
 
 interface AutomationPageProps {
   isActive: boolean
+  /** false: thẻ "Quy tắc cũ" — giữ quy tắc đang có (sửa, bật / tắt, xem dữ liệu), không tạo quy tắc mới. */
+  allowCreate?: boolean
+  /** Ẩn tiêu đề trang khi nằm trong trang Tự động hóa nhiều thẻ. */
+  embedded?: boolean
 }
 
 interface AutomationFilters {
@@ -195,7 +199,7 @@ function SortableHeader({
   )
 }
 
-export default function AutomationPage({ isActive }: AutomationPageProps) {
+export default function AutomationPage({ isActive, allowCreate = true, embedded = false }: AutomationPageProps) {
   const pageRef = useRef<HTMLDivElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
   const optionsRequestGenerationRef = useRef(0)
@@ -579,11 +583,13 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
         <div className="automation-page-title">
           <span className="automation-page-title-icon"><Zap size={21} /></span>
           <div>
-            <h1>Tự động hóa</h1>
-            <p>Kết nối kết quả chiến dịch để dữ liệu tiếp tục được xử lý tự động.</p>
+            <h1>{embedded ? 'Quy tắc cũ' : 'Tự động hóa'}</h1>
+            <p>{allowCreate ? 'Kết nối kết quả chiến dịch để dữ liệu tiếp tục được xử lý tự động.'
+              : 'Quy tắc chuyển dữ liệu đang có vẫn chạy. Việc mới làm ở mục “Sau khi chạy” của form chiến dịch hoặc thẻ Quy trình.'}</p>
           </div>
         </div>
         <div className="automation-toolbar" role="toolbar" aria-label="Hành động tự động hóa">
+          {allowCreate && (
           <button
             type="button"
             className="automation-button is-primary"
@@ -593,6 +599,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
           >
             <Plus size={16} /> Thêm tự động hóa
           </button>
+          )}
           <button type="button" className="automation-button" onClick={() => selected && void openEdit(selected.id)} disabled={!selected || busyAction !== null}>
             {busyAction === 'edit' ? <Loader2 size={15} className="animate-spin" /> : <Edit3 size={15} />} Chỉnh sửa
           </button>
@@ -608,7 +615,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
         </div>
       </header>
 
-      <section className="automation-card automation-action-section" aria-labelledby="automation-actions-title">
+      {allowCreate && <section className="automation-card automation-action-section" aria-labelledby="automation-actions-title">
         <div className="automation-card-heading">
           <h2 id="automation-actions-title">Danh sách hành động</h2>
         </div>
@@ -652,7 +659,7 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
             </button>
           </div>
         )}
-      </section>
+      </section>}
 
       <section className="automation-card automation-list-section" aria-labelledby="automation-list-title">
         <div className="automation-card-heading automation-list-heading">
@@ -747,9 +754,9 @@ export default function AutomationPage({ isActive }: AutomationPageProps) {
               {hasFilters ? (
                 <button type="button" className="automation-button" onClick={clearFilters}><FilterX size={15} /> Xóa bộ lọc</button>
               ) : (
-                <button type="button" className="automation-button is-primary" onClick={() => setModal({ mode: 'create', automation: null })} disabled={!optionsLoaded || optionsLoading}>
+                allowCreate ? <button type="button" className="automation-button is-primary" onClick={() => setModal({ mode: 'create', automation: null })} disabled={!optionsLoaded || optionsLoading}>
                   <Plus size={15} /> Thêm tự động hóa
-                </button>
+                </button> : null
               )}
             </div>
           ) : (

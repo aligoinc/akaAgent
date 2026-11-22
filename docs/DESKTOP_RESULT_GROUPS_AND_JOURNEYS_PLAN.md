@@ -2,7 +2,7 @@
 
 Ngày 22/11/2026. Người dùng gửi ảnh mục 9 của form chiến dịch trên Web và yêu cầu: áp dụng tính năng này cho Desktop, áp dụng luôn Tự động hóa mới của Web sang Desktop, "lên phương án, chưa code".
 
-**Trạng thái: chỉ là phương án, chưa viết mã, chưa đổi DB.** Người dùng chốt 22/11 (mục 6): Tự động hóa = nhúng trang Web; đồng ý các đề xuất 2, 3, 5; **mở rộng khung "Sau khi chạy" cho cả Facebook** (mục 2.6). Bản thiết kế 10 màn: https://claude.ai/artifact/Sr55xT2Qe1uf8AxGr8xQrX
+**Trạng thái (22/11/2026, sau "Thực thi cho đến khi xong"): đã viết mã cả Đợt 1 (kể cả Facebook) lẫn Đợt 2, mục 8.** Nhánh `claude/serene-edison-aukdii` ở akaAgent và akaAgentWebApp, chưa merge, chưa deploy API/Web, chưa build/phát hành Desktop; V627 chưa áp. Người dùng chốt 22/11 (mục 6): Tự động hóa = nhúng trang Web; đồng ý các đề xuất 2, 3, 5; **mở rộng khung "Sau khi chạy" cho cả Facebook** (mục 2.6). Bản thiết kế 10 màn: https://claude.ai/artifact/Sr55xT2Qe1uf8AxGr8xQrX
 
 ## 1. Hiện trạng (đọc mã và DB thật 22/11, chỉ đọc)
 
@@ -156,3 +156,31 @@ Mỗi bước deploy, migration, phát hành đều hỏi người dùng trướ
 - Chưa đọc luật hạn thiết bị Web đủ để biết phiên loại mới cần đổi những gì.
 - Nguồn "kết quả chiến dịch" của quy trình với chiến dịch Facebook: có mẫu `facebook_chain` nhưng chưa thử trên dữ liệu thật.
 - Bản API/Web đang chạy trên Fly: suy từ dữ liệu, không có biên nhận sau 17/11.
+
+
+## 8. Đã viết mã (22/11/2026)
+
+### WebApp (nhánh `claude/serene-edison-aukdii`)
+
+- Hợp đồng `packages/control-api/src/campaignResultGroups.ts`: 8 loại chiến dịch Facebook, loại nhóm Facebook, câu theo đối tượng; bộ máy `journey-core` + `journeys.engine.ts` đưa group / page / bài viết vào nhóm (`groupTarget`); V627 (chưa áp) cho `group_adds` nạp Nhóm data loại Facebook.
+- Đường Desktop `/api/aka-agent/desktop/v1/campaign-result-groups` (token phiên Desktop, cùng dịch vụ với Web).
+- Trang Web `?embed=desktop`: không thanh bên / thanh trên, đọc `/me` bằng phiên native, tiêu đề `akaAgent: cần đăng nhập lại` khi hết phiên, link ra ngoài là điều hướng cả trang. Chi tiết: akaAgentWebApp `docs/CAMPAIGN_RESULT_GROUPS.md` mục 9.
+
+### Desktop
+
+- `src/shared/campaignResultGroups.ts` (chép nguyên văn WebApp), `src/shared/campaignResultGroupsDesktop.ts` (kênh IPC, đổi (action, payload) thành yêu cầu API), `src/main/services/campaignResultGroupsApi.ts` + `ipc/handlers/campaignResultGroupsHandlers.ts` (một kênh `campaign-result-groups:call`, token phiên Desktop, hạn 30 giây, API chưa có đường → `campaign_result_groups_not_ready`).
+- Khung trong hai form: `components/CampaignResultGroups/` (thành phần chuyển từ Web, hook dữ liệu, `useCampaignFormResultGroups` dùng chung cho `CampaignFormModal` và `CampaignAgentFormModal`). Mục cuối của form khi loại chiến dịch có khung (không có ở chiến dịch tạm tạo kèm); nháp giữ ở `values.campaignResultGroups` (cùng khóa với Web, sửa luôn lỗi mất dòng khi Desktop lưu lại nháp của Web); lỗi chặn lưu; bước bật đồng bộ nằm trong `saveCompletion.finish` trước bước bật chiến dịch, mỗi (chiến dịch, nhóm) một lượt `PUT`, mã yêu cầu theo lần lưu; chiến dịch Nhóm data tạo thẳng ở trạng thái cuối thì `includeExisting: true`; lỗi thì chiến dịch giữ tạm dừng và bảng ở chân form có Thử lại / Chọn nhóm khác / Bỏ nhóm này và chạy. Tạo nhóm tại dòng bằng `QuickCreateDataGroupDialog` (thêm chọn loại khi có nhiều loại nhận được; nhóm UID Zalo chỉ tạo tại đây khi chiến dịch chạy một tài khoản). API chưa có đường của Desktop: khung báo và chặn lưu khi còn dòng, không còn dòng thì ẩn.
+- Trang Tự động hóa (`pages/AutomationHub.tsx`) ba thẻ: **Quy trình** (`components/Automation/JourneysEmbed.tsx` + `main/services/journeyWebService.ts`: đăng nhập native bằng tài khoản akaAgent, cookie httpOnly trong phân vùng `persist:akaagent_web_<tổ chức>_<nhân viên>`, chỉ cho ở lại trong `/automation`, link ra ngoài mở màn Desktop (chiến dịch, sửa chiến dịch, thêm chiến dịch, Nhóm data, tài khoản), trang không tự đăng nhập được, hết phiên thì đăng nhập lại một lần, đăng xuất / thay phiên thì thu hồi phiên native), **Từ chiến dịch** (`components/Automation/FromCampaignsTab.tsx`), **Quy tắc cũ** (trang cũ, chỉ hiện khi nhân viên còn quy tắc, không có nút tạo). Link trong form ("Tự động hóa › Từ chiến dịch", "Xem tự động hóa") qua `stores/automationNavStore.ts`; form tạm ẩn khi đang ở trang Tự động hóa.
+- `AutomationProcessor` chỉ khởi động khi nhân viên còn quy tắc cũ (một lượt đọc lúc đăng nhập; đọc lỗi thì chạy như trước).
+
+### Kiểm thử
+
+- `node scripts/campaign-result-groups-desktop-smoke.cjs` (5 nhóm; `WEBAPP_REPO=<checkout WebApp>` để so md5 hợp đồng và câu tiêu đề hết phiên): đổi yêu cầu, mã thật của client main gọi API cục bộ (thành công, lỗi nghiệp vụ giữ câu, API chưa có đường, mất mạng, token lỗi), luật đường của trang nhúng.
+- `node scripts/run-campaign-result-groups-ui-smoke.cjs` (8 nhóm, Chromium của Playwright, IPC giả): khung với chiến dịch đăng nhóm Facebook, thêm dòng một lượt `options`, chỉ nhóm đúng loại, Comment theo Kiêm comment, kiểm lỗi, nháp, lưu, bảng lỗi ba nút, ẩn theo loại, API chưa sẵn sàng, thẻ Từ chiến dịch.
+- `node scripts/journey-web-embed-electron-smoke.cjs` (8 nhóm, Electron thật dưới xvfb, máy chủ cục bộ đóng vai API + trang nhúng): đăng nhập native và cookie, trang đọc `/me`, chặn link ra ngoài, trang không tự đăng nhập, đăng nhập lại khi hết phiên, không lặp khi hết phiên liên tiếp (bài kiểm tìm ra vòng đăng nhập lại vô hạn, đã sửa: chỉ cho tự đăng nhập lại sau khi `/me` của trang thành công), thu hồi phiên khi đăng xuất.
+- Hai typecheck, `electron-vite build`.
+- Chưa: chạy form thật trong Electron, chạy trang Web thật (bản nhúng) trong webview với API thật, phát lại kết quả Facebook thật qua bộ máy trên DB thật.
+
+### Thứ tự đưa vào dùng
+
+Áp V627 (Facebook) → deploy API/Web (đường Desktop, chế độ nhúng) → build/phát hành Desktop. Desktop bản mới gặp API chưa deploy: khung "Sau khi chạy" báo chưa hỗ trợ và chặn lưu khi có dòng; thẻ Quy trình hiện trang Web bản cũ (có form đăng nhập, bị chặn), nên phải deploy Web trước khi phát hành. Mỗi bước hỏi người dùng trước.
