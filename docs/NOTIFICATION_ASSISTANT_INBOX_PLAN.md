@@ -4,7 +4,8 @@ Yêu cầu (22/11/2026): "Tôi muốn tất cả các thông báo này nó sẽ 
 nhận được một tin nhắn trợ lý AK thì hệ thống cũng sẽ tự động báo cho khách hàng thông qua Notify app."
 
 **Tình trạng:** anh chốt Q1–Q4 và cho code ("Bạn hãy thực thi cho đến khi nào xong thì thôi", 22/11/2026). Đã code xong cả
-bốn phần (DB, API + Web, iOS, Desktop), chưa apply V624, chưa deploy, chưa phát hành, chưa mở PR. Xem mục 6.
+bốn phần (DB, API + Web, iOS, Desktop). **V624 đã apply akachat 11:57:58 VN 22/11/2026** theo yêu cầu ("Apply luôn"; công tắc vẫn
+`off`, chưa ai thấy gì); chưa deploy, chưa phát hành, chưa mở PR. Xem mục 6.
 
 ## 1. Hiện trạng (đã kiểm)
 
@@ -117,7 +118,7 @@ Các câu hỏi gốc:
 
 | Phần | Ở đâu | Đã kiểm | Chưa |
 | --- | --- | --- | --- |
-| DB V624 | akaAgent nhánh `claude/practical-albattani-jm21p0`: [migration](../migrations/migration_v624_notification_assistant_inbox.sql), [gỡ](../migrations/rollback_v624_notification_assistant_inbox.sql), bản dán SQL Editor `migrations/tests/migration_v624_notification_assistant_inbox_paste.sql`; sinh bằng `python3 scripts/build-v624-sql.py` từ thân production đọc 22/11 (`migrations/snapshots/notification-assistant-inbox-v624/live/`) | `scripts/notification-assistant-inbox/smoke_v624.sh` (PG16, nền Trợ lý aka chép từ production, 6 hàm sẽ thay = md5 production): PASS, có hai phiên song song, apply lại bị từ chối, gỡ trả đúng hàm / cột, bản dán | Apply |
+| DB V624 | akaAgent nhánh `claude/practical-albattani-jm21p0`: [migration](../migrations/migration_v624_notification_assistant_inbox.sql), [gỡ](../migrations/rollback_v624_notification_assistant_inbox.sql), bản dán SQL Editor `migrations/tests/migration_v624_notification_assistant_inbox_paste.sql`; sinh bằng `python3 scripts/build-v624-sql.py` từ thân production đọc 22/11 (`migrations/snapshots/notification-assistant-inbox-v624/live/`) | `scripts/notification-assistant-inbox/smoke_v624.sh` (PG16, nền Trợ lý aka chép từ production, 6 hàm sẽ thay = md5 production): PASS, có hai phiên song song, apply lại bị từ chối, gỡ trả đúng hàm / cột, bản dán | **Đã apply** 11:57:58 VN 22/11 (sổ `20261122061101`, không apply lại; [biên nhận](../migrations/snapshots/notification-assistant-inbox-v624/apply-receipt.json)) |
 | API + Web + hợp đồng | akaAgentWebApp nhánh `claude/notification-assistant-inbox` (nền `dev_1` `097ffa57`, commit `748441ce`) | `npm run typecheck` 8 workspace, `npm test` mọi workspace, build Web | Deploy, PR |
 | iOS | cùng nhánh WebApp (commit `9de489c4`) | test mobile | Bản 0.7.0 (0.6.0 đang chờ Apple duyệt) |
 | Desktop | akaAgent cùng nhánh V624 | hai typecheck, `node scripts/notification-toast-desktop/smoke.cjs` (10 ca), `electron-vite build` | Chạy trong Electron thật, phát hành |
@@ -149,8 +150,9 @@ một chiến dịch đang hiện chuyển sang "hoàn thành". Thêm: nhãn "Ch
 thành ô số, nội dung loại `assistant`.
 
 **Thứ tự đưa lên** (mỗi bước chờ anh yêu cầu):
-1. Apply V624 buổi tối (sửa 6 hàm + thêm cột / chỉ mục trên `ai_message` = PostgREST nạp lại schema). Trước khi apply kiểm sổ còn
-   trống số 624 và 6 hàm còn đúng md5 (migration tự kiểm, sai thì dừng).
+1. ~~Apply V624~~: đã apply 11:57:58 VN 22/11/2026 theo yêu cầu ("Apply luôn"), qua bản dán (MCP), sổ `20261122061101`, md5 sổ = file
+   `7a47a5b8…`, không apply lại. PostgREST nạp lại schema 5,3 giây, 0 lỗi 5xx; thử trên thông báo thật trong giao dịch rồi huỷ: đạt
+   ([biên nhận](../migrations/snapshots/notification-assistant-inbox-v624/apply-receipt.json)).
 2. Merge + deploy API / Web từ nhánh WebApp (bản đang chạy không gửi `includeNotices` nên không thấy mục thông báo; deploy trước
    hay sau V624 đều được, API mới gặp DB chưa có V624 thì DB bỏ qua khoá lạ).
 3. iOS 0.7.0 (đổi `version` / `buildNumber` trong `app.config.ts` lúc phát hành).

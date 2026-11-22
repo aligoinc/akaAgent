@@ -1,0 +1,49 @@
+{
+  "migration": "migration_v624_notification_assistant_inbox",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply luôn (22/11/2026)",
+  "method": "bản dán migrations/tests/migration_v624_notification_assistant_inbox_paste.sql qua Supabase MCP execute_sql (một giao dịch, tự kiểm md5, tự ghi sổ)",
+  "applied_at_vn": "2026-11-22 11:57:58 (giờ PostgREST nhận tin nạp lại schema: 04:57:58 UTC)",
+  "ledger_version": "20261122061101",
+  "ledger_version_note": "Sổ đã có dòng V623 mang version 20261122061100 (đi trước giờ thật), bản dán lấy max + 1 giây nên version không phải giờ apply.",
+  "ledger_md5_statements": "7a47a5b8215103c95f174f11757f565c",
+  "file_md5": "7a47a5b8215103c95f174f11757f565c",
+  "preflight": {
+    "six_functions_md5_before": {
+      "private.aka_agent_ai_assistant_item(ai_message)": "f7d421b8977fedf20e6471a9dfa4ada6",
+      "private.aka_agent_ai_assistant_stream(bigint,bigint,jsonb)": "965d14b00e959a935b13e9ba98b05a9d",
+      "private.aka_agent_ai_assistant_sync(bigint,bigint,jsonb)": "0ca5dccc4c29ecd06666a68c52ea5750",
+      "public.aka_agent_control_ai_assistant(bigint,bigint,text,text,jsonb,uuid)": "7239d660fba11a324acd342b59698247",
+      "private.aka_agent_ai_assistant_agent_context(bigint,bigint,jsonb)": "e2cbd418d0c87926f55479d2da6416fc",
+      "public.aka_agent_notification_worker(text,jsonb)": "60eb06ec7d4f83d086b4aebb91e48b35"
+    },
+    "ledger_max_before": "migration_v623_akabiz_auto_sync",
+    "ai_message_rows": 204,
+    "load": "4 lệnh đang chạy, 2 dùng CPU (8 vCPU), 0 chờ khoá"
+  },
+  "postflight": {
+    "six_functions_md5_after": {
+      "private.aka_agent_ai_assistant_item(ai_message)": "1ceaa2192a8187af4f58759876973930",
+      "private.aka_agent_ai_assistant_stream(bigint,bigint,jsonb)": "0afcb10adeaa818089ff4d947cd9ebc3",
+      "private.aka_agent_ai_assistant_sync(bigint,bigint,jsonb)": "fd0b2fa3011125a14073deccca15b76f",
+      "public.aka_agent_control_ai_assistant(bigint,bigint,text,text,jsonb,uuid)": "68b766e23dcbd45705b4e76aa4a08311",
+      "private.aka_agent_ai_assistant_agent_context(bigint,bigint,jsonb)": "aeff942a414429b399419c0057c8a9cb",
+      "public.aka_agent_notification_worker(text,jsonb)": "86a893ab6e9ff2cba0c13dbc4be00487"
+    },
+    "new_functions_acl": "4 hàm private.aka_agent_ai_assistant_notice* chỉ postgres",
+    "replaced_functions_acl": "aka_agent_control_ai_assistant, aka_agent_notification_worker giữ postgres + service_role",
+    "trigger": "trg_aka_agent_ai_assistant_notice bật (O)",
+    "indexes": ["uq_ai_message_notification", "uq_ai_assistant_notice_thread"],
+    "setting": "notifications.assistant_inbox = {\"audience\":\"off\"}",
+    "notice_items": 0,
+    "postgrest_schema_reload": "truy vấn schema 5,3 giây; phút 11:57 VN 0 lỗi 5xx, 0 lỗi 503, 169 request REST quá 1 giây (phút trước 3–11); p50 47–59 ms",
+    "real_data_trial_rolled_back": "DO block RAISE ở cuối: thông báo chiến dịch thật của một nhân viên có Trợ lý aka; công tắc off thì không chép; bật all thì chép 1 mục, gọi lại trả cùng mục; stream/sync có includeNotices thấy mục (kind notice), không có includeNotices thì không thấy; hội thoại notices last_read_seq = last_message_seq. Kiểm lại sau: công tắc off, 0 mục, 0 hội thoại notices."
+  },
+  "not_done": [
+    "Deploy API/Web (akaAgentWebApp nhánh claude/notification-assistant-inbox)",
+    "iOS 0.7.0",
+    "Bật notifications.assistant_inbox"
+  ],
+  "do_not_reapply": true,
+  "rollback": "migrations/rollback_v624_notification_assistant_inbox.sql (tắt nhanh: đặt notifications.assistant_inbox = {\"audience\":\"off\"})"
+}
