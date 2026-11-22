@@ -31,6 +31,7 @@ const MAX_FAILURES = 5
 const MAX_BUSY_WAITS = 60
 const MAX_CAMPAIGN_RESTARTS = 3
 const BATCH_SIZE = 500
+const BATCH_MAX_BYTES = 6 * 1024 * 1024
 const ERROR_MESSAGE_MAX = 500
 const BUSY_TIMEOUT_MS = 5_000
 
@@ -224,10 +225,15 @@ function readCounts(db: Database.Database, campaignId: number): { detailCount: n
 function readDetailBatch(db: Database.Database, campaignId: number, afterId: number | null): Row[] {
   const rows = readRows(db, `SELECT * FROM autoCampaignDetail WHERE CampaignId=? AND (IsDelete IS NULL OR IsDelete=0) AND Id>?
     ORDER BY Id LIMIT ${BATCH_SIZE}`, [campaignId, afterId ?? -1])
-  for (const row of rows) {
+  // Lô theo dung lượng (API nhận tối đa 8 MB mỗi lần): data có ghi chú / địa chỉ dài ở Info1–5 thì lô ít dòng hơn.
+  let bytes = 0
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
     delete row.ContentMessage
     delete row.ErrorImagePath
     if (typeof row.ErrorMessage === 'string' && row.ErrorMessage.length > ERROR_MESSAGE_MAX) row.ErrorMessage = row.ErrorMessage.slice(0, ERROR_MESSAGE_MAX)
+    bytes += Buffer.byteLength(JSON.stringify(row), 'utf8') + 1
+    if (i > 0 && bytes > BATCH_MAX_BYTES) return rows.slice(0, i)
   }
   return rows
 }
@@ -482,20 +488,26 @@ export class AkaBizAutoSyncService {
               rows => { progress.rowsDone += rows; if (progress.current) progress.current.rowsDone += rows; emit() })
             break
           } catch (error) {
-            if (!(error instanceof TicketExpired) || attempt >= MAX_CAMPAIGN_RESTARTS) {
-              if (error instanceof TicketExpired) throw new AkaBizAutoSyncError('akabiz_sync_stuck', messageFor('akabiz_sync_stuck'))
+            // Máy chủ không còn nhớ chiến dịch trong lượt (mất câu trả lời rồi gửi lại, máy chủ khởi động lại): làm lại chiến dịch,
+            // máy chủ trả con trỏ đã ghi nên không chép trùng.
+            const unknown = error instanceof AkaBizAutoSyncError && error.code === 'akabiz_sync_campaign_unknown'
+            if ((!(error instanceof TicketExpired) && !unknown) || attempt >= MAX_CAMPAIGN_RESTARTS) {
+              if (error instanceof TicketExpired || unknown) throw new AkaBizAutoSyncError('akabiz_sync_stuck', messageFor('akabiz_sync_stuck'))
               throw error
             }
-            await this.reverify(signal)
-            beginData = await this.begin(effective, dryRun, signal, onWait)
+            if (!unknown) {
+              await this.reverify(signal)
+              beginData = await this.begin(effective, dryRun, signal, onWait)
+            }
             if (progress.current) { progress.rowsDone -= progress.current.rowsDone; progress.current.rowsDone = 0 }
           }
         }
         if (outcome) {
           report.rows.read += outcome.read
-          report.rows.imported += outcome.imported
-          report.rows.dropped += outcome.dropped
           if (outcome.verdict === 'copy') {
+            // Chỉ đếm dòng của chiến dịch đã chép xong (chiến dịch gặp dòng lỗi ở lô sau thành "cần xử lý", dòng đã gửi chưa hiện).
+            report.rows.imported += outcome.imported
+            report.rows.dropped += outcome.dropped
             report.campaigns.copied++
             if (outcome.actionId) byAction.set(outcome.actionId, (byAction.get(outcome.actionId) || 0) + 1)
             for (const adjustment of outcome.adjustments) {
@@ -583,7 +595,10 @@ export class AkaBizAutoSyncService {
       if (!rows.length) {
         if (dryRun) break
         try {
-          await this.call('/publish', { sourceId }, signal, onWait)
+          const published = await this.call('/publish', { sourceId, afterId: cursor.afterId }, signal, onWait)
+          if (published.verdict === 'issue') {
+            return { ...base, verdict: 'issue', code: String(published.code || ''), message: String(published.message || 'Chiến dịch cần kiểm tra lại.') }
+          }
           break
         } catch (error) {
           if (error instanceof AkaBizAutoSyncError && error.code === 'akabiz_sync_incomplete' && incompleteRetries++ < 2) {
