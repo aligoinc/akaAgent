@@ -2,7 +2,7 @@
 
 Ngày 22/11/2026. Người dùng gửi ảnh mục 9 của form chiến dịch trên Web và yêu cầu: áp dụng tính năng này cho Desktop, áp dụng luôn Tự động hóa mới của Web sang Desktop, "lên phương án, chưa code".
 
-**Trạng thái: chỉ là phương án, chưa viết mã, chưa đổi DB.** Năm điều chờ người dùng chốt ở mục 6.
+**Trạng thái: chỉ là phương án, chưa viết mã, chưa đổi DB.** Người dùng chốt 22/11 (mục 6): Tự động hóa = nhúng trang Web; đồng ý các đề xuất 2, 3, 5; **mở rộng khung "Sau khi chạy" cho cả Facebook** (mục 2.6). Bản thiết kế 10 màn: https://claude.ai/artifact/Sr55xT2Qe1uf8AxGr8xQrX
 
 ## 1. Hiện trạng (đọc mã và DB thật 22/11, chỉ đọc)
 
@@ -57,6 +57,30 @@ Không gọi gì khi khách chưa thêm dòng. Thêm dòng đầu: 1 lượt `op
 - Chiến dịch chạy bằng Nhóm data trong một gói tạo kèm được tạo thẳng ở trạng thái cuối (không qua tạm dừng). Với trường hợp này gửi `includeExisting: true` để không sót kết quả của vài giây đầu.
 - Xóa chiến dịch trên Desktop không gọi API Web; đồng bộ của nó được bộ máy tự dừng ở nhịp kế (tối đa khoảng 30 giây), không cần thêm gì.
 - Desktop bản cũ mở nháp có dòng nhóm rồi lưu lại vẫn làm mất dòng (đã biết); đồng bộ đã bật thì không bị ảnh hưởng.
+
+### 2.6 Mở rộng cho Facebook (người dùng chốt 22/11)
+
+Facebook đi cùng hợp đồng chung nên làm ở cả Web và Desktop, sau phần Zalo/SMS của Đợt 1 (Đợt 1b).
+
+| Loại chiến dịch Facebook | Hành động và kết quả lúc chạy (danh mục DB 22/11) | Loại nhóm nhận |
+|---|---|---|
+| Nhắn tin & Kết bạn đến UID | Kết bạn: thành công, đã gửi lời mời, đã là bạn bè, thất bại, lỗi · Nhắn tin: thành công, thất bại, lỗi | Facebook · User |
+| Nhắn tin đến bạn bè | Nhắn tin bạn bè: thành công, thất bại | Facebook · User |
+| Mời vào group | Mời: thành công, đã gửi lời mời, đã là thành viên, không tồn tại, lỗi | Facebook · User |
+| Gửi tin đến khách từng inbox Page | Nhắn tin: thành công, không tồn tại, thất bại, lỗi | Facebook · Khách inbox Page |
+| Đăng bài vào group | Đăng bài: thành công, bỏ qua, thất bại, lỗi · Comment: thành công, thất bại | Facebook · Group |
+| Tham gia group | Tham gia: thành công, đã tham gia, lỗi | Facebook · Group |
+| Comment seeding vào bài post | Comment: thành công, thất bại, lỗi, không tồn tại | Facebook · Link bài viết |
+| Comment seeding vào group/page/profile | Comment: thành công, thất bại, lỗi | User, Group hoặc Page theo loại data |
+
+Không có khung: đăng trang cá nhân, đăng fanpage, lướt newsfeed, tìm data (đã có "Đẩy sang Nhóm data"). Facebook không có kết quả "Sau khi gửi" (chưa theo dõi đã xem / đã trả lời). Tiêu đề mục đổi theo đối tượng: "đưa khách vào nhóm" (người), "đưa group vào nhóm", "đưa bài viết vào nhóm"; nhóm là "nhóm data" khi đối tượng không phải người.
+
+Việc phải làm thêm (chưa kiểm, làm ở Đợt 0):
+
+- Hợp đồng `campaignResultGroups.ts` (sửa ở WebApp trước): thêm loại chiến dịch, mã hành động, loại nhóm Facebook; luật nhóm nhận; câu theo đối tượng.
+- DB, migration mới: `group_adds` (V609/V613) chỉ nạp nhóm `phone` / `zalo_person`; phải nạp được loại Facebook bằng bản 13 tham số của `aka_agent_ingest_data_group` kèm đúng loại. Kiểm thêm bộ máy quy trình nhận khách từ kết quả chiến dịch Facebook (định danh là UID Facebook, link group, link bài) và trần, chỉ mục với lượng kết quả Facebook (đăng nhóm khoảng 2.000 chiến dịch / 30 ngày).
+- Khách inbox Page trên Desktop nằm ở SQLite trên máy (`page_inbox_customer`), không ở DB: phải kiểm kết quả chiến dịch inbox Page có đủ định danh để nạp vào nhóm "Khách inbox Page" không; không đủ thì bỏ loại này khỏi đợt đầu.
+- Kiểm thử: thêm lô Facebook vào bộ mô phỏng `campaign-result-groups-e2e.mts`.
 
 ## 3. Đợt 2: Tự động hóa mới trên Desktop
 
@@ -118,13 +142,13 @@ Mỗi bước deploy, migration, phát hành đều hỏi người dùng trướ
 - Đợt 2: smoke trang nhúng (đăng nhập, chặn điều hướng, đổi phiên) với một máy chủ Web cục bộ; chạy lại bộ e2e quy trình của Web ở chế độ nhúng.
 - Hai typecheck, `electron-vite build`.
 
-## 6. Điều chờ người dùng chốt
+## 6. Người dùng đã chốt (22/11)
 
-1. Tự động hóa mới: nhúng trang Web (cách A, đề xuất) hay viết lại trong Desktop (cách B).
-2. Quy tắc cũ: giữ chạy, ẩn nút tạo mới, thẻ chỉ hiện với người còn quy tắc (đề xuất); hay vẫn cho tạo; hay chuyển sang quy trình mới ngay.
-3. Phát hành: Đợt 1 trước rồi Đợt 2 (đề xuất), hay gom một bản.
-4. Chiến dịch Facebook: không có khung "Sau khi chạy" như Web (đề xuất giữ đúng Web); mở rộng cho Facebook là việc riêng ở cả Web, API và DB.
-5. Câu chữ: dùng nguyên câu của Web như trong ảnh (đề xuất), chỉ đổi link thành mở thẻ trong phần mềm.
+1. Tự động hóa mới: nhúng trang Web (cách A).
+2. Quy tắc cũ: giữ chạy, ẩn nút tạo mới, thẻ chỉ hiện với người còn quy tắc.
+3. Phát hành: Đợt 1 trước, Đợt 2 sau.
+4. Mở rộng khung "Sau khi chạy" cho Facebook (mục 2.6; làm ở cả Web, API, DB).
+5. Câu chữ dùng nguyên của Web, link đổi thành mở thẻ trong phần mềm.
 
 ## 7. Chưa xác minh
 
