@@ -17,6 +17,17 @@
     "dispatch_mode": "fly",
     "seeded_rows": 0
   },
-  "logs_0744_0750_vn": {"http_5xx": 0, "http_503": 0, "schema_reloads": "1 lần lúc 07:49", "notification_tick_errors": 0},
-  "p2": "chưa chạy lúc ghi biên nhận"
+  "logs_0744_0750_vn": {
+    "http_5xx": 0,
+    "http_503": 0,
+    "schema_reloads": "1 lần lúc 07:49",
+    "notification_tick_errors": 0
+  },
+  "p2": {
+    "run_by": "anh tự chạy từng lệnh trong SQL Editor",
+    "checked_at_vn": "2026-11-22 07:55:31",
+    "constraints_validated": 3,
+    "index_idx_auto_notification_subscriptions_reports_due": "valid, 16 kB",
+    "old_index_idx_auto_notification_subscriptions_report_due": "đã xoá"
+  }
 }
