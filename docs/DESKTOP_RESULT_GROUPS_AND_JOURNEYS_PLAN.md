@@ -2,7 +2,7 @@
 
 Ngày 22/11/2026. Người dùng gửi ảnh mục 9 của form chiến dịch trên Web và yêu cầu: áp dụng tính năng này cho Desktop, áp dụng luôn Tự động hóa mới của Web sang Desktop, "lên phương án, chưa code".
 
-**Trạng thái (22/11/2026, sau "Thực thi cho đến khi xong"): đã viết mã cả Đợt 1 (kể cả Facebook) lẫn Đợt 2, mục 8.** Nhánh `claude/serene-edison-aukdii` ở akaAgent và akaAgentWebApp, chưa merge, chưa deploy API/Web, chưa build/phát hành Desktop; V627 chưa áp. Người dùng chốt 22/11 (mục 6): Tự động hóa = nhúng trang Web; đồng ý các đề xuất 2, 3, 5; **mở rộng khung "Sau khi chạy" cho cả Facebook** (mục 2.6). Bản thiết kế 10 màn: https://claude.ai/artifact/Sr55xT2Qe1uf8AxGr8xQrX
+**Trạng thái (22/11/2026, sau "Thực thi cho đến khi xong"): đã viết mã cả Đợt 1 (kể cả Facebook) lẫn Đợt 2, mục 8.** Nhánh `claude/serene-edison-aukdii` ở akaAgent và akaAgentWebApp, chưa merge, chưa deploy API/Web, chưa build/phát hành Desktop; V627 đã apply akachat 22:28:57 VN 22/11/2026 theo yêu cầu ("Apply V627 đi"; sổ `20261122152857`, không apply lại, md5 sổ = file `6504433c…`; chạy thử trong khối tự huỷ trước đó, PostgREST nạp lại schema 2,2 s, 0 lỗi 5xx/503; [biên nhận](../migrations/snapshots/group-adds-facebook-v627/apply-receipt.json)). Người dùng chốt 22/11 (mục 6): Tự động hóa = nhúng trang Web; đồng ý các đề xuất 2, 3, 5; **mở rộng khung "Sau khi chạy" cho cả Facebook** (mục 2.6). Bản thiết kế 10 màn: https://claude.ai/artifact/Sr55xT2Qe1uf8AxGr8xQrX
 
 ## 1. Hiện trạng (đọc mã và DB thật 22/11, chỉ đọc)
 
@@ -162,7 +162,7 @@ Mỗi bước deploy, migration, phát hành đều hỏi người dùng trướ
 
 ### WebApp (nhánh `claude/serene-edison-aukdii`)
 
-- Hợp đồng `packages/control-api/src/campaignResultGroups.ts`: 8 loại chiến dịch Facebook, loại nhóm Facebook, câu theo đối tượng; bộ máy `journey-core` + `journeys.engine.ts` đưa group / page / bài viết vào nhóm (`groupTarget`); V627 (chưa áp) cho `group_adds` nạp Nhóm data loại Facebook.
+- Hợp đồng `packages/control-api/src/campaignResultGroups.ts`: 8 loại chiến dịch Facebook, loại nhóm Facebook, câu theo đối tượng; bộ máy `journey-core` + `journeys.engine.ts` đưa group / page / bài viết vào nhóm (`groupTarget`); V627 (đã apply 22:28:57 VN 22/11/2026) cho `group_adds` nạp Nhóm data loại Facebook.
 - Đường Desktop `/api/aka-agent/desktop/v1/campaign-result-groups` (token phiên Desktop, cùng dịch vụ với Web).
 - Trang Web `?embed=desktop`: không thanh bên / thanh trên, đọc `/me` bằng phiên native, tiêu đề `akaAgent: cần đăng nhập lại` khi hết phiên, link ra ngoài là điều hướng cả trang. Chi tiết: akaAgentWebApp `docs/CAMPAIGN_RESULT_GROUPS.md` mục 9.
 
@@ -180,8 +180,8 @@ Mỗi bước deploy, migration, phát hành đều hỏi người dùng trướ
 - `node scripts/journey-web-embed-electron-smoke.cjs` (8 nhóm, Electron thật dưới xvfb, máy chủ cục bộ đóng vai API + trang nhúng): đăng nhập native và cookie, trang đọc `/me`, chặn link ra ngoài, trang không tự đăng nhập, đăng nhập lại khi hết phiên, không lặp khi hết phiên liên tiếp (bài kiểm tìm ra vòng đăng nhập lại vô hạn, đã sửa: chỉ cho tự đăng nhập lại sau khi `/me` của trang thành công), thu hồi phiên khi đăng xuất.
 - Hai typecheck, `electron-vite build`.
 - **End-to-end (22/11, "Kiểm thử luồng dữ liệu end to end")**: akaAgentWebApp `AKA_AGENT_REPO=<akaAgent> npx tsx scripts/campaign-result-groups-desktop-e2e.mts <seed>`: mã thật của Desktop (`src/shared/campaignResultGroups.ts`, `src/main/services/campaignResultGroupsApi.ts`) → API Fastify thật (đường Desktop) → dịch vụ → RPC trên Postgres tạm có V473 + V609 + V613 + V627 → bộ máy quy trình → `group_adds`, so từng trường với đáp án độc lập; 8 loại chiến dịch Facebook + Zalo, seed 1–6 đạt. Hàm nạp nhóm thật của production nhận đúng 5 dạng dòng Facebook của V627 (khối tự hủy, không lưu gì); thân `group_adds` production đúng md5 V627 chờ.
-- Chưa: chạy form thật trong Electron, chạy trang Web thật (bản nhúng) trong webview với API thật, chạy V627 trên DB thật với kết quả Facebook thật.
+- Chưa: chạy form thật trong Electron, chạy trang Web thật (bản nhúng) trong webview với API thật, nhánh Facebook của `group_adds` chạy với lượt thật trên DB thật (V627 đã apply; hàm đọc dòng Facebook đã thử trên 5 kết quả Facebook thật trong khối tự huỷ trước khi apply, còn quy trình `campaign_groups` của chiến dịch Facebook chỉ có sau khi deploy API/Web).
 
 ### Thứ tự đưa vào dùng
 
-Áp V627 (Facebook) → deploy API/Web (đường Desktop, chế độ nhúng) → build/phát hành Desktop. Desktop bản mới gặp API chưa deploy: khung "Sau khi chạy" báo chưa hỗ trợ và chặn lưu khi có dòng; thẻ Quy trình hiện trang Web bản cũ (có form đăng nhập, bị chặn), nên phải deploy Web trước khi phát hành. Mỗi bước hỏi người dùng trước.
+~~Áp V627 (Facebook)~~ (xong 22:28:57 VN 22/11/2026) → deploy API/Web (đường Desktop, chế độ nhúng) → build/phát hành Desktop. Desktop bản mới gặp API chưa deploy: khung "Sau khi chạy" báo chưa hỗ trợ và chặn lưu khi có dòng; thẻ Quy trình hiện trang Web bản cũ (có form đăng nhập, bị chặn), nên phải deploy Web trước khi phát hành. Mỗi bước hỏi người dùng trước.
