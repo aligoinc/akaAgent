@@ -1,0 +1,29 @@
+{
+  "migration": "migration_v623_akabiz_auto_sync",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "22/11/2026 ~11:00 VN, \"Ok\" (trả lời câu hỏi làm bước 1–3: apply V623, deploy API, bật thử)",
+  "tool": "Supabase MCP apply_migration, nguyên văn file",
+  "file_md5": "64a13ceef7206f3557de96ea85a4c7c2",
+  "file_bytes": 28837,
+  "ledger": { "version": "20261122040449", "name": "migration_v623_akabiz_auto_sync", "statements_md5": "64a13ceef7206f3557de96ea85a4c7c2" },
+  "applied_at_vn": "2026-11-22 11:04:49",
+  "precheck": {
+    "at_vn": "2026-11-22 11:03",
+    "number_free": "sổ chưa có migration_v623_*; mới nhất migration_v622_notification_morning_totals (20261122012151) + 5 migration crm_timeline_cskh_* của phiên khác; origin/dev_3 không có tệp migration_v623–v629",
+    "objects": "hàm akabiz_import_auto_desktop_v1 chưa có; dòng auto_system_settings web.akabiz_auto_sync chưa có",
+    "db_load": "2 backend đang chạy (trưa Chủ nhật)"
+  },
+  "verify": {
+    "at_vn": "2026-11-22 11:04:55",
+    "function_md5": "f4ae76455879213d60526bc6cc20a805",
+    "acl": "{postgres=X/postgres,service_role=X/postgres}",
+    "check": "CHECK ((source_system = ANY (ARRAY['akabiz_main_sql'::text, 'akabiz_auto_sqlite'::text])))",
+    "old_rows_akabiz_main_sql": 13110,
+    "akabiz_import_sql_zalo_web_v1": "còn nguyên"
+  },
+  "impact": {
+    "postgrest_schema_reload": "nhận lệnh 11:04:49.7, truy vấn schema 3,78 s, nạp xong 11:04:55",
+    "edge_logs": "11:03–11:05 VN: 0 lỗi 5xx, 0 lỗi 503; phút 11:04 có 122/30.395 request quá 1 giây (phút trước 1), p50 48 ms"
+  },
+  "not_done": "Không apply lại. Chưa bật web.akabiz_auto_sync (chưa có dòng = tắt); API akaAgentWebApp có module akabiz-auto-sync chưa deploy."
+}

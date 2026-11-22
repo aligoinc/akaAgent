@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Ban, CheckCircle2, Edit3, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, Save, Search, Tags, Trash2, X } from 'lucide-react'
+import { Ban, CheckCircle2, Edit3, FolderOpen, Link2, Mail, MessageSquareText, Monitor, Phone, Plus, RefreshCw, Save, Search, Tags, Trash2, X } from 'lucide-react'
 import {
   AkaBizContactTag,
   AkaBizIntegrationInfo,
@@ -16,6 +16,7 @@ import MessageOptOutCustomersSettings from './MessageOptOutCustomersSettings'
 import BrowserRunLimitsSettings from './BrowserRunLimitsSettings'
 import DesktopCampaignTypeVisibilitySettings from './DesktopCampaignTypeVisibilitySettings'
 import NotificationCenterSettings from './NotificationCenterSettings'
+import AkaBizAutoSyncModal from './AkaBizAutoSyncModal'
 import { Grid2X2 } from 'lucide-react'
 
 export type GeneralSettingsMenu = 'akabiz' | 'akabizTags' | 'emailNotifications' | 'zaloBlocklists' | 'chatSync' | 'messageOptOutCustomers' | 'browserRunLimits' | 'campaignTypeVisibility'
@@ -116,6 +117,7 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
   const [integrations, setIntegrations] = useState<AkaBizIntegrations | null>(null)
   const [usernames, setUsernames] = useState<Record<AkaBizIntegrationKind, string>>({ sms: '', zaloWeb: '', akaBizDesktop: '' })
   const [desktopInstallPath, setDesktopInstallPath] = useState('')
+  const [autoSyncOpen, setAutoSyncOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [busyKind, setBusyKind] = useState<AkaBizIntegrationKind | null>(null)
   const [akabizTags, setAkaBizTags] = useState<AkaBizContactTag[]>([])
@@ -727,6 +729,17 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
                                 <strong title={integration.installPath || ''}>{integration.installPath || '-'}</strong>
                               </div>
                             )}
+                            {card.kind === 'akaBizDesktop' && integration.dbPath && typeof window.electronAPI?.akaBizAutoSyncConnect === 'function' && (
+                              <div className="akabiz-auto-sync-block">
+                                <div className="akabiz-auto-sync-text">
+                                  <strong>Đồng bộ tài khoản và chiến dịch <span className="akabiz-auto-sync-badge">Mới</span></strong>
+                                  <span>Chép tài khoản Zalo, Facebook và chiến dịch từ akaBiz Desktop trên máy này sang akaAgent. Dữ liệu bên akaBiz giữ nguyên.</span>
+                                </div>
+                                <button type="button" className="btn btn-primary akabiz-auto-sync-button" onClick={() => setAutoSyncOpen(true)}>
+                                  <RefreshCw size={15} /> Đồng bộ
+                                </button>
+                              </div>
+                            )}
                           </div>
                         ) : (
                           <div className="akabiz-edit-fields">
@@ -797,6 +810,9 @@ export default function GeneralSettingsModal({ initialMenu = 'akabiz', initialAc
           </section>
         </div>
       </div>
+      {autoSyncOpen && integrations?.akaBizDesktop && (
+        <AkaBizAutoSyncModal integration={integrations.akaBizDesktop} onClose={() => setAutoSyncOpen(false)} />
+      )}
     </div>,
     document.body
   )

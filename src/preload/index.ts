@@ -69,6 +69,7 @@ import { CAMPAIGN_DRAFT_IPC, type CampaignDraft, type CampaignDraftPage, type Sa
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { PageInboxScanOptions, PageInboxScanInfo } from '../shared/types'
 import { existsSync } from 'fs'
+import { AKABIZ_AUTO_SYNC_IPC, type AkaBizAutoSyncConnectResult, type AkaBizAutoSyncProgress, type AkaBizAutoSyncReport, type AkaBizAutoSyncResult, type AkaBizAutoSyncSettings } from '../shared/akaBizAutoSync'
 import { IPC_EVENTS, ZaloFriendBlocklistPageQuery, ZaloFriendBlocklistPage, ZaloFriendBlocklistMutationResult, AccountContactListQuery, AutoAccount, AutoAccountGroup, AutoProxy, ProxyTestRequest, ProxyTestResult, Campaign, CampaignConfig, CampaignUpdate, CampaignListItem, CampaignLogSnapshot, CampaignSummaryRefreshSignal, CampaignAction, CampaignInput, CampaignInputData, CampaignInputDataPageQuery, CampaignInputDataPageResult, CampaignInputDataWriteProgress, CampaignDetail, CampaignDetailPageQuery, CampaignDetailPageResult, CampaignRelationSummary, CampaignRunEvent, CampaignRunEventListOptions, CampaignLogEntry, AutoAccountContact, AutoAccountContactDataset, AutoAccountContactGroup, ContactDatasetListQuery, ContactGroupMutationResult, ContactType, ContactLoadResult, ContactLoadCompleted, ContactLoadProgress, AuthBootstrapResult, AuthSessionExpiredPayload, AuthUser, ZaloRuntimeRestartRequiredPayload, AccountActionOverview, AutoAccountAction, DeviceLockResetResult, LoginPreferences, AuthLocalState, StartupSettingResult, AiRewriteContentRequest, AiWriteMultiOtherContentRequest, AiGenerateCampaignNameRequest, CampaignAssistantChatRequest, CampaignAssistantChatResponse, CampaignAssistantContextResult, CampaignImportDataRow, CampaignImportImageRequest, CampaignImportSheetRequest, AkaBizCampaignListItem, AkaBizCampaignListKind, AkaBizIntegrationKind, AkaBizIntegrations, AkaBizStaffBasic, AkaBizSmsShopListItem, AkaBizDesktopPathValidationResult, AkaBizContactTag, ContentTemplate, ContentTemplateContentType, ContentTemplateGroup, CreateContentTemplateGroupInput, CreateContentTemplateInput, UpdateContentTemplateGroupInput, UpdateContentTemplateInput, ContactListResult, PageInboxContactListQuery, SaveUploadDatasetRequest, SaveUploadDatasetResult, ZaloGroupMemberContactListQuery, ZaloGroupMemberScanRequest, ZaloRemarketingCustomerListQuery, EmailNotificationSettings, AppNotification, AccountActionReportDetailQuery, AccountActionReportDetailResult, AccountActionReportQuery, AccountActionReportResult, AddCampaignInputDataRowsRequest, AddCampaignInputDataRowsResult, AddCampaignInputDataToCampaignRequest, AddCampaignInputDataToCampaignResult, BulkDeleteCampaignInputDataResult, BulkUpdateCampaignInputDataStatusResult, CampaignInputStatus, ZaloLabelOption, ZaloLoginQrEvent, ZaloLoginQrStartResult, ZaloSessionCheckResult, EmailAccountConfig, EmailCampaignLinkTrackingSummary, MediaClipboardImageInput, MediaDownloadResult, MediaFile, MediaGroup, MediaGroupMembership, MediaStorageSettings, MediaUploadResult, CustomerFeedbackSubmitRequest, CustomerFeedbackSubmitResult, Automation, AutomationExecutionListQuery, AutomationExecutionListResult, AutomationInput, AutomationListQuery, AutomationListResult, AutomationOptions, AutomationUpdatedEvent, CampaignAutomationExecutionListQuery, CampaignAutomationExecutionListResult, BindCampaignDataGroupSourceRequest, CampaignCreationBundle, CampaignDataGroupChangePreflight, CampaignDataGroupSource, CreateCampaignBundleRequest, CreateDataGroupRequest, DataGroupAccountOptionsQuery, DataGroupAccountOption, DataGroup, DataGroupCampaignTargetPreview, DataGroupCampaignTargetPreviewRequest, DataGroupDataset, DataGroupDynamicFilterConfig, DataGroupIngestRequest, DataGroupIngestResult, DataGroupLatestIngestStats, DataGroupListQuery, DataGroupListResult, DataGroupMember, DataGroupMemberIdListResult, DataGroupMemberListQuery, DataGroupMemberListResult, DataGroupMemberMutationRequest, DataGroupMutationResult, DataGroupNoteUpdateResult, DataGroupPanelData, DataTypeCategoryItem, MoveDataGroupMembersRequest, SaveDataGroupDynamicFilterRequest, SnapshotDataGroupToCampaignRequest, SnapshotDataGroupToCampaignResult, UpdateDataGroupRequest } from '../shared/types'
 import { IPC_EVENTS_V2, BlockDef, WorkflowDef, ElementDef, RunStepV2, BlockResult } from '../shared/v2Types'
 import type { ZaloServerOperationStateSnapshot } from '../shared/zaloServerProtocol'
@@ -320,6 +321,23 @@ const electronAPI = {
 
   validateAkaBizDesktopInstallPath: (installPath: string): Promise<AkaBizDesktopPathValidationResult> =>
     ipcRenderer.invoke(IPC_EVENTS.AKABIZ_DESKTOP_INSTALL_PATH_VALIDATE, installPath),
+
+  // Đồng bộ akaBiz Auto → akaAgent (docs/AKABIZ_AUTO_SYNC_DESKTOP.md). Mật khẩu chỉ đi một chiều vào tiến trình chính.
+  akaBizAutoSyncConnect: (password: string): Promise<AkaBizAutoSyncResult<AkaBizAutoSyncConnectResult>> =>
+    ipcRenderer.invoke(AKABIZ_AUTO_SYNC_IPC.connect, password),
+
+  akaBizAutoSyncRun: (settings: AkaBizAutoSyncSettings, dryRun: boolean): Promise<AkaBizAutoSyncResult<AkaBizAutoSyncReport>> =>
+    ipcRenderer.invoke(AKABIZ_AUTO_SYNC_IPC.run, settings, dryRun),
+
+  akaBizAutoSyncCancel: (): Promise<AkaBizAutoSyncResult<null>> => ipcRenderer.invoke(AKABIZ_AUTO_SYNC_IPC.cancel),
+
+  akaBizAutoSyncClose: (): Promise<AkaBizAutoSyncResult<null>> => ipcRenderer.invoke(AKABIZ_AUTO_SYNC_IPC.close),
+
+  onAkaBizAutoSyncProgress: (callback: (progress: AkaBizAutoSyncProgress) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, progress: AkaBizAutoSyncProgress) => callback(progress)
+    ipcRenderer.on(AKABIZ_AUTO_SYNC_IPC.progress, handler)
+    return () => { ipcRenderer.removeListener(AKABIZ_AUTO_SYNC_IPC.progress, handler) }
+  },
 
   // Webview registration (embedded browser tabs)
   registerWebview: (accountId: number, webContentsId: number, platformType?: string): Promise<{ success: boolean }> =>

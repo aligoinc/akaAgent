@@ -1,0 +1,28 @@
+{
+  "migration": "migration_v625_akabiz_auto_sync_live_source",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "22/11/2026 ~12:24 VN, \"Run sql\" (trả lời câu hỏi có apply bản sửa V624 không)",
+  "renumbered": "Viết là V624; lúc kiểm trước apply (12:24 VN) sổ đã có migration_v624_notification_assistant_inbox của phiên khác nên đổi sang V625. Bỏ số migration khỏi chú thích trong thân hàm để lần đổi số sau không đổi md5 (thân V624 bản cũ 3eae19a9…, bản V625 a4684e49…, chỉ khác chú thích). Chạy lại bộ kiểm SQL (66 PASS) và bộ giả lập (9.155 kiểm đạt, 0 lỗi) trên bản V625 trước khi apply.",
+  "tool": "Supabase MCP apply_migration, nguyên văn file",
+  "file_md5": "1f823acbe1817d5150f003cc59fbf6f2",
+  "file_bytes": 28314,
+  "ledger": { "version": "20261122053304", "name": "migration_v625_akabiz_auto_sync_live_source", "statements_md5": "1f823acbe1817d5150f003cc59fbf6f2" },
+  "applied_at_vn": "2026-11-22 12:33:04",
+  "precheck": {
+    "at_vn": "2026-11-22 12:31",
+    "number_free": "sổ chưa có migration_v625_*; mới nhất migration_v624_notification_assistant_inbox (20261122061101); không nhánh nào trong akaAgent / akaAgentWebApp / akaBizAuto có tệp migration_v625",
+    "function_md5_before": "f4ae76455879213d60526bc6cc20a805 (V623)",
+    "running_imports": 0
+  },
+  "verify": {
+    "at_vn": "2026-11-22 12:33:11",
+    "function_md5": "a4684e49cede91e434f99701b3e394e3",
+    "execute": "service_role có; anon, authenticated, aka_agent_desktop không (như V623)"
+  },
+  "impact": {
+    "postgrest_schema_reload": "phút 12:33 VN, truy vấn schema 2,87 s",
+    "edge_logs": "12:32–12:33 VN: 0 lỗi 5xx, 0 lỗi 503"
+  },
+  "rollback": "migrations/rollback_v625_akabiz_auto_sync_live_source.sql (đặt lại thân V623, kiểm md5 trước / sau)",
+  "not_done": "Không apply lại. web.akabiz_auto_sync vẫn chưa có dòng (tắt); API akaAgentWebApp chưa deploy."
+}
