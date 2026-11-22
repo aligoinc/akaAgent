@@ -1,12 +1,12 @@
--- Gỡ V624: đặt lại thân hàm akabiz_import_auto_desktop_v1 của V623.
--- Không đổi dữ liệu. Bản chép ẩn đã dựng lại bởi V624 (bản cũ không còn dòng) giữ nguyên.
+-- Gỡ V625: đặt lại thân hàm akabiz_import_auto_desktop_v1 của V623.
+-- Không đổi dữ liệu. Bản chép ẩn đã dựng lại bởi V625 (bản cũ không còn dòng) giữ nguyên.
 -- Một khối DO = một câu lệnh: kiểm trước, thay, kiểm sau cùng thành công hoặc cùng thất bại. Không đổi bảng, quyền, ACL.
-DO $r624$
+DO $r625$
 DECLARE v_body text;
 BEGIN
  SELECT md5(pg_get_functiondef('public.akabiz_import_auto_desktop_v1(jsonb)'::regprocedure)) INTO v_body;
- IF v_body IS DISTINCT FROM '3eae19a9366ba749a66ae7be6593479a' THEN
-   RAISE EXCEPTION 'R624 preflight: thân hàm hiện tại không như mong đợi: %', v_body;
+ IF v_body IS DISTINCT FROM 'a4684e49cede91e434f99701b3e394e3' THEN
+   RAISE EXCEPTION 'R625 preflight: thân hàm hiện tại không như mong đợi: %', v_body;
  END IF;
 
  EXECUTE $create$
@@ -310,6 +310,6 @@ $create$;
 
  SELECT md5(pg_get_functiondef('public.akabiz_import_auto_desktop_v1(jsonb)'::regprocedure)) INTO v_body;
  IF v_body IS DISTINCT FROM 'f4ae76455879213d60526bc6cc20a805' THEN
-   RAISE EXCEPTION 'R624 postflight: thân hàm sau khi thay không như mong đợi: %', v_body;
+   RAISE EXCEPTION 'R625 postflight: thân hàm sau khi thay không như mong đợi: %', v_body;
  END IF;
-END $r624$;
+END $r625$;

@@ -1,18 +1,18 @@
--- V624 — Đồng bộ akaBiz Auto: chạy đúng khi akaBiz Auto vẫn thêm / xoá data trong lúc đồng bộ.
+-- V625 — Đồng bộ akaBiz Auto: chạy đúng khi akaBiz Auto vẫn thêm / xoá data trong lúc đồng bộ.
 -- Người dùng yêu cầu 22/11/2026: giả lập đồng bộ trên SQLite như khách thật, sửa lỗi tìm ra (akaAgentWebApp
 -- scripts/akabiz-auto-sync-sim). Chỉ thay thân public.akabiz_import_auto_desktop_v1(jsonb) của V623:
 --  1. 'inputs' không báo SOURCE_CHANGED khi đã đọc nhiều dòng hơn lúc dựng bản chép (akaBiz Auto thêm data giữa lượt).
 --  2. 'publish' nhận payload.after_id (bên đọc đã đọc hết tới con trỏ này) thay cho so số dòng; thiếu after_id thì như V623.
 --  3. 'campaign' gọi lại cho bản chép còn ẩn: ghi số dòng mới; loại / tài khoản nguồn đổi thì dựng lại bản chép
 --     (V623 báo SOURCE_CHANGED mãi, chiến dịch không bao giờ chép được).
--- Sinh bằng scripts/build-v624-sql.py từ thân V623; bản gỡ: rollback_v624_akabiz_auto_sync_live_source.sql.
+-- Sinh bằng scripts/build-v625-sql.py từ thân V623; bản gỡ: rollback_v625_akabiz_auto_sync_live_source.sql.
 -- Một khối DO = một câu lệnh: kiểm trước, thay, kiểm sau cùng thành công hoặc cùng thất bại. Không đổi bảng, quyền, ACL.
-DO $v624$
+DO $v625$
 DECLARE v_body text;
 BEGIN
  SELECT md5(pg_get_functiondef('public.akabiz_import_auto_desktop_v1(jsonb)'::regprocedure)) INTO v_body;
  IF v_body IS DISTINCT FROM 'f4ae76455879213d60526bc6cc20a805' THEN
-   RAISE EXCEPTION 'V624 preflight: thân hàm hiện tại không như mong đợi: %', v_body;
+   RAISE EXCEPTION 'V625 preflight: thân hàm hiện tại không như mong đợi: %', v_body;
  END IF;
 
  EXECUTE $create$
@@ -242,11 +242,11 @@ BEGIN
    IF dry THEN RAISE EXCEPTION 'IMPORT_PAYLOAD_INVALID'; END IF;
    IF h.target_id IS NOT NULL THEN
      IF h.source_version IS DISTINCT FROM n.source_version THEN
-       -- V624: loại chiến dịch / tài khoản nguồn đổi khi bản chép còn ẩn: bỏ dòng đã chép, dựng bản chép mới bên dưới
+       -- Nguồn đổi giữa lượt: loại chiến dịch / tài khoản nguồn đổi khi bản chép còn ẩn: bỏ dòng đã chép, dựng bản chép mới bên dưới
        -- (bản ẩn cũ giữ is_delete=true, không còn dòng nào).
        DELETE FROM public.auto_campaign_input_data WHERE campaign_id=c.id;
      ELSE
-       -- V624: số dòng nguồn có thể đổi giữa hai lượt (akaBiz Auto vẫn chạy): ghi số mới để đối chiếu.
+       -- Nguồn đổi giữa lượt: số dòng nguồn có thể đổi giữa hai lượt (akaBiz Auto vẫn chạy): ghi số mới để đối chiếu.
        IF coalesce((payload->>'expected_count')::bigint,-1)>=0 THEN
          UPDATE public.akabiz_zalo_import_history SET data=data||jsonb_build_object('expected_count',(payload->>'expected_count')::integer),
            updated_at=clock_timestamp() WHERE id=h.id RETURNING * INTO h;
@@ -306,7 +306,7 @@ BEGIN
  END IF;
 
  -- publish
- -- V624: bên đọc gửi after_id = con trỏ nó đã đọc hết tới (không còn dòng nào sau đó); phải trùng con trỏ máy chủ.
+ -- Nguồn đổi giữa lượt: bên đọc gửi after_id = con trỏ nó đã đọc hết tới (không còn dòng nào sau đó); phải trùng con trỏ máy chủ.
  IF payload ? 'after_id' THEN
    IF (payload->'after_id') IS DISTINCT FROM coalesce(h.data->'after_id','null'::jsonb) THEN RAISE EXCEPTION 'IMPORT_INCOMPLETE'; END IF;
  ELSIF (h.data->>'consumed_count')::integer IS DISTINCT FROM (h.data->>'expected_count')::integer THEN RAISE EXCEPTION 'IMPORT_INCOMPLETE'; END IF;
@@ -328,7 +328,7 @@ $function$;
 $create$;
 
  SELECT md5(pg_get_functiondef('public.akabiz_import_auto_desktop_v1(jsonb)'::regprocedure)) INTO v_body;
- IF v_body IS DISTINCT FROM '3eae19a9366ba749a66ae7be6593479a' THEN
-   RAISE EXCEPTION 'V624 postflight: thân hàm sau khi thay không như mong đợi: %', v_body;
+ IF v_body IS DISTINCT FROM 'a4684e49cede91e434f99701b3e394e3' THEN
+   RAISE EXCEPTION 'V625 postflight: thân hàm sau khi thay không như mong đợi: %', v_body;
  END IF;
-END $v624$;
+END $v625$;

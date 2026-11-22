@@ -55,7 +55,7 @@ npx tsc --noEmit -p tsconfig.node.json && npx tsc --noEmit -p tsconfig.web.json
 npx electron-vite build
 ```
 
-Sửa sau giả lập 22/11/2026 (akaAgentWebApp `scripts/akabiz-auto-sync-sim/`): bước công bố gửi `afterId` (con trỏ đã đọc hết tới; máy chủ có V624 so con trỏ thay cho số dòng lúc bắt đầu vì akaBiz Auto vẫn thêm / xoá data giữa lượt), đọc `verdict: "issue"` của bước công bố (bản chép bị sửa / xoá) thành "cần xử lý" thay vì báo đã chép, và gặp `akabiz_sync_campaign_unknown` (mất câu trả lời rồi gửi lại, máy chủ khởi động lại) thì làm lại chiến dịch đó (máy chủ trả con trỏ đã ghi) thay vì dừng cả lượt.
+Sửa sau giả lập 22/11/2026 (akaAgentWebApp `scripts/akabiz-auto-sync-sim/`): bước công bố gửi `afterId` (con trỏ đã đọc hết tới; máy chủ có V625 so con trỏ thay cho số dòng lúc bắt đầu vì akaBiz Auto vẫn thêm / xoá data giữa lượt), đọc `verdict: "issue"` của bước công bố (bản chép bị sửa / xoá) thành "cần xử lý" thay vì báo đã chép, và gặp `akabiz_sync_campaign_unknown` (mất câu trả lời rồi gửi lại, máy chủ khởi động lại) thì làm lại chiến dịch đó (máy chủ trả con trỏ đã ghi) thay vì dừng cả lượt.
 
 Bài kiểm service: sai mật khẩu; Bearer + installId; chỉ chiến dịch đúng nhân viên, không xoá; xem trước chỉ gửi chiến dịch trong lựa chọn, khuôn dòng thô, không publish/finish; mật khẩu không xuất hiện ở lời gọi nào khác verify hay ở sự kiện tiến trình; đồng bộ thật với vé hết hạn giữa chừng + mất câu trả lời (con trỏ lệch) + máy chủ bận → đủ 1.203 dòng không trùng; lượt sau bỏ chiến dịch đã chép; chiến dịch bị bỏ qua vẫn đi hết thanh tiến độ; 404; đóng phiên; file SQLite không đổi sau mọi lượt.
 
