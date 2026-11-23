@@ -72,14 +72,23 @@ export interface EffectivenessTabProps {
  * Báo cáo page: effectiveness tabs (same numbers as WebApp/iOS through the shared assembly) plus the existing
  * account report kept as "Chi tiết theo tài khoản". Nothing loads until the page is opened; no polling.
  */
-export default function EffectivenessReportsHub({ isActive, onNavigate }: {
+export default function EffectivenessReportsHub({ isActive, onNavigate, openTab }: {
   isActive: boolean
   onNavigate: (target: EffectivenessNavigation) => void
+  /** Báo cáo 2 bấm "Xem tất cả …": mở đúng thẻ của báo cáo hiệu quả (mỗi `nonce` một lần). */
+  openTab?: { tab: ReportHubTab; nonce: number } | null
 }) {
   const authScope = useAuthStore(state => state.user ? `${state.user.organizationId}:${state.user.staffId}:${state.user.chatWebSessionId || ''}` : '')
   const [tab, setTab] = useState<ReportHubTab>(readStoredTab)
   // "Hiệu quả chiến dịch | Báo cáo dữ liệu"; the data report is for Zalo or SMS (same rule as the main process).
   const [view, setView] = useState<ReportView>(readStoredView)
+  const handledOpenTab = useRef(0)
+  useEffect(() => {
+    if (!openTab || openTab.nonce === handledOpenTab.current) return
+    handledOpenTab.current = openTab.nonce
+    setView('effectiveness')
+    setTab(openTab.tab)
+  }, [openTab])
   const [platformsLoaded, setPlatformsLoaded] = useState(false)
   const [activatedScope, setActivatedScope] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<AutoAccount[]>([])

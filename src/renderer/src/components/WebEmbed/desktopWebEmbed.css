@@ -1,0 +1,6 @@
+/* Trang Web nhúng (Tự động hóa › Quy trình, Báo cáo 2): khung webview, dòng giới thiệu, lớp phủ đang tải / lỗi. */
+.journeys-embed { display: flex; flex-direction: column; flex: 1; min-width: 0; min-height: 0; }
+.journeys-embed-bar { display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-bottom: 1px solid var(--border-default); color: var(--text-secondary); font-size: 12px; }
+.journeys-embed-bar > span { flex: 1; min-width: 0; }
+.journeys-embed-frame { position: relative; flex: 1; min-height: 0; }
+.journeys-embed-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 24px; text-align: center; background: var(--bg-primary); color: var(--text-secondary); }

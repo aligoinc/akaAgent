@@ -25,6 +25,7 @@ import {
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
 import { JOURNEY_WEB_IPC, type JourneyWebOutside, type JourneyWebState, type JourneyWebTheme } from '../shared/journeyWebDesktop'
+import { REPORTS2_WEB_IPC, type Reports2WebOutside } from '../shared/reports2WebDesktop'
 import {
   CAMPAIGN_RESULT_GROUPS_IPC, type CampaignResultGroupsDesktopAction, type CampaignResultGroupsIpcResult
 } from '../shared/campaignResultGroupsDesktop'
@@ -138,6 +139,20 @@ const electronAPI = {
     const handler = (_event: Electron.IpcRendererEvent, target: JourneyWebOutside) => callback(target)
     ipcRenderer.on(JOURNEY_WEB_IPC.navigateOut, handler)
     return () => ipcRenderer.removeListener(JOURNEY_WEB_IPC.navigateOut, handler)
+  },
+  // Menu Báo cáo 2: trang Báo cáo 2 của Web nhúng; cùng luật với Tự động hóa, phân vùng và phiên riêng.
+  reports2WebPrepare: (theme: JourneyWebTheme, path?: string | null): Promise<JourneyWebState> =>
+    ipcRenderer.invoke(REPORTS2_WEB_IPC.prepare, theme, path ?? null),
+  reports2WebReload: (): Promise<JourneyWebState> => ipcRenderer.invoke(REPORTS2_WEB_IPC.reload),
+  onReports2WebState: (callback: (state: JourneyWebState) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, state: JourneyWebState) => callback(state)
+    ipcRenderer.on(REPORTS2_WEB_IPC.state, handler)
+    return () => ipcRenderer.removeListener(REPORTS2_WEB_IPC.state, handler)
+  },
+  onReports2WebNavigateOut: (callback: (target: Reports2WebOutside) => void): (() => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, target: Reports2WebOutside) => callback(target)
+    ipcRenderer.on(REPORTS2_WEB_IPC.navigateOut, handler)
+    return () => ipcRenderer.removeListener(REPORTS2_WEB_IPC.navigateOut, handler)
   },
   onChatWebState: (callback: (state: ChatWebState) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: ChatWebState) => callback(state)

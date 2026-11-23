@@ -28,6 +28,7 @@ import {
   Settings,
   SlidersHorizontal,
   Sun,
+  TrendingUp,
   User,
   Users,
   Zap
@@ -47,7 +48,7 @@ import { ENGINE_ERROR_REVIEW_MENU_LABEL } from '../../../../shared/engineErrorRe
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'fb-messages' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
+export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'fb-messages' | 'content-templates' | 'reports' | 'reports-2' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
 
 interface TopBarProps {
   activePage: AppPage
@@ -209,6 +210,15 @@ export default function TopBar({
         icon: <BarChart3 size={18} />,
         active: activePage === 'reports',
         onClick: () => onPageChange('reports')
+      },
+      // Báo cáo 2 (người dùng yêu cầu 23/11/2026): trang Báo cáo 2 của Web, ngay dưới Báo cáo; menu Báo cáo giữ nguyên.
+      // Mọi nhân viên: kênh hiện theo sản phẩm của tổ chức và tài khoản nhân viên quản lý (máy chủ quyết).
+      {
+        key: 'reports-2',
+        label: 'Báo cáo 2',
+        icon: <TrendingUp size={18} />,
+        active: activePage === 'reports-2',
+        onClick: () => onPageChange('reports-2')
       }
     ]
 

@@ -52,6 +52,7 @@ import { createUpgradePortalWebControl } from './handlers/upgradePortalHandlers'
 import { renewalReminderService } from '../services/renewalReminderService'
 import { registerChatWebHandlers } from './handlers/chatWebHandlers'
 import { registerJourneyWebHandlers } from './handlers/journeyWebHandlers'
+import { registerReports2WebHandlers } from './handlers/reports2WebHandlers'
 import { registerCrmWebHandlers } from './handlers/crmWebHandlers'
 import { registerAdminHandlers } from './handlers/adminHandlers'
 import { registerStaffManagementHandlers } from './handlers/staffManagementHandlers'
@@ -185,6 +186,8 @@ export function registerIpcHandlers(
 ): void {
   const chatWeb = registerChatWebHandlers(mainWindow)
   const journeyWeb = registerJourneyWebHandlers(mainWindow)
+  // Menu Báo cáo 2: trang Báo cáo 2 của Web nhúng (phân vùng và phiên riêng, dọn cùng lúc với Tự động hóa).
+  const reports2Web = registerReports2WebHandlers(mainWindow)
   const crmWeb = registerCrmWebHandlers(mainWindow)
   const admin = registerAdminHandlers(mainWindow)
   registerStaffManagementHandlers(mainWindow)
@@ -869,7 +872,7 @@ export function registerIpcHandlers(
     const facebookStopped = facebookLogin.stop()
     accountOperationRegistry.stop(user.staffId)
     await facebookStopped
-    await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
+    await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset(), reports2Web.reset()])
 
     clearSessionExpiryTimer()
     cancelLocalHandoffRetry()
@@ -1345,7 +1348,7 @@ export function registerIpcHandlers(
     void (async () => {
       try {
         await facebookStopped
-        await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
+        await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset(), reports2Web.reset()])
         clearSessionExpiryTimer()
         cancelLocalHandoffRetry()
         cancelDesktopHandoffAckRetry()
@@ -1423,7 +1426,7 @@ export function registerIpcHandlers(
     afterLogin: async ({ username, password }) => {
       campaignDiagnostics.stop()
       campaignFormAi.stop()
-      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset(), reports2Web.reset()])
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
       const handoffAckGeneration = desktopHandoffAckGeneration
@@ -1520,7 +1523,7 @@ export function registerIpcHandlers(
       const user = getCurrentUser()
       if (user) accountOperationRegistry.stop(user.staffId)
       await facebookStopped
-      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset()])
+      await Promise.all([chatWeb.reset(), crmWeb.reset(), admin.reset(), journeyWeb.reset(), reports2Web.reset()])
       clearSessionExpiryTimer()
       cancelLocalHandoffRetry()
       cancelDesktopHandoffAckRetry()
@@ -1544,6 +1547,7 @@ export function registerIpcHandlers(
       facebookLogin.startSession(false)
       chatWeb.credentialsChanged()
       journeyWeb.credentialsChanged()
+      reports2Web.credentialsChanged()
       if (!runtimeCredentials) return
       runtimeCredentials = { ...runtimeCredentials, password: newPassword }
       const user = getCurrentUser()

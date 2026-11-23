@@ -5,7 +5,8 @@ import TopBar, { type AppPage } from './components/TopBar/TopBar'
 import AppUtilityTopbar from './components/TopBar/AppUtilityTopbar'
 import CampaignPage from './pages/CampaignPage'
 import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
-import EffectivenessReportsHub from './components/EffectivenessReports/EffectivenessReportsHub'
+import EffectivenessReportsHub, { type ReportHubTab } from './components/EffectivenessReports/EffectivenessReportsHub'
+import Reports2Page from './pages/Reports2Page'
 import type { EffectivenessNavigation } from './components/EffectivenessReports/effectivenessApi'
 import AutomationHub from './pages/AutomationHub'
 import { useAutomationNavStore } from './stores/automationNavStore'
@@ -141,6 +142,9 @@ export default function App() {
   const [dataGroupInitialId, setDataGroupInitialId] = useState<number | null>(null)
   const [accountOpenRequest, setAccountOpenRequest] = useState<{ accountId: number; requestId: number } | null>(null)
   const accountOpenRequestSeq = useRef(0)
+  // Báo cáo 2 bấm "Xem tất cả …": mở trang Báo cáo đúng thẻ.
+  const [reportTabRequest, setReportTabRequest] = useState<{ tab: ReportHubTab; nonce: number } | null>(null)
+  const reportTabRequestSeq = useRef(0)
   const [notificationSelectRequest, setNotificationSelectRequest] = useState<NotificationSelectRequest | null>(null)
   const notificationSelectRequestSeq = useRef(0)
   const [generalSettingsRequest, setGeneralSettingsRequest] = useState<(GeneralSettingsOpenOptions & { menu: GeneralSettingsMenu; returnFocusTo: HTMLElement | null }) | null>(null)
@@ -248,6 +252,35 @@ export default function App() {
         setAccountOpenRequest({ accountId: target.accountId, requestId: ++accountOpenRequestSeq.current })
       } else if (target.kind === 'accounts') {
         setActivePage('campaigns')
+      } else if (target.kind === 'fromCampaigns') {
+        useAutomationNavStore.getState().open('campaigns')
+      }
+    })
+  }, [openNewCampaignForm])
+
+  // Trang Báo cáo 2 nhúng (Web) bấm link ra ngoài Báo cáo 2: mở màn tương ứng của Desktop.
+  useEffect(() => {
+    const subscribe = window.electronAPI?.onReports2WebNavigateOut
+    if (!subscribe) return
+    return subscribe(target => {
+      if (target.kind === 'campaign') {
+        setActivePage('campaigns')
+        setDataGroupCampaignRequest({ requestId: ++dataGroupCampaignRequestSeq.current, mode: 'open', campaignId: target.campaignId, openFormIfEditable: target.edit })
+      } else if (target.kind === 'newCampaign') {
+        openNewCampaignForm()
+      } else if (target.kind === 'campaigns' || target.kind === 'accounts') {
+        setActivePage('campaigns')
+      } else if (target.kind === 'account') {
+        setActivePage('campaigns')
+        setAccountOpenRequest({ accountId: target.accountId, requestId: ++accountOpenRequestSeq.current })
+      } else if (target.kind === 'dataGroup') {
+        setDataGroupInitialId(target.groupId)
+        setShowDataGroups(true)
+      } else if (target.kind === 'reports') {
+        setActivePage('reports')
+        if (target.tab) setReportTabRequest({ tab: target.tab, nonce: ++reportTabRequestSeq.current })
+      } else if (target.kind === 'dataScan') {
+        setShowDataScan(true)
       } else if (target.kind === 'fromCampaigns') {
         useAutomationNavStore.getState().open('campaigns')
       }
@@ -634,7 +667,11 @@ export default function App() {
           )}
 
           <div style={{ display: activePage === 'reports' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
-            <EffectivenessReportsHub isActive={activePage === 'reports'} onNavigate={navigateFromReport} />
+            <EffectivenessReportsHub isActive={activePage === 'reports'} onNavigate={navigateFromReport} openTab={reportTabRequest} />
+          </div>
+
+          <div style={{ display: activePage === 'reports-2' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <Reports2Page isActive={activePage === 'reports-2'} />
           </div>
 
           <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
