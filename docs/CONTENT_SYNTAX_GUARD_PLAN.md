@@ -367,3 +367,45 @@ tiêu đề, địa chỉ; một ca "Chào" có thể là khách cố ý), 66 bi
      N nội dung" / "Giữ nguyên".
    - Hỏi lúc lưu: "Nội dung có chỗ cần xem lại" / "Nội dung có thể gửi không đúng ý bạn:" + từng dòng / "Sửa giúp" / "Vẫn lưu" /
      "Quay lại sửa" / "Đã sửa nội dung. Vui lòng xem lại rồi lưu."
+
+## 16. Rà các lỗi nội dung khác: cá nhân hoá, tách mẫu, spin, cắt nội dung (24/11/2026, chỉ đọc, chưa sửa gì)
+
+Cách làm: đọc code dựng nội dung của từng kênh, rồi chạy bộ tách mẫu / spin thật trên 22.243 chiến dịch chưa xoá ở chế độ
+Cơ bản (27.185 chiến dịch, 11.317 nội dung khác nhau) và đối chiếu với tin Zalo đã gửi thật (250.000 dòng lịch sử gần nhất,
+56.156 tin gửi thành công của 1.167 chiến dịch). Chưa quét nội dung nâng cao, mẫu nội dung, bước gửi của Quy trình.
+
+### 16.1. Có thật, bộ kiểm hiện tại chưa báo
+
+| # | Lỗi | Vì sao (code) | Số đo | Mức |
+|---|---|---|---|---|
+| 1 | Ngoặc `{…}` không có dấu gạch đứng bên trong bị gửi nguyên cả ngoặc | `findSpinGroupEnd` chỉ coi là spin khi có dấu gạch đứng; không có thì giữ nguyên chữ | 58 chiến dịch / 18 tổ chức (9 đang chờ); tin thật: 301 tin / 13 chiến dịch. Hay gặp: `{anh-chị-anh/chị}` (quên `#{SEX`), `{gioi_tinh}`, `{FULLNAME}`, cụm chữ bọc ngoặc | nên nhắc |
+| 2 | Chỗ trống chưa điền của bài mẫu: `[tên kh]`, `[vị trí ứng tuyển]`, `[id kênh]`, `[điền biểu phí]` | không phải biến, gửi nguyên văn | ~45 chiến dịch | nên nhắc |
+| 3 | AI viết lại mỗi lượt làm mất tên người nhận | biến được điền trước, AI viết lại sau (`rewriteContentEachRun`) | tin có `#{FULL_NAME}` ở mọi mẫu: không AI thiếu tên 12 / 10.003 (0,1%); có AI 21 / 176 (12%), 4 chiến dịch. 365 chiến dịch bật AI và có biến (64 đang chờ) | nên nhắc |
+| 4 | SMS: xuống dòng bị bỏ, hai câu dính liền (`…bóng đá!ĐĂNG KÝ…`) | `normalizeSmsContentForSend` xoá `\n` không chèn dấu cách khi không bật giữ xuống dòng | 27 chiến dịch / 20 tổ chức (14 đang chờ); xem tin đã tạo: 31 / 31 và 103 / 103 dòng dính chữ | nên nhắc |
+| 5 | Biến lấy từ cột file mà dòng data để trống: ra "Chào ," | `renderCampaignTemplateText` thay bằng chuỗi rỗng; chỉ báo CFG13 khi cả tin rỗng | 120 chiến dịch gần nhất dùng `#{INPUT_FULLNAME}`: 154 / 21.279 dòng trống (6 chiến dịch, 3 cái trống hơn nửa); `#{INFO1}`: 1.390 / 28.951 dòng (2 chiến dịch) | nên nhắc lúc nhập data |
+| 6 | Gửi dạng chia sẻ: mọi biến bị gửi nguyên văn | `shareMessage` chỉ spin | 3 chiến dịch (0 đang chờ) | nên chặn |
+| 7 | Facebook: chỉ `#{FULL_NAME}` và ngày (đúng `DD/MM/YYYY`, `MM/DD/YYYY`) được thay, biến khác gửi nguyên văn; bộ kiểm bỏ qua kênh Facebook | `prepareFacebookCampaignContent`; `usesTokens('other')` = false | 1 chiến dịch | nên chặn |
+| 8 | Nhắn group Zalo kiểu thường có biến cá nhân: tên là tên group, xưng hô luôn là lựa chọn thứ ba | người nhận là group | 3 chiến dịch (1 đang chờ) | nên nhắc |
+| 9 | Lời mời kết bạn bị cắt ở 150 ký tự, tên gợi nhớ bị cắt ở 50 ký tự (engine; bộ cũ thì Zalo từ chối), không báo | `FRIEND_REQUEST_MAX_LENGTH`, `truncateZaloAlias` | lời mời: 5 chiến dịch sát ngưỡng; tên gợi nhớ: 39 chiến dịch có khả năng vượt | nên nhắc |
+| 10 | Nội dung Zalo cá nhân quá dài: Zalo từ chối cả tin | giới hạn của Zalo; đợt này tin 2.000–2.399 ký tự không kèm 1 ảnh vẫn gửi được (118 tin), lỗi cũ bắt đầu từ 2.341 | trên 2.340 ký tự: 20 chiến dịch (1 đang chờ); 2.000–2.340: 22 | nên nhắc |
+| 11 | `#{SEX{anh-chị}}` chỉ hai lựa chọn: người không rõ giới tính bị gọi "anh" | `unknown || male || female` | 28 chiến dịch; giới tính có ở 99,6% tin nên ít gặp | thấp |
+| 12 | Mẫu trùng nhau: 68 chiến dịch mọi mẫu giống hệt, 155 trùng một phần; 1.651 / 11.654 tin thuộc chiến dịch chỉ vài mẫu có `#{FULL_NAME}` | khách chép mẫu | như trên | thấp |
+| 13 | Mẫu chỉ gồm ký tự vô hình (U+2060) | `trim()` không bỏ ký tự này | 6 chiến dịch, 1 tổ chức (3 đang chờ) | thấp |
+| 14 | Nội dung định dạng: dấu gạch đứng gõ sát sau link bị dính vào link (`href="…826\|"`), tin gửi ra link hỏng | trình soạn tự nhận link | 8 chiến dịch, 1 tổ chức (4 đang chờ), 45 tin | thấp |
+| 15 | Email nội dung HTML bị tách mẫu theo dấu gạch đứng trên cả mã HTML | `splitSharedContentVariants(raw)` | 9 chiến dịch (1 đang chờ) | thấp |
+| 16 | Ngày viết sai định dạng (`dd/mm/yyyy` thường) in nguyên chữ; SMS tính ngày lúc tạo data, không phải lúc gửi | `formatDate`, `renderSmsInputContent` | 0 chiến dịch đang dùng | chỉ ghi nhận |
+
+### 16.2. Đã kiểm và không phải lỗi
+
+- `#{FULL_NAME}` trên Zalo cá nhân không bao giờ rỗng (0 / 52.538 tin thiếu tên hiển thị).
+- Xưng hô `#{SEX{…}}`: 99,6% tin có giới tính.
+- Mẫu bắt đầu bằng dòng trống (5.097 chiến dịch, 23% tin gửi đi có dòng trống đầu): 0 / 16.249 tin ghi nhận lại từ Zalo ở các tổ chức
+  có Chat có dòng trống đầu, nên nhiều khả năng Zalo tự bỏ. Chưa xem trên máy người nhận.
+- Facebook nhắn tin có `#{FULL_NAME}`: 21 chiến dịch 45 ngày, 0 / 35.096 dòng thiếu tên.
+- Tiêu đề email không bị tách theo dấu gạch đứng.
+
+### 16.3. Vẫn đang xảy ra vì bản chặn chưa deploy
+
+Trong 250.000 dòng gần nhất: 130 tin / 4 chiến dịch còn `#{SEX{anh-chị-anh/chị}` nguyên văn; 639 tin / 18 chiến dịch còn dấu gạch đứng
+trong tin (một phần là trang trí đúng ý, một phần là gộp mẫu: 59428, 57912, 55987, 56419, 43873). Quét bằng bộ kiểm hiện tại: 15
+chiến dịch mức chặn (2 đang chờ: 58672, 59428), 196 chiến dịch chỉ có cảnh báo.
