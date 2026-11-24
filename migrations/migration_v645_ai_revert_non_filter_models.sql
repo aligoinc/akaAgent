@@ -8,7 +8,8 @@
 --    nút "Viết lại" dùng lời dặn riêng `akabiz_rewrite_content_luna` (lời dặn 1 dùng chung với 9 mã về nano nên không sửa ở đó);
 --    lời dặn 2 chỉ nút nhiều phiên bản dùng nên giữ bản V644.
 -- 3. Giữ: 5 mã lọc bài / comment `_v2` dùng Haiku 5.5 (cổng chat của Anthropic); lỗi thì block V641 sang fb_ai_content_filter_fallback (gpt-6-luna).
--- 4. Xoá ai.model_fallbacks (chỉ để cho code dự phòng chung, không cần nữa).
+-- 4. Tắt ai.model_fallbacks (is_active = false; chỉ để cho code dự phòng chung, không cần nữa). Không dùng lệnh xoá dòng: công cụ apply hỏi xác nhận với
+--    lệnh xoá và hộp xác nhận không hiện được bên phía anh (hết hạn 3 lần ngày 24/11).
 -- Gỡ: rollback_v645_ai_revert_non_filter_models.sql (đưa lại trạng thái sau V644).
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -74,7 +75,7 @@ WHERE code = 'app_ai_rewrite_content';
 
 UPDATE public.ai_prompt SET prompt_user = E'Viết lại nội dung dưới đây, chỉ trả về kết quả và không giải thích gì thêm:\r\n[content]' WHERE id = 1;
 
-DELETE FROM public.auto_system_settings WHERE key = 'ai.model_fallbacks';
+UPDATE public.auto_system_settings SET is_active = false WHERE key = 'ai.model_fallbacks';
 
 DO $post$
 DECLARE v_luna bigint; v_haiku bigint;
@@ -95,6 +96,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.ai_using u JOIN public.ai_prompt p ON p.id = u.prompt_id
                  WHERE u.code = 'app_ai_rewrite_content' AND p.code = 'akabiz_rewrite_content_luna' AND p.is_active) THEN
     RAISE EXCEPTION 'V645: nút Viết lại chưa dùng lời dặn riêng';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'ai.model_fallbacks' AND is_active) THEN
+    RAISE EXCEPTION 'V645: ai.model_fallbacks còn bật';
   END IF;
   IF (SELECT count(*) FROM public.ai_using WHERE model_id = v_haiku) <> 5
      OR EXISTS (SELECT 1 FROM public.ai_using WHERE model_id = v_haiku AND code NOT LIKE '%\_ai\_filter\_v2') THEN

@@ -29,6 +29,7 @@ WHERE id = 1;
 UPDATE public.ai_using SET prompt_id = 1 WHERE code = 'app_ai_rewrite_content';
 UPDATE public.ai_prompt SET is_active = false WHERE code = 'akabiz_rewrite_content_luna';
 
+UPDATE public.auto_system_settings SET is_active = true WHERE key = 'ai.model_fallbacks';
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active)
 SELECT 'ai.model_fallbacks', '{"anthropic_haiku_5_5_chat_compat":"openai_luna_chat"}',
        'V644: gọi ai_model (theo code) lỗi thì gọi lại bằng ai_model này, cùng khuôn yêu cầu.', false, true
