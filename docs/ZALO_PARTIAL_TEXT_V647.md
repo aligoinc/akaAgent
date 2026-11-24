@@ -40,6 +40,9 @@ Quy tắc cảnh báo: [src/shared/zaloStrangerMediaPacing.ts](../src/shared/zal
 - Production 24/11 trong khối tự huỷ: hàm biên dịch với bảng thật, md5 sau khi đổi = `488761c9…`, mỗi bảng đổi 1 dòng.
 - `node scripts/zalo-partial-send-log-smoke-test.cjs`, `node scripts/zalo-stranger-media-pacing-smoke.cjs` (18 ca), hai typecheck; Web: `vitest run src/test/CampaignRuntimeOptions.test.tsx`, typecheck.
 
+- Form Desktop thật trên Electron (form thường và form Agent, IPC giả lập): `ELECTRON_DISABLE_SANDBOX=1 xvfb-run -a node scripts/run-zalo-stranger-media-pacing-ui-smoke.cjs` (18 ca; `PACING_UI_SHOT=<file.png>` kèm `xvfb-run -s "-screen 0 1600x1200x24"` để chụp dòng cảnh báo).
+- Dữ liệu thật 19:26–19:32 VN 24/11 sau khi apply: engine v2 ra "Người nhận đã nhận ảnh nhưng chưa nhận được chữ. Zalo chặn tin chữ vì gửi quá nhanh. … (Z127)"; bộ chạy cũ ra câu mới sau tiền tố cũ "Đã gửi file nhưng gửi nội dung thất bại." (tiền tố đổi khi phát hành app) và ghi chú chiến dịch "Nhắn tin người lạ: Zalo chặn tin nhắn người lạ vì gửi quá nhanh, tạm nghỉ gửi tin 25 phút. Nếu gửi từ 3 ảnh trở lên, …". Lượt bộ chạy cũ bắt đầu trước lúc apply vẫn ghi câu cũ tới hết lượt (3 dòng tới 19:28), vì bộ chạy cũ nạp chính sách lỗi lúc bắt đầu lượt.
+
 ## Trạng thái
 
 V647 đã apply akachat 19:26:20 VN 24/11/2026 theo yêu cầu ("run sql"), bằng bản gọn `migrations/tests/migration_v647_zalo_partial_text_note_paste.sql` (cùng kết quả với file đầy đủ; sổ `20261124122620`, md5 sổ = bản gọn); PostgREST nạp lại schema 1,2 s, 0 lỗi 5xx. Không apply lại. [Biên nhận](../migrations/snapshots/zalo-partial-text-v647/apply-receipt.json).
