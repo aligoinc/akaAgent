@@ -1,0 +1,35 @@
+{
+  "migration": "migration_v644_ai_haiku_luna_switch",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "24/11/2026: \"Dùng hết bằng haiku / Nếu lỗi sang luna\", rồi qua hộp chọn: \"Viết lại dùng luna\" cho 12 mã viết lại nội dung",
+  "applied_at_vn": "2026-11-24 15:10:15",
+  "ledger_version": "20261124081015",
+  "ledger_md5": "5c656f225d3119465fed909788aa96c9",
+  "file_md5": "5c656f225d3119465fed909788aa96c9",
+  "ddl": false,
+  "postgrest_schema_reload": false,
+  "after": {
+    "ai_model": [
+      {"id": 41, "code": "anthropic_haiku_5_5_chat_compat", "model": "claude-haiku-5-5", "endpoint": "https://api.anthropic.com/v1/chat/completions", "provider": "claude", "default_body": {"max_completion_tokens": 8192}, "api_key": "chép từ ai_model 24 trong SQL"},
+      {"id": 42, "code": "openai_luna_chat", "model": "gpt-6-luna", "endpoint": "https://api.openai.com/v1/chat/completions", "provider": "openai", "default_body": {"max_completion_tokens": 8192}, "api_key": "chép từ ai_model 16 trong SQL"}
+    ],
+    "haiku_codes": ["app_ai_generate_campaign_name (request_options -> {max_completion_tokens: 2048})", "app_campaign_import_image_to_data", "campaign_error_screenshot_diagnosis", "fb_newsfeed_check_comment", "fb_newsfeed_check_like", "fb_prepare_seeding_iterations_ai_filter_v2", "fb_extract_data_from_group_posts_ai_filter_v2", "fb_collect_group_comments_ai_filter_v2", "fb_extract_data_from_search_posts_ai_filter_v2", "fb_collect_search_post_comments_ai_filter_v2"],
+    "luna_codes": ["app_ai_rewrite_content", "app_ai_write_multi_other_content", "fb_comment_at_position_rewrite", "fb_comment_current_post_rewrite", "fb_page_post_api_rewrite", "fb_post_current_identity_ui_rewrite", "fb_post_reels_rewrite", "fb_send_message_rewrite", "fb_send_page_inbox_message_rewrite", "fb_share_post_rewrite", "fb_type_post_content_rewrite", "fb_rewrite_source_content_ai"],
+    "ai_prompt": {"1": "md5 587ca6f3… -> ef7c3e20… (thêm câu không dùng markdown)", "2": "md5 3991be2d… -> 6933cbed… (thêm câu không dùng markdown, không đánh số phiên bản)"},
+    "auto_system_settings": {"ai.model_fallbacks": {"anthropic_haiku_5_5_chat_compat": "openai_luna_chat"}},
+    "unchanged": ["fb_prepare_seeding_iterations_ai_filter (mã lọc cũ, gpt-6-luna từ V643, bỏ khi V641 apply)", "fb_ai_content_filter_fallback (gpt-6-luna qua /responses)", "ai_form_configs (ô aka Cài đặt)"]
+  },
+  "checks_before_apply": [
+    "Cổng chat của Anthropic với Haiku 5.5: chữ và ảnh 200, khuôn choices[0].message.content; từ chối temperature và response_format json_object; nhận max_completion_tokens và reasoning_effort",
+    "gpt-6-luna qua /v1/chat/completions: nhận max_completion_tokens (không nhận max_tokens), chữ và ảnh 200",
+    "Phát lại 60 tin Zalo thật gần nhất của fb_send_message_rewrite: Haiku từ chối 7/60 (mời vay tín chấp, tuyển CTV), 9/60 có **; luna 0/60 từ chối, 27/60 có **; luna + lời dặn mới 0/60 từ chối, 0/60 **; gpt-5-nano 0/0",
+    "Phát lại 3 lượt thật mỗi mã (đặt tên, viết lại, nhiều phiên bản, duyệt newsfeed like / comment, viết lại bài đăng): Haiku đúng định dạng; effort thấp từ chối thêm 1 tin vay vốn",
+    "Đọc ảnh nhập data (ảnh danh sách giả): Haiku trả JSON thuần, đủ 3 dòng, SĐT chuẩn hoá",
+    "PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v644.py: 11/11"
+  ],
+  "checks_after_apply": [
+    "15:10–15:20 VN: fb_send_message_rewrite 11 lượt đều ai_model 42 (luna), 0 lỗi, 0 từ chối, 0 **; không còn lượt nào ai_model 1 (gpt-5-nano)"
+  ],
+  "fallback_code": "akaAgentWebApp nhánh claude/festive-fermi-pqkbuu (24bfaffa): API chuyển tiếp AI Desktop + đường gọi AI thường của Web đọc ai.model_fallbacks; chưa merge, chưa deploy. Tới khi deploy, mã dùng Haiku lỗi thì báo lỗi như trước (riêng lọc bài: block V641 tự sang luna).",
+  "rollback": "migrations/rollback_v644_ai_haiku_luna_switch.sql"
+}

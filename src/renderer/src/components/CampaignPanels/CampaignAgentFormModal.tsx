@@ -1,5 +1,8 @@
 import { applyCampaignContentFixes, campaignContentSaveWarning, checkCampaignContentSyntax, expandPackedVariants, packedVariantsPrompt } from '../../../../shared/contentSyntax'
 import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
+import {
+  CAMPAIGN_AI_FILTER_EMPTY_ERROR, CAMPAIGN_AI_FILTER_HINT, CAMPAIGN_AI_FILTER_PLACEHOLDER, campaignAiFilterSaveError, isCampaignAiFilterEmpty
+} from '../../../../shared/campaignAiFilterForm'
 import { getActionCodeLabel, getActionLimitUnit } from './campaignAgentPresentation'
 // Independent creation form; baseline CampaignFormModal SHA-256:
 // 24ebc9682965d94815845552ee8c4f3cf7c74a105f05cea6563d611ac36bdce3.
@@ -14,6 +17,7 @@ import './campaignAgent.css'
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
 import { validateGroupPostShareLinks } from '../../../../shared/facebookGroupPostShare'
+import { ZALO_STRANGER_MEDIA_PACING_WARNING, shouldWarnZaloStrangerMediaPacing } from '../../../../shared/zaloStrangerMediaPacing'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
@@ -2868,6 +2872,12 @@ export default function CampaignAgentFormModal({
   const showPostBumpVideoWarning = formData.enablePostBump && (isAdvancedContentMode
     ? advancedContentDisplayItems.some(item => item.mediaOption !== 'none' && campaignMediaHasVideo(item.mediaItems || []))
     : formData.imageOption !== 'none' && campaignMediaHasVideo(formData.images))
+  // Nhắn người lạ, từ 3 ảnh mỗi tin mà nghỉ dưới 300 giây: Zalo hay chặn phần chữ gửi sau album (V647, anh chốt 24/11/2026).
+  const showZaloStrangerMediaPacingWarning = canUseSleepBetweenActions && shouldWarnZaloStrangerMediaPacing({
+    actionId: formData.actionId, sleepSeconds: formData.sleepBetweenActions,
+    imageOption: formData.imageOption, images: formData.images, randomImageCount: formData.randomImageCount,
+    advancedContentEnabled: isAdvancedContentMode, advancedContentItems: advancedContentDisplayItems
+  })
   const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
@@ -6961,6 +6971,24 @@ export default function CampaignAgentFormModal({
       showAlert('Vui lòng nhập Tên, Hành động và Tài khoản.', 'error')
       return
     }
+    if (isFindDataCampaign || isCommentSeedingFeedCampaign) {
+      const aiFilterFindData = isFindDataCampaign ? normalizeFindDataFlagState(formData, { isSearchCampaign: isFindDataSearchCampaign }) : null
+      const aiFilterError = campaignAiFilterSaveError({
+        postApplies: isCommentSeedingFeedCampaign || Boolean(aiFilterFindData && (aiFilterFindData.isFindInPost || aiFilterFindData.isFindInComment || aiFilterFindData.isFindPostLink)),
+        isFindPostByContentAI: formData.isFindPostByContentAI,
+        postContentAI: formData.postContentAI,
+        commentApplies: Boolean(aiFilterFindData?.isFindInComment),
+        isFindCommentByContentAI: formData.isFindCommentByContentAI,
+        commentContentAI: formData.commentContentAI
+      })
+      if (aiFilterError) {
+        const aiFilterSection = isCommentSeedingFeedCampaign ? 'commentPostSearch' : 'findDataConditions'
+        setCollapsedSections(prev => ({ ...prev, [aiFilterSection]: false }))
+        sectionRefs.current[aiFilterSection]?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        showAlert(aiFilterError.message, 'error')
+        return
+      }
+    }
     if (showResultGroupsSection) {
       const resultGroupsError = resultGroups.validate()
       if (resultGroupsError) {
@@ -9182,13 +9210,35 @@ export default function CampaignAgentFormModal({
     }
     return snapshot
   }
+  // aka Cài đặt: Hoàn tác chỉ trả lại các ô mà lần điền vừa rồi đổi và khách chưa sửa tiếp (store formData ghi đồng bộ nên đọc được ngay).
+  const captureFormDataUndo = (applyChange: () => void): (() => void) => {
+    const before = draftValuesRef.current.formData as typeof formData
+    applyChange()
+    const after = draftValuesRef.current.formData as typeof formData
+    return () => setFormData(current => {
+      let next: typeof current | null = null
+      for (const key of Object.keys(before) as Array<keyof typeof before>) {
+        if (Object.is(before[key], after[key]) || !Object.is(current[key], after[key])) continue
+        next = next ?? { ...current }
+        ;(next as Record<string, unknown>)[key as string] = before[key]
+      }
+      return next ?? current
+    })
+  }
+
   const renderFacebookAi = (kind: FacebookAiKind, title: string) => {
     const snapshot = buildAgentFacebookSnapshot(kind)
     if (!snapshot) return null
-    const apply = (patch: FacebookAiPatch) => {
+    const apply = (patch: FacebookAiPatch): (() => void) | undefined => {
+      let undo: (() => void) | undefined
       if (kind === 'keywords') {
-        if (Array.isArray(patch.keywords)) setFindDataSearchKeywordsText(formatFindDataSearchKeywordList(patch.keywords as string[]))
-      } else {
+        if (Array.isArray(patch.keywords)) {
+          const beforeText = findDataSearchKeywordsText
+          const afterText = formatFindDataSearchKeywordList(patch.keywords as string[])
+          setFindDataSearchKeywordsText(afterText)
+          undo = () => setFindDataSearchKeywordsText(current => current === afterText ? beforeText : current)
+        }
+      } else undo = captureFormDataUndo(() => {
         if (kind === 'general') {
           invalidateCampaignNameAiRequest()
           if (typeof patch.name === 'string') handleCampaignNameChange(patch.name)
@@ -9203,11 +9253,12 @@ export default function CampaignAgentFormModal({
           if (patch.postsPerTarget !== undefined) next.postsPerTarget = clampFacebookCommentCount(next.postsPerTarget, facebookMaxComments)
           return kind === 'search' ? normalizeFindDataFlagState(next, { isSearchCampaign: isFindDataSearchCampaign }) : next
         })
-      }
+      })
       setCollapsedSections(previous => ({ ...previous,
         [kind === 'search' ? 'content' : kind === 'keywords' ? 'details' : kind === 'postSearch' ? 'commentPostSearch' : kind === 'newsfeed' ? 'newsfeedSettings' : kind]: false,
         ...(kind === 'search' ? { findDataConditions: false } : {})
       }))
+      return undo
     }
     return <CampaignFacebookAi title={title} snapshot={snapshot}
       disabled={saveBusy || loadingDetails || loadingAccounts || scheduleAiBusy || limitsAiBusy || contentAiBusy || exclusionAiBusy || (facebookAiBusy && facebookAiBusyKind !== kind)}
@@ -12831,8 +12882,14 @@ export default function CampaignAgentFormModal({
           value={formData.postContentAI} data-agent-field="postContentAI" data-agent-filled={agent.changed('postContentAI')}
           onChange={e => setFormData(p => ({ ...p, postContentAI: e.target.value }))}
           rows={4}
+          placeholder={CAMPAIGN_AI_FILTER_PLACEHOLDER.post}
           disabled={!formData.isFindPostByContentAI}
         />
+        {isCampaignAiFilterEmpty(formData.isFindPostByContentAI, formData.postContentAI) ? (
+          <div className="schedule-hint" data-ai-filter-error="post" style={{ color: 'var(--accent-error)', marginTop: 4 }}>{CAMPAIGN_AI_FILTER_EMPTY_ERROR}</div>
+        ) : (
+          <div className="schedule-hint" style={{ marginTop: 4 }}>{CAMPAIGN_AI_FILTER_HINT.post}</div>
+        )}
       </div>
     </div>
   )
@@ -12872,8 +12929,14 @@ export default function CampaignAgentFormModal({
           value={formData.commentContentAI} data-agent-field="commentContentAI" data-agent-filled={agent.changed('commentContentAI')}
           onChange={e => setFormData(p => ({ ...p, commentContentAI: e.target.value }))}
           rows={4}
+          placeholder={CAMPAIGN_AI_FILTER_PLACEHOLDER.comment}
           disabled={!formData.isFindCommentByContentAI}
         />
+        {isCampaignAiFilterEmpty(formData.isFindCommentByContentAI, formData.commentContentAI) ? (
+          <div className="schedule-hint" data-ai-filter-error="comment" style={{ color: 'var(--accent-error)', marginTop: 4 }}>{CAMPAIGN_AI_FILTER_EMPTY_ERROR}</div>
+        ) : (
+          <div className="schedule-hint" style={{ marginTop: 4 }}>{CAMPAIGN_AI_FILTER_HINT.comment}</div>
+        )}
       </div>
     </div>
   )
@@ -17850,7 +17913,7 @@ export default function CampaignAgentFormModal({
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
                     onBusyChange={setScheduleAiBusy}
-                    onApply={patch => setFormData(current => applyScheduleAiPatch(current, patch))}
+                    onApply={patch => captureFormDataUndo(() => setFormData(current => applyScheduleAiPatch(current, patch)))}
                   />}
                 </div>
                 {agent.askButton('schedule')}
@@ -18084,7 +18147,7 @@ export default function CampaignAgentFormModal({
                       disabled={saveBusy || facebookAiBusy || exclusionAiBusy || contentAiBusy || scheduleAiBusy || loadingDetails || !formData.actionId || !selectedCampaignAction}
                       authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                       zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
-                      onBusyChange={setLimitsAiBusy} onApply={applyLimitsAiPatch}
+                      onBusyChange={setLimitsAiBusy} onApply={patch => captureFormDataUndo(() => applyLimitsAiPatch(patch))}
                     />}
                   </div>
                   {agent.askButton('limits')}
@@ -18106,6 +18169,11 @@ export default function CampaignAgentFormModal({
                             />
                             <span className="stepper-input-unit">giây</span>
                           </div>
+                          {showZaloStrangerMediaPacingWarning && (
+                            <span className="campaign-manual-content-warning" style={{ marginTop: 6 }}>
+                              <AlertTriangle size={12} />{ZALO_STRANGER_MEDIA_PACING_WARNING}{selectedAccountGroupNames.length > 0 ? ' Tài khoản thuộc nhóm thì đặt trong nhóm tài khoản.' : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
