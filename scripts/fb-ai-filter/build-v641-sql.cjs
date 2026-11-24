@@ -48,22 +48,26 @@ const OLD_CENTRAL = [
   '};'
 ].join('\n')
 
-function edit(code, from, to) {
+// Mỗi lần sửa là một cặp (đoạn cũ, đoạn mới) xuất hiện đúng một lần, nên migration viết bằng replace() của Postgres
+// (thay mọi chỗ = thay đúng một chỗ) thay vì chép nguyên code mới; md5 trước / sau chốt kết quả.
+function edit(code, from, to, edits) {
   if (code.split(from).length !== 2) throw new Error(`Đoạn cần sửa phải xuất hiện đúng một lần: ${from.slice(0, 80)}`)
   const out = code.replace(from, () => to)
   if (out.split(to).length !== 2) throw new Error(`Đoạn mới phải xuất hiện đúng một lần: ${to.slice(0, 80)}`)
+  edits.push([from, to])
   return out
 }
+const replaceAll = (text, from, to) => text.split(from).join(to)
 
-function rewrite(block, pair, variant) {
+function rewrite(block, pair, variant, edits) {
   let code = block.code
   const helper = helperFor(variant)
   if (pair.kind === 'seeding') {
-    code = edit(code, `const AI_USING_CODE = '${pair.code}'\n`, `const AI_USING_CODE = '${pair.code}_v2'\n`)
-    code = edit(code, '\nasync function checkMeaningAi(content) {\n', `\n${helper}\nasync function checkMeaningAi(content) {\n`)
-    code = edit(code, '  const result = await helpers.callAIUsing(AI_USING_CODE, {\n', '  const result = await __aiFilterCall(AI_USING_CODE, {\n')
+    code = edit(code, `const AI_USING_CODE = '${pair.code}'\n`, `const AI_USING_CODE = '${pair.code}_v2'\n`, edits)
+    code = edit(code, '\nasync function checkMeaningAi(content) {\n', `\n${helper}\nasync function checkMeaningAi(content) {\n`, edits)
+    code = edit(code, '  const result = await helpers.callAIUsing(AI_USING_CODE, {\n', '  const result = await __aiFilterCall(AI_USING_CODE, {\n', edits)
   } else {
-    code = edit(code, `const __aiFindDataUsingCode = "${pair.code}";\n`, `const __aiFindDataUsingCode = "${pair.code}_v2";\n`)
+    code = edit(code, `const __aiFindDataUsingCode = "${pair.code}";\n`, `const __aiFindDataUsingCode = "${pair.code}_v2";\n`, edits)
     code = edit(code, OLD_CENTRAL, [
       helper.trimEnd(),
       'const __callCentralAI = async (usingCode, payload) => {',
@@ -74,7 +78,7 @@ function rewrite(block, pair, variant) {
       "  if (!result || result.ok !== true) throw new Error(String(result && result.error ? result.error : 'AI lỗi'));",
       '  return result;',
       '};'
-    ].join('\n'))
+    ].join('\n'), edits)
   }
   return code
 }
@@ -87,8 +91,12 @@ for (const pair of PAIRS) {
     const block = byId.get(id)
     if (!block) throw new Error(`Thiếu block ${id} trong fixture`)
     if (md5(block.code) !== block.md5) throw new Error(`Fixture block ${id} lệch md5`)
-    const code = rewrite(block, pair, variant)
-    CHANGES.push({ id, name: block.name, variant, kind: pair.kind, code: pair.code, oldMd5: block.md5, oldCode: block.code, newCode: code, newMd5: md5(code) })
+    const edits = []
+    const code = rewrite(block, pair, variant, edits)
+    // replace() thay mọi chỗ: kiểm lại cả hai chiều cho ra đúng code như bản sửa từng chỗ.
+    if (edits.reduce((text, [from, to]) => replaceAll(text, from, to), block.code) !== code) throw new Error(`Block ${id}: replace() khác bản sửa`)
+    if (edits.slice().reverse().reduce((text, [from, to]) => replaceAll(text, to, from), code) !== block.code) throw new Error(`Block ${id}: gỡ bằng replace() không về code cũ`)
+    CHANGES.push({ id, name: block.name, variant, kind: pair.kind, code: pair.code, oldMd5: block.md5, oldCode: block.code, newCode: code, newMd5: md5(code), edits })
   }
 }
 // Bộ cũ và bản engine của cùng block đang trùng code; sau khi sửa chỉ khác dòng báo lỗi cuối.
@@ -102,6 +110,7 @@ for (const pair of PAIRS) {
 const Q = `$${NUMBER}$`
 for (const c of CHANGES) if (c.newCode.includes(Q) || c.oldCode.includes(Q)) throw new Error(`Code chứa ${Q}`)
 const dq = text => `${Q}${text}${Q}`
+const replaceExpr = edits => edits.reduce((expr, [from, to]) => `replace(${expr},\n  ${dq(from)},\n  ${dq(to)})`, 'code')
 
 const header = [
   `-- ${NAME}: 10 block lọc AI (Comment seeding, Tìm data trong group, Tìm data bằng search; bộ cũ và bản "[engine]") gọi lời dặn mới`,
@@ -111,6 +120,20 @@ const header = [
   '-- Sinh bằng scripts/fb-ai-filter/build-v641-sql.cjs, không sửa tay. Chỉ dữ liệu (không DDL, không nạp lại schema PostgREST). Phải apply sau V640.',
   `-- Gỡ: ${ROLLBACK_NAME}.sql.`
 ].join('\n')
+
+// Sổ chép block bộ cũ ↔ engine: cả hai bên sửa cùng lúc (đã duyệt) nên ghi md5 mới như V589, để trace.cjs --drift không báo lệch.
+const pairMd5 = pair => {
+  const source = CHANGES.find(c => c.id === pair.old), engine = CHANGES.find(c => c.id === pair.engine)
+  return { oldMd5: source.oldMd5, sourceNew: source.newMd5, engineNew: engine.newMd5 }
+}
+const copyGuards = (label, sourceKey, engineKey) => PAIRS.map(pair => {
+  const m = pairMd5(pair)
+  return `  IF NOT EXISTS (SELECT 1 FROM public.auto_engine_block_copies WHERE engine_block_id = ${pair.engine} AND source_block_id = ${pair.old} AND source_md5_at_copy = '${m[sourceKey]}' AND engine_md5_at_copy = '${m[engineKey]}') THEN RAISE EXCEPTION '${label}: sổ chép block ${pair.engine} khác mong đợi'; END IF;`
+})
+const copyUpdates = (sourceFrom, engineFrom, sourceTo, engineTo) => PAIRS.map(pair => {
+  const m = pairMd5(pair)
+  return `UPDATE public.auto_engine_block_copies SET source_md5_at_copy = '${m[sourceTo]}', engine_md5_at_copy = '${m[engineTo]}'\n WHERE engine_block_id = ${pair.engine} AND source_block_id = ${pair.old} AND source_md5_at_copy = '${m[sourceFrom]}' AND engine_md5_at_copy = '${m[engineFrom]}';`
+}).join('\n')
 
 function migration() {
   const pre = [
@@ -128,31 +151,35 @@ function migration() {
     ...CHANGES.map(c => `  IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = ${c.id} AND md5(code) = '${c.oldMd5}') THEN RAISE EXCEPTION 'V641: block ${c.id} khác bản đã đọc (md5 ${c.oldMd5})'; END IF;`),
     `  SELECT count(*) INTO v_n FROM public.ai_using WHERE code IN (${PAIRS.map(p => `'${p.code}_v2'`).join(', ')}, 'fb_ai_content_filter_fallback') AND is_active;`,
     "  IF v_n <> 6 THEN RAISE EXCEPTION 'V641: cần 6 mã cấu hình AI của V640, có %', v_n; END IF;",
+    ...copyGuards('V641', 'oldMd5', 'oldMd5'),
     "  IF NOT EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'facebook.error_signs' AND value LIKE '%err_fb_ai_filter_unavailable%') THEN",
     "    RAISE EXCEPTION 'V641: thiếu dấu hiệu FB53 của V640';",
     '  END IF;',
     'END $pre$;'
   ].join('\n')
-  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${dq(c.newCode)}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.oldMd5}';`).join('\n\n')
+  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${replaceExpr(c.edits)}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.oldMd5}';`).join('\n\n')
   const post = [
     'DO $post$',
     'BEGIN',
     ...CHANGES.map(c => `  IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = ${c.id} AND md5(code) = '${c.newMd5}') THEN RAISE EXCEPTION 'V641 postflight: block ${c.id} không ra md5 ${c.newMd5}'; END IF;`),
+    ...copyGuards('V641 postflight', 'sourceNew', 'engineNew'),
     'END $post$;'
   ].join('\n')
-  return [header, 'BEGIN;', "SET LOCAL lock_timeout = '3s';", "SET LOCAL statement_timeout = '60s';", '', pre, '', updates, '', post, '', 'COMMIT;', ''].join('\n')
+  return [header, 'BEGIN;', "SET LOCAL lock_timeout = '3s';", "SET LOCAL statement_timeout = '60s';", '', pre, '', updates, '',
+    copyUpdates('oldMd5', 'oldMd5', 'sourceNew', 'engineNew'), '', post, '', 'COMMIT;', ''].join('\n')
 }
 
 function rollback() {
-  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${dq(c.oldCode)}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.newMd5}';`).join('\n\n')
+  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${replaceExpr(c.edits.slice().reverse().map(([from, to]) => [to, from]))}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.newMd5}';`).join('\n\n')
   const post = [
     'DO $post$',
     'BEGIN',
     ...CHANGES.map(c => `  IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = ${c.id} AND md5(code) = '${c.oldMd5}') THEN RAISE EXCEPTION 'Gỡ V641: block ${c.id} không về md5 ${c.oldMd5}'; END IF;`),
+    ...copyGuards('Gỡ V641', 'oldMd5', 'oldMd5'),
     'END $post$;'
   ].join('\n')
   return [`-- ${ROLLBACK_NAME}: trả 10 block lọc AI về code trước V641 (kiểm md5 bản V641 trước khi ghi). Mã cấu hình cũ vẫn còn nên chạy lại như trước.`,
-    'BEGIN;', "SET LOCAL lock_timeout = '3s';", '', updates, '', post, '', 'COMMIT;', ''].join('\n')
+    'BEGIN;', "SET LOCAL lock_timeout = '3s';", '', updates, '', copyUpdates('sourceNew', 'engineNew', 'oldMd5', 'oldMd5'), '', post, '', 'COMMIT;', ''].join('\n')
 }
 
 const OUT = {
