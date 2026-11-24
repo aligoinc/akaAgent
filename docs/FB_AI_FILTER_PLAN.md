@@ -1,6 +1,13 @@
 # Phương án: sửa cơ chế AI lọc bài / comment và "aka Cài đặt"
 
-Ngày lập: 24/11/2026. Trạng thái: **chờ anh duyệt để bắt đầu, chưa code, chưa đổi database.**
+Ngày lập: 24/11/2026. Anh duyệt 24/11 ("đồng ý theo phương án của bạn"), rồi "Hãy thực thi phương án này cho đến khi xong thì thôi".
+
+**Tình trạng (24/11/2026, nhánh `claude/festive-fermi-pqkbuu`, chưa merge):**
+
+- 1.1, 1.2 xong: bộ mẫu 393 bài / comment, kết quả ở [FB_AI_FILTER_EVAL_20261124.md](FB_AI_FILTER_EVAL_20261124.md). Anh từ chối cấp khoá qua form bảo mật, nên bộ mẫu chạy bằng `pg_net` từ database với khoá có sẵn trong `ai_model` (khoá không ra khỏi database). Chọn mô hình chính `deepseek-flash`, dự phòng `gpt-6-luna` (cổng "anh chọn mô hình" tôi quyết theo số liệu, anh đổi được bằng một UPDATE `ai_using.model_id`).
+- 1.3: [V640](../migrations/migration_v640_fb_ai_filter_config.sql) (lời dặn mới, 6 mã `ai_using`, FB53) **đã apply akachat 13:29:59 VN 24/11** (sổ `20261124062959`, md5 sổ = file `6fac4b95…`; chưa block nào dùng tới khi có V641). [V642](../migrations/migration_v642_ai_config_history_eval.sql) (lịch sử cấu hình AI, bảng bộ mẫu) chưa apply: có DDL, để buổi tối.
+- 1.4: [V641](../migrations/migration_v641_fb_ai_filter_blocks.sql) (10 block gọi mã mới, thử lại rồi dự phòng; bản engine báo FB53 khi cả hai lỗi; ghi sổ chép block) chưa apply, viết bằng `replace()` có kiểm md5 trước / sau (47 KB). Kiểm: `node scripts/fb-ai-filter/v641-blocks-smoke.cjs` (128), `python3 scripts/fb-ai-filter/test_v641.py` (10, PostgreSQL cục bộ với code block production 24/11).
+- Đợt 2 (app Desktop, chưa build): ô AI có chữ ví dụ, dòng dặn, báo đỏ và chặn lưu khi tích mà trống ([campaignAiFilterForm.ts](../src/shared/campaignAiFilterForm.ts), hai form); ô nổi "aka Cài đặt" có Thử nhanh, danh sách ô đã đổi (cũ → mới), Hoàn tác, nhãn "aka điền" ([CampaignFormAiPopover.tsx](../src/renderer/src/components/CampaignPanels/CampaignFormAiPopover.tsx), [akaSettingsChanges.ts](../src/renderer/src/components/CampaignPanels/akaSettingsChanges.ts)) cho 6 box Facebook, Lịch chạy, Giới hạn. Khác mục 2.2: không thêm 8 dòng `ai_form_configs` mới; danh sách ô đã đổi tính trên máy từ giá trị form và bản vá AI trả về, nên chưa có phần "câu thuộc box khác" (cần AI trả thêm trường, tức cấu hình mới). Box Nội dung và Loại trừ chỉ đổi tên ô nổi, vẫn đóng sau khi điền.
 Bản thiết kế: https://claude.ai/artifact/LFm55ymyAoGwhetKtc7Gqi
 
 ## 1. Làm gì, không làm gì
