@@ -10,6 +10,8 @@ module.exports = async function checkLimitsUi(page) {
   const requests = () => page.evaluate(() => window.scheduleSmoke.state.requests.length)
   const saveCount = () => page.evaluate(() => window.scheduleSmoke.state.calls.filter(call => /^(createCampaign|updateCampaign|saveCampaignDraft)$/.test(call.method)).length)
   const resolveAi = result => page.evaluate(result => window.scheduleSmoke.resolve(result), result)
+  // aka Cài đặt: điền xong ô nổi không tự đóng, bấm Xong để đóng.
+  const done = async () => { await panel.getByRole('button', { name: 'Xong', exact: true }).click(); await panel.waitFor({ state: 'detached' }) }
   const generate = async text => {
     await trigger.click(); await input.fill(text); await input.press('Enter')
     await page.waitForFunction(() => document.querySelector('.stepper-layout')?.inert)
@@ -38,7 +40,7 @@ module.exports = async function checkLimitsUi(page) {
   const request = await page.evaluate(() => window.scheduleSmoke.state.requests.at(-1))
   assert.deepEqual(request.limits.actions.map(item => item.actionCode), ['fb_post_my_profile'])
   await resolveAi({ ok: true, patch: { actions: [{ actionCode: 'fb_post_my_profile', dailyLimit: 20, rateLimitCount: 6, rateLimitMinutes: 30 }] } })
-  await panel.waitFor({ state: 'detached' })
+  await done()
   assert.equal(await section.locator('#action-limit-day-fb_post_my_profile').inputValue(), '20')
   assert.equal(await section.locator('#action-limit-hour-fb_post_my_profile').inputValue(), '6')
   assert.equal(await section.locator('#action-limit-minute-fb_post_my_profile').inputValue(), '30')
@@ -46,7 +48,7 @@ module.exports = async function checkLimitsUi(page) {
   assert.equal(await saveCount(), savesBefore, 'AI must not save')
   await generate('mỗi ngày 20 bài, trong nửa giờ 6 bài')
   await resolveAi({ ok: true, patch: { actions: [] } })
-  await panel.waitFor({ state: 'detached' })
+  await done()
   assert(await form.getByRole('button', { name: 'Lưu chiến dịch', exact: true }).isEnabled())
   assert.equal(await section.locator('#action-limit-day-fb_post_my_profile').inputValue(), '20')
   assert.equal(await section.locator('#action-limit-hour-fb_post_my_profile').inputValue(), '6')
@@ -73,7 +75,7 @@ module.exports = async function checkLimitsUi(page) {
   await page.evaluate(() => window.scheduleSmoke.openNew()); await trigger.waitFor(); await expand()
   await generate('đặt giới hạn ngày 20 và 6 bài mỗi 30 phút')
   await resolveAi({ ok: true, patch: { actions: [{ actionCode: 'fb_post_my_profile', dailyLimit: 20, rateLimitCount: 6, rateLimitMinutes: 30 }] } })
-  await panel.waitFor({ state: 'detached' })
+  await done()
   await form.getByRole('button', { name: 'Lưu nháp', exact: true }).click(); await form.waitFor({ state: 'detached' })
   const draft = await page.evaluate(() => window.scheduleSmoke.state.lastSavedDraft)
   assert.equal(draft.payload.values.editedRateLimitMinuteActions.fb_post_my_profile, true)
@@ -96,7 +98,7 @@ module.exports = async function checkLimitsUi(page) {
   const groupRequest = await page.evaluate(() => window.scheduleSmoke.state.requests.at(-1))
   assert.deepEqual(groupRequest.limits.actions.map(item => item.actionCode), ['fb_post_group'], 'comment limits in another section are excluded')
   await resolveAi({ ok: true, patch: { actions: [], sleepBetweenActions: 90, continueWhenActionLimitReached: true } })
-  await panel.waitFor({ state: 'detached' })
+  await done()
   assert.equal(await section.getByText('Thời gian nghỉ giữa 2 lần gửi', { exact: true }).locator('..').locator('input').inputValue(), '90')
   assert(await section.getByRole('checkbox', { name: 'Chiến dịch sẽ tiếp tục chạy khi 1 trong các hành động đạt giới hạn' }).isChecked())
   assert.equal(await page.locator('#action-limit-day-fb_comment').inputValue(), '18')
@@ -111,7 +113,7 @@ module.exports = async function checkLimitsUi(page) {
     extraSettings: { postsPerTarget: 3, enablePostLike: false, actionLimits: { sleepBetweenActions: 30,
       byActionCode: { fb_comment: { dailyLimit: 20, rateLimitCount: 6, rateLimitMinutes: 65 } } } } })
   await trigger.waitFor(); await expand(); await generate('mỗi nhóm comment 5 bài')
-  await resolveAi({ ok: true, patch: { actions: [], postsPerTarget: 5 } }); await panel.waitFor({ state: 'detached' })
+  await resolveAi({ ok: true, patch: { actions: [], postsPerTarget: 5 } }); await done()
   assert.equal(await section.getByText('Số bài cần comment trên mỗi group/page/profile', { exact: true }).locator('..').locator('input').inputValue(), '5')
   await trigger.click(); await input.fill('Mỗi ngày 50 comment, mỗi nửa giờ 5 comment, nghỉ một phút giữa hai lần.')
   const shots = resolve(__dirname, '../docs/audits/ai-form-configs-v416/limits'); mkdirSync(shots, { recursive: true })
