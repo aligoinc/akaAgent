@@ -13,6 +13,7 @@ import './campaignAgent.css'
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
 import { validateGroupPostShareLinks } from '../../../../shared/facebookGroupPostShare'
+import { ZALO_STRANGER_MEDIA_PACING_WARNING, shouldWarnZaloStrangerMediaPacing } from '../../../../shared/zaloStrangerMediaPacing'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import CampaignContentAi from './CampaignContentAi'
@@ -2867,6 +2868,12 @@ export default function CampaignAgentFormModal({
   const showPostBumpVideoWarning = formData.enablePostBump && (isAdvancedContentMode
     ? advancedContentDisplayItems.some(item => item.mediaOption !== 'none' && campaignMediaHasVideo(item.mediaItems || []))
     : formData.imageOption !== 'none' && campaignMediaHasVideo(formData.images))
+  // Nhắn người lạ, từ 3 ảnh mỗi tin mà nghỉ dưới 300 giây: Zalo hay chặn phần chữ gửi sau album (V647, anh chốt 24/11/2026).
+  const showZaloStrangerMediaPacingWarning = canUseSleepBetweenActions && shouldWarnZaloStrangerMediaPacing({
+    actionId: formData.actionId, sleepSeconds: formData.sleepBetweenActions,
+    imageOption: formData.imageOption, images: formData.images, randomImageCount: formData.randomImageCount,
+    advancedContentEnabled: isAdvancedContentMode, advancedContentItems: advancedContentDisplayItems
+  })
   const detailsColumnCount = (isCommentSeedingPostCampaign || isFindDataSearchCampaign || isFacebookJoinGroupCampaign || isZaloJoinGroupLinkCampaign
     ? (isEditingSavedCampaign ? 2 : 3)
     : isPagePostCampaign
@@ -18041,6 +18048,11 @@ export default function CampaignAgentFormModal({
                             />
                             <span className="stepper-input-unit">giây</span>
                           </div>
+                          {showZaloStrangerMediaPacingWarning && (
+                            <span className="campaign-manual-content-warning" style={{ marginTop: 6 }}>
+                              <AlertTriangle size={12} />{ZALO_STRANGER_MEDIA_PACING_WARNING}{selectedAccountGroupNames.length > 0 ? ' Tài khoản thuộc nhóm thì đặt trong nhóm tài khoản.' : ''}
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
