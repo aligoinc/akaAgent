@@ -1,5 +1,8 @@
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
-import { supportsStopMessagesLink, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
+import { supportsStopMessagesLink } from '../../../../shared/zaloMessageOptOut'
+import { validateMessageOptOutSettings } from '../../../../shared/messageOptOutValidation'
+import { channelOptOutLinkSupported } from '../../../../shared/messageOptOutChannels'
+import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import { useMemo, useRef, useState, type ChangeEvent, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { Copy, FileText, FolderOpen, Image as ImageIcon, Plus, Save, SlidersHorizontal, Trash2, X } from 'lucide-react'
@@ -905,7 +908,10 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
     actionId === ZALO_MESSAGE_REMARKETING_CUSTOMER_ACTION_ID ||
     actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID
   ) && extra.enableAddFriend === true
-  const canEditStopMessagesLink = showMainContentSection && supportsStopMessagesLink(actionId, formData.zaloMessageSendMode)
+  // Link từ chối: tin nhắn Zalo, và SMS / email / nhắn tin Facebook khi kênh đã mở (V649).
+  const optOutChannelSettings = useDesktopPollingStore(state => state.settings.messageOptOutChannels)
+  const canEditStopMessagesLink = showMainContentSection && (supportsStopMessagesLink(actionId, formData.zaloMessageSendMode)
+    || channelOptOutLinkSupported(actionId, optOutChannelSettings))
   const hasAnyEditableField = canEditStopMessagesLink || (!isLegacyManualAdvancedSource && showMainContentSection) || showCommentContent || showPostBumpContent || showNewsfeedCommentContent || showFriendRequestMessage
   const normalizedAdvancedContentItems = normalizeAdvancedContentItems(formData.advancedContentItems)
   const canUseAdvancedContentMode = showMainContentSection && !isVoiceCallCampaign && contentTemplateChannel !== undefined
@@ -2042,7 +2048,8 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       if (isZaloMessageCampaign && !isLegacyManualAdvancedSource) {
         nextExtraSettings.zaloMessageSendMode = formData.zaloMessageSendMode
       }
-      if (supportsStopMessagesLink(campaign.actionId, nextExtraSettings.zaloMessageSendMode)) {
+      if (supportsStopMessagesLink(campaign.actionId, nextExtraSettings.zaloMessageSendMode)
+        || channelOptOutLinkSupported(campaign.actionId, optOutChannelSettings)) {
         nextExtraSettings.zaloOptOutLinkEnabled = formData.zaloOptOutLinkEnabled
       }
       if (showCommentContent || (isCommentSeedingCampaign && !isLegacyManualAdvancedSource)) {
@@ -2066,7 +2073,7 @@ export function CampaignContentMediaUpdateModal({ campaign, action, onOpenConten
       const finalContent = showMainContentSection && !isCommentSeedingCampaign && !isLegacyManualAdvancedSource
         ? (isFormattedContentEnabled ? sanitizeFormattedContent(formData.content) : formData.content)
         : campaign.content || ''
-      const optOutError = validateStopMessagesSettings(finalContent, nextExtraSettings, campaign.actionId, formattedContentToPlainText)
+      const optOutError = validateMessageOptOutSettings(finalContent, nextExtraSettings, campaign.actionId, optOutChannelSettings, formattedContentToPlainText)
       if (optOutError) throw new Error(optOutError)
       const status = await campaignEdit.chooseSaveStatus(saveSignal)
       if (!status || saveSignal.aborted) return

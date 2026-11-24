@@ -25,6 +25,8 @@ export interface EmailSendInput {
   isHtml?: boolean
   attachments?: string[] // local file paths
   tracking?: EmailSendTrackingInput
+  /** Địa chỉ "Hủy đăng ký" một chạm (header List-Unsubscribe + List-Unsubscribe-Post, RFC 8058; V649). */
+  listUnsubscribeUrl?: string | null
 }
 
 export interface EmailSendTrackingInput {
@@ -283,6 +285,8 @@ export class EmailRuntimeService {
     if (!href) return null
     if (/^(mailto:|tel:|javascript:|data:|#)/i.test(href)) return null
     if (/\/functions\/v1\/email-click\?/i.test(href)) return null
+    // Link từ chối nhận tin (V649) không bọc đếm lượt bấm: bấm từ chối không phải "đã bấm link".
+    if (/^https?:\/\/b\.akabiz\.biz\/(s|api\/public\/message-opt-out)\//i.test(href)) return null
     try {
       const normalizedHref = this.normalizeHrefForLink(href)
       if (!normalizedHref) return null
@@ -769,6 +773,12 @@ export class EmailRuntimeService {
         ...(preparedBody.html !== undefined ? { html: preparedBody.html } : {}),
         ...(config.replyTo ? { replyTo: config.replyTo } : {}),
         ...(config.cc ? { cc: config.cc } : {}),
+        ...(input.listUnsubscribeUrl ? {
+          headers: {
+            'List-Unsubscribe': `<${input.listUnsubscribeUrl}>`,
+            'List-Unsubscribe-Post': 'List-Unsubscribe=One-Click'
+          }
+        } : {}),
         attachments
       }) as { messageId?: string }
     } catch (err) {

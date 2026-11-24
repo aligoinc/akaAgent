@@ -176,8 +176,8 @@ def main():
         check('bật: có biến thì thay tại chỗ, không thêm dòng cuối',
               re.fullmatch(r'Chao ban, tu choi: https://b\.akabiz\.biz/s/[A-Za-z0-9_-]{22}', c2) is not None, c2)
         c3 = by[3]['content']
-        check('bật: có dấu + giữ xuống dòng → "\\nTừ chối nhận tin: <link>"',
-              re.fullmatch(r'Chào bạn\nTừ chối nhận tin: https://b\.akabiz\.biz/s/[A-Za-z0-9_-]{22}', c3) is not None, repr(c3))
+        check('bật: có dấu + giữ xuống dòng → "\\nTu choi nhan tin: <link>" (dòng cuối luôn không dấu)',
+              re.fullmatch(r'Chào bạn\nTu choi nhan tin: https://b\.akabiz\.biz/s/[A-Za-z0-9_-]{22}', c3) is not None, repr(c3))
         check('bật nhưng chiến dịch không bật link: bỏ biến, không dòng cuối', by[4]['content'] == 'Xin chao ' and by[5]['content'] == 'Xin chao')
         again = {r['input_data_id']: r['content'] for r in list_sms(db)}
         check('đọc lại ra đúng link cũ', again[1] == c1 and again[2] == c2)

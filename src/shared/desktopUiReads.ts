@@ -28,6 +28,8 @@ export interface DesktopPollingSettings {
   facebookMaxComments?: number
   /** Mức kiểm cú pháp nội dung lúc lưu (`campaign.content_syntax_guard`); thiếu dòng = `block`. */
   contentSyntaxGuard?: 'block' | 'warn' | 'off'
+  /** Link từ chối cho SMS / email / nhắn tin Facebook (`message_opt_out.channels`, V649); thiếu = tắt cả ba. */
+  messageOptOutChannels?: { sms: boolean; email: boolean; facebook: boolean }
   /** Ngừng đọc theo hẹn giờ/sự kiện khi cửa sổ chính thu nhỏ, ẩn hoặc màn hình khóa. Thiếu = tắt. */
   hiddenPauseEnabled?: boolean
   /** Cả máy không có thao tác từ ngần này giây thì coi là không ai nhìn. 0/thiếu = tắt. */

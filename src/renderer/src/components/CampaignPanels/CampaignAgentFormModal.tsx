@@ -42,7 +42,9 @@ import ZaloCampaignTagSettings from './ZaloCampaignTagSettings'
 import './ZaloAuxiliaryActions.css'
 import ZaloTagMultiSelector from './ZaloTagMultiSelector'
 import { normalizeZaloAccountTagSettings, pickZaloAccountTagSettings, resolveZaloAccountTagSettings, type ZaloTagSettingsByAccountId } from '../../../../shared/zaloAuxiliaryActions'
-import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN, validateStopMessagesSettings } from '../../../../shared/zaloMessageOptOut'
+import { appendStopMessagesFooter, STOP_MESSAGES_PREVIEW_ID, STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN } from '../../../../shared/zaloMessageOptOut'
+import { validateMessageOptOutSettings } from '../../../../shared/messageOptOutValidation'
+import { channelOptOutLinkSupported } from '../../../../shared/messageOptOutChannels'
 import { CAMPAIGN_DRAFT_VERSION, CAMPAIGN_DRAFT_SCHEDULE_TIME_ZONE, getPreservedCampaignDraftSchedule, preserveCampaignSchedule, restoreCampaignDraftSchedule, restoreCampaignDraftValue, validateCampaignDraftPayload, type CampaignDraft, type CampaignDraftPayload } from '../../../../shared/campaignDrafts'
 import { useAgentDraftField as useCampaignDraftField, registerAgentDraftSetter } from './useAgentDraftField'
 import FacebookPageIdentitySettings from './FacebookPageIdentitySettings'
@@ -2542,7 +2544,9 @@ export default function CampaignAgentFormModal({
   const isRichContentEditorEnabled = (isEmailCampaign && formData.emailBodyIsHtml) || isFormattedContentEnabled
   const getSmsContentCountLabels = () => {
     const counts = countSmsContentVariants(formData.content, {
-      useUnicode: formData.smsUseUnicode, keepNewLines: formData.smsKeepNewLines
+      useUnicode: formData.smsUseUnicode, keepNewLines: formData.smsKeepNewLines,
+      // Bật link từ chối: đếm cả link / dòng cuối như lúc gửi (V649).
+      optOutLink: supportsZaloOptOutLink && formData.zaloOptOutLinkEnabled
     })
     return counts.map((item, index) => {
       const prefix = counts.length > 1 ? `Mẫu ${index + 1}: ` : ''
@@ -2577,7 +2581,10 @@ export default function CampaignAgentFormModal({
   const isPhoneInputCampaign = isZaloMessagePhoneCampaign || isMobileManagedSmsCampaign
   const isPhoneOrUidInputCampaign = isZaloAddGroupMemberCampaign
   const isZaloShareMessageMode = (isZaloMessageFriendCampaign || isZaloMessageGroupCampaign) && formData.zaloMessageSendMode === 'share'
-  const supportsZaloOptOutLink = isZaloMessageCampaign && !isZaloMessageGroupCampaign && !isZaloShareMessageMode
+  // Ô / biến link từ chối: tin nhắn Zalo cá nhân, và SMS / email / nhắn tin Facebook khi kênh đã mở (`message_opt_out.channels`, V649).
+  const messageOptOutChannelSettings = useDesktopPollingStore(state => state.settings.messageOptOutChannels)
+  const supportsZaloOptOutLink = (isZaloMessageCampaign && !isZaloMessageGroupCampaign && !isZaloShareMessageMode)
+    || channelOptOutLinkSupported(formData.actionId, messageOptOutChannelSettings)
   const supportsAkaBizContactTags = isZaloMessageCampaign && !isZaloMessageBirthdayCampaign && !isZaloShareMessageMode
   const defaultZaloAliasTemplate = getDefaultZaloAliasTemplate(formData.actionId)
   const isPageInboxMessageCampaign = formData.actionId === PAGE_INBOX_MESSAGE_ACTION_ID
@@ -7329,7 +7336,9 @@ export default function CampaignAgentFormModal({
         },
         // Data nhập thẳng lúc tạo: báo dòng thiếu thông tin mà biến trong nội dung cần.
         inputRows: !isEditingSavedCampaign && !isDataGroupSource && !hideDetailsSection
-          ? details as Array<Record<string, unknown>> : undefined
+          ? details as Array<Record<string, unknown>> : undefined,
+        // Link từ chối cho SMS / email / nhắn tin Facebook (V649): kênh mở thì nội dung chính được dùng biến.
+        optOutChannels: messageOptOutChannelSettings
       }
       const syntaxMode = useDesktopPollingStore.getState().settings.contentSyntaxGuard ?? 'block'
       const syntaxVerdict = checkCampaignContentSyntax(syntaxInput, syntaxMode)
@@ -7752,7 +7761,7 @@ export default function CampaignAgentFormModal({
     let saveBundleItems = buildCampaignSaveBundleItems(validDetails, advancedContentForSave)
     for (const { campaignPayload } of saveBundleItems) {
       const extra = campaignPayload.extraSettings || {}
-      const error = validateStopMessagesSettings(campaignPayload.content, extra, campaignPayload.actionId || formData.actionId, formattedContentToPlainText)
+      const error = validateMessageOptOutSettings(campaignPayload.content, extra, campaignPayload.actionId || formData.actionId, messageOptOutChannelSettings, formattedContentToPlainText)
       if (error) {
         showAlert(error, 'error')
         setSavingCampaign(false)
@@ -9551,6 +9560,16 @@ export default function CampaignAgentFormModal({
         : isZaloMessagePhoneCampaign
     const showZaloProfileTokens = isZaloMessagePhoneCampaign || isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign || isZaloMessageFriendRecommendationCampaign
     const showDateTokens = !isSmsCampaign
+    // Link từ chối: tin nhắn Zalo, và SMS / email / nhắn tin Facebook khi kênh đã mở (V649).
+    const stopLinkToken = target === 'content' && supportsZaloOptOutLink ? (
+      <>
+        <label>Từ chối nhận tin</label>
+        <button type="button" className="message-template-token" onClick={() => {
+          setFormData(current => ({ ...current, zaloOptOutLinkEnabled: true }))
+          insertCampaignContentToken(STOP_MESSAGES_INSERT_TEXT, target, advancedItemId)
+        }}>{STOP_MESSAGES_LINK_TOKEN}</button>
+      </>
+    ) : null
     const renderExcelTokens = () => (
       <div className="message-template-token-row">
         {excelTokens.map(token => (
@@ -9566,7 +9585,7 @@ export default function CampaignAgentFormModal({
       </div>
     )
 
-    const sectionCount = (showCustomerTokens ? 1 : 0) + (showExcelTokens ? 1 : 0) + (showDateTokens ? 1 : 0)
+    const sectionCount = (showCustomerTokens || stopLinkToken ? 1 : 0) + (showExcelTokens ? 1 : 0) + (showDateTokens ? 1 : 0)
     const sectionLayoutClass = sectionCount >= 3
       ? 'three-token-sections'
       : sectionCount === 1
@@ -9640,15 +9659,19 @@ export default function CampaignAgentFormModal({
                   >
                     {'#{SEX{anh-chị-anh/chị}}'}
                   </button>
-                  {target === 'content' && supportsZaloOptOutLink && <>
-                    <label>Từ chối nhận tin</label>
-                    <button type="button" className="message-template-token" onClick={() => {
-                      setFormData(current => ({ ...current, zaloOptOutLinkEnabled: true }))
-                      insertCampaignContentToken(STOP_MESSAGES_INSERT_TEXT, target, advancedItemId)
-                    }}>{STOP_MESSAGES_LINK_TOKEN}</button>
-                  </>}
                 </>
               )}
+              {stopLinkToken}
+            </div>
+          )}
+          {/* SMS / email không có mục "Khách hàng": nút link từ chối đứng riêng (V649). */}
+          {!showCustomerTokens && stopLinkToken && (
+            <div className="message-template-section">
+              <div className="message-template-section-title">
+                <Users size={16} />
+                <span>Khách hàng</span>
+              </div>
+              {stopLinkToken}
             </div>
           )}
 

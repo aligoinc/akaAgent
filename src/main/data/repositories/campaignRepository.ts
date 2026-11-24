@@ -6870,6 +6870,47 @@ export async function prepareZaloMessageOptOut(
   return { id, isOptedOut: row?.is_opted_out === true }
 }
 
+/** Link từ chối cho SMS / email / nhắn tin Facebook (V649): kiểm người đã từ chối theo đúng kênh. */
+export async function checkMessageOptOut(
+  campaignId: number,
+  accountId: number,
+  channel: 'sms' | 'email' | 'facebook',
+  identity: string
+): Promise<boolean> {
+  const user = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_check_message_opt_out', {
+    p_campaign_id: campaignId,
+    p_account_id: accountId,
+    p_staff_id: user.staffId,
+    p_channel: channel,
+    p_identity: identity
+  })
+  if (error) throw new Error(`Không thể kiểm tra từ chối nhận tin: ${error.message}`)
+  return data === true
+}
+
+/** Tạo (hoặc lấy) link từ chối của người nhận ở kênh SMS / email / Facebook (V649). */
+export async function prepareMessageOptOut(
+  campaignId: number,
+  accountId: number,
+  channel: 'sms' | 'email' | 'facebook',
+  identity: string
+): Promise<ZaloMessageOptOutPrepareResult> {
+  const user = requireCurrentUser()
+  const { data, error } = await client().rpc('aka_agent_prepare_message_opt_out', {
+    p_campaign_id: campaignId,
+    p_account_id: accountId,
+    p_staff_id: user.staffId,
+    p_channel: channel,
+    p_identity: identity
+  })
+  if (error) throw new Error(`Không thể tạo link từ chối nhận tin: ${error.message}`)
+  const row = ((data || []) as Record<string, unknown>[])[0]
+  const id = String(row?.id || '').trim()
+  if (!id) throw new Error('RPC tạo link từ chối nhận tin không trả kết quả.')
+  return { id, isOptedOut: row?.is_opted_out === true }
+}
+
 export async function pausePendingZaloMessageOptOutInput(
   campaignId: number,
   inputDataId: number,

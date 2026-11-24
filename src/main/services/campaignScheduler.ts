@@ -34,7 +34,9 @@ import { WebEnrichmentService } from './webEnrichmentService'
 import { attachWebEnrichmentPreview } from './webEnrichmentPreview'
 import { FACEBOOK_REST_BROWSE_WORKFLOW, facebookRestBrowseSettings, facebookRestBrowseTarget, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../shared/facebookRestBrowse'
 import { runFacebookRestBrowse } from './facebookRestBrowse'
-import { appendStopMessagesFooter, replaceStopMessagesLink, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
+import { appendStopMessagesFooter, buildStopMessagesLink, encodeStopMessagesId, replaceStopMessagesLink, STOP_MESSAGES_ERROR_URL, STOP_MESSAGES_LINK_TOKEN, type StopMessagesRenderState } from '../../shared/zaloMessageOptOut'
+import { facebookOptOutKey, FACEBOOK_OPT_OUT_ERROR_CODE, MESSAGE_OPT_OUT_SKIP_NOTES, messageOptOutChannelForAction, messageOptOutFooterText, messageOptOutOneClickUrl, type MessageOptOutChannel } from '../../shared/messageOptOutChannels'
+import { getMessageOptOutChannels } from './messageOptOutChannelsSetting'
 import { buildMessageOptOutSource } from '../../shared/messageOptOutSource'
 import { resolveAccountActionLimitConfig } from '../../shared/accountActionLimits'
 import { BrowserWindow } from 'electron'
@@ -213,6 +215,14 @@ interface DeliveryCooldownBatchResult {
   pausedInputDataIds: Set<number>
   deferredInputDataIds: Set<number>
   pausedNotesByInputDataId: Map<number, string>
+}
+
+/** Link từ chối của người nhận đang chạy ở chiến dịch SMS / email / nhắn tin Facebook (V649). */
+interface ChannelOptOutRuntimeContext {
+  channel: MessageOptOutChannel
+  /** Chiến dịch bật "Thêm link từ chối nhận tin nhắn" và kênh đang mở. */
+  linkEnabled: boolean
+  linkId: string | null
 }
 
 interface ZaloMessageOptOutRuntimeContext {
@@ -1068,6 +1078,8 @@ export class CampaignScheduler {
   private sendExclusionRuns = new Map<number, SendExclusionSnapshot>()
   private sendExclusionLabels = new Map<number, CampaignLabelContext>()
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
+  /** Theo chiến dịch: link từ chối của data đang chạy (email / Facebook, V649); bước dựng nội dung đọc ở đây. */
+  private channelOptOutContexts = new Map<number, ChannelOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
   readonly webEnrichment?: WebEnrichmentService
   /** Engine kết quả v2 (packages/campaign-engine): chỉ Desktop, cho loại chiến dịch đã tách sang lõi. */
@@ -4726,6 +4738,19 @@ export class CampaignScheduler {
         if (zaloOptOutContext.blocked) continue
       }
 
+      // Email / nhắn tin Facebook (V649): bỏ qua người đã từ chối kênh này, giữ link cho bước dựng nội dung.
+      if (messageOptOutChannelForAction(campaign.actionId)) {
+        const optOut = await this.resolveChannelOptOut(account, campaign, detail)
+        if (optOut.blocked && detail) {
+          const note = MESSAGE_OPT_OUT_SKIP_NOTES[optOut.blocked]
+          await this.supabase.pausePendingZaloMessageOptOutInput(campaign.id, detail.id, note).catch(() => false)
+          detail.status = 'tạm dừng'
+          detail.note = note
+          await this.logCampaignProgress(campaign, `🚫 Bỏ qua "${this.getInputDataDisplayName(campaign, detail)}": ${note}`).catch(() => {})
+          continue
+        }
+      }
+
       if (detail && isRecentDeliveryCooldownEnabled(campaign.actionId, campaign.extraSettings)) {
         try {
           const cooldown = await this.applyRecentDeliveryCooldown(account, campaign, [detail.id])
@@ -6368,6 +6393,16 @@ export class CampaignScheduler {
     }
     const share: FacebookEngineShare = { targets: sharePrep.targets, maxCount: sharePrep.maxCount, selected: null, runs: new Map(),
       mainKey: null, postDelivery: null, aborted: false }
+
+    // Nhắn tin Facebook (V649): người nhận đã từ chối thì không mở Messenger; OPT02 = data tạm dừng, không lịch sử, không tính lượt.
+    const optOut = await this.resolveChannelOptOut(account, campaign, detail)
+    if (optOut.blocked) {
+      const note = MESSAGE_OPT_OUT_SKIP_NOTES[optOut.blocked]
+      progress(`🚫 Bỏ qua "${name}": ${note}`)
+      const res = await api.reportMilestone(milestone('__opt_out', firstAction), { ok: false, phase: 'before_send',
+        signal: { kind: 'engine', code: 'recipient_opted_out', errorCode: FACEBOOK_OPT_OUT_ERROR_CODE, message: note } })
+      return 'stop' in res ? res : { done: true }
+    }
 
     const mediaTempPaths: string[] = []
     this.campaignContentMediaPaths.set(campaign.id, mediaTempPaths)
@@ -8823,6 +8858,72 @@ export class CampaignScheduler {
     if (campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID || !detail || !blocklist || blocklist.invalidReason) return false
     const uid = this.normalizeUidForCompare(this.firstNonEmptyString(detail.uid))
     return Boolean(uid && blocklist.uidKeys.has(uid))
+  }
+
+  /**
+   * Link từ chối cho email / nhắn tin Facebook (V649). Kênh đang tắt: xoá ngữ cảnh (bước dựng nội dung chỉ bỏ biến).
+   * Kênh mở: chiến dịch bật link thì tạo / lấy link (DB trả luôn người này đã từ chối chưa), không bật thì chỉ kiểm.
+   * Lỗi kiểm / tạo link: ghi cảnh báo và vẫn gửi (như Zalo), biến thành trang báo lỗi, không thêm dòng cuối.
+   * Không tự đổi trạng thái data: bộ cũ tạm dừng data, engine báo kết quả OPT02.
+   */
+  private async resolveChannelOptOut(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData | null
+  ): Promise<{ blocked: MessageOptOutChannel | null }> {
+    this.channelOptOutContexts.delete(campaign.id)
+    const channel = messageOptOutChannelForAction(campaign.actionId)
+    if (!channel || channel === 'sms' || getMessageOptOutChannels()[channel] !== true) return { blocked: null }
+    const context: ChannelOptOutRuntimeContext = {
+      channel, linkEnabled: campaign.extraSettings?.zaloOptOutLinkEnabled === true, linkId: null
+    }
+    this.channelOptOutContexts.set(campaign.id, context)
+    const identity = channel === 'email'
+      ? String(detail?.email || '').trim().toLowerCase()
+      : facebookOptOutKey(campaign.actionId, detail?.uid, campaign.extraSettings?.pageInboxPageUid)
+    if (!identity) return { blocked: null }
+    try {
+      if (context.linkEnabled) {
+        const prepared = await this.supabase.prepareMessageOptOut(campaign.id, account.id, channel, identity)
+        if (prepared.isOptedOut) return { blocked: channel }
+        context.linkId = prepared.id
+      } else if (await this.supabase.checkMessageOptOut(campaign.id, account.id, channel, identity)) {
+        return { blocked: channel }
+      }
+    } catch (err) {
+      await this.logCampaignProgress(campaign,
+        `⚠️ Không thể kiểm tra từ chối nhận tin; vẫn tiếp tục gửi: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`).catch(() => {})
+    }
+    return { blocked: null }
+  }
+
+  /**
+   * Gắn link từ chối vào nội dung email / tin nhắn Facebook sau mọi bước viết lại (V649). Có biến thì thay tại chỗ;
+   * không có biến mà chiến dịch bật link thì thêm dòng cuối. Kênh tắt / không tạo được link: biến bị bỏ (hoặc thành
+   * trang báo lỗi khi đã bật link), không bao giờ gửi nguyên văn.
+   */
+  private applyChannelOptOutLink(campaign: Campaign, content: string, options: { html?: boolean } = {}): string {
+    if (!messageOptOutChannelForAction(campaign.actionId)) return content
+    const context = this.channelOptOutContexts.get(campaign.id)
+    const link = context?.linkEnabled && context.linkId ? buildStopMessagesLink(context.linkId) : null
+    if (content.includes(STOP_MESSAGES_LINK_TOKEN)) {
+      return content.split(STOP_MESSAGES_LINK_TOKEN).join(link || (context?.linkEnabled ? STOP_MESSAGES_ERROR_URL : ''))
+    }
+    if (!link) return content
+    if (options.html) {
+      const footer = `<p>${messageOptOutFooterText(`<a href="${link}">${link}</a>`)}</p>`
+      return /<\/body\s*>/i.test(content) ? content.replace(/<\/body\s*>/i, `${footer}</body>`) : `${content}${footer}`
+    }
+    const body = content.replace(/\s+$/, '')
+    return `${body}${body ? '\n\n' : ''}${messageOptOutFooterText(link)}`
+  }
+
+  /** Địa chỉ "Hủy đăng ký" một chạm của email đang gửi (header List-Unsubscribe, V649). */
+  private channelOptOutOneClickUrl(campaign: Campaign): string | null {
+    const context = this.channelOptOutContexts.get(campaign.id)
+    if (context?.channel !== 'email' || !context.linkEnabled || !context.linkId) return null
+    const token = encodeStopMessagesId(context.linkId)
+    return token ? messageOptOutOneClickUrl(token) : null
   }
 
   private zaloMessageOptOutContextKey(campaignId: number, inputDataId: number): string {
@@ -18725,7 +18826,10 @@ export class CampaignScheduler {
       const businessNow = await this.getTemplateBusinessNow(variant.subject, variant.content)
       const subject = this.renderZaloTemplate(variant.subject, options.inputData, undefined, false, businessNow).trim()
       const renderedBody = this.renderZaloTemplate(variant.content, options.inputData, undefined, false, businessNow)
-      return { subject, content: await this.rewriteEmailPlainTextBodyForRun(account, campaign, options, renderedBody), media: variant.media }
+      // Link từ chối gắn sau AI viết lại (V649); tiêu đề không có link, biến (nếu có) bị bỏ.
+      const body = this.applyChannelOptOutLink(campaign,
+        await this.rewriteEmailPlainTextBodyForRun(account, campaign, options, renderedBody), { html: options.isHtml === true })
+      return { subject: subject.split(STOP_MESSAGES_LINK_TOKEN).join('').trim(), content: body, media: variant.media }
     }
     const prepared = this.campaignContentPreparationRuns.has(campaign.id)
       ? await this.prepareSelectedCampaignContent(account, campaign, actionCode, Number(options.inputData?.id) || null, prepareEmail)
@@ -18741,6 +18845,7 @@ export class CampaignScheduler {
         body,
         isHtml: options.isHtml === true,
         attachments,
+        listUnsubscribeUrl: this.channelOptOutOneClickUrl(campaign),
         tracking: {
           campaignId: campaign.id,
           inputDataId: Number(options.inputData?.id) || null,
@@ -19461,6 +19566,8 @@ export class CampaignScheduler {
       } else if (!formatted && rewriteEnabled && content.trim() && options.rewriteCode) {
         content = await ai(options.rewriteCode, content)
       }
+      // Nhắn tin Facebook: gắn link từ chối sau AI viết lại (V649); AI làm mất biến thì vẫn có dòng cuối.
+      if (kind === 'main') content = this.applyChannelOptOutLink(campaign, content, { html: formatted })
       return { content, media: [...variant.media, ...(options.sourceMedia || [])], subject: variant.subject }
     }, kind, mediaTempPaths)
   }

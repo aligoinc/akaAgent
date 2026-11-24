@@ -538,7 +538,8 @@ BEGIN
   RETURN QUERY SELECT
     v_body
       || CASE WHEN v_body = '' THEN '' WHEN COALESCE(p_extra ->> 'smsKeepNewLines', '') = 'true' THEN E'\n' ELSE ' ' END
-      || CASE WHEN COALESCE(p_extra ->> 'smsUseUnicode', '') = 'true' THEN 'Từ chối nhận tin: ' ELSE 'Tu choi nhan tin: ' END
+      -- Luôn không dấu: chữ có dấu biến cả tin thành tin Unicode (70 ký tự một phần), tốn gấp đôi.
+      || 'Tu choi nhan tin: '
       || v_link,
     false;
 END;

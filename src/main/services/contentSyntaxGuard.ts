@@ -7,6 +7,7 @@ import {
   type CampaignContentSyntaxInput,
   type ContentSyntaxGuardMode
 } from '../../shared/contentSyntax'
+import { getMessageOptOutChannels } from './messageOptOutChannelsSetting'
 
 /**
  * Chặn lưu nội dung sai cú pháp biến / ngoặc ở đường lưu từ giao diện (IPC tạo / sửa chiến dịch, lưu mẫu nội dung).
@@ -90,7 +91,7 @@ export function changedCampaignContentFields(
 }
 
 export function assertCampaignContentSyntax(input: CampaignContentSyntaxInput): void {
-  const verdict = checkCampaignContentSyntax(input, mode)
+  const verdict = checkCampaignContentSyntax({ ...input, optOutChannels: input.optOutChannels ?? getMessageOptOutChannels() }, mode)
   if (!verdict.ok) throw new CampaignContentSyntaxError(verdict.message, verdict.field || 'content')
 }
 

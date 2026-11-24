@@ -69,8 +69,8 @@ export interface ContentSyntaxOptions {
    */
   audience?: 'person' | 'group' | 'share'
   /**
-   * Ô này có điền `#{STOP_MESSAGES_LINK}` không: chỉ nội dung tin nhắn Zalo (lời mời kết bạn, tên gợi nhớ, SMS, email, Facebook
-   * gửi nguyên văn). Mặc định: kênh `zalo`.
+   * Ô này có điền `#{STOP_MESSAGES_LINK}` không: nội dung tin nhắn Zalo, và nội dung chính của SMS / email / nhắn tin Facebook
+   * khi kênh đó đã mở link từ chối (V649). Lời mời kết bạn, tên gợi nhớ, comment, đăng bài gửi nguyên văn. Mặc định: kênh `zalo`.
    */
   stopLink?: boolean
   /** Giới hạn độ dài: chỉ báo khi chắc chắn vượt (biến tính phần ít nhất, spin tính lựa chọn dài nhất). */
@@ -445,6 +445,8 @@ function checkWellFormedToken(scan: Scan, start: number, end: number, name: stri
   }
   if (scan.channel === 'facebook') {
     if (FACEBOOK_TOKEN.test(token)) return
+    // Nhắn tin Facebook khi kênh đã bật link từ chối (V649).
+    if (shape === 'simple' && name === 'STOP_MESSAGES_LINK' && scan.stopLink) return
     if (has(DATE_TOKENS, upper)) {
       push(scan, 'token_unsupported_here', 'block', start, end,
         `${token} không dùng được trên Facebook nên sẽ bị gửi nguyên văn. Trên Facebook ngày chỉ viết được dạng #{${upper}(DD/MM/YYYY)} hoặc #{${upper}(MM/DD/YYYY)}.`,
@@ -471,7 +473,7 @@ function checkWellFormedToken(scan: Scan, start: number, end: number, name: stri
 
   if (shape === 'simple' && name === 'STOP_MESSAGES_LINK' && !scan.stopLink) {
     push(scan, 'token_unsupported_here', 'block', start, end,
-      `${token} chỉ dùng được trong nội dung tin nhắn Zalo, ở đây sẽ bị gửi nguyên văn. Hãy bỏ biến này.`)
+      `${token} chỉ dùng được trong nội dung tin nhắn (Zalo, hoặc SMS / email / Facebook khi đã mở link từ chối), ở đây sẽ bị gửi nguyên văn. Hãy bỏ biến này.`)
     return
   }
 
@@ -676,8 +678,8 @@ function insideToken(scan: Scan, start: number, end: number): boolean {
 /** Ô này điền được biến `name` (dùng khi gợi ý sửa một đoạn ngoặc thành biến: không gợi ý biến sẽ bị chặn). */
 function tokenAllowedOn(scan: Scan, name: string): boolean {
   if (!usesTokens(scan.channel) || scan.audience === 'share') return false
-  if (scan.channel === 'facebook') return name === 'FULL_NAME'
   if (name === 'STOP_MESSAGES_LINK') return scan.stopLink
+  if (scan.channel === 'facebook') return name === 'FULL_NAME'
   return true
 }
 
@@ -1146,6 +1148,17 @@ export interface CampaignContentSyntaxInput {
   extraSettings?: Record<string, unknown> | null
   /** Data nhập thẳng vào chiến dịch (chỉ form gửi, để báo dòng thiếu thông tin mà biến cần). */
   inputRows?: Array<Record<string, unknown>> | null
+  /**
+   * Công tắc link từ chối nhận tin cho SMS / email / nhắn tin Facebook (`message_opt_out.channels`, akaAgent V649). Kênh `true`
+   * thì nội dung chính của loại đó được dùng `#{STOP_MESSAGES_LINK}`. Thiếu = tắt.
+   */
+  optOutChannels?: { sms?: boolean; email?: boolean; facebook?: boolean } | null
+}
+
+/** Kênh link từ chối của loại chiến dịch (như `messageOptOutChannelForAction` của control-api). */
+const OPT_OUT_CHANNEL_OF_ACTION: Record<string, 'sms' | 'email' | 'facebook'> = {
+  sms_send: 'sms', email_send: 'email',
+  facebook_message_uid: 'facebook', facebook_message_friend: 'facebook', facebook_page_to_message: 'facebook',
 }
 
 export interface CampaignContentFieldReport {
@@ -1182,12 +1195,16 @@ export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput):
   const share = (action === 'zalo_message_friend' || action === 'zalo_message_group') && extra.zaloMessageSendMode === 'share'
   const audience: 'person' | 'group' | 'share' = share ? 'share' : action === 'zalo_message_group' ? 'group' : 'person'
   const zaloMessage = action.indexOf('zalo_message_') === 0
+  // SMS / email / nhắn tin Facebook: nội dung chính được dùng link từ chối khi kênh đã bật (V649). Loại khác giữ mặc định.
+  const optOutChannel = OPT_OUT_CHANNEL_OF_ACTION[action]
+  const mainStopLink: Pick<ContentSyntaxOptions, 'stopLink'> = optOutChannel
+    ? { stopLink: input.optOutChannels?.[optOutChannel] === true } : {}
   const messageLimit = (label: string, perVariant: boolean): ContentLengthLimit | undefined => zaloMessage ? {
     limit: ZALO_MESSAGE_MAX_LENGTH, label, perVariant,
     consequence: `Zalo thường không nhận tin dài hơn khoảng ${formatCount(ZALO_MESSAGE_MAX_LENGTH)} ký tự nên tin có thể không gửi được.`,
   } : undefined
 
-  add('content', 'Nội dung', input.content, channel, mainHtml, false, { audience, maxLength: messageLimit('Nội dung', true) })
+  add('content', 'Nội dung', input.content, channel, mainHtml, false, { audience, maxLength: messageLimit('Nội dung', true), ...mainStopLink })
   add('emailSubject', 'Tiêu đề email', extra.emailSubject, 'email', false)
   if (Array.isArray(extra.advancedContentItems)) {
     extra.advancedContentItems.forEach((item, index) => {
@@ -1195,7 +1212,7 @@ export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput):
       const row = item as Record<string, unknown>
       // Nội dung nâng cao: mỗi mục là một tin, dấu | trong mục giữ nguyên chữ.
       add(`advancedContentItems[${index}].content`, `Nội dung ${index + 1}`, row.content, channel, 'auto', false,
-        { audience, maxLength: messageLimit(`Nội dung ${index + 1}`, false) })
+        { audience, maxLength: messageLimit(`Nội dung ${index + 1}`, false), ...mainStopLink })
       add(`advancedContentItems[${index}].emailSubject`, `Tiêu đề email của nội dung ${index + 1}`, row.emailSubject, 'email', false)
     })
   }

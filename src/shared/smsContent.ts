@@ -54,13 +54,28 @@ export function countSingleSmsContent(content: string, useUnicode: boolean): Sms
   }
 }
 
+const STOP_LINK_TOKEN = '#{STOP_MESSAGES_LINK}'
+/** Link từ chối mẫu cùng độ dài link thật (`https://b.akabiz.biz/s/` + 22 ký tự). */
+const SAMPLE_STOP_LINK = `https://b.akabiz.biz/s/${'x'.repeat(22)}`
+
+/**
+ * Tin SMS như lúc gửi khi chiến dịch bật "Thêm link từ chối nhận tin nhắn" (V649, hàm DB lấy tin): biến thành link,
+ * không có biến thì thêm "Tu choi nhan tin: <link>" (luôn không dấu) sau dấu cách, hoặc xuống dòng khi giữ xuống dòng.
+ */
+export function withSmsOptOutLink(text: string, options: Pick<SmsContentOptions, 'keepNewLines'>, link = SAMPLE_STOP_LINK): string {
+  if (text.includes(STOP_LINK_TOKEN)) return text.split(STOP_LINK_TOKEN).join(link)
+  const body = text.replace(/\s+$/, '')
+  return `${body}${body ? (options.keepNewLines ? '\n' : ' ') : ''}Tu choi nhan tin: ${link}`
+}
+
 export function countSmsContentVariants(
   content: string | null | undefined,
-  options: SmsContentOptions
+  options: SmsContentOptions & { optOutLink?: boolean }
 ): SmsContentCount[] {
   const variants = splitContentVariants(content, { fallbackToRaw: true })
     .map(item => normalizeSmsContentForSend(renderContentSpinMax(item), options))
     .filter(Boolean)
+    .map(item => options.optOutLink ? withSmsOptOutLink(item, options) : item)
 
   if (variants.length === 0) return [{ countChar: 0, countSms: 0 }]
   return variants.map(item => countSingleSmsContent(item, options.useUnicode))

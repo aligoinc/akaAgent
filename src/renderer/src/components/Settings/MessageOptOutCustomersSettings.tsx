@@ -3,6 +3,9 @@ import { ChevronLeft, ChevronRight, RefreshCw, Search, UserRound } from 'lucide-
 import type { MessageOptOutCustomerPage } from '../../../../shared/messageOptOutCustomers'
 import './messageOptOutCustomers.css'
 
+/** Kênh của link từ chối (V649). */
+const CHANNEL_LABELS: Record<string, string> = { zalo: 'Zalo', sms: 'SMS', email: 'Email', facebook: 'Facebook' }
+
 const dateFormat = new Intl.DateTimeFormat('vi-VN', {
   timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
   hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
@@ -63,21 +66,22 @@ export default function MessageOptOutCustomersSettings() {
     <div className="message-opt-out-table-wrap" aria-busy={loading}>
       <table className="message-opt-out-table" aria-label="Khách hàng từ chối nhận tin">
         <thead><tr>
-          {['STT', 'Ảnh đại diện', 'Tên Zalo', 'SĐT', 'Email', 'Zalo global ID', 'Ngày từ chối', 'Từ chiến dịch', 'Từ chi tiết chiến dịch'].map(label => <th scope="col" key={label}>{label}</th>)}
+          {['STT', 'Kênh', 'Ảnh đại diện', 'Tên Zalo', 'SĐT', 'Email', 'Mã Zalo / Facebook', 'Ngày từ chối', 'Từ chiến dịch', 'Từ chi tiết chiến dịch'].map(label => <th scope="col" key={label}>{label}</th>)}
         </tr></thead>
         <tbody>
-          {loading ? <tr><td colSpan={9} className="message-opt-out-empty" role="status">Đang tải...</td></tr>
-            : error ? <tr><td colSpan={9} className="message-opt-out-empty">
+          {loading ? <tr><td colSpan={10} className="message-opt-out-empty" role="status">Đang tải...</td></tr>
+            : error ? <tr><td colSpan={10} className="message-opt-out-empty">
               <div role="alert">{error}</div><button type="button" className="btn btn-secondary" onClick={reload}>Thử lại</button>
             </td></tr>
-              : !result?.items.length ? <tr><td colSpan={9} className="message-opt-out-empty">{search.trim() ? 'Không tìm thấy khách hàng phù hợp.' : 'Chưa có khách hàng từ chối nhận tin.'}</td></tr>
+              : !result?.items.length ? <tr><td colSpan={10} className="message-opt-out-empty">{search.trim() ? 'Không tìm thấy khách hàng phù hợp.' : 'Chưa có khách hàng từ chối nhận tin.'}</td></tr>
                 : result.items.map((item, index) => <tr key={item.id}>
                   <td>{(currentPage - 1) * result.pageSize + index + 1}</td>
+                  <td className="message-opt-out-nowrap">{CHANNEL_LABELS[item.channel || 'zalo'] || 'Zalo'}</td>
                   <td><CustomerAvatar key={item.zaloAvatar} url={item.zaloAvatar} /></td>
                   <td>{item.zaloName || '—'}</td>
                   <td className="message-opt-out-nowrap">{item.phone || '—'}</td>
                   <td>{item.email || '—'}</td>
-                  <td>{item.zaloGlobalId || '—'}</td>
+                  <td>{item.zaloGlobalId || item.facebookKey || '—'}</td>
                   <td className="message-opt-out-nowrap">{formatDate(item.confirmedAt)}</td>
                   <td>{item.sourceCampaignName || '—'}</td>
                   <td>{item.sourceDetailId ? <div className="message-opt-out-detail">

@@ -431,6 +431,12 @@ export class SupabaseService {
   ) {
     return campaignRepo.prepareZaloMessageOptOut(campaignId, accountId, target)
   }
+  checkMessageOptOut(campaignId: number, accountId: number, channel: 'sms' | 'email' | 'facebook', identity: string) {
+    return campaignRepo.checkMessageOptOut(campaignId, accountId, channel, identity)
+  }
+  prepareMessageOptOut(campaignId: number, accountId: number, channel: 'sms' | 'email' | 'facebook', identity: string) {
+    return campaignRepo.prepareMessageOptOut(campaignId, accountId, channel, identity)
+  }
   pausePendingZaloMessageOptOutInput(campaignId: number, inputDataId: number, note: string) {
     return campaignRepo.pausePendingZaloMessageOptOutInput(campaignId, inputDataId, note)
   }

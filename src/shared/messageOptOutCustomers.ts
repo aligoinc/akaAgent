@@ -10,7 +10,12 @@ export interface MessageOptOutCustomer {
   id: string
   phone: string | null
   email: string | null
-  zaloGlobalId: string
+  /** Dòng của kênh SMS / email / Facebook (V649) không có mã Zalo. */
+  zaloGlobalId: string | null
+  /** Kênh của link (V649). DB cũ không trả = Zalo. */
+  channel?: 'zalo' | 'sms' | 'email' | 'facebook'
+  /** Khoá người nhận Facebook (uid:… / user:… / page:…:…), chỉ dòng kênh Facebook. */
+  facebookKey?: string | null
   zaloName: string | null
   zaloAvatar: string | null
   confirmedAt: string

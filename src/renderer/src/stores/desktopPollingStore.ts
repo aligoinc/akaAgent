@@ -6,6 +6,7 @@ import {
 } from '../../../shared/desktopUiReads'
 import { parseAffPartnerAudience } from '../../../shared/affPartner'
 import { parseContentSyntaxGuardMode } from '../../../shared/contentSyntax'
+import { parseMessageOptOutChannels } from '../../../shared/messageOptOutChannels'
 
 let generation = 0
 export const useDesktopPollingStore = create<{
@@ -35,7 +36,9 @@ export const useDesktopPollingStore = create<{
         // Ẩn/hiện mục "Giới thiệu nhận hoa hồng"; giá trị lạ = ẩn.
         affPartnerAudience: parseAffPartnerAudience({ audience: settings.affPartnerAudience }),
         // Chặn lưu nội dung sai cú pháp: thiếu / lạ = chặn.
-        contentSyntaxGuard: parseContentSyntaxGuardMode(settings.contentSyntaxGuard)
+        contentSyntaxGuard: parseContentSyntaxGuardMode(settings.contentSyntaxGuard),
+        // Link từ chối cho SMS / email / nhắn tin Facebook (V649): thiếu / lạ = tắt.
+        messageOptOutChannels: parseMessageOptOutChannels(settings.messageOptOutChannels)
       } })
     }).catch(() => { /* Defaults must not block the UI or trigger retries. */ })
   }

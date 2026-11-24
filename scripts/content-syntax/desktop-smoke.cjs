@@ -25,6 +25,8 @@ function build(source, target) {
 }
 build('src/shared/contentSyntax.ts', 'shared/contentSyntax.js')
 build('src/shared/contentSpin.ts', 'shared/contentSpin.js')
+build('src/shared/messageOptOutChannels.ts', 'shared/messageOptOutChannels.js')
+build('src/main/services/messageOptOutChannelsSetting.ts', 'main/services/messageOptOutChannelsSetting.js')
 build('src/main/services/contentSyntaxGuard.ts', 'main/services/contentSyntaxGuard.js')
 
 const syntax = require(path.join(out, 'shared/contentSyntax.js'))
@@ -46,6 +48,8 @@ check('bản Desktop của contentSyntax.ts trùng bản WebApp (khi có WEBAPP_
   const webapp = process.env.WEBAPP_REPO
   if (!webapp) return console.log('  (bỏ qua: chưa đặt WEBAPP_REPO)')
   assert.equal(md5(path.join(root, 'src/shared/contentSyntax.ts')), md5(path.join(webapp, 'packages/campaign-core/src/contentSyntax.ts')))
+  // Link từ chối cho SMS / email / Facebook (V649): bản Desktop chép nguyên văn WebApp control-api.
+  assert.equal(md5(path.join(root, 'src/shared/messageOptOutChannels.ts')), md5(path.join(webapp, 'packages/control-api/src/messageOptOutChannels.ts')))
 })
 
 check('logic chạy không đổi: hai bản contentSpin của Desktop và lõi engine vẫn trùng nhau', () => {

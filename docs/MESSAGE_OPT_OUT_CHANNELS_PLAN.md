@@ -1,6 +1,6 @@
 # Phương án: link từ chối nhận tin cho SMS, email và Facebook
 
-Viết 24/11/2026, chưa duyệt, chưa code. Tình trạng hiện tại và lý do ba kênh này chưa chạy được ở mục 1. Các câu anh cần chốt ở mục 5.
+Viết 24/11/2026. Anh duyệt cùng ngày ("Thực thi"; 1 chỉ kênh đó, 2 SMS tự thêm dòng cuối, 3 Facebook cả 3 loại, 4 email có nút "Hủy đăng ký" một chạm). **Đã code trên nhánh `claude/ecstatic-carson-0q5vlw` (akaAgent + akaAgentWebApp), chưa merge, V649 chưa apply, chưa deploy API / Web, chưa build Desktop; công tắc `message_opt_out.channels` V649 đặt tắt cả ba kênh.** Tình trạng và cách kiểm ở mục 6.
 
 ## 1. Hiện tại
 
@@ -149,3 +149,26 @@ Tắt khẩn: đặt kênh về `false`. Form ẩn lại nút; chiến dịch đ
 4. **Email:** thêm nút "Hủy đăng ký" một chạm của Gmail/Yahoo (header `List-Unsubscribe`)? Đề xuất có.
 
 Phạm vi giữ theo từng nhân viên như Zalo: từ chối nhân viên A thì nhân viên B cùng tổ chức vẫn gửi được.
+
+## 6. Đã làm (24/11/2026)
+
+Anh chốt mục 5: (1) chỉ chặn kênh đã từ chối, (2) SMS bật ô mà không chèn biến thì tự thêm dòng cuối, (3) Facebook cả inbox Page, UID, bạn bè, (4) email có header "Hủy đăng ký" một chạm.
+
+**DB** [V649](../migrations/migration_v649_message_opt_out_channels.sql) + [gỡ](../migrations/rollback_v649_message_opt_out_channels.sql), thân hàm cũ ở `migrations/snapshots/message-opt-out-channels-v649/`:
+- bảng thêm `channel` / `facebook_key`, khoá duy nhất riêng mỗi kênh, CHECK theo kênh;
+- `aka_agent_check_zalo_message_opt_out` so SĐT chỉ dòng `channel = 'zalo'` (câu 1);
+- RPC mới `aka_agent_prepare_message_opt_out` / `aka_agent_check_message_opt_out` (Desktop + service_role), `aka_agent_inspect_message_opt_out` (API Web);
+- `aka_agent_list_sms_due_input_data`: cùng tham số, cùng cột, thêm bước `private.aka_agent_sms_opt_out_render` mỗi dòng. Kênh SMS tắt hoặc chiến dịch không bật ô: biến bị bỏ, không gửi nguyên văn. Bật: thay biến / thêm " Tu choi nhan tin: <link>" (luôn không dấu, vì chữ có dấu làm cả tin thành tin Unicode 70 ký tự một phần). Người đã từ chối: data "hoàn thành" kèm ghi chú, không lịch sử, không tính lượt, hết data thì chiến dịch hoàn thành (vì hàm báo kết quả SMS tính cả data "tạm dừng" là còn data, data tạm dừng sẽ giữ chiến dịch mãi). Tạo link lỗi: biến thành `b.akabiz.biz/s/error`, không dòng cuối (như Zalo);
+- mã engine OPT02 `err_engine_recipient_opted_out_facebook` chép mã + chính sách của OPT01;
+- danh sách khách từ chối trả thêm `channel`, `facebookKey`.
+Kiểm `python3 scripts/message-opt-out-channels/test_v649.py` (PG16, 61 khẳng định, gồm gỡ và apply lại, khớp thứ tự / giới hạn với hàm cũ, chỉ mục từng kênh).
+
+**Hợp đồng dùng chung**: WebApp `packages/control-api/src/messageOptOutChannels.ts`, chép nguyên văn sang `src/shared/messageOptOutChannels.ts` (smoke so md5). `messageOptOutValidation.ts` gộp luật kênh mới với luật Zalo cũ. Bộ kiểm `contentSyntax.ts` nhận `optOutChannels`: kênh mở thì nội dung chính được dùng biến, ô khác (tiêu đề email, comment, lời mời…) vẫn chặn.
+
+**API / Web** (WebApp): API đọc công tắc mỗi lần lưu; trang từ chối ghi đúng kênh (hàm mới, DB cũ thì đọc như trước); `POST /api/public/message-opt-out/:token/one-click` xác nhận luôn (RFC 8058, nhận body dạng form), `GET` cùng địa chỉ chỉ chuyển sang trang; form Web hiện ô + nút chèn biến khi kênh mở, bộ đếm SMS cộng link. App iOS chưa làm (giữ như cũ: ẩn ô, biến bị chặn).
+
+**Desktop**: công tắc đọc chung câu đọc cài đặt lúc đăng nhập (`src/main/services/messageOptOutChannelsSetting.ts`); bộ lập lịch `resolveChannelOptOut` (bộ cũ: data tạm dừng + dòng "🚫 Bỏ qua"; engine Facebook: báo OPT02 trước khi mở Messenger) và `applyChannelOptOutLink` (sau AI viết lại; email HTML thêm `<p>` trước `</body>`); email thêm header `List-Unsubscribe` / `List-Unsubscribe-Post`, link từ chối không bị bọc đếm lượt bấm; hai form + sửa nhanh hiện ô / nút theo công tắc, bộ đếm SMS cộng link; danh sách khách từ chối có cột Kênh. Kiểm `node scripts/message-opt-out-channels/desktop-smoke.cjs` (8 nhóm, mã thật của bộ lập lịch, DB giả).
+
+**Thứ tự đưa lên**: apply V649 (DDL, buổi tối) → deploy API / Web → phát hành Desktop → bật từng kênh bằng `message_opt_out.channels` (SMS trước: gửi thử thật xem nhà mạng có lọc tin chứa link; Facebook thử vài tài khoản trước). Tắt khẩn: đặt kênh về `false`, có hiệu lực ngay ở hàm SMS; Desktop / Web đọc lại khi đăng nhập / tải lại trang.
+
+**Chưa làm / giới hạn**: app iOS; xem trước "Khách sẽ nhận" chưa hiện link ở kênh mới; mẫu nội dung kênh SMS / email chưa có nút chèn biến; email gửi qua akaBiz Sms bên ngoài không đi qua đây; dòng nguồn của khách từ chối ở kênh mới là chiến dịch phát link gần nhất (không phải lần gửi thành công); bộ chạy cũ App Server không chạy email / Facebook nên không liên quan.
