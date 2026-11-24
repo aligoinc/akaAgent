@@ -76,6 +76,7 @@ import {
   selectAdvancedContentItem
 } from '../../shared/advancedContent'
 import { MAX_SMS_ADVANCED_CONTENT_ITEMS } from '../../shared/smsContent'
+import { isRecurringRefreshCampaign } from '../../shared/campaignRecurringPass'
 import { isRecentDeliveryCooldownEnabled } from '../../shared/campaignDeliveryCooldown'
 import { parseZaloShareRepeatMinutes, supportsZaloShareRepeat } from '../../shared/zaloShareRepeat'
 import { CAMPAIGN_REPEAT_NO_DATA_ACTIONS, campaignRepeatUnits } from '../../shared/campaignRepeat'
@@ -2665,10 +2666,47 @@ export class CampaignScheduler {
       return
     }
 
+    if (await this.handleRecurringRefreshAfterCompletion(campaign, now)) {
+      return
+    }
+
     const completed = await this.transitionCampaignToCompleted(campaign)
     if (completed) {
       await this.logCampaignProgress(campaign, `✅ Hoàn thành chiến dịch "${campaign.name}"`)
     }
+  }
+
+  /**
+   * Lịch tuần / tháng có "làm mới data": chạy xong danh sách trong ngày thì không "hoàn thành" mà đặt lại data (trừ "tạm dừng") và
+   * hẹn ngày chạy kế (anh duyệt 24/11/2026). Trước đó chiến dịch hiện "✅ Hoàn thành" mỗi ngày tới lượt bảo trì lịch của ngày chạy kế,
+   * khách tưởng chiến dịch đã kết thúc. Engine v2 làm cùng việc trong finish_campaign_v2 (V648). Bỏ qua: up tin, sinh nhật, đề xuất
+   * kết bạn, huỷ lời mời (bảo trì lịch có cách riêng); Zalo Server đang giữ lượt mà không phải nhắn bạn bè / nhắn nhóm (RPC chuyển lượt
+   * của Server chỉ nhận hai loại đó). Ngày chạy kế quá ngày kết thúc / không tính được thì hoàn thành như cũ.
+   */
+  private async handleRecurringRefreshAfterCompletion(campaign: Campaign, now: Date): Promise<boolean> {
+    if (!isRecurringRefreshCampaign(campaign) || isPostBumpTargetCampaign(campaign)) return false
+    if (campaign.actionId === ZALO_MESSAGE_BIRTHDAY_ACTION_ID ||
+      campaign.actionId === ZALO_MESSAGE_FRIEND_RECOMMENDATION_ACTION_ID ||
+      campaign.actionId === ZALO_CANCEL_SENT_FRIEND_REQUEST_ACTION_ID) return false
+    const isClaimedServerZalo = this.runtimeTarget === 'server' &&
+      this.claimedServerZaloCampaignIds.has(campaign.id) &&
+      this.claimedServerZaloAccountIds.has(campaign.accountId) &&
+      String(campaign.actionId || '').trim().toLowerCase().startsWith('zalo_')
+    if (isClaimedServerZalo &&
+      campaign.actionId !== ZALO_MESSAGE_FRIEND_ACTION_ID && campaign.actionId !== ZALO_MESSAGE_GROUP_ACTION_ID) return false
+
+    const nextSchedule = this.supabase.resolveNextRecurringRun(campaign, now)
+    if (!nextSchedule) return false
+    // Không có dòng data nào: chỉ chiến dịch Facebook không cần data (trang cá nhân, newsfeed…) mới hẹn lượt kế; loại khác hoàn thành
+    // như engine v2 (finish_campaign_v2 bước 6) để hai nơi chạy giống nhau.
+    const actionId = String(campaign.actionId || '')
+    if ((!actionId.startsWith('facebook_') || actionId === 'facebook_page_post') &&
+      (await this.supabase.listCampaignInputData(campaign.id)).every(detail => detail.isDelete)) return false
+
+    return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
+      emptyDataSuffix: 'ở ngày chạy kế tiếp',
+      scheduledLog: `⏳ Đã hoàn thành lượt chạy và hẹn chạy lại chiến dịch "${campaign.name}" lúc ${this.formatVietnamDateTime(nextSchedule)}`
+    })
   }
 
   private async handleZaloRealtimeGroupCompletion(campaign: Campaign, now: Date): Promise<boolean> {

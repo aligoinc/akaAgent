@@ -409,6 +409,7 @@ export class SupabaseService {
     return campaignRepo.addCampaignInputDataRows(request, onProgress)
   }
   resetCampaignInputDataForRerun(campaignId: number) { return campaignRepo.resetCampaignInputDataForRerun(campaignId) }
+  resolveNextRecurringRun(campaign: Campaign, now: Date) { return campaignRepo.resolveNextRecurringRun(campaign, now) }
   /** "Lặp lại sau khi chạy xong" (V561): DB đếm lượt và trả quyết định; null khi DB chưa có V561. */
   decideCampaignRepeat(campaignId: number) { return campaignRepeatRepo.decideCampaignRepeat(campaignId) }
   clearCampaignInputData(campaignId: number) { return campaignRepo.clearCampaignInputData(campaignId) }
