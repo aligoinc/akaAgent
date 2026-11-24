@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Chạy V641 và bản gỡ trên PostgreSQL cục bộ với code 10 block đọc từ production 24/11 (scripts/fixtures/fb-ai-filter/blocks-live-20261124.json).
-Kiểm: md5 sau khi apply khớp bộ sinh, sổ chép block ghi md5 mới, chạy lại bị từ chối, gỡ trả đúng code cũ (gỡ hai lần vô hại),
+Kiểm: md5 sau khi apply khớp bộ sinh, sổ chép block ghi md5 mới, chạy lại bị từ chối, gỡ trả đúng code cũ (gỡ lần hai bị dừng, không đổi gì),
 thiếu V640 hoặc block đã bị sửa thì từ chối.
 Chạy: PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v641.py"""
 import hashlib, json, os, shutil, subprocess, sys, tempfile, time
@@ -85,7 +85,7 @@ try:
     copies = psql("select engine_block_id || ':' || source_md5_at_copy || ':' || engine_md5_at_copy from public.auto_engine_block_copies order by 1;").stdout.split()
     check('gỡ trả sổ chép block về md5 cũ', all(f'{e}:{before[o]}:{before[e]}' in copies for o, e in PAIRS))
     r = psql(ROLLBACK, expect_ok=False)
-    check('gỡ lần hai không đổi gì (UPDATE theo md5 bản V641 không khớp dòng nào)', r.returncode == 0 and md5s() == before)
+    check('gỡ lần hai bị dừng (block không còn bản V641), không đổi gì', r.returncode != 0 and 'không cập nhật được' in r.stderr and md5s() == before)
     psql("update public.auto_blocks set code = code || ' ' where id = 2859;")
     r = psql(MIGRATION.replace("'migration_v641_%'", "'migration_v641_x%'"), expect_ok=False)
     check('block bị sửa khác bản đã đọc thì V641 dừng, không ghi gì', r.returncode != 0 and 'khác bản đã đọc' in r.stderr and md5s()[2554] == before[2554])

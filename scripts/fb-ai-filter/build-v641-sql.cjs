@@ -110,7 +110,56 @@ for (const pair of PAIRS) {
 const Q = `$${NUMBER}$`
 for (const c of CHANGES) if (c.newCode.includes(Q) || c.oldCode.includes(Q)) throw new Error(`Code chứa ${Q}`)
 const dq = text => `${Q}${text}${Q}`
-const replaceExpr = edits => edits.reduce((expr, [from, to]) => `replace(${expr},\n  ${dq(from)},\n  ${dq(to)})`, 'code')
+// Đoạn lớn lặp lại ở nhiều block (hàm thử lại / dự phòng, hàm gọi AI của Tìm data) khai báo một lần trong khối DO,
+// các lần sửa ghép biến đó với phần chữ còn lại, để migration gửi qua công cụ database nhỏ gọn.
+const HELPER_OLD = helperFor('old'), HELPER_ENGINE = helperFor('engine')
+if (HELPER_OLD.split(FINAL.old).length !== 2) throw new Error('Hàm trợ giúp phải có đúng một dòng báo lỗi cuối')
+const CENTRAL_NEW = CHANGES.find(c => c.id === PAIRS[1].old).edits[1][1].slice(HELPER_OLD.length)
+const VARS = [
+  { name: 'v_helper_old', text: HELPER_OLD, init: () => dq(HELPER_OLD) },
+  { name: 'v_helper_engine', text: HELPER_ENGINE, init: () => `replace(v_helper_old, ${dq(FINAL.old)}, ${dq(FINAL.engine)})` },
+  { name: 'v_central_old', text: OLD_CENTRAL, init: () => dq(OLD_CENTRAL) },
+  { name: 'v_central_new', text: CENTRAL_NEW, init: () => dq(CENTRAL_NEW) }
+]
+function sqlText(text) {
+  const parts = []
+  let rest = text
+  while (rest) {
+    let best = null
+    for (const v of VARS) {
+      const at = rest.indexOf(v.text)
+      if (at >= 0 && (!best || at < best.at || (at === best.at && v.text.length > best.v.text.length))) best = { at, v }
+    }
+    if (!best) { parts.push(dq(rest)); break }
+    if (best.at > 0) parts.push(dq(rest.slice(0, best.at)))
+    parts.push(best.v.name)
+    rest = rest.slice(best.at + best.v.text.length)
+  }
+  return parts.length ? parts.join(' || ') : "''"
+}
+// Kiểm cách ghép: thay biến bằng chữ thật phải ra đúng đoạn gốc.
+for (const c of CHANGES) for (const pair of c.edits) for (const text of pair) {
+  const back = sqlText(text).split(' || ').map(part => {
+    const v = VARS.find(item => item.name === part)
+    return v ? v.text : part === "''" ? '' : part.slice(Q.length, -Q.length)
+  }).join('')
+  if (back !== text) throw new Error(`Block ${c.id}: ghép biến sai`)
+}
+const replaceExpr = edits => edits.reduce((expr, [from, to]) => `replace(${expr},\n    ${sqlText(from)},\n    ${sqlText(to)})`, 'code')
+const updateBlock = (label, changes, editsOf, fromMd5) => [
+  'DO $upd$',
+  'DECLARE',
+  ...VARS.map(v => `  ${v.name} text := ${v.init()};`),
+  '  v_n integer;',
+  'BEGIN',
+  ...changes.map(c => [
+    `  UPDATE public.auto_blocks SET code = ${replaceExpr(editsOf(c))}, updated_at = now()`,
+    `   WHERE id = ${c.id} AND md5(code) = '${fromMd5(c)}';`,
+    `  GET DIAGNOSTICS v_n = ROW_COUNT;`,
+    `  IF v_n <> 1 THEN RAISE EXCEPTION '${label}: block ${c.id} không cập nhật được'; END IF;`
+  ].join('\n')),
+  'END $upd$;'
+].join('\n')
 
 const header = [
   `-- ${NAME}: 10 block lọc AI (Comment seeding, Tìm data trong group, Tìm data bằng search; bộ cũ và bản "[engine]") gọi lời dặn mới`,
@@ -157,7 +206,7 @@ function migration() {
     '  END IF;',
     'END $pre$;'
   ].join('\n')
-  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${replaceExpr(c.edits)}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.oldMd5}';`).join('\n\n')
+  const updates = updateBlock('V641', CHANGES, c => c.edits, c => c.oldMd5)
   const post = [
     'DO $post$',
     'BEGIN',
@@ -170,7 +219,7 @@ function migration() {
 }
 
 function rollback() {
-  const updates = CHANGES.map(c => `UPDATE public.auto_blocks SET code = ${replaceExpr(c.edits.slice().reverse().map(([from, to]) => [to, from]))}, updated_at = now()\n WHERE id = ${c.id} AND md5(code) = '${c.newMd5}';`).join('\n\n')
+  const updates = updateBlock('Gỡ V641', CHANGES, c => c.edits.slice().reverse().map(([from, to]) => [to, from]), c => c.newMd5)
   const post = [
     'DO $post$',
     'BEGIN',
