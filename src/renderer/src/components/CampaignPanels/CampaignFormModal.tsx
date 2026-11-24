@@ -7379,8 +7379,20 @@ export default function CampaignFormModal({
           externalSmsContent: formData.externalSmsContent,
           commentContent: formData.commentContent,
           postBumpContent: formData.postBumpContent,
-          newsfeedCommentContent: formData.newsfeedCommentContent
-        }
+          newsfeedCommentContent: formData.newsfeedCommentContent,
+          // Cách gửi quyết định biến có được điền không và có cần nhắc độ dài, AI viết lại.
+          zaloMessageSendMode: isZaloShareMessageMode ? 'share' : 'normal',
+          rewriteContentEachRun: formData.rewriteContentEachRun,
+          rewriteCommentContentEachRun: formData.rewriteCommentContentEachRun,
+          enableAddFriend: formData.actionId.startsWith('zalo_') && formData.enableAddFriend
+            && !(isZaloMessageFriendCampaign || isZaloMessageBirthdayCampaign || isZaloMessageGroupCampaign),
+          enableZaloAlias: formData.enableZaloAlias && (isZaloMessagePhoneCampaign || (isZaloMessageFriendCampaign && !isZaloShareMessageMode)
+            || isZaloMessageGroupMemberCampaign || isZaloMessageGroupRealtimeCampaign || isZaloMessageRemarketingCustomerCampaign
+            || isZaloMessageFriendRecommendationCampaign)
+        },
+        // Data nhập thẳng lúc tạo: báo dòng thiếu thông tin mà biến trong nội dung cần.
+        inputRows: !isEditingSavedCampaign && !isDataGroupSource && !hideDetailsSection
+          ? details as Array<Record<string, unknown>> : undefined
       }
       const syntaxMode = useDesktopPollingStore.getState().settings.contentSyntaxGuard ?? 'block'
       const syntaxVerdict = checkCampaignContentSyntax(syntaxInput, syntaxMode)

@@ -9,7 +9,7 @@
  * đúng luật của `contentSpin.ts` để tính số mẫu sẽ thật sự được gửi, bài kiểm giữ hai bản khớp nhau.
  */
 
-export type ContentSyntaxChannel = 'zalo' | 'sms' | 'voice' | 'email' | 'other'
+export type ContentSyntaxChannel = 'zalo' | 'sms' | 'voice' | 'email' | 'facebook' | 'other'
 export type ContentSyntaxSeverity = 'block' | 'warn'
 export type ContentSyntaxCode =
   | 'token_unclosed'
@@ -22,6 +22,11 @@ export type ContentSyntaxCode =
   | 'separator_escaped'
   | 'variant_fragment'
   | 'legacy_token'
+  | 'brace_literal'
+  | 'placeholder_unfilled'
+  | 'token_unsupported_here'
+  | 'token_group_target'
+  | 'too_long'
 
 export interface ContentSyntaxFix {
   start: number
@@ -57,6 +62,23 @@ export interface ContentSyntaxOptions {
   channel: ContentSyntaxChannel
   /** `true`: nội dung có định dạng (HTML). `'auto'`: tự nhận theo thẻ. Mặc định `false`. */
   html?: boolean | 'auto'
+  /**
+   * Ai nhận tin. `share`: gửi dạng chia sẻ, một tin cho mọi người nên không điền biến nào. `group`: nhắn vào group nên
+   * biến tên là tên group. Mặc định `person`.
+   */
+  audience?: 'person' | 'group' | 'share'
+  /** Giới hạn độ dài sau khi điền biến (ước lượng). */
+  maxLength?: ContentLengthLimit
+}
+
+export interface ContentLengthLimit {
+  limit: number
+  /** Tên ô trong câu báo: "Nội dung", "Lời mời kết bạn"… */
+  label: string
+  /** Câu nói điều gì xảy ra khi dài quá. */
+  consequence: string
+  /** `true`: tính từng mẫu (ngăn bằng dấu |); `false`: cả ô là một tin. */
+  perVariant: boolean
 }
 
 export type ContentSyntaxGuardMode = 'block' | 'warn' | 'off'
@@ -74,6 +96,15 @@ const DEFAULT_DATE_FORMAT = 'DD/MM/YYYY'
 const DEFAULT_SEX_EXAMPLE = '#{SEX{anh-chị-anh/chị}}'
 /** Biến lấy từ hồ sơ Zalo: với email luôn ra rỗng. */
 const ZALO_PROFILE_ONLY_TOKENS = ['FULL_NAME', 'ORIGINAL_NAME']
+/** Biến tên: nhắn vào group thì ra tên group. */
+const NAME_TOKENS = ['FULL_NAME', 'ORIGINAL_NAME', 'INPUT_FULLNAME']
+/** Facebook chỉ điền tên người nhận và ngày (đúng hai định dạng), không phân biệt hoa / thường, cho phép khoảng trắng. */
+const FACEBOOK_TOKEN = /^#\{\s*FULL_NAME\s*\}$|^#\{\s*(TODAY|TOMORROW|YESTERDAY)\s*(?:\(\s*(DD\/MM\/YYYY|MM\/DD\/YYYY)\s*\))?\s*\}$/i
+const FACEBOOK_TOKENS_HINT = 'Trên Facebook phần mềm chỉ điền #{FULL_NAME} và ngày (ví dụ #{TODAY(DD/MM/YYYY)}).'
+/** Chữ mở đầu của biến xưng hô viết thiếu `#{SEX`. */
+const ADDRESS_WORD = /^(anh|chị|chi|em|bạn|ban|ông|bà|cô|chú|quý khách|qúy khách|mr|ms|mrs|sir|madam)/i
+/** Chỗ trống của bài mẫu trong ngoặc vuông: tên / số điện thoại / lời dặn điền. */
+const PLACEHOLDER_WORDS = /^(tên|ten|họ tên|ho ten|họ và tên|ho va ten|sđt|sdt|số điện thoại|so dien thoai|số đt|xưng hô|xung ho|danh xưng|vị trí ứng tuyển|id kênh)$|^(tên|ten|họ tên|họ và tên|sđt|số điện thoại) |^(điền|dien|nhập|nhap|thay|chèn) |^(x{2,}|\.{2,}|…+|_{2,}|-{2,}|\?{2,})$/i
 
 const ESCAPABLE = '{}|\\'
 const HTML_TAG_HINT = /<\/?(p|div|br|span|strong|em|b|i|u|s|a|ul|ol|li|h[1-6]|blockquote|img|table|tr|td)\b[^>]*>/i
@@ -335,6 +366,7 @@ function usesTokens(channel: ContentSyntaxChannel): boolean {
 interface Scan {
   text: string
   channel: ContentSyntaxChannel
+  audience: 'person' | 'group' | 'share'
   allowFix: boolean
   issues: ContentSyntaxIssue[]
 }
@@ -360,8 +392,43 @@ function checkWellFormedToken(scan: Scan, start: number, end: number, name: stri
   const token = scan.text.slice(start, end)
   const upper = name.toUpperCase()
   const replaceWith = (text: string): ContentSyntaxFix => ({ start, end, text })
-  const unknown = () => push(scan, 'token_unknown', 'block', start, end,
+  // Bài Facebook có khi cố ý viết `#{…}` để trang trí: biến lạ chỉ nhắc, biến hệ thống không điền được mới chặn.
+  const unknown = () => push(scan, 'token_unknown', scan.channel === 'facebook' ? 'warn' : 'block', start, end,
     `${token} không phải biến của hệ thống nên sẽ bị giữ nguyên văn, không được thay bằng thông tin của khách.`)
+
+  const exact = shape === 'simple' ? has(SIMPLE_TOKENS, name)
+    : shape === 'date' ? has(DATE_TOKENS, name)
+      : name === SEX_TOKEN && body.indexOf('|') < 0
+  if (scan.audience === 'share' && (exact || isKnownTokenName(upper))) {
+    push(scan, 'token_unsupported_here', 'block', start, end,
+      `Gửi dạng chia sẻ gửi cùng một tin cho mọi người nên ${token} không được điền mà bị gửi nguyên văn. Hãy bỏ biến này hoặc tắt gửi dạng chia sẻ.`)
+    return
+  }
+  if (scan.channel === 'facebook') {
+    if (FACEBOOK_TOKEN.test(token)) return
+    if (has(DATE_TOKENS, upper)) {
+      push(scan, 'token_unsupported_here', 'block', start, end,
+        `${token} không dùng được trên Facebook nên sẽ bị gửi nguyên văn. Trên Facebook ngày chỉ viết được dạng #{${upper}(DD/MM/YYYY)} hoặc #{${upper}(MM/DD/YYYY)}.`,
+        replaceWith(`#{${upper}(${DEFAULT_DATE_FORMAT})}`))
+      return
+    }
+    const closestName = shape === 'simple' ? closestSimpleToken(name) : null
+    if (isKnownTokenName(upper) || (closestName && closestName !== 'FULL_NAME')) {
+      push(scan, 'token_unsupported_here', 'block', start, end,
+        `${token} không dùng được trên Facebook nên sẽ bị gửi nguyên văn. ${FACEBOOK_TOKENS_HINT}`)
+      return
+    }
+  }
+  if (scan.audience === 'group' && exact) {
+    if (shape === 'simple' && has(NAME_TOKENS, name)) {
+      push(scan, 'token_group_target', 'warn', start, end,
+        `Tin gửi vào group nên ${token} sẽ là tên group, không phải tên từng người trong group.`)
+    } else if (shape === 'brace') {
+      const parts = body.split('-')
+      push(scan, 'token_group_target', 'warn', start, end,
+        `Tin gửi vào group nên ${token} không biết giới tính, luôn ra "${parts[2] || parts[0] || ''}".`)
+    }
+  }
 
   if (shape === 'simple') {
     if (has(SIMPLE_TOKENS, name)) {
@@ -496,6 +563,7 @@ function scanToken(scan: Scan, index: number): number {
   }
 
   if (balancedEnd !== null) {
+    if (scan.channel === 'facebook' && scan.audience !== 'share' && FACEBOOK_TOKEN.test(balanced)) return balancedEnd
     if (tokenChannel) {
       const loose = looseTokenFix(balanced)
       if (loose) {
@@ -504,7 +572,7 @@ function scanToken(scan: Scan, index: number): number {
           { start: index, end: balancedEnd + 1, text: loose })
         return balancedEnd
       }
-      push(scan, 'token_unknown', 'block', index, balancedEnd + 1,
+      push(scan, 'token_unknown', scan.channel === 'facebook' ? 'warn' : 'block', index, balancedEnd + 1,
         `${excerptOf(text, index, balancedEnd + 1)} không phải biến của hệ thống nên sẽ bị giữ nguyên văn, không được thay bằng thông tin của khách.`)
     } else if (balanced.indexOf('|') >= 0) {
       push(scan, 'hashtag_spin', 'warn', index, balancedEnd + 1,
@@ -533,13 +601,206 @@ function scanLegacyTokens(scan: Scan): void {
   while ((match = LEGACY_TOKEN.exec(scan.text)) !== null) {
     const key = match[1].toLowerCase()
     const capital = match[1].charAt(0) !== match[1].charAt(0).toLowerCase()
-    const replacement = key === 'vocative_web'
+    let replacement = key === 'vocative_web'
       ? (capital ? '#{SEX{Anh-Chị-Anh/Chị}}' : DEFAULT_SEX_EXAMPLE)
       : LEGACY_TOKEN_MAP[key]
+    if (scan.channel === 'facebook') replacement = key === 'fullname' || key === 'fullname_web' || key === 'fullname_original' ? '#{FULL_NAME}' : ''
     push(scan, 'legacy_token', 'warn', match.index, match.index + match[0].length,
-      `${match[0]} là biến của phần mềm akaBiz cũ. akaAgent không thay biến này nên sẽ gửi nguyên văn. Biến tương ứng là ${replacement}.`,
-      { start: match.index, end: match.index + match[0].length, text: replacement })
+      `${match[0]} là biến của phần mềm akaBiz cũ. akaAgent không thay biến này nên sẽ gửi nguyên văn.`
+        + (replacement ? ` Biến tương ứng là ${replacement}.` : ''),
+      replacement ? { start: match.index, end: match.index + match[0].length, text: replacement } : undefined)
   }
+}
+
+function insideIssue(scan: Scan, index: number): boolean {
+  return scan.issues.some(issue => index >= issue.start && index < issue.end)
+}
+
+/** Kênh này điền được biến `name` (dùng khi gợi ý sửa một đoạn ngoặc thành biến). */
+function tokenAllowedOn(channel: ContentSyntaxChannel, name: string): boolean {
+  if (!usesTokens(channel)) return false
+  if (channel === 'facebook') return name === 'FULL_NAME'
+  return true
+}
+
+function reportLiteralBrace(scan: Scan, start: number, end: number): void {
+  const text = scan.text
+  const inner = text.slice(start + 1, end)
+  const parts = inner.split('-')
+  let fix = ''
+  const sexMissingHash = /^\s*SEX\s*\{([^{}|]*)\}\s*$/i.exec(inner)
+  if (sexMissingHash && tokenAllowedOn(scan.channel, SEX_TOKEN) && scan.channel !== 'facebook') {
+    fix = `#{${SEX_TOKEN}{${sexMissingHash[1]}}}`
+  } else if (tokenAllowedOn(scan.channel, SEX_TOKEN) && scan.channel !== 'facebook' && parts.length === 3
+    && parts.every(part => part.trim() && part.length <= 15 && !/[{}|#\n]/.test(part))
+    && ADDRESS_WORD.test(parts[0].trim().normalize('NFC'))) {
+    fix = `#{${SEX_TOKEN}{${inner}}}`
+  } else {
+    const closest = closestSimpleToken(inner)
+    if (closest && tokenAllowedOn(scan.channel, closest)) fix = `#{${closest}}`
+  }
+  const shown = excerptOf(text, start, end + 1)
+  push(scan, 'brace_literal', 'warn', start, end + 1,
+    fix
+      ? `${shown} sẽ được gửi nguyên cả dấu ngoặc. Muốn điền thông tin của người nhận thì viết ${fix}.`
+      : `${shown} không có dấu | bên trong nên không được xoay vòng: người nhận thấy nguyên cả dấu ngoặc. Muốn xoay vòng thì ngăn các lựa chọn bằng dấu |, ví dụ {Chào|Xin chào}; muốn hiện dấu ngoặc thì viết \\{ và \\}.`,
+    fix ? { start, end: end + 1, text: fix } : undefined)
+}
+
+/** Ngoặc `{…}` đóng đủ mà không có dấu `|` ngoài cùng bên trong: bộ chạy giữ nguyên cả dấu ngoặc. */
+function scanLiteralBraces(scan: Scan, from: number, to: number, depth = 0): void {
+  if (depth > 20) return
+  const text = scan.text
+  for (let index = from; index < to; index += 1) {
+    if (isEscapedSpecial(text, index)) {
+      index += 1
+      continue
+    }
+    const tokenEnd = findTemplateTokenEnd(text, index)
+    if (tokenEnd !== null) {
+      index = tokenEnd
+      continue
+    }
+    if (text[index] !== '{' || (index > 0 && text[index - 1] === '#')) continue
+    const spinEnd = findSpinGroupEnd(text, index)
+    if (spinEnd !== null && spinEnd < to) {
+      scanLiteralBraces(scan, index + 1, spinEnd, depth + 1)
+      index = spinEnd
+      continue
+    }
+    const braceEnd = findBraceGroupEnd(text, index)
+    if (braceEnd === null || braceEnd >= to) continue
+    // Báo đoạn ngoài cùng; ngoặc lồng bên trong (`{{gioi_tinh}}`) đã nằm trong câu báo đó.
+    if (!insideIssue(scan, index)) reportLiteralBrace(scan, index, braceEnd)
+    else scanLiteralBraces(scan, index + 1, braceEnd, depth + 1)
+    index = braceEnd
+  }
+}
+
+const PLACEHOLDER = /\[([^\[\]\n|]{1,40})\]/g
+
+/** Chỗ trống của bài mẫu chưa điền (`[tên kh]`, `[điền giá]`): không phải biến nên gửi nguyên văn. */
+function scanPlaceholders(scan: Scan): void {
+  if (!usesTokens(scan.channel)) return
+  PLACEHOLDER.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = PLACEHOLDER.exec(scan.text)) !== null) {
+    const inner = match[1].trim().normalize('NFC')
+    LEGACY_TOKEN.lastIndex = 0
+    if (LEGACY_TOKEN.test(match[0]) || !PLACEHOLDER_WORDS.test(inner) || insideIssue(scan, match.index)) continue
+    push(scan, 'placeholder_unfilled', 'warn', match.index, match.index + match[0].length,
+      `${match[0]} trông như chỗ trống của bài mẫu chưa được điền nên sẽ được gửi nguyên văn. Hãy thay bằng nội dung thật`
+        + (scan.channel === 'facebook' ? ' hoặc biến #{FULL_NAME}.' : ' hoặc biến cá nhân hoá như #{FULL_NAME}.'))
+  }
+  LEGACY_TOKEN.lastIndex = 0
+}
+
+/** Các lựa chọn của một nhóm spin (bên trong ngoặc), tách tại dấu `|` ngoài cùng. */
+function splitSpinOptions(inner: string): string[] {
+  const options: string[] = []
+  let depth = 0
+  let start = 0
+  for (let index = 0; index < inner.length; index += 1) {
+    if (isEscapedSpecial(inner, index)) {
+      index += 1
+      continue
+    }
+    const tokenEnd = findTemplateTokenEnd(inner, index)
+    if (tokenEnd !== null) {
+      index = tokenEnd
+      continue
+    }
+    if (inner[index] === '{') depth += 1
+    else if (inner[index] === '}') depth = Math.max(0, depth - 1)
+    else if (inner[index] === '|' && depth === 0) {
+      options.push(inner.slice(start, index))
+      start = index + 1
+    }
+  }
+  options.push(inner.slice(start))
+  return options
+}
+
+/** Độ dài ước lượng của một biến sau khi điền (tên khoảng 15 ký tự). */
+function tokenSampleLength(token: string): number {
+  const brace = TOKEN_BRACE.exec(token)
+  if (brace && brace[1].toUpperCase() === SEX_TOKEN) {
+    return brace[2].split('-').reduce((longest, part) => Math.max(longest, part.length), 0)
+  }
+  const date = TOKEN_DATE.exec(token)
+  if (date && has(DATE_TOKENS, date[1].toUpperCase())) return date[2].replace(/YYYY/g, '0000').length
+  const simple = TOKEN_SIMPLE.exec(token)
+  const name = simple ? simple[1].toUpperCase() : ''
+  if (has(NAME_TOKENS, name)) return 15
+  if (name === 'PHONE' || name === 'MOBILE') return 10
+  if (name === 'EMAIL') return 20
+  if (name === 'UID') return 18
+  if (name === 'STOP_MESSAGES_LINK') return 40
+  if (/^INFO[1-5]$/.test(name)) return 10
+  if (has(DATE_TOKENS, name)) return 10
+  return token.length
+}
+
+/** Độ dài dài nhất có thể của một đoạn sau khi xoay vòng và điền biến (ước lượng). */
+function estimatedLength(value: string, depth = 0): { length: number; tokens: boolean } {
+  let length = 0
+  let tokens = false
+  for (let index = 0; index < value.length; index += 1) {
+    if (isEscapedSpecial(value, index)) {
+      length += 1
+      index += 1
+      continue
+    }
+    const tokenEnd = findTemplateTokenEnd(value, index)
+    if (tokenEnd !== null) {
+      length += tokenSampleLength(value.slice(index, tokenEnd + 1))
+      tokens = true
+      index = tokenEnd
+      continue
+    }
+    const spinEnd = depth < 20 ? findSpinGroupEnd(value, index) : null
+    if (spinEnd !== null) {
+      let longest = 0
+      for (const option of splitSpinOptions(value.slice(index + 1, spinEnd))) {
+        const estimate = estimatedLength(option, depth + 1)
+        longest = Math.max(longest, estimate.length)
+        tokens = tokens || estimate.tokens
+      }
+      length += longest
+      index = spinEnd
+      continue
+    }
+    length += 1
+  }
+  return { length, tokens }
+}
+
+function formatCount(value: number): string {
+  return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, '.')
+}
+
+function scanLength(scan: Scan, limit: ContentLengthLimit, separators: number[]): void {
+  const text = scan.text
+  const bounds: Array<[number, number]> = []
+  if (limit.perVariant) {
+    let from = 0
+    for (let position = 0; position <= separators.length; position += 1) {
+      const to = position < separators.length ? separators[position] : text.length
+      bounds.push([from, to])
+      from = to + 1
+    }
+  } else bounds.push([0, text.length])
+  const filled = bounds.filter(([from, to]) => text.slice(from, to).trim())
+  filled.forEach(([from, to], position) => {
+    const segment = text.slice(from, to)
+    const estimate = estimatedLength(segment.trim())
+    if (estimate.length <= limit.limit) return
+    const start = from + (segment.length - segment.trimStart().length)
+    const which = filled.length > 1 ? ` (mẫu số ${position + 1})` : ''
+    push(scan, 'too_long', 'warn', start, from + segment.trimEnd().length,
+      `${limit.label}${which} dài ${estimate.tokens ? 'khoảng ' : ''}${formatCount(estimate.length)} ký tự`
+        + `${estimate.tokens ? ' (tính cả phần điền thông tin người nhận)' : ''}. ${limit.consequence}`)
+  })
 }
 
 function resolveHtml(text: string, html: boolean | 'auto' | undefined): boolean {
@@ -552,7 +813,7 @@ export function analyzeContentSyntax(content: string | null | undefined, options
   const raw = String(content || '')
   const isHtml = resolveHtml(raw, options.html)
   const text = isHtml ? htmlToText(raw) : raw
-  const scan: Scan = { text, channel: options.channel, allowFix: !isHtml, issues: [] }
+  const scan: Scan = { text, channel: options.channel, audience: options.audience || 'person', allowFix: !isHtml, issues: [] }
 
   // Quét "khoan dung": biến viết dở coi như đã đóng, ngoặc { mở dở coi như chữ thường.
   const openBraces: Array<{ index: number; closed: boolean }> = []
@@ -635,6 +896,9 @@ export function analyzeContentSyntax(content: string | null | undefined, options
     }
   }
   scanLegacyTokens(scan)
+  if (usesTokens(options.channel)) scanLiteralBraces(scan, 0, text.length)
+  scanPlaceholders(scan)
+  if (options.maxLength) scanLength(scan, options.maxLength, actual)
 
   scan.issues.sort((left, right) => left.start - right.start || left.end - right.end)
   return {
@@ -709,14 +973,26 @@ export function contentSyntaxChannelForAction(actionId: string | null | undefine
   if (action === 'voice_call') return 'voice'
   if (action === 'email_send') return 'email'
   if (action.indexOf('zalo_') === 0) return 'zalo'
+  if (action.indexOf('facebook_') === 0) return 'facebook'
   return 'other'
 }
+
+/** Zalo thường không nhận tin cá nhân dài hơn khoảng ngần này ký tự (lỗi 112 / 118). */
+export const ZALO_MESSAGE_MAX_LENGTH = 2300
+export const ZALO_FRIEND_REQUEST_MAX_LENGTH = 150
+export const ZALO_ALIAS_MAX_LENGTH = 50
 
 export interface CampaignContentSyntaxInput {
   actionId?: string | null
   /** `undefined` = lần lưu này không gửi nội dung chính nên không kiểm. */
   content?: unknown
+  /**
+   * Ô nội dung và các cài đặt quyết định cách gửi: `zaloMessageSendMode` (gửi dạng chia sẻ thì không điền biến),
+   * `enableAddFriend` / `enableZaloAlias` (mới kiểm độ dài lời mời / tên gợi nhớ), `rewriteContentEachRun`… Thiếu thì coi như tắt.
+   */
   extraSettings?: Record<string, unknown> | null
+  /** Data nhập thẳng vào chiến dịch (chỉ form gửi, để báo dòng thiếu thông tin mà biến cần). */
+  inputRows?: Array<Record<string, unknown>> | null
 }
 
 export interface CampaignContentFieldReport {
@@ -737,35 +1013,55 @@ function fieldText(value: unknown): string | null {
 /** Kiểm mọi ô nội dung CÓ MẶT trong dữ liệu được lưu. Ô vắng mặt (undefined) không bị kiểm. */
 export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput): CampaignContentFieldReport[] {
   const channel = contentSyntaxChannelForAction(input.actionId)
+  const action = String(input.actionId || '')
   const extra = (input.extraSettings && typeof input.extraSettings === 'object' ? input.extraSettings : {}) as Record<string, unknown>
   const reports: CampaignContentFieldReport[] = []
-  const add = (field: string, label: string, value: unknown, fieldChannel: ContentSyntaxChannel, html: boolean | 'auto', warnOnly = false) => {
+  const add = (field: string, label: string, value: unknown, fieldChannel: ContentSyntaxChannel, html: boolean | 'auto',
+    warnOnly = false, more: Pick<ContentSyntaxOptions, 'audience' | 'maxLength'> = {}) => {
     const text = fieldText(value)
     if (text === null) return
-    const result = analyzeContentSyntax(text, { channel: fieldChannel, html })
+    const result = analyzeContentSyntax(text, { channel: fieldChannel, html, ...more })
     if (warnOnly) for (const issue of result.issues) issue.severity = 'warn'
     reports.push({ field, label, result, value: text, channel: fieldChannel, html: resolveHtml(text, html) })
   }
   const mainHtml: boolean | 'auto' = extra.formattedContentEnabled === true || extra.emailBodyIsHtml === true ? true : 'auto'
+  // Gửi dạng chia sẻ (bạn bè / group): một tin cho mọi người, bộ chạy chỉ xoay vòng chữ, không điền biến nào.
+  const share = (action === 'zalo_message_friend' || action === 'zalo_message_group') && extra.zaloMessageSendMode === 'share'
+  const audience: 'person' | 'group' | 'share' = share ? 'share' : action === 'zalo_message_group' ? 'group' : 'person'
+  const zaloMessage = action.indexOf('zalo_message_') === 0
+  const messageLimit = (label: string, perVariant: boolean): ContentLengthLimit | undefined => zaloMessage ? {
+    limit: ZALO_MESSAGE_MAX_LENGTH, label, perVariant,
+    consequence: `Zalo thường không nhận tin dài hơn khoảng ${formatCount(ZALO_MESSAGE_MAX_LENGTH)} ký tự nên tin có thể không gửi được.`,
+  } : undefined
 
-  add('content', 'Nội dung', input.content, channel, mainHtml)
+  add('content', 'Nội dung', input.content, channel, mainHtml, false, { audience, maxLength: messageLimit('Nội dung', true) })
   add('emailSubject', 'Tiêu đề email', extra.emailSubject, 'email', false)
   if (Array.isArray(extra.advancedContentItems)) {
     extra.advancedContentItems.forEach((item, index) => {
       if (!item || typeof item !== 'object') return
       const row = item as Record<string, unknown>
-      add(`advancedContentItems[${index}].content`, `Nội dung ${index + 1}`, row.content, channel, 'auto')
+      // Nội dung nâng cao: mỗi mục là một tin, dấu | trong mục giữ nguyên chữ.
+      add(`advancedContentItems[${index}].content`, `Nội dung ${index + 1}`, row.content, channel, 'auto', false,
+        { audience, maxLength: messageLimit(`Nội dung ${index + 1}`, false) })
       add(`advancedContentItems[${index}].emailSubject`, `Tiêu đề email của nội dung ${index + 1}`, row.emailSubject, 'email', false)
     })
   }
-  add('friendRequestMessage', 'Lời mời kết bạn', extra.friendRequestMessage, 'zalo', false)
+  add('friendRequestMessage', 'Lời mời kết bạn', extra.friendRequestMessage, 'zalo', false, false, extra.enableAddFriend === true ? {
+    maxLength: { limit: ZALO_FRIEND_REQUEST_MAX_LENGTH, label: 'Lời mời kết bạn', perVariant: true,
+      consequence: `Zalo chỉ nhận lời mời tối đa ${ZALO_FRIEND_REQUEST_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt.` },
+  } : {})
   // Tên gợi nhớ là nhãn nội bộ của khách (nhiều khách cố ý viết kiểu `#{TÊN DỰ ÁN}`): chỉ nhắc, không chặn.
-  add('zaloAliasTemplate', 'Tên gợi nhớ', extra.zaloAliasTemplate, 'zalo', false, true)
+  add('zaloAliasTemplate', 'Tên gợi nhớ', extra.zaloAliasTemplate, 'zalo', false, true, extra.enableZaloAlias === true ? {
+    maxLength: { limit: ZALO_ALIAS_MAX_LENGTH, label: 'Tên gợi nhớ', perVariant: false,
+      consequence: `Zalo chỉ nhận tên gợi nhớ tối đa ${ZALO_ALIAS_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt hoặc không đổi được tên.` },
+  } : {})
   add('internalSmsContent', 'Nội dung SMS gửi kèm', extra.internalSmsContent, 'sms', false)
   add('externalSmsContent', 'Nội dung SMS gửi kèm (akaBiz Sms)', extra.externalSmsContent, 'other', false)
-  add('commentContent', 'Nội dung comment', extra.commentContent, 'other', false)
-  add('postBumpContent', 'Nội dung up tin', extra.postBumpContent, 'other', false)
-  add('newsfeedCommentContent', 'Nội dung comment newsfeed', extra.newsfeedCommentContent, 'other', false)
+  // Comment / up tin / comment newsfeed chỉ có ở chiến dịch Facebook và được điền biến như nội dung Facebook.
+  const facebookOrOther: ContentSyntaxChannel = channel === 'facebook' ? 'facebook' : 'other'
+  add('commentContent', 'Nội dung comment', extra.commentContent, facebookOrOther, false)
+  add('postBumpContent', 'Nội dung up tin', extra.postBumpContent, facebookOrOther, false)
+  add('newsfeedCommentContent', 'Nội dung comment newsfeed', extra.newsfeedCommentContent, facebookOrOther, false)
   return reports
 }
 
@@ -792,8 +1088,50 @@ export function checkCampaignContentSyntax(input: CampaignContentSyntaxInput, mo
 
 // ── Cảnh báo hỏi lại lúc lưu ────────────────────────────────────────────────────────────────────────────────────
 
-/** Ba cảnh báo "nội dung có thể gửi không đúng ý" được hỏi lại một lần lúc lưu. */
-export const CONTENT_SYNTAX_SAVE_WARNING_CODES: ContentSyntaxCode[] = ['separator_escaped', 'variant_fragment', 'legacy_token']
+/** Các cảnh báo "nội dung có thể gửi không đúng ý" được hỏi lại một lần lúc lưu. */
+export const CONTENT_SYNTAX_SAVE_WARNING_CODES: ContentSyntaxCode[] = [
+  'separator_escaped', 'variant_fragment', 'legacy_token', 'brace_literal', 'placeholder_unfilled', 'token_group_target', 'too_long',
+]
+
+const INPUT_COLUMN_LABELS: Record<string, string> = {
+  name: 'Tên', email: 'Email', info1: 'Info1', info2: 'Info2', info3: 'Info3', info4: 'Info4', info5: 'Info5',
+}
+
+/** Biến lấy từ một cột của data, theo loại chiến dịch (SĐT / email / UID là cột khoá nên luôn có). */
+function inputColumnOfToken(name: string, action: string): string | null {
+  if (name === 'INPUT_FULLNAME') return 'name'
+  if (/^INFO[1-5]$/.test(name)) return name.toLowerCase()
+  if (name === 'EMAIL' && action !== 'email_send') return 'email'
+  if ((name === 'FULL_NAME' || name === 'ORIGINAL_NAME') && (action === 'sms_send' || action === 'voice_call')) return 'name'
+  return null
+}
+
+/** Dòng data thiếu thông tin mà biến trong nội dung cần: người đó nhận tin có chỗ trống. */
+function missingInputColumnLines(input: CampaignContentSyntaxInput, reports: CampaignContentFieldReport[]): { lines: string[]; key: string } {
+  const rows = Array.isArray(input.inputRows) ? input.inputRows.filter(row => row && typeof row === 'object') : []
+  if (rows.length === 0) return { lines: [], key: '' }
+  const action = String(input.actionId || '')
+  const columns: Array<{ column: string; token: string }> = []
+  for (const report of reports) {
+    if (!usesTokens(report.channel) || report.channel === 'facebook') continue
+    const tokens = report.result.text.match(/#\{[A-Z_0-9]+\}/g) || []
+    for (const token of tokens) {
+      const column = inputColumnOfToken(token.slice(2, -1), action)
+      if (column && !columns.some(item => item.column === column)) columns.push({ column, token })
+    }
+  }
+  const lines: string[] = []
+  const key: string[] = []
+  for (const { column, token } of columns) {
+    const missing = rows.filter(row => !String((row as Record<string, unknown>)[column] ?? '').trim()).length
+    if (missing === 0) continue
+    key.push(`${column}:${missing}/${rows.length}`)
+    lines.push(`• ${formatCount(missing)}/${formatCount(rows.length)} dòng data chưa có ${INPUT_COLUMN_LABELS[column] || column}`
+      + ` nên chỗ ${token} trong tin gửi cho những người này sẽ để trống`
+      + (column === 'name' ? ' (ví dụ "Chào ,").' : '.'))
+  }
+  return { lines, key: key.join(',') }
+}
 
 export interface CampaignContentSaveWarning {
   count: number
@@ -815,21 +1153,28 @@ export interface CampaignContentSaveWarning {
 export function campaignContentSaveWarning(input: CampaignContentSyntaxInput, mode: ContentSyntaxGuardMode = 'block'): CampaignContentSaveWarning | null {
   if (mode === 'off') return null
   const counts: Record<string, number> = {}
+  const examples: Record<string, string> = {}
+  const fixedCodes: Record<string, boolean> = {}
+  const tooLong: string[] = []
   const fixes: Record<string, string> = {}
   const signature: string[] = []
   let count = 0
-  let legacyExample = ''
   let legacyReplacement = ''
-  for (const report of analyzeCampaignContentFields(input)) {
+  let braceReplacement = ''
+  const reports = analyzeCampaignContentFields(input)
+  for (const report of reports) {
     const found = report.result.issues.filter(issue => CONTENT_SYNTAX_SAVE_WARNING_CODES.indexOf(issue.code) >= 0)
     if (found.length === 0) continue
     count += found.length
     signature.push(report.field, report.value)
     for (const issue of found) {
       counts[issue.code] = (counts[issue.code] || 0) + 1
-      if (issue.code === 'legacy_token' && !legacyExample) {
-        legacyExample = report.result.text.slice(issue.start, issue.end)
-        legacyReplacement = issue.fix ? issue.fix.text : ''
+      if (!examples[issue.code]) examples[issue.code] = report.result.text.slice(issue.start, issue.end)
+      if (issue.code === 'too_long') tooLong.push(`• ${issue.message}`)
+      if (issue.fix && !report.html) {
+        fixedCodes[issue.code] = true
+        if (issue.code === 'legacy_token' && !legacyReplacement) legacyReplacement = issue.fix.text
+        if (issue.code === 'brace_literal' && !braceReplacement) braceReplacement = issue.fix.text
       }
     }
     if (!report.html) {
@@ -845,21 +1190,49 @@ export function campaignContentSaveWarning(input: CampaignContentSyntaxInput, mo
       if (fixed !== report.value) fixes[report.field] = fixed
     }
   }
-  if (count === 0) return null
+  // Bật "Viết nội dung cho mỗi lượt chạy" mà nội dung có biến: AI viết lại sau khi điền nên có thể bỏ / đổi tên, xưng hô.
+  const extra = (input.extraSettings && typeof input.extraSettings === 'object' ? input.extraSettings : {}) as Record<string, unknown>
+  const hasToken = (fields: (field: string) => boolean) => reports.some(report => fields(report.field)
+    && usesTokens(report.channel) && /#\{[A-Za-z_]/.test(report.result.text))
+  const aiMain = extra.rewriteContentEachRun === true && extra.formattedContentEnabled !== true
+    && hasToken(field => field === 'content' || /^advancedContentItems\[\d+\]\.content$/.test(field))
+  const aiComment = extra.rewriteCommentContentEachRun === true && hasToken(field => field === 'commentContent')
+  const missing = missingInputColumnLines(input, reports)
+  if (count === 0 && !aiMain && !aiComment && missing.lines.length === 0) return null
+  if (aiMain || aiComment) signature.push(`ai:${aiMain ? 1 : 0}${aiComment ? 1 : 0}`)
+  if (missing.key) signature.push(`rows:${missing.key}`)
+  count += (aiMain || aiComment ? 1 : 0) + missing.lines.length
   const fixable = Object.keys(fixes).length > 0
   const lines: string[] = []
   if (counts.separator_escaped) {
     lines.push(`• ${counts.separator_escaped} dấu \\| nằm riêng ở đầu hoặc cuối dòng nên các mẫu hai bên đang gửi chung một tin.`
-      + (fixable ? ' Sửa giúp: đổi thành dấu | để tách mẫu.' : ''))
+      + (fixedCodes.separator_escaped ? ' Sửa giúp: đổi thành dấu | để tách mẫu.' : ''))
   }
   if (counts.variant_fragment) {
     lines.push(`• ${counts.variant_fragment} dấu | giữa dòng đang cắt một mẩu vài chữ thành mẫu riêng.`
-      + (fixable ? ' Sửa giúp: đổi thành \\| để chỉ hiện ký tự |.' : ''))
+      + (fixedCodes.variant_fragment ? ' Sửa giúp: đổi thành \\| để chỉ hiện ký tự |.' : ''))
   }
   if (counts.legacy_token) {
-    lines.push(`• ${counts.legacy_token} biến của phần mềm akaBiz cũ (ví dụ ${legacyExample}) sẽ bị gửi nguyên văn.`
-      + (fixable && legacyReplacement ? ` Sửa giúp: đổi sang biến tương ứng (${legacyReplacement}).` : ''))
+    lines.push(`• ${counts.legacy_token} biến của phần mềm akaBiz cũ (ví dụ ${examples.legacy_token}) sẽ bị gửi nguyên văn.`
+      + (fixedCodes.legacy_token && legacyReplacement ? ` Sửa giúp: đổi sang biến tương ứng (${legacyReplacement}).` : ''))
   }
+  if (counts.brace_literal) {
+    lines.push(`• ${counts.brace_literal} đoạn trong ngoặc { } không có dấu | (ví dụ ${excerptOf(examples.brace_literal, 0, examples.brace_literal.length)}) sẽ được gửi nguyên cả dấu ngoặc.`
+      + (fixedCodes.brace_literal && braceReplacement ? ` Sửa giúp: đổi các đoạn nhận ra được thành biến (ví dụ ${braceReplacement}).` : ''))
+  }
+  if (counts.placeholder_unfilled) {
+    lines.push(`• ${counts.placeholder_unfilled} chỗ trống của bài mẫu chưa điền (ví dụ ${examples.placeholder_unfilled}) sẽ được gửi nguyên văn.`)
+  }
+  if (counts.token_group_target) {
+    lines.push(`• Tin gửi vào group nên biến cá nhân hoá (ví dụ ${examples.token_group_target}) không ra thông tin từng người:`
+      + ' biến tên là tên group, biến xưng hô luôn ra lựa chọn thứ ba.')
+  }
+  for (const line of tooLong) lines.push(line)
+  if (aiMain || aiComment) {
+    lines.push(`• Đang bật "${aiMain ? 'Viết nội dung cho mỗi lượt chạy' : 'Viết nội dung comment cho mỗi lượt chạy'}" mà nội dung có biến cá nhân hoá:`
+      + ' AI viết lại có thể làm mất hoặc đổi tên, xưng hô của người nhận.')
+  }
+  for (const line of missing.lines) lines.push(line)
   return {
     count,
     signature: signature.join('\u0001'),

@@ -49,7 +49,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 export function touchesCampaignContent(updates: { content?: unknown; extraSettings?: unknown }): boolean {
   if (typeof updates.content === 'string') return true
   const extra = asRecord(updates.extraSettings)
-  return !!extra && EXTRA_CONTENT_KEYS.some(key => extra[key] !== undefined && extra[key] !== null && extra[key] !== '')
+  return !!extra && (extra.zaloMessageSendMode === 'share'
+    || EXTRA_CONTENT_KEYS.some(key => extra[key] !== undefined && extra[key] !== null && extra[key] !== ''))
 }
 
 /** Chỉ giữ các ô nội dung lần lưu này thật sự đổi so với bản đang lưu. */
@@ -62,14 +63,26 @@ export function changedCampaignContentFields(
   const input: CampaignContentSyntaxInput = { actionId }
   if (typeof updates.content === 'string' && (actionChanged || updates.content !== current?.content)) input.content = updates.content
   const next = asRecord(updates.extraSettings)
-  if (next) {
-    const before = asRecord(current?.extraSettings) || {}
+  const before = asRecord(current?.extraSettings) || {}
+  // Gửi dạng chia sẻ không điền biến: vừa bật chế độ này thì kiểm lại nội dung dù nội dung không đổi.
+  const sendMode = next && next.zaloMessageSendMode !== undefined ? next.zaloMessageSendMode : before.zaloMessageSendMode
+  const shareTurnedOn = sendMode === 'share' && before.zaloMessageSendMode !== 'share'
+  if (shareTurnedOn && input.content === undefined) {
+    const content = typeof updates.content === 'string' ? updates.content : current?.content
+    if (typeof content === 'string') input.content = content
+  }
+  if (next || sendMode !== undefined) {
+    const source = next || {}
     const changed: Record<string, unknown> = {
-      formattedContentEnabled: next.formattedContentEnabled,
-      emailBodyIsHtml: next.emailBodyIsHtml
+      formattedContentEnabled: source.formattedContentEnabled ?? before.formattedContentEnabled,
+      emailBodyIsHtml: source.emailBodyIsHtml ?? before.emailBodyIsHtml,
+      zaloMessageSendMode: sendMode
     }
     for (const key of EXTRA_CONTENT_KEYS) {
-      if (actionChanged || !sameValue(next[key], before[key])) changed[key] = next[key]
+      if (next && (actionChanged || !sameValue(next[key], before[key]))) changed[key] = next[key]
+    }
+    if (shareTurnedOn && changed.advancedContentItems === undefined) {
+      changed.advancedContentItems = next && next.advancedContentItems !== undefined ? next.advancedContentItems : before.advancedContentItems
     }
     input.extraSettings = changed
   }

@@ -182,6 +182,51 @@ check('hỏi lại lúc lưu: gom cảnh báo, "Sửa giúp" chỉ sửa đúng 
   }
 })
 
+check('rà 24/11: ngoặc không xoay vòng, chỗ trống, chia sẻ, Facebook, group, độ dài, AI viết lại, data thiếu', () => {
+  const codes = (text, options = { channel: 'zalo' }) => syntax.analyzeContentSyntax(text, options).issues.map(issue => `${issue.code}:${issue.severity}`)
+  assert.deepEqual(codes('Chào {anh-chị-anh/chị} [tên kh]'), ['brace_literal:warn', 'placeholder_unfilled:warn'])
+  assert.equal(syntax.applyContentSyntaxFixes('Chào {anh-chị-anh/chị}', { channel: 'zalo' }, ['brace_literal']), 'Chào #{SEX{anh-chị-anh/chị}}')
+  // Bộ chạy thật gửi nguyên cả dấu ngoặc khi không có dấu | bên trong: đúng điều bộ kiểm báo.
+  assert.equal(spin.renderContentSpin('Chào {anh-chị-anh/chị}', { rng: () => 0 }), 'Chào {anh-chị-anh/chị}')
+
+  // Gửi dạng chia sẻ: chặn ở đường lưu, kể cả khi chỉ bật chế độ chia sẻ mà không sửa nội dung.
+  throwsSyntax(() => guard.assertCampaignContentSyntax({ actionId: 'zalo_message_friend', content: 'Chào #{FULL_NAME}', extraSettings: { zaloMessageSendMode: 'share' } }), 'content')
+  const normal = { actionId: 'zalo_message_group', content: 'Chào #{FULL_NAME}', extraSettings: { zaloMessageSendMode: 'normal' } }
+  assert.equal(guard.touchesCampaignContent({ extraSettings: { zaloMessageSendMode: 'share' } }), true)
+  throwsSyntax(() => guard.assertCampaignContentSyntax(guard.changedCampaignContentFields('zalo_message_group', { extraSettings: { zaloMessageSendMode: 'share' } }, normal)), 'content')
+  const sharing = { ...normal, extraSettings: { zaloMessageSendMode: 'share' } }
+  guard.assertCampaignContentSyntax(guard.changedCampaignContentFields('zalo_message_group', { extraSettings: { zaloMessageSendMode: 'share', actionLimits: {} } }, sharing))
+  guard.assertCampaignContentSyntax(normal)
+
+  // Facebook: biến hệ thống không điền được thì chặn, #{FULL_NAME} / ngày / biến lạ trang trí thì không.
+  throwsSyntax(() => guard.assertCampaignContentSyntax({ actionId: 'facebook_message_uid', content: 'Chào #{SEX{anh-chị-anh/chị}}' }), 'content')
+  throwsSyntax(() => guard.assertCampaignContentSyntax({ actionId: 'facebook_group_post', content: 'Bài', extraSettings: { commentContent: 'Hi #{INFO1}' } }), 'commentContent')
+  guard.assertCampaignContentSyntax({ actionId: 'facebook_message_uid', content: 'Chào #{FULL_NAME} #{ full_name } #{TODAY(DD/MM/YYYY)} #{abc}' })
+
+  assert.deepEqual(codes('Chào #{FULL_NAME} #{SEX{anh-chị-bạn}}', { channel: 'zalo', audience: 'group' }), ['token_group_target:warn', 'token_group_target:warn'])
+
+  const warning = syntax.campaignContentSaveWarning({
+    actionId: 'zalo_message_phone', content: `Chào #{INPUT_FULLNAME}\n|\n${'x'.repeat(2400)}`,
+    extraSettings: { rewriteContentEachRun: true, enableAddFriend: true, friendRequestMessage: 'k'.repeat(160), enableZaloAlias: true, zaloAliasTemplate: 'Khách #{FULL_NAME} - #{PHONE} - #{INFO1} - dự án' },
+    inputRows: [{ name: 'A', info1: 'a' }, { name: '', info1: 'b' }]
+  })
+  assert.equal(warning.count, 5)
+  for (const text of ['mẫu số 2) dài 2.400', 'Lời mời kết bạn dài 160', 'Tên gợi nhớ dài khoảng', 'Viết nội dung cho mỗi lượt chạy', '1/2 dòng data chưa có Tên']) {
+    assert.ok(warning.message.includes(text), text)
+  }
+  // Tắt lời mời / đổi tên thì không nhắc độ dài.
+  assert.equal(syntax.campaignContentSaveWarning({ actionId: 'zalo_message_phone', content: 'Chào bạn',
+    extraSettings: { enableAddFriend: false, friendRequestMessage: 'k'.repeat(160), enableZaloAlias: false, zaloAliasTemplate: 'x'.repeat(80) } }), null)
+
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+  for (const form of ['CampaignFormModal.tsx', 'CampaignAgentFormModal.tsx']) {
+    const source = read(`src/renderer/src/components/CampaignPanels/${form}`)
+    for (const key of ['zaloMessageSendMode: isZaloShareMessageMode', 'rewriteContentEachRun: formData.rewriteContentEachRun', 'enableAddFriend: formData.actionId', 'enableZaloAlias: formData.enableZaloAlias', 'inputRows: !isEditingSavedCampaign']) {
+      assert.ok(source.includes(key), `${form}: ${key}`)
+    }
+  }
+})
+
 check('đường lưu IPC và hai form đã gọi bộ chặn; bộ lập lịch và lõi engine không gọi', () => {
   const read = file => fs.readFileSync(path.join(root, file), 'utf8')
   assert.match(read('src/main/ipc/handlers/campaignHandlers.ts'), /assertCampaignContentSyntax\(\{\s*actionId: campaignData\?\.actionId/)

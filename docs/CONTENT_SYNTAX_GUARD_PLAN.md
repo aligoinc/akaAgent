@@ -409,3 +409,30 @@ Cơ bản (27.185 chiến dịch, 11.317 nội dung khác nhau) và đối chi�
 Trong 250.000 dòng gần nhất: 130 tin / 4 chiến dịch còn `#{SEX{anh-chị-anh/chị}` nguyên văn; 639 tin / 18 chiến dịch còn dấu gạch đứng
 trong tin (một phần là trang trí đúng ý, một phần là gộp mẫu: 59428, 57912, 55987, 56419, 43873). Quét bằng bộ kiểm hiện tại: 15
 chiến dịch mức chặn (2 đang chờ: 58672, 59428), 196 chiến dịch chỉ có cảnh báo.
+
+## 17. Thực thi mục 16 (24/11/2026)
+
+Anh duyệt mục 16 trừ ý 4 ("4 không phải là vấn đề": SMS bỏ xuống dòng giữ nguyên) rồi bảo "Hãy thực thi". Cùng nhánh
+`claude/ecstatic-carson-0q5vlw` ở hai repo; chưa merge, chưa deploy API / Web, chưa build Desktop, không migration, không đụng
+logic chạy (bộ tách, bộ lập lịch, lõi engine, ChatApi).
+
+| Ý | Làm | Mức |
+|---|---|---|
+| 1 | `brace_literal`: ngoặc `{…}` đóng đủ, không có dấu `\|` bên trong. Sửa giúp khi nhận ra biến: `{anh-chị-anh/chị}` / `{SEX{…}}` → `#{SEX{…}}`, `{FULLNAME}` → `#{FULL_NAME}` | hỏi lúc lưu |
+| 2 | `placeholder_unfilled`: `[tên …]`, `[họ và tên]`, `[số điện thoại]`, `[điền …]`, `[vị trí ứng tuyển]`, `[id kênh]`, `[...]` | hỏi lúc lưu |
+| 3 | Bật "Viết nội dung cho mỗi lượt chạy" (hoặc comment) mà nội dung có biến, nội dung không định dạng | hỏi lúc lưu |
+| 5 | `inputRows`: data nhập thẳng lúc tạo thiếu cột mà biến cần (Tên, Email trừ chiến dịch email, Info1–5; SMS / gọi tự động thêm `#{FULL_NAME}`) | hỏi lúc lưu |
+| 6 | `token_unsupported_here`: gửi dạng chia sẻ (bạn bè / group) mà nội dung có biến; đường lưu Desktop và API kiểm lại nội dung cả khi chỉ bật chia sẻ | chặn |
+| 7 | Kênh mới `facebook` (nội dung + comment / up tin / comment newsfeed của chiến dịch Facebook): biến hệ thống khác `#{FULL_NAME}` và ngày bị chặn; biến lạ trang trí chỉ nhắc | chặn |
+| 8 | `token_group_target`: nhắn group kiểu thường có biến tên / xưng hô | hỏi lúc lưu |
+| 9, 10 | `too_long`: ước lượng sau khi xoay vòng (lấy lựa chọn dài nhất) và điền biến (tên 15 ký tự): tin Zalo > 2.300, lời mời kết bạn > 150 khi bật kết bạn, tên gợi nhớ > 50 khi bật đổi tên | hỏi lúc lưu |
+
+Các ý ít gặp (mẫu trùng, mẫu vô hình, link dính dấu `|`, email HTML bị tách, ngày sai định dạng) chưa làm.
+
+Chạy trên 27.185 chiến dịch thật (chỉ đọc): chặn mới chỉ 4 chiến dịch đã hoàn thành (3 gửi dạng chia sẻ, 1 Facebook), không chiến
+dịch đang chạy nào. Nhắc: `brace_literal` 67 chiến dịch (8 đang chờ), `placeholder_unfilled` 39 (11), `token_group_target` 3 (1),
+`too_long` 79 (6; phần lớn là tên gợi nhớ ước lượng 51–60 ký tự).
+
+Kiểm: campaign-core 557 đạt (`contentSyntax.test.ts` 37 ca), API `contentSyntaxGuard.test.ts` 7 ca, smoke Desktop 13 nhóm,
+typecheck Desktop (node + web) và WebApp (campaign-core, web, api) sạch. Câu cho khách là bản nháp, chờ anh duyệt (đầy đủ trong
+`contentSyntax.ts`, phần `campaignContentSaveWarning` và các `push(...)` mới). iOS vẫn chỉ nhận lỗi chặn từ API.
