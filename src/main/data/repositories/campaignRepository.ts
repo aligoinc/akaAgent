@@ -58,6 +58,7 @@ import { getSupabaseClient } from '../supabaseClient'
 import { insertWithContentRotationFallback, normalizeContentRotationIndexes } from '../campaignInputContentRotation'
 import { isPostBumpTargetCampaign, planPostBumpMaintenanceSchedule } from '../../../shared/postBumpContent'
 import { CampaignProgressReuse, type CampaignProgressRow } from '../campaignProgressReuse'
+import { isRefreshablePassDone, isSingleDayStopCampaign, SINGLE_DAY_STOP_CAMPAIGN_NOTE, SINGLE_DAY_STOP_INPUT_NOTE } from '../../../shared/campaignRecurringPass'
 import { mapCampaignConfigFromDB, mapCampaignFromDB, mapCampaignInputFromDB, mapCampaignInputDataFromDB, mapCampaignDetailFromDB, mapCampaignListItemFromDB } from '../mappers'
 import {
   getCurrentUserCredentials,
@@ -1134,6 +1135,18 @@ function resolveNextSchedule(campaign: Campaign, todayStart: Date): Date | null 
 function isPastScheduleEnd(campaign: Campaign, schedule: Date): boolean {
   if (!campaign.scheduleEndDate) return false
   return schedule.getTime() > new Date(campaign.scheduleEndDate).getTime()
+}
+
+/**
+ * Ngày chạy kế của lịch tuần / tháng tính từ ngày mai (giờ Việt Nam), giờ theo lịch gốc, như bước bảo trì lịch ngày mới.
+ * Không tính được hoặc đã quá ngày kết thúc thì null (chiến dịch hoàn thành như cũ).
+ */
+export function resolveNextRecurringRun(campaign: Campaign, now: Date): Date | null {
+  const parts = parseVietnamParts(now)
+  const tomorrowStart = addVietnamDays(makeVietnamDate({ year: parts.year, month: parts.month, day: parts.day }), 1)
+  const next = resolveNextSchedule(campaign, tomorrowStart)
+  if (!next || isPastScheduleEnd(campaign, next)) return null
+  return next
 }
 
 // =========== CAMPAIGNS ===========
@@ -3891,10 +3904,36 @@ export async function maintainCampaignSchedules(
 
         if (campaign.status !== 'chờ xử lý') continue
 
+        // Có giờ dừng mà không tích "hôm sau tiếp tục" (anh chốt 24/11/2026): chiến dịch chỉ chạy trong ngày đầu. Đã chạy được data
+        // nào thì đóng data còn lại kèm ghi chú và hoàn thành; chưa chạy data nào (vd. app tắt cả ngày đầu) thì hẹn giờ chạy hôm nay
+        // như khi có tích. Trước đó lịch cũ được giữ nên chiến dịch chạy tiếp ngay từ 00:00, ngoài khung giờ khách đặt (21/51
+        // chiến dịch như vậy gửi 0–6h trong 7 ngày tới 24/11). Nhóm data có hàm kết thúc riêng, giữ như cũ.
+        if (isSingleDayStopCampaign(campaign) && campaign.dataTargetSourceMode !== 'data_group') {
+          const details = await listCampaignInputData(campaign.id)
+          if (!details.some(detail => detail.status === 'hoàn thành')) {
+            const updated = await updateCampaign(campaign.id, { schedule: nextSchedule.toISOString(), note: null })
+            updatedCampaigns.push(updated)
+            continue
+          }
+          if (details.some(detail => detail.status === 'chờ xử lý')) {
+            const { error: closeError } = await client()
+              .from('auto_campaign_input_data')
+              .update({ status: 'hoàn thành', note: SINGLE_DAY_STOP_INPUT_NOTE })
+              .eq('campaign_id', campaign.id)
+              .eq('is_delete', false)
+              .eq('status', 'chờ xử lý')
+            if (closeError) throw new Error(`Failed to close single-day campaign input data: ${closeError.message}`)
+          }
+          const updated = await updateCampaign(campaign.id, { status: 'hoàn thành', note: SINGLE_DAY_STOP_CAMPAIGN_NOTE })
+          updatedCampaigns.push(updated)
+          continue
+        }
+
         // continueNextDay controls timing, not whether stale daily data continues.
-        // true advances to today's configured run time. false deliberately keeps
-        // the already-due timestamp unchanged so the campaign can continue as
-        // soon as the scheduler runs after midnight.
+        // true advances to today's configured run time. false (only without a
+        // daily stop time since 24/11/2026) deliberately keeps the already-due
+        // timestamp unchanged so the campaign can continue as soon as the
+        // scheduler runs after midnight.
         if (campaign.continueNextDay) {
           const updated = await updateCampaign(campaign.id, {
             schedule: nextSchedule.toISOString(),
@@ -3909,7 +3948,10 @@ export async function maintainCampaignSchedules(
       }
 
       const details = await listCampaignInputData(campaign.id)
-      const allDataDone = details.length > 0 && details.every(detail => detail.status === 'hoàn thành')
+      // Data "tạm dừng" (vd. nhóm Zalo đã mất, mã 161 với input_effect=pause) không bao giờ tự xong và không được đặt lại
+      // (câu đặt lại bên dưới bỏ qua nó). Trước 24/11/2026 chỉ một dòng như vậy làm lịch tuần/tháng không bao giờ làm mới
+      // data nữa (33 chiến dịch đứng "hoàn thành"). Coi là đã xong, nhưng phải còn ít nhất một dòng chạy được.
+      const allDataDone = isRefreshablePassDone(details)
       // Up tin không làm mới data: lượt đã xong không chạy lại. Chiến dịch up tin khách đổi sang lịch tuần từng bị đặt lại mọi
       // bài cũ về "chờ xử lý" và comment lại 3–4 lần (19362, 53818; anh chốt 18/11/2026).
       const shouldRefreshData = campaign.refreshData && !isPostBumpTargetCampaign(campaign) && (allDataDone || details.length === 0)

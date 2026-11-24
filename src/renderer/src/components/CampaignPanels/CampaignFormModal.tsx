@@ -17865,6 +17865,13 @@ export default function CampaignFormModal({
                         />
                         <span>Nếu chưa chạy hết data, hôm sau chiến dịch sẽ tiếp tục chạy theo thời gian hẹn giờ.</span>
                       </label>
+                      {!formData.continueNextDay && (
+                        <p className="schedule-hint">
+                          {String(formData.dailyStopTime || '').trim()
+                            ? 'Không tích: tới giờ dừng của ngày đầu tiên thì chiến dịch dừng hẳn, data còn lại sẽ không được gửi.'
+                            : 'Không tích và không đặt giờ dừng: chiến dịch chạy liên tục, kể cả ban đêm, tới khi hết data.'}
+                        </p>
+                      )}
                     </div>
                   )}
 
