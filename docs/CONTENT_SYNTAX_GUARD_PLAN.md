@@ -1,6 +1,6 @@
 # Phương án: chặn lưu nội dung sai cú pháp biến / ngoặc (nhiều nội dung bị gộp vào một tin)
 
-Ngày lập: 24/11/2026. Trạng thái: **chờ anh duyệt, chưa code, chưa đổi gì trên production.**
+Ngày lập: 24/11/2026. Trạng thái: **anh bảo "Thực thi" 24/11; đã code bộ kiểm, chặn ở API Web và ở đường lưu Desktop (mục 13); chưa merge, chưa deploy, chưa build; chưa đổi gì trên production. Giao diện báo lỗi khi gõ chờ duyệt thiết kế; chiến dịch đang lỗi (mục 8) chờ anh chọn cách xử lý.**
 
 Phạm vi (anh chốt lại 24/11): **chỉ kiểm ở giao diện và chặn tương ứng ở API lúc lưu. Không can thiệp vào logic chạy.**
 Bản đầu của phương án có thêm phần bộ chạy tạm dừng chiến dịch (mã CFG21, một migration); phần đó đã bỏ.
@@ -216,3 +216,63 @@ Gỡ: công tắc về `off` (có hiệu lực không cần phát hành). Không
 - Logic chạy: bộ tách `contentSpin`, bộ lập lịch Desktop / App Server, lõi engine v2, ChatApi (anh chốt 24/11).
 - Gửi lại / đính chính các tin đã gửi sai.
 - Gộp các bản chép `contentSpin` về một nguồn (việc riêng).
+
+## 13. Tình trạng thực thi (24/11/2026)
+
+Anh bảo "Thực thi". Các quyết định ở mục 10 anh chưa trả lời riêng nên em làm theo đề xuất: biến lạ = chặn, Desktop kiểm ở
+đường lưu của tiến trình chính, câu cho khách dùng bản nháp (chờ anh duyệt), thêm cảnh báo email dùng biến hồ sơ Zalo.
+
+### Đã làm (trên nhánh `claude/ecstatic-carson-0q5vlw` của hai repo, chưa merge)
+
+| Phần | Ở đâu | Kiểm |
+|---|---|---|
+| Bộ kiểm `contentSyntax.ts` | WebApp `packages/campaign-core/src/`, chép nguyên văn sang `src/shared/` | 18 ca, có 6.000 chuỗi ngẫu nhiên so với bộ tách thật |
+| Luật lưu của form Web | WebApp `validation.ts` (`validateCampaignForm`) | `submission.test.ts` |
+| Chặn ở API Web | WebApp `apps/api/.../contentSyntaxGuard.ts`: tạo / sửa chiến dịch, tạo / sửa mẫu nội dung; 400 `campaign_content_syntax_invalid` | 5 ca + 5 ca công tắc |
+| Chặn ở đường lưu Desktop | [contentSyntaxGuard.ts](../src/main/services/contentSyntaxGuard.ts), gọi ở IPC `DB_CREATE_CAMPAIGN` / `DB_UPDATE_CAMPAIGN` và lưu mẫu nội dung | `node scripts/content-syntax/desktop-smoke.cjs` (9 nhóm) |
+| Kiểm trước khi lưu ở form Desktop | `CampaignFormModal.tsx`, `CampaignAgentFormModal.tsx` (trước mọi bước tạo dữ liệu kèm) | hai typecheck |
+| Công tắc | khoá `campaign.content_syntax_guard` (`block` / `warn` / `off`, thiếu dòng = `block`); API Web đọc khi có nội dung lỗi, Web nhận qua cài đặt lúc vào trang, Desktop đọc chung câu đọc cài đặt lúc đăng nhập | có trong các bài trên |
+| Script quét | `scripts/content-syntax/scan-export.sql` (chỉ đọc) + `scan-prod.cjs` | đã chạy trên dữ liệu thật |
+
+Bộ chặn nằm ở lớp IPC / API, không nằm trong `campaignRepository`: bộ lập lịch, App Server và chiến dịch do hệ thống tự tạo
+gọi thẳng repository nên không đi qua. Bài kiểm Desktop khẳng định `campaignScheduler.ts` và `packages/campaign-engine`
+không gọi bộ kiểm, và hai bản `contentSpin.ts` vẫn trùng nhau.
+
+Sửa chiến dịch: API và đường lưu Desktop chỉ kiểm ô nội dung lần lưu này thật sự đổi so với bản đang lưu. Chiến dịch cũ đang
+lỗi vẫn sửa được lịch, giới hạn, trạng thái; form thì kiểm nội dung đang hiện mỗi lần bấm Lưu.
+
+### Chạy bộ kiểm trên dữ liệu thật (chỉ đọc, 24/11)
+
+22.362 ô nội dung có biến / ngoặc (nội dung chính, nội dung nâng cao, lời mời kết bạn, tên gợi nhớ, các ô SMS / comment, mẫu
+nội dung). Mọi dòng bị chặn đã xem tay, đều là lỗi thật:
+
+| Loại | Ở đâu | Số |
+|---|---|---|
+| Biến thiếu ngoặc đóng | 9 chiến dịch bị gộp mẫu ở mục 2, cộng lời mời kết bạn / nội dung nâng cao | 18 ô |
+| Biến lạ hoặc sai dạng, bị gửi nguyên văn | `#{INPUT_Fullname}` (1454), `#{INPUT FULLNAME}` (1836), `#{FULLNAME}` (1), `#{INPUT_NAME}` (713), `#{NAME}` (1293), `#{SEX{…} }` (2219, 2116, một mẫu nội dung) | 18 ô |
+
+Hai điều dữ liệu thật buộc phải đổi so với bản nháp:
+
+- **Ô "Tên gợi nhớ" chỉ nhắc, không chặn.** 45 chiến dịch (chủ yếu tổ chức 704) cố ý viết nhãn kiểu `#{DIỆU}`, `#{F2 BITRIX}`
+  trong tên gợi nhớ. Đây là nhãn nội bộ của khách, chặn là làm hỏng cách họ đang dùng.
+- **Thêm "Sửa giúp" cho các kiểu gõ sai gặp thật**: sai chữ hoa / thường, thiếu gạch dưới (`#{FULLNAME}`), khoảng trắng thay
+  gạch dưới (`#{INPUT FULLNAME}`), khoảng trắng thừa (`#{SEX{…} }`). Chỉ sửa khi có đúng một biến khớp; `#{NAME}`,
+  `#{INPUT_NAME}` không đoán.
+
+Chiến dịch đang chờ chạy có lỗi mức chặn (danh sách đầy đủ hơn mục 8): 59428 (1871), 61004 (2189), 49656 (560),
+58672 (2219, `#{SEX{…} }` bị gửi nguyên văn), 41331 (1293, `#{NAME}` trong lời mời kết bạn). Đang tạm dừng: 60005, 32998, 9019.
+
+### Chưa làm
+
+1. **Đợt 0, chiến dịch đang lỗi**: chưa đụng production, chờ anh chọn cách ở mục 8.
+2. **Giao diện báo lỗi ngay khi gõ** (danh sách lỗi dưới ô nhập, dòng đếm mẫu, nút "Sửa giúp", dải cảnh báo ở Xem trước) trên
+   Web, iOS, Desktop: chờ anh duyệt thiết kế. Hiện tại Web báo ở ô lỗi sẵn có khi bấm Lưu, Desktop hiện hộp báo lỗi khi bấm
+   Lưu, iOS nhận câu lỗi từ API.
+3. Bước gửi của Quy trình tự động, sửa nhanh nội dung trên Desktop (đã được đường lưu chặn, chưa có kiểm trước ở cửa sổ sửa nhanh).
+4. Chưa chạy trong Electron thật và chưa chạy bài kiểm giao diện (Playwright / Electron) cho phần này.
+5. Câu cho khách chờ anh duyệt.
+
+### Thứ tự đưa lên
+
+Deploy API / Web trước (chặn được Web, iOS mọi phiên bản), rồi phát hành Desktop. Không migration. Muốn chỉ nhắc mà chưa
+chặn trong những ngày đầu: thêm dòng `campaign.content_syntax_guard` = `warn` trước khi deploy.

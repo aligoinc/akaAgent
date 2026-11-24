@@ -1,3 +1,5 @@
+import { CONTENT_SYNTAX_SETTING_KEY } from '../../../shared/contentSyntax'
+import { setContentSyntaxGuardMode } from '../../services/contentSyntaxGuard'
 import { CAMPAIGN_REPEAT_SETTING_KEY, parseCampaignRepeatAudience } from '../../../shared/campaignRepeat'
 import { getSupabaseClient } from '../supabaseClient'
 import { requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
@@ -36,7 +38,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY, FACEBOOK_MAX_COMMENTS_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY, FACEBOOK_MAX_COMMENTS_KEY, CONTENT_SYNTAX_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
@@ -55,7 +57,9 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       // Nhắc gia hạn: cùng câu đọc, thiếu dòng/sai định dạng = tắt (docs/RENEWAL_REMINDER_DESKTOP.md).
       renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY)),
       // Giới thiệu nhận hoa hồng: cùng câu đọc, thiếu dòng/sai JSON = ẩn mục menu (docs/AFF_PARTNER_DESKTOP.md).
-      affPartnerAudience: parseAffPartnerAudience(values.get(AFF_PARTNER_SETTING_KEY))
+      affPartnerAudience: parseAffPartnerAudience(values.get(AFF_PARTNER_SETTING_KEY)),
+      // Chặn lưu nội dung sai cú pháp: cùng câu đọc, thiếu dòng = chặn. Tiến trình chính dùng mức này ở đường lưu.
+      contentSyntaxGuard: setContentSyntaxGuardMode(values.get(CONTENT_SYNTAX_SETTING_KEY))
     }
   } catch { return { ...DEFAULT_DESKTOP_POLLING } }
 }

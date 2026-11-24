@@ -1,3 +1,4 @@
+import { checkCampaignContentSyntax } from '../../../../shared/contentSyntax'
 import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
@@ -7350,6 +7351,27 @@ export default function CampaignFormModal({
     if (isEmailCampaign && !isAdvancedContentMode && !formData.emailSubject.trim()) {
       showAlert('Vui lòng nhập tiêu đề email.', 'error')
       return
+    }
+    {
+      // Biến / ngoặc viết dở làm nhiều mẫu bị gộp vào một tin hoặc bị gửi nguyên văn: không cho lưu.
+      const syntaxVerdict = checkCampaignContentSyntax({
+        actionId: formData.actionId,
+        content: isAdvancedContentMode ? undefined : formData.content,
+        extraSettings: {
+          formattedContentEnabled: formData.formattedContentEnabled,
+          emailBodyIsHtml: formData.emailBodyIsHtml,
+          emailSubject: isEmailCampaign && !isAdvancedContentMode ? formData.emailSubject : undefined,
+          advancedContentItems: isAdvancedContentMode && !isAdvancedGroupSource ? formData.advancedContentItems : undefined,
+          friendRequestMessage: formData.friendRequestMessage,
+          zaloAliasTemplate: formData.zaloAliasTemplate,
+          internalSmsContent: formData.internalSmsContent,
+          externalSmsContent: formData.externalSmsContent,
+          commentContent: formData.commentContent,
+          postBumpContent: formData.postBumpContent,
+          newsfeedCommentContent: formData.newsfeedCommentContent
+        }
+      }, useDesktopPollingStore.getState().settings.contentSyntaxGuard ?? 'block')
+      if (!syntaxVerdict.ok) { showAlert(syntaxVerdict.message, 'error'); return }
     }
     if (requiresMainContentOrMedia && !isAdvancedGroupSource && !hasMainContentText && !hasSelectedMainMedia) {
       showAlert(
