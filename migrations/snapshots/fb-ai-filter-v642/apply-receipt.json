@@ -1,0 +1,26 @@
+{
+  "migration": "migrations/migration_v642_ai_config_history_eval.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-24 19:21:57",
+  "ledger_version": "20261124122157",
+  "ledger_name": "migration_v642_ai_config_history_eval",
+  "file_md5": "c96e0a0f9d451aa092970581b07ee952",
+  "ledger_md5": "c96e0a0f9d451aa092970581b07ee952",
+  "requested_by": "anh: \"run 642\"",
+  "method": "Supabase MCP apply_migration",
+  "postflight": {
+    "triggers_ai_config_history_v642": 3,
+    "snapshot_rows": {"ai_prompt": 55, "ai_using": 48, "ai_model": 27},
+    "rows_with_api_key": 0
+  },
+  "edge_logs_12_18_to_12_22_utc": "0 lỗi 503, 1 lỗi 500 lúc 12:20 (trước apply), trung bình 51–60 ms",
+  "eval_load": {
+    "at_vn": "2026-11-24 19:24",
+    "rows": 393,
+    "labels": {"no": 232, "match": 116, "unclear": 45},
+    "case_key": "gold:<case_id> của bộ chấm tay trong scratchpad, nội dung không nằm trong repo",
+    "method": "hàm tạm public.tmp_v642_load_eval(jsonb), chỉ service_role EXECUTE, gọi qua REST 4 lô",
+    "temp_function_dropped": false,
+    "note": "Lệnh DROP FUNCTION bị Supabase MCP hỏi xác nhận và hết hạn 60 giây không ai trả lời; hàm còn trên production tới khi xoá: drop function public.tmp_v642_load_eval(jsonb);"
+  }
+}
