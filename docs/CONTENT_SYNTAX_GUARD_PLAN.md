@@ -276,3 +276,45 @@ Chiến dịch đang chờ chạy có lỗi mức chặn (danh sách đầy đ�
 
 Deploy API / Web trước (chặn được Web, iOS mọi phiên bản), rồi phát hành Desktop. Không migration. Muốn chỉ nhắc mà chưa
 chặn trong những ngày đầu: thêm dòng `campaign.content_syntax_guard` = `warn` trước khi deploy.
+
+## 14. Rà các lỗi tương tự ở mục soạn nội dung (24/11/2026, chỉ đọc, chưa sửa gì)
+
+Anh hỏi còn kiểu lỗi nào khác làm hệ thống gửi cả nội dung mà không tách mẫu. Em đọc mọi đường tách mẫu trong code rồi đối chiếu
+27.185 chiến dịch chưa xoá. Số đếm dưới đây lọc bằng SQL theo dấu hiệu (dấu `|` nằm sát chỗ xuống dòng, độ dài từng phần), nên
+là ước lượng; các ca nêu tên đã xem đoạn trích thật.
+
+### Kiểu lỗi mới tìm ra
+
+| # | Kiểu | Cơ chế | Số đo | Bộ kiểm hiện tại |
+|---|---|---|---|---|
+| 1 | **Dấu ngăn mẫu bị đổi thành `\|` (đã thoát)**: hai mẫu bị gửi chung một tin, kèm ký tự `\|` ở giữa | Mỗi ô "Biến thể" của mẫu nội dung được coi là một khối nguyên. Khách gõ nhiều mẫu ngăn bằng `\|` trong MỘT ô biến thể; khi áp mẫu vào chiến dịch, app tự thêm `\` trước các dấu `\|` đó để giữ nguyên khối (`serializeContentVariants` ở Desktop, `escapeContentVariantSeparators` ở Web `CampaignContentForm.tsx`) | 31 chiến dịch nhắn tin / 13 tổ chức, 11 đang chờ chạy; tăng theo tháng: 8/2026 1, 9/2026 3, 10/2026 10, 11/2026 17. Nguồn: 143 mẫu nội dung / 64 tổ chức có dấu `\|` sát chỗ xuống dòng trong một ô biến thể | Không bắt (cú pháp hợp lệ) |
+| 2 | **Dấu `\|` trang trí bị hiểu là dấu ngăn mẫu**: người nhận chỉ nhận được một mẩu vài chữ | Ở chế độ Cơ bản mọi dấu `\|` ngoài cùng đều ngăn mẫu, kể cả `\|` trong tiêu đề ("FPT TELECOM \| CẬP NHẬT…") hay dòng liên hệ ("HOTLINE … \| NHÀ Ở XÃ HỘI") | 62 chiến dịch nhắn tin / 24 tổ chức, 10 đang chờ chạy: có mẫu ≤ 25 ký tự đứng cạnh mẫu > 150 ký tự và dấu `\|` nằm giữa dòng. Ví dụ 60919 (hoàn thành): một nửa người nhận chỉ nhận 13 ký tự | Không bắt |
+| 3 | **Biến kiểu akaBiz cũ** `[fullname]`, `[Vocative_web]`, `[info1]` bị gửi nguyên văn | akaAgent chỉ thay biến dạng `#{…}`; khách chép nội dung từ phần mềm cũ | 18 chiến dịch / 6 tổ chức, 8 đang chờ chạy | Không bắt |
+
+Ca 1 là ca giống sự cố gốc nhất (nhiều mẫu vào một tin) và đang tăng. Ví dụ đã xem: 57912 (2091), 50467 (1688), 55882 (1730),
+56419 (2132), 55987 (113): dấu `\|` ở cuối một mẫu, ngay trước dòng mở đầu mẫu kế, đã bị thoát.
+
+### Đã rà, không phải lỗi hoặc đã được phủ
+
+- **Nội dung có định dạng (HTML)**: tách bằng cùng bộ tìm dấu ngăn, nên chỉ dính đúng lỗi ngoặc / biến chưa đóng đã có bộ kiểm.
+- **Nội dung nâng cao**: mỗi mục là một khối nguyên, dấu `|` bên trong được gửi nguyên văn. 314 chiến dịch có dấu `|` trong mục
+  nâng cao; các ca đã xem đều là `|` trang trí khách muốn giữ ("2PN | View hồ bơi | 4,5 tỷ"), tức đây là cách dùng đúng. Chỉ 2
+  chiến dịch nhắn tin có dấu `|` sát chỗ xuống dòng trong một mục (21856, 47092, cùng một tổ chức).
+- **Lời mời kết bạn, comment, comment newsfeed, SMS gửi kèm, SMS, gọi tự động, email**: đều tách bằng cùng bộ tách; mọi workflow
+  có nội dung đang ở kiểu chuẩn bị nội dung mới (`campaignContentPreparationVersion = 1`), nhánh cũ gửi nguyên chuỗi không còn
+  được dùng. Tiêu đề email và tên gợi nhớ không tách mẫu (đúng thiết kế).
+- **Ký tự giống dấu `|`** (｜ │ ¦ …): 0 chiến dịch. **Đánh số "Mẫu 1: … Mẫu 2: …" mà không có dấu `|`**: 0 chiến dịch.
+- **Ngoặc `{ }` bọc qua nhiều dòng có dấu `|`**: 13 chiến dịch; hệ thống chọn ngẫu nhiên một phần thay vì luân phiên, không gộp.
+- Bộ chạy cũ của ChatApi (`zaloCampaignExecutor.ts`) không có trong hai repo của phiên này nên chưa đọc; lõi engine v2 chép từ
+  repo này thì đã rà.
+
+### Đề xuất (chưa làm, chờ anh quyết)
+
+1. Bộ kiểm thêm luật cho ca 1: dấu `\|` nằm sát chỗ xuống dòng hoặc cuối nội dung → báo "dấu ngăn mẫu này đang bị vô hiệu",
+   có "Sửa giúp" bỏ dấu `\`. Mức chặn hay nhắc tuỳ anh; em đề xuất nhắc vì có khách cố ý thoát dấu `|` trang trí.
+2. Sửa gốc ca 1 ở chỗ soạn / áp mẫu nội dung: ô "Biến thể" có dấu `|` sát chỗ xuống dòng thì hỏi khách muốn tách thành nhiều
+   biến thể hay giữ nguyên, thay vì âm thầm thêm `\`.
+3. Ca 2: dòng đếm mẫu trong bản thiết kế đã giúp khách thấy ("có 2 mẫu" khi họ chỉ viết một tin); thêm cảnh báo khi có mẫu rất
+   ngắn đứng cạnh mẫu dài, gợi ý viết `\|` nếu muốn giữ ký tự.
+4. Ca 3: cảnh báo kèm "Sửa giúp" đổi `[fullname]` → `#{INPUT_FULLNAME}`, `[fullname_web]` → `#{FULL_NAME}`… (bảng đổi đã có ở
+   WebApp `zalo-import.prepare.ts`).
