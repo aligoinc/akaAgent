@@ -35,19 +35,25 @@ Gọi thẳng API của từng mô hình từ database bằng `pg_net`, khoá l�
 | | Comment seeding | 252 | 67 | 87 | 4 | 43,5% | 94,4% |
 | | Tìm data | 96 | 43 | 26 | 2 | 62,3% | 95,6% |
 | Lời dặn mới + gpt-5-nano, suy luận vừa | Tất cả | 348 | 109 | 102 | 7 | 51,7% | 94,0% |
+| Lời dặn mới + claude-haiku-5-5 | Tất cả | 348 | 98 | 16 | 18 | 86,0% | 84,5% |
+| | Comment seeding | 252 | 58 | 14 | 13 | 80,6% | 81,7% |
+| | Tìm data | 96 | 40 | 2 | 5 | 95,2% | 88,9% |
 
 Mốc đạt ghi trong phương án:
 
-| Mốc | Lời dặn cũ + DeepSeek | Lời dặn mới + DeepSeek (lượt 1 / 2) | Lời dặn mới + gpt-6-luna | Lời dặn mới + gpt-5-nano |
-|---|---|---|---|---|
-| Chọn bài thuộc phần loại bỏ (38 mẫu) | 0 | 0 / 0 | 1 | 4 |
-| Mô tả một dòng: chọn đúng / số bài chọn | 100/137 (73%) | 96/106 (91%) / 94/112 (84%) | 98/117 (84%) | 106/214 (50%) |
-| Tiêu chí thuê phòng: chọn đúng / số bài chọn | 13/15 | 13/13 / 13/14 | 12/13 | 13/31 |
+| Mốc | Lời dặn cũ + DeepSeek | Lời dặn mới + DeepSeek (lượt 1 / 2) | Lời dặn mới + gpt-6-luna | Lời dặn mới + gpt-5-nano | Lời dặn mới + claude-haiku-5-5 |
+|---|---|---|---|---|---|
+| Chọn bài thuộc phần loại bỏ (38 mẫu) | 0 | 0 / 0 | 1 | 4 | 0 |
+| Mô tả một dòng: chọn đúng / số bài chọn | 100/137 (73%) | 96/106 (91%) / 94/112 (84%) | 98/117 (84%) | 106/214 (50%) | 91/107 (85%) |
+| Tiêu chí thuê phòng: chọn đúng / số bài chọn | 13/15 | 13/13 / 13/14 | 12/13 | 13/31 | 13/13 |
+
+Haiku 5.5 (thêm theo yêu cầu 24/11 chiều) gọi bằng đúng lời dặn mới, khoá lấy trong `ai_model` (dòng `fb_ai_content_filter_haiku_5_5`, thêm ở [V643](../migrations/migration_v643_aka_settings_sonnet_filter_models.sql)), `max_tokens` 4096, suy luận mặc định. 348 lượt hết 442.679 token vào / 107.562 token ra, khoảng 0,1 USD (~0,0003 USD một bài). "Mô tả một dòng" = mô tả của khách chỉ có một dòng; "tiêu chí thuê phòng" = mô tả có chữ "trọ" hoặc "phòng" (cách tính dùng cho mọi cột).
 
 ## Kết luận
 
 - Lời dặn mới giảm số bài chọn sai từ 40 xuống 10–19 trên cùng mô hình, chủ yếu ở Comment seeding; bỏ sót tăng nhẹ (9 → 13–15 bài).
 - Cùng mô hình, cùng lời dặn mà hai lượt ra 10 và 19 bài chọn sai: kết quả DeepSeek dao động giữa các lần hỏi, con số đúng nằm trong khoảng đó.
-- gpt-5-nano (đang chạy lọc bài Comment seeding từ 21/11) chọn sai gần một nửa số bài, kể cả khi bật suy luận vừa: không dùng.
+- gpt-5-nano (chạy lọc bài Comment seeding 21/11 – 24/11) chọn sai gần một nửa số bài, kể cả khi bật suy luận vừa: không dùng. V643 (14:52 VN 24/11) đổi mã lọc bài cũ sang gpt-6-luna cho tới khi V641 đổi block sang mã mới (lời dặn cũ + luna chưa đo).
+- claude-haiku-5-5 ngang DeepSeek / gpt-6-luna: ít chọn sai hơn luna (16 so với 20), bỏ sót nhiều hơn (18 so với 12). Chưa dùng được để lọc thật: block gọi AI qua `ai_using`, đường đó chỉ dựng yêu cầu kiểu Claude cho ô AI của form (`formConfigId`), muốn dùng phải sửa app và API chuyển tiếp.
 - Chọn: mô hình chính `deepseek-flash` (`ai_model` 2), dự phòng `gpt-6-luna` (`ai_model` 16), dùng chung một lời dặn (`ai_prompt` `find_data_meaning_check_v2`). Cấu hình ở [V640](../migrations/migration_v640_fb_ai_filter_config.sql), block dùng ở [V641](../migrations/migration_v641_fb_ai_filter_blocks.sql).
 - Mẫu của chiến dịch ghi dòng loại bỏ: lời dặn cũ cũng không chọn sai bài nào trong 38 mẫu này, vì các bài lấy được đều không thuộc phần loại bỏ. Lỗi "dòng loại bỏ thành điều kiện tìm" nằm ở lời dặn cũ (danh sách dòng đã cắt, khớp một dòng là chọn); lời dặn mới đọc nguyên văn mô tả mà block vẫn gửi trong trường `prompt`, nên không cần sửa cách block cắt dòng.
