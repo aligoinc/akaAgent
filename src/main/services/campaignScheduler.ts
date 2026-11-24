@@ -2694,6 +2694,11 @@ export class CampaignScheduler {
 
     const nextSchedule = this.supabase.resolveNextRecurringRun(campaign, now)
     if (!nextSchedule) return false
+    // Không có dòng data nào: chỉ chiến dịch Facebook không cần data (trang cá nhân, newsfeed…) mới hẹn lượt kế; loại khác hoàn thành
+    // như engine v2 (finish_campaign_v2 bước 6) để hai nơi chạy giống nhau.
+    const actionId = String(campaign.actionId || '')
+    if ((!actionId.startsWith('facebook_') || actionId === 'facebook_page_post') &&
+      (await this.supabase.listCampaignInputData(campaign.id)).every(detail => detail.isDelete)) return false
 
     return this.rescheduleCompletedCampaignPass(campaign, now, nextSchedule, {
       emptyDataSuffix: 'ở ngày chạy kế tiếp',

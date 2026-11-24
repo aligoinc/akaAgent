@@ -18,7 +18,7 @@ Luật chung: [src/shared/campaignRecurringPass.ts](../src/shared/campaignRecurr
 |---|---|---|---|
 | Desktop + App Server: `maintainCampaignSchedules` ([campaignRepository.ts](../src/main/data/repositories/campaignRepository.ts)), `handleRecurringRefreshAfterCompletion` ([campaignScheduler.ts](../src/main/services/campaignScheduler.ts)) | ✓ | ✓ (bộ cũ) | ✓ |
 | Engine v2: `aka_agent_engine_finish_campaign_v2` → [V648](../migrations/migration_v648_engine_recurring_refresh_pass.sql), sinh bằng `node scripts/build-v648-sql.cjs` | – | ✓ | – |
-| ChatApi (Fly): `maintainCampaign` trong `packages/database/src/campaignRuntimeRepository.ts`, nhánh `claude/epic-ritchie-cd8thr` | ✓ | – | ✓ |
+| ChatApi (Fly): `maintainCampaign` + `parseNumberList` trong `packages/database/src/campaignRuntimeRepository.ts`, nhánh `claude/epic-ritchie-cd8thr` | ✓ | – | ✓ |
 | Form Desktop (thường + Agent), form Web (bản 1, bản 2) + `campaignSendPlan` ở akaAgentWebApp nhánh `claude/campaign-schedule-fixes` | chữ giải thích | – | – |
 
 Ghi chú:
@@ -34,6 +34,36 @@ Ghi chú:
 - `CHAT_REPO=<thư mục có module pg> PG17_BIN=<bin Postgres> LC_ALL=C node scripts/engine-v2-recurring-refresh-v648-smoke.cjs` (7 nhóm, Postgres cục bộ; chạy bằng user không phải root vì `initdb` từ chối root: `runuser -u postgres -- env HOME=/tmp ...`). Phải chạy trước 23:00 giờ Việt Nam.
 - ChatApi: `npx vitest run packages/database/src/campaignScheduleMaintenance.integration.test.ts` (14), `npm run verify`.
 - akaAgentWebApp: `packages/campaign-core` `campaignSendPlan.test.ts`, `apps/web` typecheck + bài kiểm form.
+
+## Giả lập nhiều vòng (24/11/2026, anh yêu cầu "Kiểm thử và cải tiến … cho đến khi ít nhất 3 vòng không còn vấn đề")
+
+`scripts/schedule-fixes-sim/` (lib.cjs: sinh ca + luật kiểm độc lập + hàm thật của Desktop; engine.cjs: engine v2 trên Postgres cục bộ;
+run.cjs: một vòng). Mỗi vòng: mẫu ngẫu nhiên production (chỉ GET qua REST, không ghi; ghi ra thư mục `--out`, không commit), ca tổng
+hợp, ca cố tình sai (ngày "0x1f", "1-31", "16.17.18", tên tỉnh, loại lịch " weekly", trạng thái lạ, data đã xoá, ngày kết thúc sát giờ…),
+ngày "hôm nay" đổi theo vòng (cuối tháng, 29/02, đầu năm). So: bảo trì đầu ngày (luật ↔ Desktop, Desktop ↔ ChatApi trên PGlite qua
+bài kiểm opt-in `campaignScheduleMaintenanceSim.integration.test.ts`), kết thúc lượt (luật ↔ Desktop, luật ↔ engine v2), bất biến (data
+"tạm dừng" không bao giờ bị đổi).
+
+Chạy một vòng (user không phải root vì `initdb`; cần chép CA của proxy cho user đó):
+
+```
+runuser -u postgres -- env HOME=/tmp NODE_EXTRA_CA_CERTS=<ca> CURL_CA_BUNDLE=<ca> SIM_SEED=<số> CHAT_REPO=<module pg> \
+  PG17_BIN=/usr/lib/postgresql/16/bin CHATAPI_DIR=<checkout ChatApi> LC_ALL=C node scripts/schedule-fixes-sim/run.cjs --out <thư mục>
+```
+
+| Vòng | Ca | Kết quả | Sửa |
+|---|---|---|---|
+| 1 | 1.954 (154 production) | 54 lệch | Desktop + ChatApi đọc ngày dạng hệ 16 ("0x1f" = 31) trong khi engine bỏ qua → cả ba chỉ nhận số thập phân (`SCHEDULE_DAY_TOKEN`; V648 lọc cùng mẫu). Desktop hẹn lượt kế cho chiến dịch Zalo không có data, engine hoàn thành → Desktop hoàn thành (trừ Facebook không cần data). |
+| 2 | 1.904 + 477 engine | 13 lệch | **V648 đặt bước mới trước "chạy lại sau N giờ"**: lịch tuần / tháng bật chạy lại sau N giờ bị hẹn sang ngày chạy kế → dời bước 5c ra sau, đúng thứ tự Desktop. |
+| 3 | 1.929 + 481 | 4 lệch (bộ giả lập) | Bỏ qua. |
+| 4 | 1.904 + 482 | sạch | |
+| 5 | 3.195 + 765 | sạch | |
+| 6 | 3.220 + 766 | 1 lệch | Loại lịch " weekly": engine (lower/btrim) coi là lịch tuần, Desktop coi là không hợp lệ → V648 so khớp đúng ký tự. |
+| 7, 8, 9 | 3.195 / 3.270 / 3.220 + ~765 | sạch ×3 | |
+
+Các lệch của bộ giả lập (đã sửa ở bộ giả lập, không phải code): DB chỉ cho 4 trạng thái data (`auto_campaign_input_data_status_check`)
+nên ca trạng thái lạ không chạy ở engine; lúc kết thúc lượt không có data "đang chạy"; lịch lúc nhận lượt của engine khác lịch của ca khi
+chiến dịch không có lịch gốc; mẫu production trùng chiến dịch.
 
 ## Thứ tự đưa lên
 

@@ -65,19 +65,25 @@ const NEW_DECL = `  -- V561: lặp lại sau khi chạy xong.
   v_rec_offset integer;
 BEGIN`
 
-const ANCHOR = `  -- V558: chạy lại sau N giờ khi xong (handleRerunAfterCompletion, campaignScheduler.ts:2711-2786): tìm data trong group / bằng search,`
-const NEW_BLOCK = String.raw`  -- 5c. Lịch tuần / tháng có làm mới data (refresh_data): chạy xong danh sách trong ngày thì không hoàn thành mà hẹn ngày chạy kế
+// Sau bước "chạy lại sau N giờ" (V558), trước bước hoàn thành: như thứ tự handleCampaignCompletion của bộ cũ (handleRerunAfterCompletion
+// trước handleRecurringRefreshAfterCompletion). Đặt trước V558 thì lịch tuần / tháng bật "chạy lại sau N giờ" bị hẹn sang ngày chạy kế
+// (giả lập 24/11/2026 tìm ra).
+const ANCHOR = `  IF v_mode IS NULL THEN
+    v_raw := public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed',`
+const NEW_BLOCK = String.raw`  -- 5c. (sau "chạy lại sau N giờ") Lịch tuần / tháng có làm mới data (refresh_data): chạy xong danh sách trong ngày thì không hoàn thành mà hẹn ngày chạy kế
   -- (từ ngày mai, theo ngày trong tuần / trong tháng đã chọn, giờ theo original_schedule) rồi đi bước 6: đặt lại data (trừ "tạm dừng"),
   -- chiến dịch về "chờ xử lý". Ngày chạy kế quá ngày kết thúc, không tính được, hay không còn data chạy lại được thì hoàn thành như cũ.
   -- Như handleRecurringRefreshAfterCompletion của bộ cũ (campaignScheduler.ts). Up tin, sinh nhật, đề xuất kết bạn, huỷ lời mời: bảo trì
   -- lịch ngày mới có cách riêng, giữ như cũ. Lý do trả về 'rerun_scheduled' để mọi bản lõi đang chạy in đúng câu hẹn chạy lại.
-  v_rec_type := lower(btrim(coalesce(nullif(c.schedule_type, ''), 'daily')));
+  -- So khớp đúng từng ký tự như bộ cũ (Desktop / ChatApi): " weekly" / "Weekly" không phải lịch tuần (giả lập 24/11/2026).
+  v_rec_type := coalesce(nullif(c.schedule_type, ''), 'daily');
   IF v_mode IS NULL AND v_repeat IS NULL AND v_rec_type IN ('weekly', 'monthly') AND c.refresh_data IS TRUE
      AND c.action_id NOT IN ('zalo_message_birthday', 'zalo_message_friend_recommendation', 'zalo_cancel_sent_friend_request')
      AND NOT (c.action_id = 'facebook_comment_seeding_post' AND coalesce(c.name, '') LIKE 'Up tin cho chiến dịch %')
      AND coalesce(c.original_schedule, c.schedule) IS NOT NULL THEN
     FOREACH v_rec_token IN ARRAY string_to_array(CASE WHEN v_rec_type = 'weekly' THEN coalesce(c.schedule_week_days, '')
                                                       ELSE coalesce(c.schedule_days, '') END, ',') LOOP
+      CONTINUE WHEN btrim(v_rec_token) !~ '^\+?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$';
       BEGIN
         v_rec_number := btrim(v_rec_token)::numeric;
         IF v_rec_number = trunc(v_rec_number)

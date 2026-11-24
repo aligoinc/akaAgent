@@ -11,7 +11,7 @@ BEGIN
   IF v_oid IS NULL THEN RAISE EXCEPTION 'Gỡ V648: không có public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
   IF v_md5 = 'ed7406cbccac16af32af4f329aabb170' THEN RAISE EXCEPTION 'Gỡ V648: hàm đã là bản trước V648'; END IF;
-  IF v_md5 IS DISTINCT FROM 'b19961ddebcf4c30621014e5977a7be6' THEN RAISE EXCEPTION 'Gỡ V648: định nghĩa finish không phải bản V648 (finish: %)', v_md5; END IF;
+  IF v_md5 IS DISTINCT FROM '9b29fe98391f682819e4458a6a1387aa' THEN RAISE EXCEPTION 'Gỡ V648: định nghĩa finish không phải bản V648 (finish: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
   PERFORM set_config('aka.v648_acl_finish', v_acl, true);
 END $pre$;

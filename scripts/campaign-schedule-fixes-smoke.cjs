@@ -123,7 +123,7 @@ function loadMaintenance(store) {
   const REPO = 'src/main/data/repositories/campaignRepository.ts'
   const helpers = pickDeclarations(REPO, ['VIETNAM_TIME_ZONE', 'VIETNAM_UTC_OFFSET', 'vietnamDateTimeFormatter', 'vietnamWeekdayFormatter', 'pad2',
     'parseVietnamParts', 'makeVietnamDate', 'startOfVietnamDateKey', 'addVietnamDays', 'withVietnamTime', 'formatVietnamTimeForQuery',
-    'isAtOrAfterDailyDrainTime', 'getVietnamWeekdayNumber', 'parseNumberList', 'resolveNextSchedule', 'isPastScheduleEnd',
+    'isAtOrAfterDailyDrainTime', 'getVietnamWeekdayNumber', 'SCHEDULE_DAY_TOKEN', 'parseNumberList', 'resolveNextSchedule', 'isPastScheduleEnd',
     'resolveNextRecurringRun', 'maintainCampaignSchedules'])
   const code = transpile(helpers, false)
   const scope = {
@@ -228,7 +228,8 @@ function scheduler({ server = false, claimed = false, next = new Date('2026-11-2
   s.runtimeTarget = server ? 'server' : 'desktop'
   s.claimedServerZaloCampaignIds = new Set(claimed ? [10] : [])
   s.claimedServerZaloAccountIds = new Set(claimed ? [9] : [])
-  s.supabase = { resolveNextRecurringRun: () => next }
+  s.supabase = { resolveNextRecurringRun: () => next, listCampaignInputData: async () => s.rows }
+  s.rows = [{ id: 1, status: 'hoàn thành', isDelete: false }]
   s.formatVietnamDateTime = d => d.toISOString()
   s.calls = []
   s.rescheduleCompletedCampaignPass = async (campaign, now, nextSchedule, labels) => { s.calls.push({ nextSchedule, labels }); return true }
@@ -259,6 +260,12 @@ check('ca 2: các trường hợp vẫn hoàn thành như cũ', async () => {
   }
   const noNext = scheduler({ next: null })
   assert.equal(await noNext.handleRecurringRefreshAfterCompletion(weekly(), new Date()), false, 'quá ngày kết thúc')
+  // Không có dòng data nào: chỉ chiến dịch Facebook không cần data (trừ Page) hẹn lượt kế, như engine v2 (giả lập 24/11/2026).
+  for (const [actionId, expected] of [['zalo_message_phone', false], ['facebook_page_post', false], ['facebook_timeline_post', true]]) {
+    const s = scheduler()
+    s.rows = []
+    assert.equal(await s.handleRecurringRefreshAfterCompletion(weekly({ actionId }), new Date()), expected, `không data: ${actionId}`)
+  }
 })
 check('ca 2, Zalo Server đang giữ lượt: chỉ nhắn bạn bè / nhắn nhóm (RPC chuyển lượt của Server chỉ nhận hai loại)', async () => {
   for (const [actionId, expected] of [['zalo_message_group', true], ['zalo_message_friend', true], ['zalo_message_phone', false]]) {
