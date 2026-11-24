@@ -131,4 +131,37 @@ COMMIT;
 
 fs.writeFileSync(path.join(ROOT, 'migrations/migration_v647_zalo_partial_text_note.sql'), build('up'))
 fs.writeFileSync(path.join(ROOT, 'migrations/rollback_v647_zalo_partial_text_note.sql'), build('down'))
+
+// Bản gọn để apply qua MCP (thân hàm 54 KB không gửi lại): tự thay đúng một chuỗi trong thân hàm đang chạy, kiểm md5 trước / sau như
+// bản đầy đủ. Sổ migration ghi nguyên văn bản này (md5 sổ = file này). Không có BEGIN/COMMIT: apply_migration tự bọc giao dịch.
+function buildPaste() {
+  const sq = v => v.replace(/'/g, "''")
+  const full = build('up')
+  const updates = full.slice(full.indexOf('UPDATE public.auto_error'), full.indexOf('DO $post$'))
+  const pre = full.slice(full.indexOf('DO $pre$'), full.indexOf('$pre$;') + '$pre$;'.length)
+  const post = full.slice(full.indexOf('DO $post$'), full.indexOf('$post$;') + '$post$;'.length)
+  return `-- V647 bản gọn (cùng kết quả với migrations/migration_v647_zalo_partial_text_note.sql; sinh bằng scripts/build-v647-sql.cjs).
+SET LOCAL lock_timeout = '3s';
+SET LOCAL statement_timeout = '60s';
+
+${pre}
+
+DO $fn$
+DECLARE v_def text; v_new text;
+BEGIN
+  v_def := pg_get_functiondef('public.aka_agent_engine_report_v1(bigint,uuid,jsonb,boolean,boolean)'::regprocedure);
+  IF (length(v_def) - length(replace(v_def, '${sq(OLD_PREFIX)}', ''))) <> length('${sq(OLD_PREFIX)}') THEN
+    RAISE EXCEPTION 'V647: tiền tố cũ không xuất hiện đúng một lần';
+  END IF;
+  v_new := replace(v_def, '${sq(OLD_PREFIX)}', '${sq(NEW_PREFIX)}');
+  EXECUTE v_new;
+END $fn$;
+
+${updates.trimEnd()}
+
+${post}
+`
+}
+fs.mkdirSync(path.join(ROOT, 'migrations/tests'), { recursive: true })
+fs.writeFileSync(path.join(ROOT, 'migrations/tests/migration_v647_zalo_partial_text_note_paste.sql'), buildPaste())
 console.log(JSON.stringify({ oldBodyMd5: OLD_BODY_MD5, newBodyMd5: NEW_BODY_MD5, texts: NEW }, null, 2))

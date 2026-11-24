@@ -40,6 +40,10 @@ Quy tắc cảnh báo: [src/shared/zaloStrangerMediaPacing.ts](../src/shared/zal
 - Production 24/11 trong khối tự huỷ: hàm biên dịch với bảng thật, md5 sau khi đổi = `488761c9…`, mỗi bảng đổi 1 dòng.
 - `node scripts/zalo-partial-send-log-smoke-test.cjs`, `node scripts/zalo-stranger-media-pacing-smoke.cjs` (18 ca), hai typecheck; Web: `vitest run src/test/CampaignRuntimeOptions.test.tsx`, typecheck.
 
+## Trạng thái
+
+V647 đã apply akachat 19:26:20 VN 24/11/2026 theo yêu cầu ("run sql"), bằng bản gọn `migrations/tests/migration_v647_zalo_partial_text_note_paste.sql` (cùng kết quả với file đầy đủ; sổ `20261124122620`, md5 sổ = bản gọn); PostgREST nạp lại schema 1,2 s, 0 lỗi 5xx. Không apply lại. [Biên nhận](../migrations/snapshots/zalo-partial-text-v647/apply-receipt.json).
+
 ## Thứ tự đưa lên
 
-Apply V647 (ngoài giờ cao điểm vì `CREATE OR REPLACE FUNCTION` làm PostgREST nạp lại schema) → deploy Web → phát hành Desktop / cài App Server.
+~~Apply V647~~ (ngoài giờ cao điểm vì `CREATE OR REPLACE FUNCTION` làm PostgREST nạp lại schema) → deploy Web → phát hành Desktop / cài App Server.

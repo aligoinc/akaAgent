@@ -1,0 +1,23 @@
+{
+  "migration": "migration_v647_zalo_partial_text_note",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "appliedAtVietnam": "2026-11-24T19:26:20+07:00",
+  "requestedBy": "anh: \"run sql\"",
+  "ledgerVersion": "20261124122620",
+  "appliedFile": "migrations/tests/migration_v647_zalo_partial_text_note_paste.sql",
+  "ledgerStatementMd5": "2bb98a9ce0b8f3d76f52fed4e90621e4",
+  "note": "Apply bằng bản gọn qua MCP apply_migration (thân hàm 54 KB không gửi lại); kết quả giống migrations/migration_v647_zalo_partial_text_note.sql. Không apply lại.",
+  "preflight": {
+    "ledgerHadV647": false,
+    "reportV1ProsrcMd5": "ca458543bd12435a39def998ee0268d2",
+    "productionDryRun": "2026-11-24 ~19:15 VN, khối DO tự huỷ: md5 mới 488761c97f91872d0e548c817f8f9ed9, auto_error 1 dòng, chính sách 1 dòng"
+  },
+  "postflight": {
+    "reportV1ProsrcMd5": "488761c97f91872d0e548c817f8f9ed9",
+    "autoError61": "customer_title, customer_help, noti_running_process, noti_campaign đã đổi",
+    "policy92Revision": 2,
+    "postgrestReload": "nhận thông báo 12:26:20 UTC, truy vấn schema 1.217,6 ms",
+    "restErrors12_24to12_26UTC": { "5xx": 0, "503": 0, "over1s": 0 }
+  },
+  "rollback": "migrations/rollback_v647_zalo_partial_text_note.sql"
+}
