@@ -1,5 +1,7 @@
--- Gỡ V648: trả aka_agent_engine_finish_campaign_v2 về bản V618 p2 (production 24/11/2026). SINH TỪ scripts/build-v648-sql.cjs.
--- Sau khi gỡ, lịch tuần / tháng chạy bằng engine v2 lại "hoàn thành" sau mỗi ngày chạy, bảo trì lịch ngày chạy kế mới đặt lại data.
+-- V650: engine v2 hẹn ngày chạy kế cho lịch tuần / tháng có làm mới data thay vì hoàn thành. SINH TỪ scripts/build-v650-sql.cjs,
+-- không sửa tay. Thay thân aka_agent_engine_finish_campaign_v2 (giữ chữ ký, chủ sở hữu, quyền), thêm bước 5c; mọi nhánh khác giữ nguyên.
+-- Nguồn = pg_get_functiondef production 24/11/2026 (bản V618 p2): finish ed7406cbccac16af32af4f329aabb170. Bản mới: 9b29fe98391f682819e4458a6a1387aa.
+-- DDL làm PostgREST nạp lại schema: apply ngoài giờ cao điểm. Gỡ: rollback_v650_engine_recurring_refresh_pass.sql.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
@@ -7,13 +9,18 @@ SET LOCAL statement_timeout = '60s';
 DO $pre$
 DECLARE v_oid oid; v_md5 text; v_acl text;
 BEGIN
+  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v650_%') THEN
+      RAISE EXCEPTION 'V650 đã có trong sổ migration, không chạy lại';
+    END IF;
+  END IF;
   v_oid := to_regprocedure('public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)');
-  IF v_oid IS NULL THEN RAISE EXCEPTION 'Gỡ V648: không có public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'; END IF;
+  IF v_oid IS NULL THEN RAISE EXCEPTION 'V650: không có public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'; END IF;
   v_md5 := md5(pg_get_functiondef(v_oid));
-  IF v_md5 = 'ed7406cbccac16af32af4f329aabb170' THEN RAISE EXCEPTION 'Gỡ V648: hàm đã là bản trước V648'; END IF;
-  IF v_md5 IS DISTINCT FROM '9b29fe98391f682819e4458a6a1387aa' THEN RAISE EXCEPTION 'Gỡ V648: định nghĩa finish không phải bản V648 (finish: %)', v_md5; END IF;
+  IF v_md5 = '9b29fe98391f682819e4458a6a1387aa' THEN RAISE EXCEPTION 'V650 đã chạy (finish)'; END IF;
+  IF v_md5 IS DISTINCT FROM 'ed7406cbccac16af32af4f329aabb170' THEN RAISE EXCEPTION 'V650: định nghĩa finish khác bản production 24/11 (V618 p2), dừng để đối chiếu bản live (finish: %)', v_md5; END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  PERFORM set_config('aka.v648_acl_finish', v_acl, true);
+  PERFORM set_config('aka.v650_acl_finish', v_acl, true);
 END $pre$;
 
 CREATE OR REPLACE FUNCTION public.aka_agent_engine_finish_campaign_v2(p_account_id bigint, p_lease_token uuid, p_note text DEFAULT NULL::text)
@@ -56,6 +63,13 @@ DECLARE
   v_hours numeric;
   -- V561: lặp lại sau khi chạy xong.
   v_repeat jsonb;
+  -- Lịch tuần / tháng có làm mới data: ngày chạy kế.
+  v_rec_type text;
+  v_rec_days integer[] := ARRAY[]::integer[];
+  v_rec_token text;
+  v_rec_number numeric;
+  v_rec_date date;
+  v_rec_offset integer;
 BEGIN
   SELECT el.campaign_id INTO v_campaign_id FROM public.auto_engine_leases el
    WHERE el.account_id = p_account_id AND el.lease_token = p_lease_token AND el.expires_at > v_now;
@@ -314,6 +328,51 @@ BEGIN
     END IF;
   END IF;
 
+  -- 5c. (sau "chạy lại sau N giờ") Lịch tuần / tháng có làm mới data (refresh_data): chạy xong danh sách trong ngày thì không hoàn thành mà hẹn ngày chạy kế
+  -- (từ ngày mai, theo ngày trong tuần / trong tháng đã chọn, giờ theo original_schedule) rồi đi bước 6: đặt lại data (trừ "tạm dừng"),
+  -- chiến dịch về "chờ xử lý". Ngày chạy kế quá ngày kết thúc, không tính được, hay không còn data chạy lại được thì hoàn thành như cũ.
+  -- Như handleRecurringRefreshAfterCompletion của bộ cũ (campaignScheduler.ts). Up tin, sinh nhật, đề xuất kết bạn, huỷ lời mời: bảo trì
+  -- lịch ngày mới có cách riêng, giữ như cũ. Lý do trả về 'rerun_scheduled' để mọi bản lõi đang chạy in đúng câu hẹn chạy lại.
+  -- So khớp đúng từng ký tự như bộ cũ (Desktop / ChatApi): " weekly" / "Weekly" không phải lịch tuần (giả lập 24/11/2026).
+  v_rec_type := coalesce(nullif(c.schedule_type, ''), 'daily');
+  IF v_mode IS NULL AND v_repeat IS NULL AND v_rec_type IN ('weekly', 'monthly') AND c.refresh_data IS TRUE
+     AND c.action_id NOT IN ('zalo_message_birthday', 'zalo_message_friend_recommendation', 'zalo_cancel_sent_friend_request')
+     AND NOT (c.action_id = 'facebook_comment_seeding_post' AND coalesce(c.name, '') LIKE 'Up tin cho chiến dịch %')
+     AND coalesce(c.original_schedule, c.schedule) IS NOT NULL THEN
+    FOREACH v_rec_token IN ARRAY string_to_array(CASE WHEN v_rec_type = 'weekly' THEN coalesce(c.schedule_week_days, '')
+                                                      ELSE coalesce(c.schedule_days, '') END, ',') LOOP
+      CONTINUE WHEN btrim(v_rec_token) !~ '^\+?([0-9]+\.?[0-9]*|\.[0-9]+)([eE][+-]?[0-9]+)?$';
+      BEGIN
+        v_rec_number := btrim(v_rec_token)::numeric;
+        IF v_rec_number = trunc(v_rec_number)
+           AND ((v_rec_type = 'weekly' AND v_rec_number BETWEEN 2 AND 8) OR (v_rec_type = 'monthly' AND v_rec_number BETWEEN 1 AND 31))
+           AND NOT v_rec_number::integer = ANY(v_rec_days) THEN
+          v_rec_days := array_append(v_rec_days, v_rec_number::integer);
+        END IF;
+      EXCEPTION WHEN invalid_text_representation OR numeric_value_out_of_range THEN NULL;
+      END;
+    END LOOP;
+    v_rec_date := NULL;
+    IF cardinality(v_rec_days) > 0 THEN
+      FOR v_rec_offset IN 1..(CASE WHEN v_rec_type = 'weekly' THEN 14 ELSE 370 END) LOOP
+        IF (v_rec_type = 'weekly' AND (extract(isodow FROM v_vn + v_rec_offset)::integer + 1) = ANY(v_rec_days))
+           OR (v_rec_type = 'monthly' AND extract(day FROM v_vn + v_rec_offset)::integer = ANY(v_rec_days)) THEN
+          v_rec_date := v_vn + v_rec_offset;
+          EXIT;
+        END IF;
+      END LOOP;
+    END IF;
+    IF v_rec_date IS NOT NULL THEN
+      v_candidate := ((v_rec_date + date_trunc('second', coalesce(c.original_schedule, c.schedule) AT TIME ZONE 'Asia/Ho_Chi_Minh')::time)::timestamp
+                      AT TIME ZONE 'Asia/Ho_Chi_Minh');
+      IF c.schedule_end_date IS NULL OR v_candidate <= c.schedule_end_date THEN
+        v_next := v_candidate;
+        v_mode := 'rerun_scheduled';
+        v_suffix := 'ở ngày chạy kế tiếp';
+      END IF;
+    END IF;
+  END IF;
+
   IF v_mode IS NULL THEN
     v_raw := public.aka_agent_engine_finalize_v501(c.id, p_note, 'completed',
       CASE WHEN v_repeat IS NOT NULL THEN jsonb_build_object('repeat', v_repeat) END);
@@ -360,11 +419,11 @@ DO $post$
 DECLARE v_oid oid; v_acl text;
 BEGIN
   v_oid := 'public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'::regprocedure;
-  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM 'ed7406cbccac16af32af4f329aabb170' THEN
-    RAISE EXCEPTION 'Gỡ V648 postflight: định nghĩa finish %', md5(pg_get_functiondef(v_oid));
+  IF md5(pg_get_functiondef(v_oid)) IS DISTINCT FROM '9b29fe98391f682819e4458a6a1387aa' THEN
+    RAISE EXCEPTION 'V650 postflight: định nghĩa finish %', md5(pg_get_functiondef(v_oid));
   END IF;
   SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) INTO v_acl FROM pg_catalog.pg_proc p WHERE p.oid = v_oid;
-  IF v_acl IS DISTINCT FROM current_setting('aka.v648_acl_finish', true) THEN RAISE EXCEPTION 'Gỡ V648 postflight: quyền / chủ sở hữu finish bị đổi'; END IF;
+  IF v_acl IS DISTINCT FROM current_setting('aka.v650_acl_finish', true) THEN RAISE EXCEPTION 'V650 postflight: quyền / chủ sở hữu finish bị đổi'; END IF;
 END $post$;
 
 COMMIT;

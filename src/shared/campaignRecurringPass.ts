@@ -1,6 +1,6 @@
 // Luật chung cho lịch tuần / tháng có "làm mới data" (refresh_data) và lịch hằng ngày không tích
 // "hôm sau tiếp tục" (continue_next_day = false). Dùng ở bước bảo trì lịch đầu ngày và lúc chạy xong
-// danh sách (Desktop + App Server). Engine v2 trong DB làm theo cùng luật (migration V648).
+// danh sách (Desktop + App Server). Engine v2 trong DB làm theo cùng luật (migration V650).
 
 export interface RecurringPassInputRow {
   status: string

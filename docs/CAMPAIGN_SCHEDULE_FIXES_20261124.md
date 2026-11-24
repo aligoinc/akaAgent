@@ -2,6 +2,8 @@
 
 Anh duyệt phương án ngày 24/11/2026 ("Vậy hãy thực thi phương án"). Nguyên tắc: khách đặt lịch thế nào thì app chạy đúng như vậy, và chữ hiện ra phải nói đúng việc app đang làm.
 
+**Đổi số 25/11/2026:** migration của engine v2 lúc viết mang số V648; sổ production đã có `migration_v648_notification_email_opt_out` (akaAgentWebApp, apply 21:57 VN 24/11) và V649, nên đổi thành **V650** theo yêu cầu ("Đổi số V650"). Chỉ đổi số: thân hàm mới giữ md5 `9b29fe98…`, cách gỡ không đổi. Các mục dưới đã ghi số mới.
+
 ## Lỗi và cách sửa
 
 | Ca | Khách | Lỗi | Sửa |
@@ -17,7 +19,7 @@ Luật chung: [src/shared/campaignRecurringPass.ts](../src/shared/campaignRecurr
 | Nơi | Ca 1 | Ca 2 | Ca 3 |
 |---|---|---|---|
 | Desktop + App Server: `maintainCampaignSchedules` ([campaignRepository.ts](../src/main/data/repositories/campaignRepository.ts)), `handleRecurringRefreshAfterCompletion` ([campaignScheduler.ts](../src/main/services/campaignScheduler.ts)) | ✓ | ✓ (bộ cũ) | ✓ |
-| Engine v2: `aka_agent_engine_finish_campaign_v2` → [V648](../migrations/migration_v648_engine_recurring_refresh_pass.sql), sinh bằng `node scripts/build-v648-sql.cjs` | – | ✓ | – |
+| Engine v2: `aka_agent_engine_finish_campaign_v2` → [V650](../migrations/migration_v650_engine_recurring_refresh_pass.sql), sinh bằng `node scripts/build-v650-sql.cjs` | – | ✓ | – |
 | ChatApi (Fly): `maintainCampaign` + `parseNumberList` trong `packages/database/src/campaignRuntimeRepository.ts`, nhánh `claude/epic-ritchie-cd8thr` | ✓ | – | ✓ |
 | Form Desktop (thường + Agent), form Web (bản 1, bản 2) + `campaignSendPlan` ở akaAgentWebApp nhánh `claude/campaign-schedule-fixes` | chữ giải thích | – | – |
 
@@ -31,7 +33,7 @@ Ghi chú:
 ## Kiểm thử
 
 - `node scripts/campaign-schedule-fixes-smoke.cjs` (12 nhóm: hàm thật `maintainCampaignSchedules`, `resolveNextRecurringRun`, `handleRecurringRefreshAfterCompletion` với kho giả).
-- `CHAT_REPO=<thư mục có module pg> PG17_BIN=<bin Postgres> LC_ALL=C node scripts/engine-v2-recurring-refresh-v648-smoke.cjs` (7 nhóm, Postgres cục bộ; chạy bằng user không phải root vì `initdb` từ chối root: `runuser -u postgres -- env HOME=/tmp ...`). Phải chạy trước 23:00 giờ Việt Nam.
+- `CHAT_REPO=<thư mục có module pg> PG17_BIN=<bin Postgres> LC_ALL=C node scripts/engine-v2-recurring-refresh-v650-smoke.cjs` (7 nhóm, Postgres cục bộ; chạy bằng user không phải root vì `initdb` từ chối root: `runuser -u postgres -- env HOME=/tmp ...`). Phải chạy trước 23:00 giờ Việt Nam.
 - ChatApi: `npx vitest run packages/database/src/campaignScheduleMaintenance.integration.test.ts` (14), `npm run verify`.
 - akaAgentWebApp: `packages/campaign-core` `campaignSendPlan.test.ts`, `apps/web` typecheck + bài kiểm form.
 
@@ -53,12 +55,12 @@ runuser -u postgres -- env HOME=/tmp NODE_EXTRA_CA_CERTS=<ca> CURL_CA_BUNDLE=<ca
 
 | Vòng | Ca | Kết quả | Sửa |
 |---|---|---|---|
-| 1 | 1.954 (154 production) | 54 lệch | Desktop + ChatApi đọc ngày dạng hệ 16 ("0x1f" = 31) trong khi engine bỏ qua → cả ba chỉ nhận số thập phân (`SCHEDULE_DAY_TOKEN`; V648 lọc cùng mẫu). Desktop hẹn lượt kế cho chiến dịch Zalo không có data, engine hoàn thành → Desktop hoàn thành (trừ Facebook không cần data). |
-| 2 | 1.904 + 477 engine | 13 lệch | **V648 đặt bước mới trước "chạy lại sau N giờ"**: lịch tuần / tháng bật chạy lại sau N giờ bị hẹn sang ngày chạy kế → dời bước 5c ra sau, đúng thứ tự Desktop. |
+| 1 | 1.954 (154 production) | 54 lệch | Desktop + ChatApi đọc ngày dạng hệ 16 ("0x1f" = 31) trong khi engine bỏ qua → cả ba chỉ nhận số thập phân (`SCHEDULE_DAY_TOKEN`; V650 lọc cùng mẫu). Desktop hẹn lượt kế cho chiến dịch Zalo không có data, engine hoàn thành → Desktop hoàn thành (trừ Facebook không cần data). |
+| 2 | 1.904 + 477 engine | 13 lệch | **V650 đặt bước mới trước "chạy lại sau N giờ"**: lịch tuần / tháng bật chạy lại sau N giờ bị hẹn sang ngày chạy kế → dời bước 5c ra sau, đúng thứ tự Desktop. |
 | 3 | 1.929 + 481 | 4 lệch (bộ giả lập) | Bỏ qua. |
 | 4 | 1.904 + 482 | sạch | |
 | 5 | 3.195 + 765 | sạch | |
-| 6 | 3.220 + 766 | 1 lệch | Loại lịch " weekly": engine (lower/btrim) coi là lịch tuần, Desktop coi là không hợp lệ → V648 so khớp đúng ký tự. |
+| 6 | 3.220 + 766 | 1 lệch | Loại lịch " weekly": engine (lower/btrim) coi là lịch tuần, Desktop coi là không hợp lệ → V650 so khớp đúng ký tự. |
 | 7, 8, 9 | 3.195 / 3.270 / 3.220 + ~765 | sạch ×3 | |
 
 Các lệch của bộ giả lập (đã sửa ở bộ giả lập, không phải code): DB chỉ cho 4 trạng thái data (`auto_campaign_input_data_status_check`)
@@ -67,7 +69,7 @@ chiến dịch không có lịch gốc; mẫu production trùng chiến dịch.
 
 ## Thứ tự đưa lên
 
-1. Apply V648 buổi tối (DDL, PostgREST nạp lại schema). Gỡ: `rollback_v648_engine_recurring_refresh_pass.sql`.
+1. Apply V650 buổi tối (DDL, PostgREST nạp lại schema). Gỡ: `rollback_v650_engine_recurring_refresh_pass.sql`.
 2. Deploy ChatApi `worker` (bảo trì lịch Fly chạy trong worker).
 3. Build Desktop + App Server, cài App Server lên VPS (ca của Lê Minh Đức hết ngay ở lần bảo trì đầu ngày sau khi cài).
 4. Deploy Web.
