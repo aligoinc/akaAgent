@@ -91,11 +91,24 @@ Sửa code 10 block, có kiểm md5 bản đang chạy trước khi ghi:
 
 ## 5. Đợt 2: app Desktop
 
-### 2.1 Form (form thường và form Agent)
+### 2.1 Form (form thường và form Agent) — phương án chốt 24/11/2026
 
-- Bật lọc AI mà ô mô tả trống: báo lỗi dưới ô, không cho lưu.
-- Ô AI có ví dụ và một dòng dặn cách viết: viết tự do, muốn bỏ loại bài nào thì ghi rõ "Loại bỏ: …".
-- Các ô, tên trường và dữ liệu lưu giữ nguyên.
+Thay mọi bản thiết kế trước (bản đầu có ô "Không lấy bài", "Cách chọn bài", nút thử trên bài thật: đã bỏ). Không thêm, không bỏ ô nào; tên trường và dữ liệu lưu giữ nguyên (`isFindPostByContentAI` / `postContentAI`, `isFindCommentByContentAI` / `commentContentAI`, từ khoá). Ba loại dùng chung `renderFindDataPostContentConditions` / `renderFindDataCommentContentConditions` nên chữ giống nhau.
+
+Bốn chỗ đổi, giống nhau ở cả ba loại:
+
+1. Chữ mờ ví dụ trong ô AI. Bài viết: "Ví dụ: Người đăng đang cần thuê phòng trọ ở Hà Nội cho chính mình. Loại bỏ: bài cho thuê của chủ nhà hoặc môi giới." Comment: "Ví dụ: Người comment đang hỏi giá hoặc xin tư vấn. Loại bỏ: comment quảng cáo, comment chỉ gắn tên bạn bè."
+2. Dòng dặn dưới ô AI: "Viết như đang dặn nhân viên. Muốn bỏ loại bài (comment) nào thì ghi “Loại bỏ: …”."
+3. Tích ô AI mà để trống: chữ đỏ "Nhập mô tả cho AI hoặc bỏ tích ô này.", không cho lưu.
+4. aka Cài đặt ở ngôi sao cạnh tiêu đề box (mục 2.2).
+
+| Loại chiến dịch | Ô AI trên form | Box có aka Cài đặt | Block chạy AI |
+|---|---|---|---|
+| Comment seeding (`facebook_comment_seeding`) | "Ý nghĩa bài viết là (dùng AI)" trong box "Điều kiện tìm kiếm bài post" | Điều kiện tìm kiếm bài post | 2554 / 2859 |
+| Tìm data trong group (`facebook_find_data_group`) | Box "Điều kiện chạy": "Ý nghĩa bài viết là (dùng AI)" (mục Bài viết, hiện khi tìm ở bài / comment / link bài) và "Ý nghĩa comment là (dùng AI)" (mục Comment, hiện khi tìm trong comment) | Cấu hình tìm kiếm (điền cả Điều kiện chạy) | 2602 / 2863, 2603 / 2864 |
+| Tìm data bằng search (`facebook_find_data_search`) | Như Tìm data trong group; bộ lọc search (Bài viết bạn đã xem, Ngày đăng, Bài viết của, Vị trí) giữ nguyên | Danh sách từ khóa; Cấu hình tìm kiếm | 2718 / 2904, 2719 / 2905 |
+
+Lướt newsfeed, Comment vào link bài, Đăng bài kèm Kiêm comment: không có ô AI lọc bài, không đổi. Chiến dịch đang có không phải sửa; 20 chiến dịch tích AI mà để trống vẫn chạy như hiện nay (không lọc AI) cho tới khi khách mở sửa và lưu.
 
 ### 2.2 aka Cài đặt (9 box đang có AI điền)
 
