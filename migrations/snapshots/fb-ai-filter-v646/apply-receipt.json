@@ -1,0 +1,17 @@
+{
+  "migration": "migration_v646_fb_ai_filter_prompt_v3",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "24/11/2026: \"Kiểm thử và cải tiến ... Lấy mẫu data ngẫu nhiên > kiểm thử > phát hiện lỗi ... > fix và cập nhật và update prompt ... cho đến khi ít nhất 3 vòng không còn vấn đề gì cả\"",
+  "applied_at_vn": "2026-11-24 18:00:38",
+  "applied_by": "MCP apply_migration",
+  "ledger_version": "20261124110038",
+  "ledger_md5": "95f0b201d7c6accfbd9f95bf2b2757f1",
+  "file_md5": "95f0b201d7c6accfbd9f95bf2b2757f1",
+  "ddl": false,
+  "ai_prompt_75_md5": { "before": "a9b2b67c84c04b937ed4c35e4517eb74", "after": "a872762a567a0b8ad907e2a185ed1ad6" },
+  "evidence": "scripts/fb-ai-filter/e2e vòng 5 và 6 (cùng bộ ca cho mọi bản): bài thật chấm tay đúng 89,7 / 89,8% (bản 2: 88,8 / 88,9%), chọn đúng 89,7 / 89,9% (83,6 / 83,9%), bắt đủ 77,7 / 78,1% (82,1 / 82,5%); dữ liệu cố tình sai lệch 47/47 và 47/47; bản 3, 4, 5, 6, 8 và tắt suy nghĩ của Haiku đều bị loại (xem docs/FB_AI_FILTER_E2E_20261124.md)",
+  "cost": "Haiku 5.5 trung vị 1,7 → 3,2 giây mỗi lượt, token trả lời ~330 → ~700",
+  "checks_before_apply": ["PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v646.py: 5/5", "gpt-6-luna (mã dự phòng, /v1/responses) đọc được khuôn mới: 15/15"],
+  "checks_after_apply": ["18:00:43 VN: md5 lời dặn 75 = a872762a…, md5 dòng sổ = md5 file"],
+  "rollback": "migrations/rollback_v646_fb_ai_filter_prompt_v3.sql"
+}
