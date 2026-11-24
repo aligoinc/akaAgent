@@ -517,6 +517,9 @@ class FacebookRandomProgressReadError extends Error {
   }
 }
 
+// Dòng lịch sử khi album đã tới mà phần chữ gửi sau bị Zalo từ chối (V647 đổi cùng câu ở engine v2: aka_agent_engine_report_v1).
+const ZALO_PARTIAL_CONTENT_AFTER_MEDIA_LOG = 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ'
+
 class ZaloPartialSendError extends Error {
   constructor(
     public readonly stage: 'content_after_media' | 'media_after_content',
@@ -524,7 +527,7 @@ class ZaloPartialSendError extends Error {
     public readonly response: ZaloMessageDispatchResponse
   ) {
     super(stage === 'content_after_media'
-      ? 'Đã gửi file nhưng gửi nội dung thất bại'
+      ? ZALO_PARTIAL_CONTENT_AFTER_MEDIA_LOG
       : 'Đã gửi nội dung nhưng gửi file thất bại')
     this.name = 'ZaloPartialSendError'
   }
@@ -17812,7 +17815,7 @@ export class CampaignScheduler {
     partialSend: ZaloPartialSendMetadata
   ): ZaloActionDetailOutput {
     const log = partialSend.stage === 'content_after_media'
-      ? 'Đã gửi file nhưng gửi nội dung thất bại'
+      ? ZALO_PARTIAL_CONTENT_AFTER_MEDIA_LOG
       : 'Đã gửi nội dung nhưng gửi file thất bại'
     // Keep the existing policy/fallback message; partial delivery must not
     // replace it or introduce a different error-message rendering policy.

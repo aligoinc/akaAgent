@@ -26,6 +26,8 @@ export interface DesktopPollingSettings {
    * sửa ở DB không cần phát hành). Đọc chung câu này, không thêm request.
    */
   facebookMaxComments?: number
+  /** Mức kiểm cú pháp nội dung lúc lưu (`campaign.content_syntax_guard`); thiếu dòng = `block`. */
+  contentSyntaxGuard?: 'block' | 'warn' | 'off'
   /** Ngừng đọc theo hẹn giờ/sự kiện khi cửa sổ chính thu nhỏ, ẩn hoặc màn hình khóa. Thiếu = tắt. */
   hiddenPauseEnabled?: boolean
   /** Cả máy không có thao tác từ ngần này giây thì coi là không ai nhìn. 0/thiếu = tắt. */

@@ -1,3 +1,4 @@
+import { assertTemplateContentSyntax } from '../../services/contentSyntaxGuard'
 import { ipcMain } from 'electron'
 import {
   IPC_EVENTS,
@@ -14,10 +15,12 @@ export function registerContentTemplateHandlers(supabase: SupabaseService): void
   })
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CONTENT_TEMPLATE, async (_, templateData: CreateContentTemplateInput) => {
+    assertTemplateContentSyntax(templateData)
     return supabase.createContentTemplate(templateData)
   })
 
   ipcMain.handle(IPC_EVENTS.DB_UPDATE_CONTENT_TEMPLATE, async (_, id: number, updates: UpdateContentTemplateInput) => {
+    assertTemplateContentSyntax(updates)
     return supabase.updateContentTemplate(id, updates)
   })
 

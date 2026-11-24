@@ -25,6 +25,8 @@ export interface ConfirmOptions {
   confirmText?: string
   cancelText?: string
   variant?: ConfirmVariant
+  /** Chạy khi bấm nút bên trái (cancelText). Đóng bằng dấu X thì không chạy. */
+  onCancel?: () => void
 }
 
 interface UiState {
@@ -46,6 +48,7 @@ interface UiState {
     cancelText: string
     variant: ConfirmVariant
     onConfirm: (() => void | Promise<void>) | null
+    onCancel?: (() => void) | null
   }
   showConfirm: (message: string, onConfirm: () => void | Promise<void>, options?: ConfirmOptions) => void
   closeConfirm: () => void
@@ -76,8 +79,9 @@ export const useUiStore = create<UiState>((set) => ({
         confirmText: options?.confirmText ?? 'Đồng ý',
         cancelText: options?.cancelText ?? 'Huỷ',
         variant: options?.variant ?? 'danger',
-        onConfirm
+        onConfirm,
+        onCancel: options?.onCancel ?? null
       }
     }),
-  closeConfirm: () => set((state) => ({ confirm: { ...state.confirm, isOpen: false, onConfirm: null } }))
+  closeConfirm: () => set((state) => ({ confirm: { ...state.confirm, isOpen: false, onConfirm: null, onCancel: null } }))
 }))
