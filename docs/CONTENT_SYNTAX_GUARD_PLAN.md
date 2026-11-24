@@ -266,7 +266,7 @@ Chiến dịch đang chờ chạy có lỗi mức chặn (danh sách đầy đ�
 
 1. **Đợt 0, chiến dịch đang lỗi**: chưa đụng production, chờ anh chọn cách ở mục 8.
 2. **Giao diện báo lỗi ngay khi gõ** (danh sách lỗi dưới ô nhập, dòng đếm mẫu, nút "Sửa giúp", dải cảnh báo ở Xem trước) trên
-   Web, iOS, Desktop: chờ anh duyệt thiết kế. Hiện tại Web báo ở ô lỗi sẵn có khi bấm Lưu, Desktop hiện hộp báo lỗi khi bấm
+   Web, iOS, Desktop: chờ anh duyệt thiết kế https://claude.ai/artifact/6sxNw3envM1Wa28Hbneocw (gửi 24/11). Hiện tại Web báo ở ô lỗi sẵn có khi bấm Lưu, Desktop hiện hộp báo lỗi khi bấm
    Lưu, iOS nhận câu lỗi từ API.
 3. Bước gửi của Quy trình tự động, sửa nhanh nội dung trên Desktop (đã được đường lưu chặn, chưa có kiểm trước ở cửa sổ sửa nhanh).
 4. Chưa chạy trong Electron thật và chưa chạy bài kiểm giao diện (Playwright / Electron) cho phần này.
