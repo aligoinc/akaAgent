@@ -1,0 +1,29 @@
+{
+  "migration": "migration_v645_ai_revert_non_filter_models",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "24/11/2026: \"Bạn hiểu nhầm tôi rồi. Tôi chỉ muốn thay đổi model ai cho bộ lọc post và comment fb thôi\"; \"Nút viết lại trong form, nút tạo nhiều phiên bản nội dung: dùng luna\"; \"Ok\" / \"Ok rồi\"",
+  "applied_at_vn": "2026-11-24 15:38:33",
+  "applied_by": "anh tự dán migrations/tests/migration_v645_ai_revert_non_filter_models_paste.sql vào SQL Editor (hộp xác nhận MCP hết hạn 3 lần; created_by của dòng sổ = NULL)",
+  "ledger_version": "20261124083833",
+  "ledger_md5": "994a9fdd43e70413594e8c7753b91218",
+  "file_md5": "ff705a6a8db2e32392a6152fe95a80c0",
+  "md5_note": "Sổ lưu bản có xuống dòng CRLF (dán từ Windows, 108 ký tự CR); bỏ CR thì md5 sổ = md5 file ff705a6a…. Chuỗi lời dặn trong SQL viết bằng E'\\r\\n' trên một dòng nên CRLF không đổi dữ liệu: md5 lời dặn sau apply khớp bài kiểm.",
+  "ddl": false,
+  "after": {
+    "gpt_5_nano_ai_model_1": "15 mã: app_ai_generate_campaign_name (request_options về khuôn Responses cũ), app_campaign_import_image_to_data, campaign_error_screenshot_diagnosis, fb_newsfeed_check_comment, fb_newsfeed_check_like, fb_comment_at_position_rewrite, fb_comment_current_post_rewrite, fb_page_post_api_rewrite, fb_post_current_identity_ui_rewrite, fb_post_reels_rewrite, fb_send_message_rewrite, fb_send_page_inbox_message_rewrite, fb_share_post_rewrite, fb_type_post_content_rewrite, fb_rewrite_source_content_ai",
+    "gpt_6_luna_ai_model_42": ["app_ai_rewrite_content (lời dặn riêng ai_prompt 76 akabiz_rewrite_content_luna)", "app_ai_write_multi_other_content (lời dặn 2 bản V644)"],
+    "claude_haiku_5_5_ai_model_41": ["fb_prepare_seeding_iterations_ai_filter_v2", "fb_extract_data_from_group_posts_ai_filter_v2", "fb_collect_group_comments_ai_filter_v2", "fb_extract_data_from_search_posts_ai_filter_v2", "fb_collect_search_post_comments_ai_filter_v2"],
+    "ai_prompt_1_md5": "587ca6f3a4e1c94bd9073922bbbac480 (chữ cũ)",
+    "ai_prompt_76_md5": "ef7c3e20fee46ef5f25ef4e51f4cca51",
+    "ai_prompt_2_md5": "6933cbed6ece1318859a25227ac6eb95",
+    "auto_system_settings_ai_model_fallbacks": "is_active = false"
+  },
+  "checks_before_apply": [
+    "PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v645.py: 9/9 (file gốc), 10/10 (bản dán tự ghi sổ)"
+  ],
+  "checks_after_apply": [
+    "15:38–15:40 VN: fb_send_message_rewrite 7 lượt và fb_newsfeed_check_like 4 lượt đều gpt-5-nano, thành công",
+    "Đếm theo mô hình: gpt-5-nano 15 mã, gpt-6-luna cổng chat 2 mã, Haiku cổng chat 5 mã"
+  ],
+  "rollback": "migrations/rollback_v645_ai_revert_non_filter_models.sql (đưa lại trạng thái sau V644)"
+}

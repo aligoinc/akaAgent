@@ -14,7 +14,8 @@ module.exports = async page => {
   const parsed=async(patch,ok=true)=>{
     const result=await page.evaluate(patch=>window.scheduleSmoke.resolveFacebookOutput(patch),patch)
     assert.equal(result.ok,ok,JSON.stringify(result))
-    if(ok)await panel().waitFor({state:'detached'})
+    // aka Cài đặt: điền xong ô nổi không tự đóng, bấm Xong để đóng.
+    if(ok){await panel().getByRole('button',{name:'Xong',exact:true}).click();await panel().waitFor({state:'detached'})}
     else{await panel().getByRole('alert').waitFor();await panel().getByRole('button',{name:`Đóng AI ${title}`}).click()}
   }
   for(const [action,platform,flags]of [

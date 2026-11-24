@@ -14,3 +14,26 @@
 .campaign-schedule-ai-hint { margin-top: 6px; color: var(--text-secondary, #64748b); font-size: 12px; line-height: 1.5; }
 .campaign-schedule-ai-actions { justify-content: flex-end; margin-top: 12px; }
 .campaign-schedule-ai-error { color: var(--accent-error, #dc2626); margin-top: 10px; line-height: 1.5; }
+/* aka Cài đặt: câu mẫu, danh sách ô đã đổi, nhãn "aka điền" trên form (docs/FB_AI_FILTER_PLAN.md mục 2.2). */
+.aka-settings-examples { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--text-secondary, #64748b); }
+.aka-settings-example {
+  border: 1px solid var(--border-default, #e2e8f0); border-radius: 999px; padding: 2px 10px; background: var(--bg-secondary, #f8fafc);
+  color: var(--text-primary, #1e293b); font-size: 12px; cursor: pointer;
+}
+.aka-settings-example:hover:not(:disabled) { border-color: var(--accent-primary, #6366f1); color: var(--accent-primary, #6366f1); }
+.aka-settings-example:disabled { opacity: .6; cursor: default; }
+.aka-settings-result {
+  margin-top: 12px; padding: 10px 12px; border-radius: 8px; line-height: 1.5;
+  background: color-mix(in srgb, var(--accent-primary, #6366f1) 8%, transparent);
+}
+.aka-settings-changes { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.aka-settings-changes li { display: flex; flex-direction: column; gap: 1px; }
+.aka-settings-change-label { font-weight: 600; font-size: 12px; }
+.aka-settings-change-values { font-size: 12px; color: var(--text-secondary, #64748b); overflow-wrap: anywhere; }
+.aka-settings-change-before { text-decoration: line-through; }
+.aka-settings-change-after { color: var(--text-primary, #1e293b); }
+[data-aka-filled] { position: relative; box-shadow: inset 3px 0 0 var(--accent-primary, #6366f1); padding-left: 8px; border-radius: 4px; }
+[data-aka-filled]::after {
+  content: 'aka điền'; position: absolute; top: 0; right: 0; padding: 0 6px; border-radius: 999px; font-size: 11px; line-height: 18px;
+  color: var(--accent-primary, #6366f1); background: color-mix(in srgb, var(--accent-primary, #6366f1) 12%, transparent); pointer-events: none;
+}
