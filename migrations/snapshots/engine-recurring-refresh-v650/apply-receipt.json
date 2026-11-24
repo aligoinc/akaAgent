@@ -1,0 +1,20 @@
+{
+  "migration": "migrations/migration_v650_engine_recurring_refresh_pass.sql",
+  "written_as": "V648 (#784), đổi số V650 ở #786 vì sổ đã có migration_v648_notification_email_opt_out và V649",
+  "requested_by": "anh: \"cần deploy và build những gì thì làm đi, sau đó tôi sẽ phát hành\" (25/11/2026)",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-25 00:52:34–00:52:36",
+  "ledger": { "version": "20261124175234", "name": "migration_v650_engine_recurring_refresh_pass", "statements_md5": "521e6ac6a4013bf16722adb5b7a1ebe4", "file_md5": "521e6ac6a4013bf16722adb5b7a1ebe4", "created_by": null },
+  "how": "supabase db query --linked -f <file bọc bằng scripts/make-migration-ledger-apply.cjs>: dòng sổ chèn trước COMMIT cuối, cùng giao dịch",
+  "preflight_read_only": { "checked_at_vn": "2026-11-25 00:52:11", "finish_md5": "ed7406cbccac16af32af4f329aabb170", "ledger_v650_rows": 0, "active_client_backends": 1 },
+  "dry_run": { "at_vn": "2026-11-25 00:52:24", "how": "cùng file, COMMIT thay bằng ROLLBACK", "finish_md5_in_transaction": "9b29fe98391f682819e4458a6a1387aa", "finish_md5_after_rollback": "ed7406cbccac16af32af4f329aabb170" },
+  "postflight": {
+    "checked_at_vn": "2026-11-25 00:52:45",
+    "finish_md5": "9b29fe98391f682819e4458a6a1387aa",
+    "finish_acl_owner_config": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres|{\"search_path=\\\"\\\"\"} (giống trước)",
+    "postgrest_schema_reload": "00:52:34.99 nhận lệnh, schema cache queried in 1889.2 ms, loaded 00:52:37.34",
+    "edge_logs_17_50_to_17_58_utc": { "5xx": 0, "503": 0, "requests_over_1s_minute_17_52": 83, "p50_ms": "47–48" }
+  },
+  "not_applied_again": true,
+  "rollback": "migrations/rollback_v650_engine_recurring_refresh_pass.sql (trả finish_campaign_v2 về ed7406cb…)"
+}
