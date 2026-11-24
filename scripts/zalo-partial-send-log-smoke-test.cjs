@@ -65,7 +65,7 @@ async function dispatchCases(Scheduler) {
       assert.ok(failure, scenario.name)
       const detail = await f.scheduler.createZaloPartialSendDetail(f.account, f.campaign, failure,
         f.campaign.actionId, 'Nhắn tin', { inputData: { id: 100 } })
-      const prefix = mediaFirst ? 'Đã gửi file nhưng gửi nội dung thất bại' : 'Đã gửi nội dung nhưng gửi file thất bại'
+      const prefix = mediaFirst ? 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ' : 'Đã gửi nội dung nhưng gửi file thất bại'
       assert.equal(detail.log, prefix + '. ' + scenario.expected, scenario.name)
       assert.equal(detail.data.partialSend.sequence, sequence)
       assert.equal(detail.data.partialSend[mediaFirst ? 'mediaResponse' : 'contentResponse'], acknowledged)
@@ -119,7 +119,7 @@ async function shareCases(Scheduler) {
         const raw = detail.data.zalo.message
         const originalLog = policy === mapped ? 'Thông báo theo policy' : policy === fallback
           ? 'Nhắn tin thất bại: ' + raw + ' (mã Zalo: ' + detail.data.zalo.code + ')' : raw
-        assert.equal(detail.log, (hasMedia ? 'Đã gửi file nhưng gửi nội dung thất bại. ' : '') + originalLog)
+        assert.equal(detail.log, (hasMedia ? 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ. ' : '') + originalLog)
         assert.ok(f.logs.some(log => log.includes(detail.log)))
         assert.equal(f.updates.findLast(update => update.id === detail.inputDataId).note, detail.log)
       }
@@ -162,7 +162,7 @@ async function helperCases(Scheduler) {
         enabled: true, target: recipient, targetUid: recipient.uid, inputData: { id: 100 }
       })
       const originalLog = scenario.expected.replace(/^Nhắn tin thất bại:/, actionName + ' thất bại:')
-      const prefix = mediaFirst ? 'Đã gửi file nhưng gửi nội dung thất bại. ' : 'Đã gửi nội dung nhưng gửi file thất bại. '
+      const prefix = mediaFirst ? 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ. ' : 'Đã gửi nội dung nhưng gửi file thất bại. '
       assert.equal(result.ok, false)
       assert.equal(result.detail.log, (failOn === 2 ? prefix : '') + originalLog, method)
       assert.equal(Boolean(result.detail.data.partialSend), failOn === 2)
@@ -185,7 +185,7 @@ async function shareEdgeCases(Scheduler) {
       assert.equal(f.details.length, 2)
       const originalLog = (policy ? 'Nhắn tin thất bại: ' : '') + 'Chia sẻ tin nhắn Zalo thất bại'
       for (const detail of f.details) {
-        assert.equal(detail.log, 'Đã gửi file nhưng gửi nội dung thất bại. ' + originalLog)
+        assert.equal(detail.log, 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ. ' + originalLog)
         assert.equal(detail.data.zalo.code, null)
         assert.equal(f.updates.findLast(update => update.id === detail.inputDataId).note, detail.log)
       }
@@ -207,7 +207,7 @@ async function shareEdgeCases(Scheduler) {
     const result = await f.scheduler.processZaloShareMessageBatch(f.account, f.campaign, f.rows(3), [],
       { code: f.campaign.actionId, name: 'Nhắn tin' }, 'Nội dung', ['one.jpg'], new Map())
     const partial = f.details.find(detail => detail.inputDataId === 100)
-    assert.equal(partial.log, 'Đã gửi file nhưng gửi nội dung thất bại. Nhắn tin thất bại: Chiến dịch đã dừng theo policy khi gửi media; chưa chia sẻ phần nội dung.')
+    assert.equal(partial.log, 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ. Nhắn tin thất bại: Chiến dịch đã dừng theo policy khi gửi media; chưa chia sẻ phần nội dung.')
     assert.equal(f.updates.findLast(update => update.id === 100).note, partial.log)
     assert.deepEqual(f.attempts, ['0', '1'])
     assert.equal(f.forwards.length, 0)
@@ -226,7 +226,7 @@ async function main() {
     const detail = scheduler.finalizeZaloPartialSendDetail({ log: '' }, {}, {
       stage: 'content_after_media', sequence: 'media_then_content', error
     })
-    assert.equal(detail.log, 'Đã gửi file nhưng gửi nội dung thất bại' + (error ? '. ' + error : ''))
+    assert.equal(detail.log, 'Người nhận đã nhận ảnh nhưng chưa nhận được chữ' + (error ? '. ' + error : ''))
   }
   const dispatch = await dispatchCases(Scheduler)
   const share = await shareCases(Scheduler)
