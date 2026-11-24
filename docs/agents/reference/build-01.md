@@ -123,6 +123,15 @@ chiến dịch đăng fanpage ở `now() + 3 giờ`); V621 vẫn từ 23:00. Mu�
 (chỉ đổi hai khoảng thành + 20 / + 40 phút). Bộ kiểm chạy 20:57–21:33 VN (~36 phút cho 122 bước), nên bắt đầu trước 21:00 thì mọi bài theo giờ đều qua
 trừ V622.
 
+**Build 10.6.0 (25/11/2026, Desktop + App Server).** `dist/build-10.6.0-work/` của repo chính; `run-builds.sh` nay chạy luôn App Server sau ba
+bản Desktop (chụp `dist-server/private/verification-before.json` → `build:server:win:private` → `verify-private-server-build.cjs`). Bài kiểm dựng
+lại hàm của bộ lập lịch theo danh sách tên (zalo-share-repeat, campaign-repeat-scheduler / runtime-e2e, run-campaign-schedule-ai-ui) vỡ mỗi khi PR
+thêm lời gọi / hằng mới vào hàm được dựng (10.6.0: `handleRecurringRefreshAfterCompletion`, `SCHEDULE_DAY_TOKEN` của #784); bản chép đã vá ở
+`patched-repeat/`, `patched-schedule-ai/`, và bản chép nằm ngoài `scripts/` thì phải đổi `require('./…')` sang đường tuyệt đối.
+`engine-v2-multi-slot-array-v585-smoke` hỏng trước 08:00 VN (ca 6 hẹn 08:00 hôm nay). Bài Python `scripts/fb-ai-filter/test_*.py` trên Mac cần
+`PGUSER=postgres`. `WEBAPP_REPO` nên là bản `git archive origin/dev_1 packages apps` (đủ `apps/web`). Tệp phát lại dữ liệu thật ở scratchpad
+(`replay-inputs/`) có thể bị dọn giữa hai lần build (25/11 00:04 VN): mất thì ba bài phát lại không chạy được, ghi rõ trong biên nhận.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module

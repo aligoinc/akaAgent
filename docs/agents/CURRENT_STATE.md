@@ -46,6 +46,15 @@ nhóm 9.878 thành viên: 500/500 số đã có được báo, 0/500 số bịa,
 Caller là API akaAgentWebApp (nhánh `dev_1`), **chưa deploy**, nên chưa có lượt gọi thật. Desktop và iOS chưa dùng.
 [Receipt](../../migrations/snapshots/data-group-member-matches-v519/apply-receipt.json).
 
+[Build akaAgent Desktop + App Server 10.6.0](../audits/akaagent-10.6.0-20261125/README.md):
+**Đã build Desktop Windows x64, Mac ARM64, Mac Intel x64 lúc 00:59:38–01:03:12 VN và App Server nội bộ 01:03:12–01:04:03 VN, 25/11/2026. Đã phát
+hành Desktop: feed ba nền tảng trả 10.6.0, bộ cài tải lên 01:07 VN 25/11, cùng số byte với bản build (kiểm 02:07 VN); App Server chưa rõ đã cài VPS.** Nguồn worktree `release-10.6.0`, nhánh `codex/release-10.6.0` `dc3ca157` (chỉ
+đổi version) trên `origin/dev_3` `5f0f20e3` sau PR #786. Mới so với 10.5.0: AI lọc bài / comment Facebook phần Desktop (#780), câu Z127 + cảnh báo
+nghỉ 300 giây (#781), kiểm cú pháp nội dung ở đường lưu (#783, công tắc chưa có dòng = chặn), ba lỗi hẹn giờ (#784 / #786). Trước khi build theo
+cùng yêu cầu: V650 apply 00:52 VN, ChatApi `worker` deploy 00:56 VN (`dev-1a808cb-20261125`); Web đã có phần của các PR (v143). 117/140 bước kiểm
+đạt, 23 lỗi đã giải thích (bài kiểm chưa theo code mới, hỏng sẵn, theo giờ chạy, môi trường; ba bài phát lại không chạy được vì mất tệp đầu vào).
+[Receipt](../audits/akaagent-10.6.0-20261125/build-receipt.json).
+
 [Build akaAgent Desktop 10.5.0](../audits/akaagent-10.5.0-20261123/README.md):
 **Đã build Desktop Windows x64, Mac ARM64, Mac Intel x64 lúc 20:52:56–20:56:25 VN, 23/11/2026. Đã phát hành: feed ba nền tảng trả 10.5.0,
 bộ cài tải lên 21:10 VN 23/11, cùng số byte với bản build (kiểm 00:36 VN 25/11). Không có #780–#784 (merge 24/11). Không build App Server** (#778 không đổi file nào của gói Server). Nguồn worktree `release-10.5.0`, nhánh `codex/release-10.5.0`
