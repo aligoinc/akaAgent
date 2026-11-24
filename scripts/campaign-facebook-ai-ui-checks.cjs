@@ -12,14 +12,19 @@ module.exports = async page => {
     assert.equal(await page.getByRole('button',{name:'Điền lịch bằng AI',exact:true}).isDisabled(),true)
     return page.evaluate(()=>window.scheduleSmoke.state.requests.at(-1))
   }
+  // aka Cài đặt: điền xong ô nổi không tự đóng, bấm Xong để đóng.
+  const finish=async title=>{
+    await panel(title).getByRole('button',{name:'Xong',exact:true}).click()
+    await panel(title).waitFor({state:'detached'})
+  }
   const resolve=async(title,patch)=>{
     await page.evaluate(patch=>window.scheduleSmoke.resolve({ok:true,patch}),patch)
-    await panel(title).waitFor({state:'detached'})
+    await finish(title)
   }
   const parsed=async(title,patch,ok)=>{
     const result=await page.evaluate(patch=>window.scheduleSmoke.resolveFacebookOutput(patch),patch)
     assert.equal(result.ok,ok,JSON.stringify(result))
-    if(ok)await panel(title).waitFor({state:'detached'})
+    if(ok)await finish(title)
     else {await panel(title).getByRole('alert').waitFor();await panel(title).getByRole('button',{name:`Đóng AI ${title}`}).click()}
   }
   const searchTitle='Cấu hình tìm kiếm và Điều kiện chạy'
@@ -147,8 +152,58 @@ module.exports = async page => {
   sent=await request(searchTitle);assert.equal(sent.current.countCommentFindData,30)
   await parsed(searchTitle,{isFindInComment:true,isFindCommentByKeywords:true,commentKeywords:'cần mua'},true)
   sent=await request(searchTitle);assert.equal(sent.current.isFindInComment,true);assert.equal(sent.current.commentKeywords,'cần mua');await resolve(searchTitle,{})
+  // aka Cài đặt: tên ô nổi, câu mẫu Thử nhanh, danh sách ô đã đổi, nhãn "aka điền", Hoàn tác (docs/FB_AI_FILTER_PLAN.md mục 2.2).
+  await open('facebook_comment_seeding')
+  await page.getByRole('button',{name:`AI điền ${post}`,exact:true}).click()
+  assert.equal((await panel(post).locator('.campaign-schedule-ai-heading strong').textContent()).trim(),'aka Cài đặt')
+  await panel(post).getByRole('button',{name:'Người cần thuê trọ, bỏ môi giới',exact:true}).click()
+  assert.match(await panel(post).getByLabel('Mô tả cấu hình bạn muốn').inputValue(),/thuê phòng trọ/)
+  await panel(post).getByRole('button',{name:`Đóng AI ${post}`}).click()
+  sent=await request(post);const beforeAka=sent.current
+  const nextSort=beforeAka.commentPostSort==='new_posts'?'most_relevant':'new_posts'
+  await page.evaluate(patch=>window.scheduleSmoke.resolve({ok:true,patch}),{commentPostSort:nextSort,isFindPostByContentAI:true,postContentAI:'Người cần thuê trọ cho mình.\nLoại bỏ: môi giới.'})
+  await panel(post).getByText('aka đã điền 3 ô',{exact:true}).waitFor()
+  assert.equal(await panel(post).locator('.aka-settings-changes li').count(),3)
+  assert.match(await panel(post).locator('.aka-settings-changes').textContent(),/Người cần thuê trọ cho mình\. · Loại bỏ: môi giới\./)
+  await page.waitForFunction(()=>document.querySelectorAll('[data-aka-filled]').length>=2)
+  if(process.env.AKA_SETTINGS_SHOTS){
+    // Ảnh để xem bằng mắt: AKA_SETTINGS_SHOTS=<thư mục> (không ghi vào repo).
+    const dir=process.env.AKA_SETTINGS_SHOTS;require('node:fs').mkdirSync(dir,{recursive:true})
+    // Cửa sổ ẩn không vẽ nên chụp ảnh treo: chạy kèm AKA_UI_SMOKE_SHOW=1 (hiện cửa sổ trong xvfb).
+    const box=await panel(post).boundingBox()
+    await page.screenshot({path:require('node:path').join(dir,'aka-settings-result.png'),clip:box})
+    await page.locator('[data-aka-filled]').first().evaluate(el=>el.closest('.stepper-section')?.scrollIntoView({block:'start'}))
+    await page.screenshot({path:require('node:path').join(dir,'aka-settings-form.png')})
+  }
+  await panel(post).getByRole('button',{name:'Hoàn tác',exact:true}).click()
+  await panel(post).getByText('Đã hoàn tác, các ô trở lại như trước.',{exact:true}).waitFor()
+  assert.equal(await page.evaluate(()=>document.querySelectorAll('[data-aka-filled]').length),0)
+  await panel(post).getByRole('button',{name:`Đóng AI ${post}`}).click()
+  sent=await request(post);assert.deepEqual(sent.current,beforeAka)
+  await page.evaluate(patch=>window.scheduleSmoke.resolve({ok:true,patch}),{isFindPostByContentAI:true,postContentAI:'Người cần thuê trọ.'})
+  await panel(post).getByText('aka đã điền 2 ô',{exact:true}).waitFor()
+  await finish(post)
+  await page.waitForFunction(()=>!!document.querySelector('textarea[placeholder^="Ví dụ: Người đăng"]')?.closest('[data-aka-filled]'))
+  // Khách tự sửa ô thì bỏ nhãn "aka điền" của ô đó.
+  const aiBox=page.locator('textarea[placeholder^="Ví dụ: Người đăng"]')
+  await aiBox.fill('')
+  await page.waitForFunction(()=>!document.querySelector('textarea[placeholder^="Ví dụ: Người đăng"]')?.closest('[data-aka-filled]'))
+  // Ô AI tích mà trống: chữ đỏ dưới ô và không cho lưu.
+  await page.locator('[data-ai-filter-error="post"]').waitFor()
+  if(process.env.AKA_SETTINGS_SHOTS){
+    await page.locator('[data-ai-filter-error="post"]').scrollIntoViewIfNeeded()
+    await page.screenshot({path:require('node:path').join(process.env.AKA_SETTINGS_SHOTS,'ai-filter-empty.png')})
+  }
+  assert.equal((await page.locator('[data-ai-filter-error="post"]').textContent()).trim(),'Nhập mô tả cho AI hoặc bỏ tích ô này.')
+  const alertsBefore=await page.evaluate(()=>window.scheduleSmoke.state.alerts.length)
+  await page.getByRole('button',{name:'Lưu chiến dịch',exact:true}).click()
+  await page.waitForFunction(n=>window.scheduleSmoke.state.alerts.length>n,alertsBefore)
+  assert.deepEqual(await page.evaluate(()=>window.scheduleSmoke.state.alerts.at(-1)),{message:'Ý nghĩa bài viết là (dùng AI): Nhập mô tả cho AI hoặc bỏ tích ô này.',type:'error'})
+  await aiBox.fill('Người cần thuê trọ cho mình.')
+  assert.equal(await page.locator('[data-ai-filter-error="post"]').count(),0)
+  assert.match(await page.locator('textarea[placeholder^="Ví dụ: Người đăng"] + .schedule-hint').textContent(),/Loại bỏ: …/)
   const calls=await page.evaluate(()=>window.scheduleSmoke.state.calls)
   assert.equal(calls.filter(c=>['createCampaign','updateCampaign'].includes(c.method)).length,0)
   assert.ok(await page.evaluate(()=>window.scheduleSmoke.state.cancels.length>=3))
-  console.log('PASS Electron Facebook AI: six sections, section order, account/Page atomic apply, single-account edit/secondary guard, hidden comment filter rejection, valid comment source, media/content preservation, cancel/timeout/stale form, no auto-save')
+  console.log('PASS Electron Facebook AI: six sections, section order, account/Page atomic apply, single-account edit/secondary guard, hidden comment filter rejection, valid comment source, media/content preservation, cancel/timeout/stale form, no auto-save, aka Cài đặt (Thử nhanh, ô đã đổi, aka điền, Hoàn tác), ô AI trống chặn lưu')
 }

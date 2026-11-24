@@ -1,0 +1,29 @@
+{
+  "migration": "migration_v641_fb_ai_filter_blocks",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "24/11/2026: \"Tại sao không xử lý luôn mà phải đợi đến tối?\"; anh tự dán bản dán rồi báo \"Ok\"",
+  "applied_at_vn": "2026-11-24 15:55:56",
+  "applied_by": "anh tự dán migrations/tests/migration_v641_fb_ai_filter_blocks_paste.sql (bản chịu CRLF) vào SQL Editor; created_by của dòng sổ = NULL. Hộp xác nhận MCP hết hạn 60 giây lúc 15:49 VN.",
+  "ledger_version": "20261124085556",
+  "ledger_md5": "75f6c2ed153a835a6008fc7ac1b0d657",
+  "file_md5": "75f6c2ed153a835a6008fc7ac1b0d657",
+  "ddl": false,
+  "first_attempt": "15:53 VN: bản dán kiểu cũ (chèn dòng sổ trước COMMIT), dán từ máy tính bảng nên xuống dòng thành CRLF; replace() đoạn nhiều dòng không khớp, dừng ở postflight \"block 2554 không ra md5 091f5748…\", giao dịch tự huỷ, database không đổi (kiểm 15:55:18 VN). Tái hiện và sửa bằng scripts/make-migration-paste-crlf-safe.py.",
+  "blocks_md5_after": {
+    "2554": "091f57483369c8b03fea65e9eba0390c", "2859": "81f1dd79e70bbafcb85cf98b2d672210",
+    "2602": "1716cf0e653949d72decaf6b7b633d15", "2863": "c966c4608a3cbee3f524915fb4c090eb",
+    "2603": "24c0f8b97db8a5467280603dbdc99cc9", "2864": "905a88740cee819e0e34feb1351a0476",
+    "2718": "892b788ee949373baa4ba1674d4d11c4", "2904": "023c452504d3e5c40b584fbb146c26bc",
+    "2719": "9d2678eeb3ef2ca56bf86a5f442958f0", "2905": "79ae67b90927a743a24f146f92245b42"
+  },
+  "checks_before_apply": [
+    "PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v641.py",
+    "PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v641_paste.py <bản dán kiểu cũ>: 10/10 (CRLF và LF)",
+    "15:47 VN đọc production: 10 block và sổ chép block đúng md5 preflight, 6 mã ai_using của V640 đang bật, 5 mã _v2 dùng Haiku 5.5 cổng chat"
+  ],
+  "checks_after_apply": [
+    "15:56:07 VN: 10 block ra đúng md5 bộ sinh (updated_at 15:55:56), 5 dòng auto_engine_block_copies ghi md5 mới, md5 dòng sổ = md5 file",
+    "15:56:14 VN: chưa có lượt lọc AI nào sau apply (lượt lọc seeding gần nhất 07:25 VN 23/11)"
+  ],
+  "rollback": "migrations/rollback_v641_fb_ai_filter_blocks.sql"
+}
