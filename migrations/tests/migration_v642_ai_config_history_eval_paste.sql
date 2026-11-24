@@ -2,8 +2,11 @@
 -- AI lọc bài (docs/FB_AI_FILTER_PLAN.md mục 1.3). Bảng ở schema private, chỉ postgres đọc / ghi. Có DDL nên PostgREST nạp lại schema: apply buổi tối.
 -- Dữ liệu bộ mẫu (nội dung bài thật của khách) nạp riêng sau khi apply, không nằm trong repo.
 -- Gỡ: rollback_v642_ai_config_history_eval.sql.
+-- Bản dán SQL Editor (chịu được CRLF): dán cả file, bấm Run một lần. Sinh bằng scripts/make-migration-paste-crlf-safe.py, không sửa tay.
 BEGIN;
-SET LOCAL lock_timeout = '3s';
+DO $aka_wrap_c2b186d22a23$
+BEGIN
+  EXECUTE replace($aka_body_9d04dbe0b25b$SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
@@ -102,8 +105,9 @@ BEGIN
   END IF;
 END $post$;
 
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
-VALUES (to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYYMMDDHH24MISS'), 'migration_v642_ai_config_history_eval', ARRAY[$ledger_126bd4a23ecd$-- migration_v642_ai_config_history_eval: lịch sử thay đổi cấu hình AI (ai_prompt, ai_using, ai_model; không chép khoá API) và bảng bộ mẫu kiểm
+$aka_body_9d04dbe0b25b$, chr(13), '');
+  INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+  VALUES (to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS'), 'migration_v642_ai_config_history_eval', ARRAY[replace($aka_ledger_495dc51caceb$-- migration_v642_ai_config_history_eval: lịch sử thay đổi cấu hình AI (ai_prompt, ai_using, ai_model; không chép khoá API) và bảng bộ mẫu kiểm
 -- AI lọc bài (docs/FB_AI_FILTER_PLAN.md mục 1.3). Bảng ở schema private, chỉ postgres đọc / ghi. Có DDL nên PostgREST nạp lại schema: apply buổi tối.
 -- Dữ liệu bộ mẫu (nội dung bài thật của khách) nạp riêng sau khi apply, không nằm trong repo.
 -- Gỡ: rollback_v642_ai_config_history_eval.sql.
@@ -208,5 +212,6 @@ BEGIN
 END $post$;
 
 COMMIT;
-$ledger_126bd4a23ecd$]);
+$aka_ledger_495dc51caceb$, chr(13), '')]);
+END $aka_wrap_c2b186d22a23$;
 COMMIT;

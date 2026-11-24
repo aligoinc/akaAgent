@@ -4,8 +4,11 @@
 -- Bộ cũ (Desktop dưới 9.9.0): cả hai mô hình đều lỗi thì giữ như hiện nay. Phương án: docs/FB_AI_FILTER_PLAN.md mục 1.4.
 -- Sinh bằng scripts/fb-ai-filter/build-v641-sql.cjs, không sửa tay. Chỉ dữ liệu (không DDL, không nạp lại schema PostgREST). Phải apply sau V640.
 -- Gỡ: rollback_v641_fb_ai_filter_blocks.sql.
+-- Bản dán SQL Editor (chịu được CRLF): dán cả file, bấm Run một lần. Sinh bằng scripts/make-migration-paste-crlf-safe.py, không sửa tay.
 BEGIN;
-SET LOCAL lock_timeout = '3s';
+DO $aka_wrap_299d12299fc4$
+BEGIN
+  EXECUTE replace($aka_body_41efb61b99eb$SET LOCAL lock_timeout = '3s';
 SET LOCAL statement_timeout = '60s';
 
 DO $pre$
@@ -255,8 +258,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.auto_engine_block_copies WHERE engine_block_id = 2905 AND source_block_id = 2719 AND source_md5_at_copy = '9d2678eeb3ef2ca56bf86a5f442958f0' AND engine_md5_at_copy = '79ae67b90927a743a24f146f92245b42') THEN RAISE EXCEPTION 'V641 postflight: sổ chép block 2905 khác mong đợi'; END IF;
 END $post$;
 
-INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
-VALUES (to_char(clock_timestamp() AT TIME ZONE 'UTC','YYYYMMDDHH24MISS'), 'migration_v641_fb_ai_filter_blocks', ARRAY[$ledger_06e5d19b1f12$-- migration_v641_fb_ai_filter_blocks: 10 block lọc AI (Comment seeding, Tìm data trong group, Tìm data bằng search; bộ cũ và bản "[engine]") gọi lời dặn mới
+$aka_body_41efb61b99eb$, chr(13), '');
+  INSERT INTO supabase_migrations.schema_migrations (version, name, statements)
+  VALUES (to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYYMMDDHH24MISS'), 'migration_v641_fb_ai_filter_blocks', ARRAY[replace($aka_ledger_f65dfe594805$-- migration_v641_fb_ai_filter_blocks: 10 block lọc AI (Comment seeding, Tìm data trong group, Tìm data bằng search; bộ cũ và bản "[engine]") gọi lời dặn mới
 -- qua mã `<mã cũ>_v2` (V640), thử lại 2 lần rồi gọi mô hình dự phòng fb_ai_content_filter_fallback. Câu trả lời sai khuôn cũng tính là lỗi.
 -- Bản "[engine]": cả hai mô hình đều lỗi thì báo "AI lọc bài tạm thời không dùng được" (FB53: tạm dừng chiến dịch, data về hàng đợi).
 -- Bộ cũ (Desktop dưới 9.9.0): cả hai mô hình đều lỗi thì giữ như hiện nay. Phương án: docs/FB_AI_FILTER_PLAN.md mục 1.4.
@@ -514,5 +518,6 @@ BEGIN
 END $post$;
 
 COMMIT;
-$ledger_06e5d19b1f12$]);
+$aka_ledger_f65dfe594805$, chr(13), '')]);
+END $aka_wrap_299d12299fc4$;
 COMMIT;
