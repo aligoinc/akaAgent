@@ -1,3 +1,4 @@
+import { assertCampaignContentSyntax, changedCampaignContentFields, getContentSyntaxGuardMode, touchesCampaignContent } from '../../services/contentSyntaxGuard'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaignDraftRequest } from '../../../shared/campaignDrafts'
@@ -148,6 +149,10 @@ export function registerCampaignHandlers(
   }
 
   ipcMain.handle(IPC_EVENTS.DB_CREATE_CAMPAIGN, async (_, campaignData) => {
+    // Nội dung sai cú pháp biến / ngoặc không được lưu (docs/CONTENT_SYNTAX_GUARD_PLAN.md). Chỉ đường lưu từ giao diện.
+    assertCampaignContentSyntax({
+      actionId: campaignData?.actionId, content: campaignData?.content, extraSettings: campaignData?.extraSettings
+    })
     const campaign = await supabase.createCampaign(campaignData)
     await registerCampaignRepeat(campaign?.id, campaign?.extraSettings)
     realtimeRefreshController?.refreshSoon('campaign-created')
@@ -182,6 +187,13 @@ export function registerCampaignHandlers(
         // still compares this exact timestamp and paused status.
         expectedUpdatedAt = ready.updatedAt
       }
+    }
+    // Chỉ kiểm các ô nội dung lần lưu này thật sự đổi: chiến dịch cũ đang lỗi vẫn sửa được lịch, giới hạn.
+    if (getContentSyntaxGuardMode() === 'block' && touchesCampaignContent(payload)) {
+      const before = ready !== undefined ? ready : await supabase.getCampaignConfig(id).catch(() => null)
+      assertCampaignContentSyntax(changedCampaignContentFields(
+        String(payload.actionId ?? before?.actionId ?? ''), payload, before
+      ))
     }
     // "Nội dung up tin" đổi thì chép sang các chiến dịch up tin đã tạo; cần bản trước khi lưu để biết khách có đổi.
     const touchesPostBumpContent = !!payload.extraSettings && 'postBumpContent' in payload.extraSettings

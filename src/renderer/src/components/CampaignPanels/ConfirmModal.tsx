@@ -23,6 +23,13 @@ export default function ConfirmModal() {
     closeConfirm()
   }
 
+  const handleCancelChoice = () => {
+    if (busy) return
+    const onCancel = confirm.onCancel
+    closeConfirm()
+    onCancel?.()
+  }
+
   const isDanger = confirm.variant === 'danger'
   const confirmBtnClass = isDanger ? 'btn btn-danger' : 'btn btn-primary'
 
@@ -42,7 +49,7 @@ export default function ConfirmModal() {
           {confirm.message}
         </div>
         <div className="modal-footer" style={{ justifyContent: 'center', gap: 8, borderTop: 'none', paddingBottom: '24px' }}>
-          <button className="btn btn-ghost" onClick={handleCancel} disabled={busy} style={{ padding: '8px 24px' }}>
+          <button className="btn btn-ghost" onClick={handleCancelChoice} disabled={busy} style={{ padding: '8px 24px' }}>
             {confirm.cancelText}
           </button>
           <button className={confirmBtnClass} onClick={handleConfirm} disabled={busy} style={{ padding: '8px 24px' }}>

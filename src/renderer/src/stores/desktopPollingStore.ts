@@ -5,6 +5,7 @@ import {
   type DesktopPollingSettings
 } from '../../../shared/desktopUiReads'
 import { parseAffPartnerAudience } from '../../../shared/affPartner'
+import { parseContentSyntaxGuardMode } from '../../../shared/contentSyntax'
 
 let generation = 0
 export const useDesktopPollingStore = create<{
@@ -32,7 +33,9 @@ export const useDesktopPollingStore = create<{
         idlePollSeconds: parseDesktopUiSeconds(settings.idlePollSeconds, DESKTOP_UI_TUNING_RANGES.idlePollSeconds),
         progressRecountSeconds: parseDesktopUiSeconds(settings.progressRecountSeconds, DESKTOP_UI_TUNING_RANGES.progressRecountSeconds),
         // Ẩn/hiện mục "Giới thiệu nhận hoa hồng"; giá trị lạ = ẩn.
-        affPartnerAudience: parseAffPartnerAudience({ audience: settings.affPartnerAudience })
+        affPartnerAudience: parseAffPartnerAudience({ audience: settings.affPartnerAudience }),
+        // Chặn lưu nội dung sai cú pháp: thiếu / lạ = chặn.
+        contentSyntaxGuard: parseContentSyntaxGuardMode(settings.contentSyntaxGuard)
       } })
     }).catch(() => { /* Defaults must not block the UI or trigger retries. */ })
   }

@@ -1,0 +1,477 @@
+# Phương án: chặn lưu nội dung sai cú pháp biến / ngoặc (nhiều nội dung bị gộp vào một tin)
+
+Ngày lập: 24/11/2026. Trạng thái: **anh bảo "Thực thi" 24/11; đã code bộ kiểm, chặn ở API Web và ở đường lưu Desktop (mục 13); chưa merge, chưa deploy, chưa build; chưa đổi gì trên production. Giao diện báo lỗi khi gõ chờ duyệt thiết kế; chiến dịch đang lỗi (mục 8) chờ anh chọn cách xử lý.**
+
+Phạm vi (anh chốt lại 24/11): **chỉ kiểm ở giao diện và chặn tương ứng ở API lúc lưu. Không can thiệp vào logic chạy.**
+Bản đầu của phương án có thêm phần bộ chạy tạm dừng chiến dịch (mã CFG21, một migration); phần đó đã bỏ.
+
+## 1. Sự cố
+
+Khách 1871.0962737366, chiến dịch 59428 (`zalo_message_group_member`, Zalo Server chạy trên App Server VPS, bộ chạy cũ).
+Nội dung có 3 mẫu ngăn bằng `|`, mỗi mẫu kết thúc bằng `#{SEX{anh-chị-anh/chị}` (thiếu một dấu `}`).
+Người nhận nhận một tin chứa cả 3 mẫu, kèm nguyên chữ `#{SEX{anh-chị-anh/chị}|`.
+
+Nguyên nhân trong code (đã tái hiện bằng bộ tách thật: nội dung của khách ra 1 mẫu, thêm `}` thì ra 3):
+
+- `findContentVariantSeparatorIndexes` ([src/shared/contentSpin.ts](../src/shared/contentSpin.ts)) gặp dấu `{` không có `}` đóng thì `break`:
+  mọi dấu `|` phía sau không còn là dấu ngăn mẫu.
+- Biến chỉ được thay khi khớp đúng `#{SEX{...}}` ([src/shared/campaignContentTemplate.ts](../src/shared/campaignContentTemplate.ts)),
+  nên biến thiếu ngoặc được gửi nguyên văn.
+- Không nơi nào báo cho khách: form Desktop, form Web, app iOS và API lưu đều nhận nội dung này im lặng.
+
+## 2. Số đo trên production (quét chỉ đọc 24/11/2026)
+
+22.972 chiến dịch chưa xoá có nội dung. Chạy bộ tách thật trên 28 chiến dịch có ngoặc `{ }` lệch:
+
+| Loại | Số chiến dịch | Ghi chú |
+|---|---|---|
+| Nhiều mẫu bị gộp vào một tin | 9 (5 tổ chức: 485, 1744, 1871, 1877, 2189) | 59428, 61004, 48492, 42610, 9031, 9108, 9164, 47257, 9019 |
+| trong đó đang chờ / đang chạy | 2 | 59428 (tổ chức 1871), 61004 (tổ chức 2189) |
+| Biến hỏng bị gửi nguyên văn, không gộp | 2 | 45029, 45030 (tổ chức 1133, đã hoàn thành) |
+| Ngoặc lệch nhưng không ảnh hưởng tin gửi | 17 | dấu `}` thừa, hoặc `{` lẻ trong bài không có `\|` |
+
+Số tin "Nhắn tin" thành công của các chiến dịch bị gộp: 59428: 501, 48492: 916, 42610: 272, 61004: 87, bốn chiến dịch còn lại
+26 dòng. Đây là số trên: nội dung có thể được sửa giữa chừng, và 61004 chỉ gộp từ mẫu thứ hai.
+
+Ngoài cột nội dung chính:
+
+- 4 chiến dịch có `#{SEX{...}` thiếu ngoặc trong `extra_settings`: lời mời kết bạn (49656, 15083, 60005, 61004) và nội dung
+  nâng cao (61004). Ba cái chưa hoàn thành: 49656, 60005, 61004.
+- 1 / 2.373 mẫu nội dung (`auto_content_templates`) có biến thiếu ngoặc.
+- 3 chiến dịch email của tổ chức 1454 dùng `#{INPUT_Fullname}` (sai chữ hoa) nên gửi nguyên văn.
+
+Kết luận: lỗi hiếm (khoảng 0,05% chiến dịch) nhưng mỗi lần xảy ra là hàng trăm tin sai tới khách của khách, không gửi lại được.
+Phần quét `extra_settings` mới chỉ tìm mẫu `#{SEX{`, chưa chạy bộ tách đầy đủ; đợt 1 sẽ quét lại bằng bộ kiểm mới.
+
+## 3. Nguyên tắc
+
+1. Khách phải thấy lỗi ngay lúc gõ, bằng câu tiếng Việt chỉ đúng chỗ sai và cách sửa.
+2. Nội dung sai cú pháp không lưu được: form chặn, API chặn lại lần nữa.
+3. Một bộ kiểm duy nhất cho form Desktop, form Web, iOS và API. Không viết luật riêng từng nơi.
+4. Không đụng logic chạy: bộ tách `contentSpin`, bộ lập lịch, lõi engine và ChatApi giữ nguyên. Không migration.
+5. Có công tắc tắt khẩn cho phần chặn, vì bộ kiểm bắt nhầm là khách không lưu được.
+
+## 4. Bộ kiểm cú pháp dùng chung
+
+Module mới `contentSyntax.ts`, tự đứng một mình (không import gì), viết ở WebApp `packages/campaign-core/src/` (Web, iOS và API
+cùng dùng) rồi chép nguyên văn sang Desktop `src/shared/` (bài kiểm so md5 như các hợp đồng dùng chung khác).
+Không chép vào lõi `packages/campaign-engine`.
+
+```ts
+analyzeContentSyntax(text, { channel, html }) => {
+  issues: Array<{ code, severity: 'block' | 'warn', start, end, excerpt, message, fix? }>,
+  variantCount: number,        // số mẫu bộ tách thật sẽ gửi
+  lostSeparators: number       // số dấu | bị mất tác dụng vì lỗi
+}
+```
+
+Nội dung có định dạng (HTML) được kiểm trên phần chữ, đúng như `splitFormattedContentVariants` đang làm.
+
+### 4.1. Luật
+
+| Mã | Tình huống | Ví dụ | Mức đề xuất |
+|---|---|---|---|
+| B1 | Biến `#{` chưa đóng | `#{SEX{anh-chị-anh/chị}`, `#{FULL_NAME` | Chặn |
+| B2 | Dấu `{` chưa đóng và phía sau còn dấu `\|` ngăn mẫu | `{anh\|chị ... \| mẫu 2` | Chặn |
+| B3 | Biến không có trong hệ thống, hoặc sai dạng, trên kênh có biến (Zalo, SMS, Email, Gọi tự động) | `#{INPUT_Fullname}`, `#{TODAY}`, `#{SEX{anh\|chị}}` | Chặn (cần anh chốt, mục 10) |
+| W1 | Dấu `{` chưa đóng nhưng không làm mất dấu `\|` nào | bài Facebook có một dấu `{` lẻ | Cảnh báo |
+| W2 | Dấu `}` thừa | `...nhé}` | Cảnh báo |
+| W3 | Facebook: `#{a\|b}` (hashtag dính liền ngoặc xoay vòng nên không xoay) | `#{sale\|giảm giá}` | Cảnh báo |
+
+Danh sách biến hợp lệ lấy từ code đang chạy: `TODAY(...)`, `TOMORROW(...)`, `YESTERDAY(...)`, `SEX{a-b-c}`, `FULL_NAME`,
+`ORIGINAL_NAME`, `INPUT_FULLNAME`, `UID`, `PHONE`, `MOBILE`, `EMAIL`, `INFO1`–`INFO5`, `STOP_MESSAGES_LINK`.
+Ký tự thoát giữ như hiện nay: `\{`, `\}`, `\|`, `\\`.
+
+"Chặn" nghĩa là không lưu được, ở form lẫn API. "Cảnh báo" nghĩa là hiện câu nhắc, vẫn lưu được.
+
+### 4.2. Sửa giúp
+
+Chỉ với lỗi có đúng một cách sửa:
+
+- `#{SEX{a-b-c}` ngay trước `|`, xuống dòng hoặc hết nội dung: thêm `}`.
+- `#{TÊN_BIẾN_HỢP_LỆ` thiếu `}`: thêm `}`.
+- Biến sai chữ hoa / thường của một biến hợp lệ: đổi về đúng tên.
+
+Nút "Sửa giúp" chỉ sửa khi khách bấm. Không tự sửa lúc lưu.
+
+### 4.3. Câu cho khách (bản nháp, chờ anh duyệt từng câu)
+
+| Mã | Câu |
+|---|---|
+| B1 | Biến `#{SEX{anh-chị-anh/chị}` đang thiếu dấu `}` ở cuối. Viết đúng là `#{SEX{anh-chị-anh/chị}}`. |
+| B2 | Dấu `{` ở "…" chưa có dấu `}` đóng. Nếu muốn gửi đúng ký tự `{`, hãy viết `\{`. |
+| kèm B1 / B2 khi `lostSeparators > 0` | Vì lỗi này, N mẫu nội dung phía sau sẽ bị gộp chung vào một tin. |
+| B3 | `#{INPUT_Fullname}` không phải biến của hệ thống nên sẽ bị gửi nguyên văn. Có thể anh/chị muốn dùng `#{INPUT_FULLNAME}`. |
+| W1 | Dấu `{` ở "…" chưa có dấu `}` đóng. |
+| W2 | Dấu `}` ở "…" không có dấu `{` mở. |
+| Dòng đếm | Nội dung này có N mẫu, gửi luân phiên. |
+| Khi bấm Lưu mà còn lỗi | Nội dung còn lỗi cú pháp nên chưa lưu được. Vui lòng sửa các chỗ được đánh dấu. |
+
+## 5. Giao diện
+
+Áp cho mọi ô nhập nội dung có `|` hoặc biến: nội dung chính, từng mục nội dung nâng cao, lời mời kết bạn, nội dung comment,
+comment newsfeed, nội dung up tin, SMS gửi kèm, tiêu đề email, mẫu nội dung, bước gửi của Quy trình tự động.
+
+Hành vi chung trên cả ba nền tảng:
+
+1. **Báo lỗi ngay dưới ô nhập**, cập nhật khi gõ (bộ kiểm chạy trên chuỗi, không gọi mạng). Mỗi lỗi một dòng: câu ở 4.3, đoạn
+   trích chỗ sai, nút "Sửa giúp" nếu có, bấm vào dòng thì con trỏ nhảy tới chỗ sai.
+2. **Dòng đếm mẫu** luôn hiện khi nội dung có dấu `|`: "Nội dung này có 3 mẫu, gửi luân phiên." Khi có lỗi làm mất dấu `|`:
+   "Có 3 dấu `|` nhưng chỉ tách được 1 mẫu." Đây là thứ giúp khách tự nhận ra kể cả với lỗi bộ kiểm chưa biết.
+3. **Không cho lưu khi còn lỗi mức Chặn**: nút Lưu báo lỗi và cuộn tới ô sai. Mức Cảnh báo không chặn.
+4. **Xem trước** ("Xem trước", "Khách sẽ nhận") hiện dải cảnh báo ở đầu khi nội dung còn lỗi.
+5. **Mở sửa chiến dịch cũ đang có lỗi**: lỗi hiện ngay khi mở form, không đợi khách gõ.
+6. **Nội dung do AI viết** (Viết lại, form AI, Agent): bản AI trả về mà có lỗi mức Chặn thì không áp vào form, báo "AI trả nội
+   dung sai cú pháp, vui lòng thử lại".
+
+Chỗ sửa:
+
+| Nền tảng | File chính |
+|---|---|
+| Web | `apps/web/src/features/CampaignContentForm.tsx` (đã có tô màu theo `contentSegments`: thêm màu đỏ cho đoạn lỗi), `CampaignFormPage.tsx`, `CampaignQuickEditModals.tsx`, `CampaignRuntimeOptions.tsx`, `recipientPreview/RecipientPreviewPanel.tsx`, form mẫu nội dung, `journeys/formControls.tsx`; luật form ở `packages/campaign-core/src/validation.ts` |
+| iOS | `apps/mobile/src/features/campaign/Content.tsx`, `TokenInput.tsx`, `review.ts`, `ContentSheets.tsx`, `features/TemplateForm.tsx` |
+| Desktop | `CampaignFormModal.tsx` và `CampaignAgentFormModal.tsx` (kiểm lúc lưu quanh các câu "Vui lòng nhập nội dung…"), `CampaignQuickEditModals.tsx`, `ContentPreviewModal.tsx`, `CampaignContentPreviewTab.tsx`, `ContentTemplates/ContentTemplateWorkspace.tsx` |
+
+Trước khi code giao diện em sẽ gửi bản thiết kế (trang xem thử) để anh duyệt, như các tính năng trước.
+
+## 6. Chặn ở API lúc lưu
+
+Form chỉ che được bản app mới và người dùng đi qua form. API chặn lại bằng đúng bộ kiểm đó:
+
+- **API Web** (`apps/api/src/modules/aka-agent-control/aka-agent-control.service.ts`, cạnh `validateStopMessagesSettings`): tạo
+  chiến dịch, sửa chiến dịch, sửa nhanh, nhân bản, Agent tạo chiến dịch, mẫu nội dung, bước gửi của Quy trình tự động.
+  Còn lỗi mức Chặn thì trả 400, mã `campaign_content_syntax_invalid`, kèm câu ở 4.3 và tên ô sai để form đánh dấu đúng chỗ.
+  Che được Web, iOS mọi phiên bản và tab Web chưa tải lại.
+- **Chỉ kiểm ô nội dung có trong yêu cầu lưu.** Sửa nhanh lịch chạy, giới hạn, tạm dừng / tiếp tục của một chiến dịch cũ đang
+  có nội dung lỗi vẫn làm được; lưu cả form thì phải sửa nội dung trước.
+- **Desktop** không lưu qua API Web mà ghi DB từ tiến trình chính. Chỗ tương ứng là đường lưu của tiến trình chính
+  (`campaignRepository.createCampaign` / `updateCampaign`, lưu mẫu nội dung): kiểm trước khi ghi, trả đúng mã và câu như API Web.
+  Đây vẫn là bước lưu, không phải logic chạy.
+
+Công tắc: một khoá `auto_system_settings` ba mức `block` / `warn` (chỉ nhắc, vẫn lưu) / `off`. Thiếu dòng = `block`.
+API Web đọc mỗi lần lưu, form Web lấy mức này từ API, Desktop đọc chung câu đọc cài đặt lúc đăng nhập. Không cần migration.
+
+## 7. Phần không làm: logic chạy
+
+Theo anh chốt, bộ chạy không đổi gì. Hệ quả cần biết:
+
+1. **Chiến dịch đã lưu với nội dung lỗi vẫn gửi như hiện nay** cho tới khi khách mở ra sửa. Phần này chỉ xử lý được bằng mục 8.
+2. **Bản Desktop cũ vẫn lưu được nội dung lỗi**, vì nó ghi thẳng DB, không qua API Web và chưa có bước kiểm. Hết khi khách
+   cập nhật app.
+3. **Chiến dịch do hệ thống tự tạo trong lúc chạy** (chiến dịch up tin, chiến dịch SMS gửi kèm) chép nội dung từ chiến dịch
+   nguồn, không qua form hay API. Nguồn đã được chặn lúc lưu thì bản chép cũng sạch; nguồn cũ còn lỗi thì bản chép lỗi theo.
+
+Lưới đỡ cho ba trường hợp này là script quét ở mục 8, chạy lại sau mỗi đợt phát hành.
+
+## 8. Chiến dịch đang lỗi
+
+Đang chờ / đang chạy với nội dung lỗi: 59428 (1871), 61004 (2189), 49656 (560), 60005 (2116, đang tạm dừng).
+Mỗi lượt chạy tiếp là thêm tin sai, và vì không đụng bộ chạy nên chỉ có cách xử lý tay. Ba cách, anh chọn ở mục 10:
+
+1. Tạm dừng 59428, 61004, 49656 kèm ghi chú chỉ chỗ sai, rồi CSKH báo khách sửa.
+2. Sửa hộ nội dung (chỉ thêm đúng dấu `}` thiếu), ghi biên nhận trước / sau.
+3. Không đụng DB, chỉ gửi danh sách cho CSKH liên hệ.
+
+Kèm theo: script quét chỉ đọc `scripts/content-syntax/scan-prod.cjs` (xuất nội dung ra tệp, chạy bộ kiểm thật, in danh sách
+chiến dịch + mẫu nội dung lỗi theo tổ chức, kèm trạng thái và số tin đã gửi).
+
+## 9. Kiểm thử
+
+- **Trên dữ liệu thật**: chạy bộ kiểm trên toàn bộ ~23.000 nội dung chiến dịch, 2.373 mẫu nội dung và các ô trong `extra_settings`
+  (xuất chỉ đọc ra tệp). Yêu cầu trước khi bật chặn: mọi lỗi mức Chặn đều được xem tay và đúng là lỗi; kỳ vọng dưới 30 dòng.
+- **Bất biến với bộ tách**: nội dung không có lỗi mức Chặn thì số mẫu của `splitContentVariants` phải bằng số mẫu tính kiểu
+  "bỏ qua ngoặc lỗi" (kiểm trên dữ liệu thật và trên chuỗi sinh ngẫu nhiên). Bộ kiểm lệch bộ tách là bài kiểm đỏ.
+- **Ca cố định**: 9 nội dung bị gộp và 2 nội dung biến hỏng ở mục 2 (đã ẩn danh) phải ra đúng mã lỗi và đúng số mẫu bị mất;
+  các ca thoát ký tự `\{ \} \|`; nội dung HTML; biến lồng trong ngoặc xoay vòng `{a #{FULL_NAME}|b}`.
+- **Giao diện**: bài kiểm form thật trên Electron (Desktop) và Playwright (Web): gõ nội dung của khách → thấy câu lỗi, dòng đếm,
+  không lưu được; bấm "Sửa giúp" → lưu được, 3 mẫu.
+- **API**: gọi thẳng API (bỏ qua form) với nội dung lỗi → 400 đúng mã, không ghi gì; nội dung đúng và nội dung chỉ có cảnh báo →
+  lưu như cũ; sửa nhanh ô khác của chiến dịch cũ đang lỗi → vẫn lưu được; công tắc `warn` / `off` → lưu được.
+- md5 hai bản `contentSyntax.ts` (WebApp, Desktop) trùng nhau.
+- Bộ chạy không đổi nên không thêm bài kiểm bộ chạy; chạy lại hai typecheck và bộ kiểm lõi để xác nhận không lệch.
+
+## 10. Việc cần anh quyết
+
+1. **B3 (biến lạ / sai dạng)**: chặn (em đề xuất, vì cũng làm lộ chữ `#{...}` tới người nhận) hay chỉ cảnh báo?
+2. **Chiến dịch đang lỗi (mục 8)**: cách 1, 2 hay 3? Em đề xuất cách 1 cho 59428, 61004, 49656.
+3. **Câu cho khách (4.3)**: anh duyệt hoặc sửa từng câu.
+4. **Desktop**: em hiểu "chặn tương ứng với API" ở Desktop là kiểm ở đường lưu của tiến trình chính (mục 6). Nếu anh chỉ muốn
+   kiểm ở form Desktop thì em bỏ bước này.
+
+## 11. Thứ tự làm sau khi duyệt
+
+| Đợt | Nội dung | Kết quả |
+|---|---|---|
+| 0 | Xử lý chiến dịch đang lỗi theo quyết định 2 | Ngừng gửi thêm tin sai |
+| 1 | `contentSyntax.ts` + bài kiểm + quét dữ liệu thật | Danh sách lỗi đầy đủ, số bắt nhầm |
+| 2 | Thiết kế giao diện, anh duyệt | Chốt cách hiển thị và câu chữ |
+| 3 | Web + API Web, deploy | Khách Web / iOS bị chặn lúc lưu |
+| 4 | Form Desktop + đường lưu Desktop; iOS | Đủ ba nền tảng (theo bản phát hành) |
+| 5 | Quét lại production sau mỗi lần phát hành | Xác nhận không còn chiến dịch lỗi đang chạy |
+
+Gỡ: công tắc về `off` (có hiệu lực không cần phát hành). Không có migration, không đổi dữ liệu.
+
+## 12. Ngoài phạm vi
+
+- Logic chạy: bộ tách `contentSpin`, bộ lập lịch Desktop / App Server, lõi engine v2, ChatApi (anh chốt 24/11).
+- Gửi lại / đính chính các tin đã gửi sai.
+- Gộp các bản chép `contentSpin` về một nguồn (việc riêng).
+
+## 13. Tình trạng thực thi (24/11/2026)
+
+Anh bảo "Thực thi". Các quyết định ở mục 10 anh chưa trả lời riêng nên em làm theo đề xuất: biến lạ = chặn, Desktop kiểm ở
+đường lưu của tiến trình chính, câu cho khách dùng bản nháp (chờ anh duyệt), thêm cảnh báo email dùng biến hồ sơ Zalo.
+
+### Đã làm (trên nhánh `claude/ecstatic-carson-0q5vlw` của hai repo, chưa merge)
+
+| Phần | Ở đâu | Kiểm |
+|---|---|---|
+| Bộ kiểm `contentSyntax.ts` | WebApp `packages/campaign-core/src/`, chép nguyên văn sang `src/shared/` | 18 ca, có 6.000 chuỗi ngẫu nhiên so với bộ tách thật |
+| Luật lưu của form Web | WebApp `validation.ts` (`validateCampaignForm`) | `submission.test.ts` |
+| Chặn ở API Web | WebApp `apps/api/.../contentSyntaxGuard.ts`: tạo / sửa chiến dịch, tạo / sửa mẫu nội dung; 400 `campaign_content_syntax_invalid` | 5 ca + 5 ca công tắc |
+| Chặn ở đường lưu Desktop | [contentSyntaxGuard.ts](../src/main/services/contentSyntaxGuard.ts), gọi ở IPC `DB_CREATE_CAMPAIGN` / `DB_UPDATE_CAMPAIGN` và lưu mẫu nội dung | `node scripts/content-syntax/desktop-smoke.cjs` (9 nhóm) |
+| Kiểm trước khi lưu ở form Desktop | `CampaignFormModal.tsx`, `CampaignAgentFormModal.tsx` (trước mọi bước tạo dữ liệu kèm) | hai typecheck |
+| Công tắc | khoá `campaign.content_syntax_guard` (`block` / `warn` / `off`, thiếu dòng = `block`); API Web đọc khi có nội dung lỗi, Web nhận qua cài đặt lúc vào trang, Desktop đọc chung câu đọc cài đặt lúc đăng nhập | có trong các bài trên |
+| Script quét | `scripts/content-syntax/scan-export.sql` (chỉ đọc) + `scan-prod.cjs` | đã chạy trên dữ liệu thật |
+
+Bộ chặn nằm ở lớp IPC / API, không nằm trong `campaignRepository`: bộ lập lịch, App Server và chiến dịch do hệ thống tự tạo
+gọi thẳng repository nên không đi qua. Bài kiểm Desktop khẳng định `campaignScheduler.ts` và `packages/campaign-engine`
+không gọi bộ kiểm, và hai bản `contentSpin.ts` vẫn trùng nhau.
+
+Sửa chiến dịch: API và đường lưu Desktop chỉ kiểm ô nội dung lần lưu này thật sự đổi so với bản đang lưu. Chiến dịch cũ đang
+lỗi vẫn sửa được lịch, giới hạn, trạng thái; form thì kiểm nội dung đang hiện mỗi lần bấm Lưu.
+
+### Chạy bộ kiểm trên dữ liệu thật (chỉ đọc, 24/11)
+
+22.362 ô nội dung có biến / ngoặc (nội dung chính, nội dung nâng cao, lời mời kết bạn, tên gợi nhớ, các ô SMS / comment, mẫu
+nội dung). Bộ kiểm chặn 30 ô ở 28 chiến dịch / mẫu nội dung; em đã xem tay cả 30, đều là lỗi thật:
+
+| Loại | Ở đâu | Số |
+|---|---|---|
+| Biến hoặc ngoặc chưa đóng | 9 chiến dịch bị gộp mẫu ở mục 2, cộng lời mời kết bạn / nội dung nâng cao | 17 ô |
+| Biến lạ hoặc sai dạng, bị gửi nguyên văn | `#{INPUT_Fullname}` (1454), `#{INPUT FULLNAME}` (1836), `#{FULLNAME}` (1), `#{INPUT_NAME}` (713), `#{NAME}` (1293), `#{SEX{…} }` (2219, 2116, một mẫu nội dung) | 13 ô |
+
+Hai điều dữ liệu thật buộc phải đổi so với bản nháp:
+
+- **Ô "Tên gợi nhớ" chỉ nhắc, không chặn.** 45 chiến dịch (chủ yếu tổ chức 704) cố ý viết nhãn kiểu `#{DIỆU}`, `#{F2 BITRIX}`
+  trong tên gợi nhớ. Đây là nhãn nội bộ của khách, chặn là làm hỏng cách họ đang dùng.
+- **Thêm "Sửa giúp" cho các kiểu gõ sai gặp thật**: sai chữ hoa / thường, thiếu gạch dưới (`#{FULLNAME}`), khoảng trắng thay
+  gạch dưới (`#{INPUT FULLNAME}`), khoảng trắng thừa (`#{SEX{…} }`). Chỉ sửa khi có đúng một biến khớp; `#{NAME}`,
+  `#{INPUT_NAME}` không đoán.
+
+Chiến dịch đang chờ chạy có lỗi mức chặn (danh sách đầy đủ hơn mục 8): 59428 (1871), 61004 (2189), 49656 (560),
+58672 (2219, `#{SEX{…} }` bị gửi nguyên văn), 41331 (1293, `#{NAME}` trong lời mời kết bạn). Đang tạm dừng: 60005, 32998, 9019.
+
+### Chưa làm
+
+1. **Đợt 0, chiến dịch đang lỗi**: chưa đụng production, chờ anh chọn cách ở mục 8.
+2. **Giao diện báo lỗi ngay khi gõ** (danh sách lỗi dưới ô nhập, dòng đếm mẫu, nút "Sửa giúp", dải cảnh báo ở Xem trước) trên
+   Web, iOS, Desktop: chờ anh duyệt thiết kế https://claude.ai/artifact/6sxNw3envM1Wa28Hbneocw (gửi 24/11). Hiện tại Web báo ở ô lỗi sẵn có khi bấm Lưu, Desktop hiện hộp báo lỗi khi bấm
+   Lưu, iOS nhận câu lỗi từ API.
+3. Bước gửi của Quy trình tự động, sửa nhanh nội dung trên Desktop (đã được đường lưu chặn, chưa có kiểm trước ở cửa sổ sửa nhanh).
+4. Chưa chạy trong Electron thật và chưa chạy bài kiểm giao diện (Playwright / Electron) cho phần này.
+5. Câu cho khách chờ anh duyệt.
+
+### Thứ tự đưa lên
+
+Deploy API / Web trước (chặn được Web, iOS mọi phiên bản), rồi phát hành Desktop. Không migration. Muốn chỉ nhắc mà chưa
+chặn trong những ngày đầu: thêm dòng `campaign.content_syntax_guard` = `warn` trước khi deploy.
+
+## 14. Rà các lỗi tương tự ở mục soạn nội dung (24/11/2026, chỉ đọc; phần sửa ở mục 15)
+
+Anh hỏi còn kiểu lỗi nào khác làm hệ thống gửi cả nội dung mà không tách mẫu. Em đọc mọi đường tách mẫu trong code rồi đối chiếu
+27.185 chiến dịch chưa xoá. Số đếm dưới đây lọc bằng SQL theo dấu hiệu (dấu `|` nằm sát chỗ xuống dòng, độ dài từng phần), nên
+là ước lượng; các ca nêu tên đã xem đoạn trích thật.
+
+### Kiểu lỗi mới tìm ra
+
+| # | Kiểu | Cơ chế | Số đo | Bộ kiểm hiện tại |
+|---|---|---|---|---|
+| 1 | **Dấu ngăn mẫu bị đổi thành `\|` (đã thoát)**: hai mẫu bị gửi chung một tin, kèm ký tự `\|` ở giữa | Mỗi ô "Biến thể" của mẫu nội dung được coi là một khối nguyên. Khách gõ nhiều mẫu ngăn bằng `\|` trong MỘT ô biến thể; khi áp mẫu vào chiến dịch, app tự thêm `\` trước các dấu `\|` đó để giữ nguyên khối (`serializeContentVariants` ở Desktop, `escapeContentVariantSeparators` ở Web `CampaignContentForm.tsx`) | 31 chiến dịch nhắn tin / 13 tổ chức, 11 đang chờ chạy; tăng theo tháng: 8/2026 1, 9/2026 3, 10/2026 10, 11/2026 17. Nguồn: 143 mẫu nội dung / 64 tổ chức có dấu `\|` sát chỗ xuống dòng trong một ô biến thể | Không bắt (cú pháp hợp lệ) |
+| 2 | **Dấu `\|` trang trí bị hiểu là dấu ngăn mẫu**: người nhận chỉ nhận được một mẩu vài chữ | Ở chế độ Cơ bản mọi dấu `\|` ngoài cùng đều ngăn mẫu, kể cả `\|` trong tiêu đề ("FPT TELECOM \| CẬP NHẬT…") hay dòng liên hệ ("HOTLINE … \| NHÀ Ở XÃ HỘI") | 62 chiến dịch nhắn tin / 24 tổ chức, 10 đang chờ chạy: có mẫu ≤ 25 ký tự đứng cạnh mẫu > 150 ký tự và dấu `\|` nằm giữa dòng. Ví dụ 60919 (hoàn thành): một nửa người nhận chỉ nhận 13 ký tự | Không bắt |
+| 3 | **Biến kiểu akaBiz cũ** `[fullname]`, `[Vocative_web]`, `[info1]` bị gửi nguyên văn | akaAgent chỉ thay biến dạng `#{…}`; khách chép nội dung từ phần mềm cũ | 18 chiến dịch / 6 tổ chức, 8 đang chờ chạy | Không bắt |
+
+Ca 1 là ca giống sự cố gốc nhất (nhiều mẫu vào một tin) và đang tăng. Ví dụ đã xem: 57912 (2091), 50467 (1688), 55882 (1730),
+56419 (2132), 55987 (113): dấu `\|` ở cuối một mẫu, ngay trước dòng mở đầu mẫu kế, đã bị thoát.
+
+### Đã rà, không phải lỗi hoặc đã được phủ
+
+- **Nội dung có định dạng (HTML)**: tách bằng cùng bộ tìm dấu ngăn, nên chỉ dính đúng lỗi ngoặc / biến chưa đóng đã có bộ kiểm.
+- **Nội dung nâng cao**: mỗi mục là một khối nguyên, dấu `|` bên trong được gửi nguyên văn. 314 chiến dịch có dấu `|` trong mục
+  nâng cao; các ca đã xem đều là `|` trang trí khách muốn giữ ("2PN | View hồ bơi | 4,5 tỷ"), tức đây là cách dùng đúng. Chỉ 2
+  chiến dịch nhắn tin có dấu `|` sát chỗ xuống dòng trong một mục (21856, 47092, cùng một tổ chức).
+- **Lời mời kết bạn, comment, comment newsfeed, SMS gửi kèm, SMS, gọi tự động, email**: đều tách bằng cùng bộ tách; mọi workflow
+  có nội dung đang ở kiểu chuẩn bị nội dung mới (`campaignContentPreparationVersion = 1`), nhánh cũ gửi nguyên chuỗi không còn
+  được dùng. Tiêu đề email và tên gợi nhớ không tách mẫu (đúng thiết kế).
+- **Ký tự giống dấu `|`** (｜ │ ¦ …): 0 chiến dịch. **Đánh số "Mẫu 1: … Mẫu 2: …" mà không có dấu `|`**: 0 chiến dịch.
+- **Ngoặc `{ }` bọc qua nhiều dòng có dấu `|`**: 13 chiến dịch; hệ thống chọn ngẫu nhiên một phần thay vì luân phiên, không gộp.
+- Bộ chạy cũ của ChatApi (`zaloCampaignExecutor.ts`) không có trong hai repo của phiên này nên chưa đọc; lõi engine v2 chép từ
+  repo này thì đã rà.
+
+### Đề xuất (anh bảo "thực thi tất cả" 24/11; tình trạng ở mục 15)
+
+1. Bộ kiểm thêm luật cho ca 1: dấu `\|` nằm sát chỗ xuống dòng hoặc cuối nội dung → báo "dấu ngăn mẫu này đang bị vô hiệu",
+   có "Sửa giúp" bỏ dấu `\`. Mức chặn hay nhắc tuỳ anh; em đề xuất nhắc vì có khách cố ý thoát dấu `|` trang trí.
+2. Sửa gốc ca 1 ở chỗ soạn / áp mẫu nội dung: ô "Biến thể" có dấu `|` sát chỗ xuống dòng thì hỏi khách muốn tách thành nhiều
+   biến thể hay giữ nguyên, thay vì âm thầm thêm `\`.
+3. Ca 2: dòng đếm mẫu trong bản thiết kế đã giúp khách thấy ("có 2 mẫu" khi họ chỉ viết một tin); thêm cảnh báo khi có mẫu rất
+   ngắn đứng cạnh mẫu dài, gợi ý viết `\|` nếu muốn giữ ký tự.
+4. Ca 3: cảnh báo kèm "Sửa giúp" đổi `[fullname]` → `#{INPUT_FULLNAME}`, `[fullname_web]` → `#{FULL_NAME}`… (bảng đổi đã có ở
+   WebApp `zalo-import.prepare.ts`).
+
+## 15. Thực thi bốn đề xuất của mục 14 (24/11/2026)
+
+Anh bảo "thực thi tất cả." Vẫn giữ nguyên tắc ở mục 3: chỉ giao diện và đường lưu, không đụng logic chạy, không migration,
+chưa đổi gì trên production. Code ở nhánh `claude/ecstatic-carson-0q5vlw` của hai repo, chưa merge, chưa deploy, chưa build.
+
+### Đã làm
+
+| Đề xuất | Cách làm | Ở đâu |
+|---|---|---|
+| 1. Dấu ngăn mẫu bị vô hiệu | Luật `separator_escaped` (nhắc): dấu `\\|` ngoài cùng nằm ở đầu hoặc cuối một dòng. "Sửa giúp" đổi thành `\|`. Dấu `\\|` giữa dòng không nhắc (khách cố ý giữ ký tự) | `contentSyntax.ts` |
+| 2. Sửa gốc ở mẫu nội dung | Một ô "Biến thể" có dấu `\|` đứng ở đầu / cuối dòng thì hỏi "Tách thành N nội dung" hay "Giữ nguyên" (`packedVariantsPrompt`, `expandPackedVariants`): lúc **áp mẫu** vào chiến dịch (form thường + form Agent của Desktop, form Web, cả chế độ nâng cao) và lúc **lưu mẫu** (Desktop `ContentTemplateWorkspace`, Web `TemplatesPage`). Ô có định dạng không hỏi | hai form Desktop, `CampaignContentForm.tsx`, hai màn mẫu nội dung |
+| 3. Mẩu vài chữ do dấu `\|` trang trí | Luật `variant_fragment` (nhắc): dấu `\|` giữa dòng, một bên ≤ 25 ký tự trong khi có mẫu > 150 ký tự. "Sửa giúp" đổi thành `\\|` | `contentSyntax.ts` |
+| 4. Biến akaBiz cũ | Luật `legacy_token` (nhắc): `[fullname]`, `[fullname_web]`, `[fullname_original]`, `[mobile]`, `[phone]`, `[email]`, `[info1–5]`, `[Vocative_web]`. "Sửa giúp" đổi sang `#{INPUT_FULLNAME}`, `#{FULL_NAME}`, `#{ORIGINAL_NAME}`, `#{PHONE}`, `#{EMAIL}`, `#{INFO1–5}`, `#{SEX{Anh-Chị-Anh/Chị}}`. Chỉ ở kênh có biến (Zalo, SMS, Email, Gọi tự động) | `contentSyntax.ts` |
+| Hiện ba cảnh báo cho khách | Trước đó cảnh báo chỉ nằm trong kết quả bộ kiểm, không form nào hiện. Nay lúc bấm Lưu, nội dung có một trong ba cảnh báo thì hỏi một lần (`campaignContentSaveWarning`): nút "Sửa giúp" sửa đúng các chỗ đã nêu rồi để khách xem lại (không tự lưu), nút "Vẫn lưu" lưu như đang viết, dấu X quay lại form. Đã chọn "Vẫn lưu" thì không hỏi lại cùng nội dung đó. Nội dung có định dạng không sửa hộ được: chỉ còn "Vẫn lưu" / "Quay lại sửa" | hai form Desktop, `CampaignFormPage.tsx` (Web) |
+| Hộp xác nhận hai lựa chọn | `ConfirmOptions.onCancel`: nút bên trái chạy lựa chọn thứ hai, dấu X chỉ đóng | Desktop `uiStore.ts` + `ConfirmModal.tsx`, Web `UiFeedback.tsx` |
+
+Ba cảnh báo không chặn lưu ở form, API hay đường lưu Desktop. `applyContentSyntaxFixes` mặc định chỉ sửa lỗi mức chặn; muốn
+sửa cảnh báo phải nêu mã. "Sửa giúp" lúc lưu chỉ sửa một lượt: chỗ mới lộ ra sau khi sửa (ví dụ tách mẫu xong mới thấy một
+mẩu vài chữ) được hỏi ở lần lưu kế tiếp.
+
+### Chạy trên dữ liệu thật (chỉ đọc, 24/11)
+
+Xuất 5.120 nội dung chế độ Cơ bản (mọi chiến dịch có `\|` hoặc biến akaBiz cũ, cộng chiến dịch 30 ngày gần đây có dấu `|` và
+dài hơn 150 ký tự) rồi chạy bộ kiểm: 113 nội dung chỉ có cảnh báo, 4 có lỗi chặn (đã biết), 5.003 sạch. Theo loại: 40 dấu
+ngăn bị vô hiệu ở 29 nội dung, 123 mẩu vài chữ ở 64 chiến dịch (38 mẩu khác nhau, xem từng mẩu: tên dự án, số điện thoại,
+tiêu đề, địa chỉ; một ca "Chào" có thể là khách cố ý), 66 biến akaBiz cũ ở 19 nội dung.
+
+### Kiểm
+
+- WebApp: `contentSyntax.test.ts` 30 ca (có ca hỏi lúc lưu, ca tách ô biến thể, 6.000 chuỗi ngẫu nhiên), campaign-core 555 đạt,
+  `UiFeedback.test.tsx` thêm ca nút bên trái, typecheck Web + API sạch.
+- Desktop: `WEBAPP_REPO=… node scripts/content-syntax/desktop-smoke.cjs` 12 nhóm (md5 trùng bản WebApp; tách ô biến thể rồi đưa
+  qua `serializeContentVariants` + bộ tách đang chạy ra đúng số mẫu), hai typecheck sạch.
+
+### Chưa làm / giới hạn
+
+1. Chưa chạy trong Electron thật, chưa có bài kiểm giao diện cho các hộp hỏi mới.
+2. iOS chưa có bước hỏi lúc lưu và chưa hỏi khi áp mẫu (iOS chỉ nhận lỗi chặn từ API).
+3. Sửa nhanh nội dung trên Desktop và bước gửi của Quy trình tự động không qua form nên không có bước hỏi.
+4. Chiến dịch và mẫu đã lưu không đổi: 31 chiến dịch đang gộp mẫu vì dấu `\|`, 143 mẫu nội dung có ô chứa nhiều nội dung vẫn như
+   cũ tới khi khách mở ra lưu lại (lúc đó mới được hỏi).
+5. Mẫu có định dạng mà áp vào form không hỗ trợ định dạng trên Desktop: hỏi theo bản văn bản thường sau khi chuyển.
+6. Câu cho khách của các hộp hỏi là bản nháp, chờ anh duyệt:
+   - Tách ô biến thể: "Một biến thể đang chứa nhiều nội dung" / "Có ô biến thể chứa nhiều nội dung ngăn bằng dấu |. Tách ra thì
+     sẽ có N nội dung gửi luân phiên. Giữ nguyên thì các nội dung trong ô đó được gửi chung một tin, kèm ký tự |." / "Tách thành
+     N nội dung" / "Giữ nguyên".
+   - Hỏi lúc lưu: "Nội dung có chỗ cần xem lại" / "Nội dung có thể gửi không đúng ý bạn:" + từng dòng / "Sửa giúp" / "Vẫn lưu" /
+     "Quay lại sửa" / "Đã sửa nội dung. Vui lòng xem lại rồi lưu."
+
+## 16. Rà các lỗi nội dung khác: cá nhân hoá, tách mẫu, spin, cắt nội dung (24/11/2026, chỉ đọc, chưa sửa gì)
+
+Cách làm: đọc code dựng nội dung của từng kênh, rồi chạy bộ tách mẫu / spin thật trên 22.243 chiến dịch chưa xoá ở chế độ
+Cơ bản (27.185 chiến dịch, 11.317 nội dung khác nhau) và đối chiếu với tin Zalo đã gửi thật (250.000 dòng lịch sử gần nhất,
+56.156 tin gửi thành công của 1.167 chiến dịch). Chưa quét nội dung nâng cao, mẫu nội dung, bước gửi của Quy trình.
+
+### 16.1. Có thật, bộ kiểm hiện tại chưa báo
+
+| # | Lỗi | Vì sao (code) | Số đo | Mức |
+|---|---|---|---|---|
+| 1 | Ngoặc `{…}` không có dấu gạch đứng bên trong bị gửi nguyên cả ngoặc | `findSpinGroupEnd` chỉ coi là spin khi có dấu gạch đứng; không có thì giữ nguyên chữ | 58 chiến dịch / 18 tổ chức (9 đang chờ); tin thật: 301 tin / 13 chiến dịch. Hay gặp: `{anh-chị-anh/chị}` (quên `#{SEX`), `{gioi_tinh}`, `{FULLNAME}`, cụm chữ bọc ngoặc | nên nhắc |
+| 2 | Chỗ trống chưa điền của bài mẫu: `[tên kh]`, `[vị trí ứng tuyển]`, `[id kênh]`, `[điền biểu phí]` | không phải biến, gửi nguyên văn | ~45 chiến dịch | nên nhắc |
+| 3 | AI viết lại mỗi lượt làm mất tên người nhận | biến được điền trước, AI viết lại sau (`rewriteContentEachRun`) | tin có `#{FULL_NAME}` ở mọi mẫu: không AI thiếu tên 12 / 10.003 (0,1%); có AI 21 / 176 (12%), 4 chiến dịch. 365 chiến dịch bật AI và có biến (64 đang chờ) | nên nhắc |
+| 4 | SMS: xuống dòng bị bỏ, hai câu dính liền (`…bóng đá!ĐĂNG KÝ…`) | `normalizeSmsContentForSend` xoá `\n` không chèn dấu cách khi không bật giữ xuống dòng | 27 chiến dịch / 20 tổ chức (14 đang chờ); xem tin đã tạo: 31 / 31 và 103 / 103 dòng dính chữ | nên nhắc |
+| 5 | Biến lấy từ cột file mà dòng data để trống: ra "Chào ," | `renderCampaignTemplateText` thay bằng chuỗi rỗng; chỉ báo CFG13 khi cả tin rỗng | 120 chiến dịch gần nhất dùng `#{INPUT_FULLNAME}`: 154 / 21.279 dòng trống (6 chiến dịch, 3 cái trống hơn nửa); `#{INFO1}`: 1.390 / 28.951 dòng (2 chiến dịch) | nên nhắc lúc nhập data |
+| 6 | Gửi dạng chia sẻ: mọi biến bị gửi nguyên văn | `shareMessage` chỉ spin | 3 chiến dịch (0 đang chờ) | nên chặn |
+| 7 | Facebook: chỉ `#{FULL_NAME}` và ngày (đúng `DD/MM/YYYY`, `MM/DD/YYYY`) được thay, biến khác gửi nguyên văn; bộ kiểm bỏ qua kênh Facebook | `prepareFacebookCampaignContent`; `usesTokens('other')` = false | 1 chiến dịch | nên chặn |
+| 8 | Nhắn group Zalo kiểu thường có biến cá nhân: tên là tên group, xưng hô luôn là lựa chọn thứ ba | người nhận là group | 3 chiến dịch (1 đang chờ) | nên nhắc |
+| 9 | Lời mời kết bạn bị cắt ở 150 ký tự, tên gợi nhớ bị cắt ở 50 ký tự (engine; bộ cũ thì Zalo từ chối), không báo | `FRIEND_REQUEST_MAX_LENGTH`, `truncateZaloAlias` | lời mời: 5 chiến dịch sát ngưỡng; tên gợi nhớ: 39 chiến dịch có khả năng vượt | nên nhắc |
+| 10 | Nội dung Zalo cá nhân quá dài: Zalo từ chối cả tin | giới hạn của Zalo; đợt này tin 2.000–2.399 ký tự không kèm 1 ảnh vẫn gửi được (118 tin), lỗi cũ bắt đầu từ 2.341 | trên 2.340 ký tự: 20 chiến dịch (1 đang chờ); 2.000–2.340: 22 | nên nhắc |
+| 11 | `#{SEX{anh-chị}}` chỉ hai lựa chọn: người không rõ giới tính bị gọi "anh" | `unknown || male || female` | 28 chiến dịch; giới tính có ở 99,6% tin nên ít gặp | thấp |
+| 12 | Mẫu trùng nhau: 68 chiến dịch mọi mẫu giống hệt, 155 trùng một phần; 1.651 / 11.654 tin thuộc chiến dịch chỉ vài mẫu có `#{FULL_NAME}` | khách chép mẫu | như trên | thấp |
+| 13 | Mẫu chỉ gồm ký tự vô hình (U+2060) | `trim()` không bỏ ký tự này | 6 chiến dịch, 1 tổ chức (3 đang chờ) | thấp |
+| 14 | Nội dung định dạng: dấu gạch đứng gõ sát sau link bị dính vào link (`href="…826\|"`), tin gửi ra link hỏng | trình soạn tự nhận link | 8 chiến dịch, 1 tổ chức (4 đang chờ), 45 tin | thấp |
+| 15 | Email nội dung HTML bị tách mẫu theo dấu gạch đứng trên cả mã HTML | `splitSharedContentVariants(raw)` | 9 chiến dịch (1 đang chờ) | thấp |
+| 16 | Ngày viết sai định dạng (`dd/mm/yyyy` thường) in nguyên chữ; SMS tính ngày lúc tạo data, không phải lúc gửi | `formatDate`, `renderSmsInputContent` | 0 chiến dịch đang dùng | chỉ ghi nhận |
+
+### 16.2. Đã kiểm và không phải lỗi
+
+- `#{FULL_NAME}` trên Zalo cá nhân không bao giờ rỗng (0 / 52.538 tin thiếu tên hiển thị).
+- Xưng hô `#{SEX{…}}`: 99,6% tin có giới tính.
+- Mẫu bắt đầu bằng dòng trống (5.097 chiến dịch, 23% tin gửi đi có dòng trống đầu): 0 / 16.249 tin ghi nhận lại từ Zalo ở các tổ chức
+  có Chat có dòng trống đầu, nên nhiều khả năng Zalo tự bỏ. Chưa xem trên máy người nhận.
+- Facebook nhắn tin có `#{FULL_NAME}`: 21 chiến dịch 45 ngày, 0 / 35.096 dòng thiếu tên.
+- Tiêu đề email không bị tách theo dấu gạch đứng.
+
+### 16.3. Vẫn đang xảy ra vì bản chặn chưa deploy
+
+Trong 250.000 dòng gần nhất: 130 tin / 4 chiến dịch còn `#{SEX{anh-chị-anh/chị}` nguyên văn; 639 tin / 18 chiến dịch còn dấu gạch đứng
+trong tin (một phần là trang trí đúng ý, một phần là gộp mẫu: 59428, 57912, 55987, 56419, 43873). Quét bằng bộ kiểm hiện tại: 15
+chiến dịch mức chặn (2 đang chờ: 58672, 59428), 196 chiến dịch chỉ có cảnh báo.
+
+## 17. Thực thi mục 16 (24/11/2026)
+
+Anh duyệt mục 16 trừ ý 4 ("4 không phải là vấn đề": SMS bỏ xuống dòng giữ nguyên) rồi bảo "Hãy thực thi". Cùng nhánh
+`claude/ecstatic-carson-0q5vlw` ở hai repo; chưa merge, chưa deploy API / Web, chưa build Desktop, không migration, không đụng
+logic chạy (bộ tách, bộ lập lịch, lõi engine, ChatApi).
+
+| Ý | Làm | Mức |
+|---|---|---|
+| 1 | `brace_literal`: ngoặc `{…}` đóng đủ, không có dấu `\|` bên trong. Sửa giúp khi nhận ra biến: `{anh-chị-anh/chị}` / `{SEX{…}}` → `#{SEX{…}}`, `{FULLNAME}` → `#{FULL_NAME}` | hỏi lúc lưu |
+| 2 | `placeholder_unfilled`: `[tên …]`, `[họ và tên]`, `[số điện thoại]`, `[điền …]`, `[vị trí ứng tuyển]`, `[id kênh]`, `[...]` | hỏi lúc lưu |
+| 3 | Bật "Viết nội dung cho mỗi lượt chạy" (hoặc comment) mà nội dung có biến, nội dung không định dạng | hỏi lúc lưu |
+| 5 | `inputRows`: data nhập thẳng lúc tạo thiếu cột mà biến cần (Tên, Email trừ chiến dịch email, Info1–5; SMS / gọi tự động thêm `#{FULL_NAME}`) | hỏi lúc lưu |
+| 6 | `token_unsupported_here`: gửi dạng chia sẻ (bạn bè / group) mà nội dung có biến; đường lưu Desktop và API kiểm lại nội dung cả khi chỉ bật chia sẻ | chặn |
+| 7 | Kênh mới `facebook` (nội dung + comment / up tin / comment newsfeed của chiến dịch Facebook): biến hệ thống khác `#{FULL_NAME}` và ngày bị chặn; biến lạ trang trí chỉ nhắc | chặn |
+| 8 | `token_group_target`: nhắn group kiểu thường có biến tên / xưng hô | hỏi lúc lưu |
+| 9, 10 | `too_long`: chỉ khi chắc chắn vượt (anh duyệt đề xuất này sau đợt đầu): spin lấy lựa chọn dài nhất, biến data / tên tính 0 ký tự, xưng hô lấy lựa chọn ngắn nhất, ngày đúng định dạng. Tin Zalo > 2.300, lời mời kết bạn > 150 khi bật kết bạn, tên gợi nhớ > 50 khi bật đổi tên | hỏi lúc lưu |
+
+Các ý ít gặp (mẫu trùng, mẫu vô hình, link dính dấu `|`, email HTML bị tách, ngày sai định dạng) chưa làm.
+
+Chạy trên 27.185 chiến dịch thật (chỉ đọc): chặn mới chỉ 4 chiến dịch đã hoàn thành (3 gửi dạng chia sẻ, 1 Facebook), không chiến
+dịch đang chạy nào. Nhắc: `brace_literal` 67 chiến dịch (8 đang chờ), `placeholder_unfilled` 39 (11), `token_group_target` 3 (1),
+`too_long` 24 (1 đang chờ; trước khi đổi sang "chắc chắn vượt" là 79, phần lớn là tên gợi nhớ ước lượng 51–60 ký tự).
+
+Kiểm: campaign-core 557 đạt (`contentSyntax.test.ts` 37 ca), API `contentSyntaxGuard.test.ts` 7 ca, smoke Desktop 13 nhóm,
+typecheck Desktop (node + web) và WebApp (campaign-core, web, api) sạch. Câu cho khách là bản nháp, chờ anh duyệt (đầy đủ trong
+`contentSyntax.ts`, phần `campaignContentSaveWarning` và các `push(...)` mới). iOS vẫn chỉ nhận lỗi chặn từ API.
+
+## 18. Vòng kiểm thử ngẫu nhiên và các bản sửa (24/11/2026)
+
+Anh yêu cầu "Kiểm thử và cải tiến … lấy mẫu ngẫu nhiên > kiểm thử > phát hiện lỗi > fix > lấy mẫu ngẫu nhiên > kiểm thử … cho đến khi
+ít nhất 3 vòng không còn vấn đề gì". Cùng nhánh, chưa merge / deploy / build, không migration, không đụng logic chạy.
+
+**Bộ thử** `scripts/content-syntax/fuzz-loop.cjs` (chỉ chạy cục bộ, không gọi DB):
+`node scripts/content-syntax/fuzz-loop.cjs --seed N [--cases 3000] [--real <pool.json> --real-cases 2000] [--dump <file>]`;
+`--replay <dump1,dump2>` chạy lại đúng các ca đã ghi sau khi sửa. Mỗi vòng ~5.000 nội dung trên 12 ô / kênh (Zalo theo SĐT,
+thành viên nhóm, group, chia sẻ, có định dạng, nâng cao, lời mời kết bạn, tên gợi nhớ, SMS, email, Facebook tin nhắn / comment):
+30 mẫu viết tay, nội dung sinh đúng (biết trước số mẫu), nội dung cố tình sai (bỏ / thêm ngoặc, biến hỏng, `\|`, dấu `|` giữa dòng,
+`||`, `{` mở dở; 1–3 lỗi chồng nhau), và nội dung thật lấy chỉ đọc từ DB (file pool để ngoài repo, không commit). Bộ thử nạp
+code thật (bộ kiểm, bộ tách `contentSpin`, `renderCampaignTemplateText`, `renderSmsInputContent`, bộ tách nội dung có định dạng,
+`convertHtmlToZaloMessage`, đường lưu Desktop `contentSyntaxGuard`), dựng tin khách thật sự nhận (nhiều hồ sơ người nhận × nhiều
+cách chọn spin) rồi kiểm 14 tính chất: tin còn `#{` thì phải báo / chặn (T1), chặn vì biến thì tin thật phải còn biến hỏng (T2),
+ngoặc ngoài ý muốn phải báo (T3, T4), đếm mẫu khớp bộ tách thật (T5, T14), nội dung đúng không bị chặn (T6), gộp mẫu phải báo (T7),
+độ dài "chắc chắn vượt" đúng với tin thật khi data rỗng (T8), "Sửa giúp" không sinh lỗi chặn / không đổi chữ ngoài chỗ sửa (T9, T12),
+chia sẻ có biến phải chặn (T10), số dòng data thiếu cột đúng (T11), đường lưu Desktop chặn đúng như bộ kiểm (T13).
+
+**Kết quả**: 16 vòng (hạt giống 1–16). Lỗi thật của bộ kiểm tìm ra và đã sửa:
+
+| Lỗi | Sửa |
+|---|---|
+| `#{STOP_MESSAGES_LINK}` ở lời mời kết bạn / tên gợi nhớ / SMS / email / Facebook bị gửi nguyên văn mà không báo | chỉ điền ở nội dung tin nhắn Zalo; ô khác chặn (tên gợi nhớ nhắc) |
+| "Sửa giúp" gợi ý biến mà ô không điền được (chia sẻ, link từ chối ngoài tin Zalo, biến akaBiz cũ `[fullname]` khi gửi chia sẻ) | không gợi ý, chỉ nhắc |
+| Nội dung có định dạng: biến / đoạn xoay vòng bị thẻ (in đậm, xuống dòng) chen giữa nên bộ chạy không điền / không xoay vòng | mã mới `format_split`: biến chặn, đoạn xoay vòng hỏi lúc lưu |
+| Nội dung có định dạng: bộ kiểm chèn xuống dòng giữa các đoạn, bộ tách thật nối liền (dấu `\` cuối đoạn này thoát ký tự đầu đoạn sau) nên đếm mẫu lệch | chữ nối liền như bộ tách thật, chỗ xuống dòng ghi riêng cho luật theo dòng và độ dài |
+| Độ dài: biến gửi nguyên văn tính 0 ký tự; nội dung có định dạng đếm cả đoạn thay vì từng đoạn chữ; không bỏ khoảng trắng hai đầu như bộ chạy (biến rỗng ở cuối); xưng hô lấy phần ngắn nhất của từng biến riêng thay vì cùng một giới tính | sửa cả bốn; biến hỏng (thiếu ngoặc, sai dạng) thì chưa tính độ dài vì bộ chạy điền lệch không đoán được (lỗi biến đã được báo) |
+| Biến akaBiz cũ / chỗ trống nằm trong một biến (`#{TODAY(DD/MM [fullname] YYYY)}`) bị báo và "sửa" thành biến lồng | bỏ qua chữ nằm trong biến |
+| Ngoặc nằm trong phần bộ chạy điền biến xưng hô (`#{SEX{anh{-chị}}`) bị báo là ngoặc không xoay vòng | bỏ qua |
+
+Phần còn lại là lỗi của chính bộ thử (cách dựng tin, lấy mẫu chưa đủ, vị trí UTF-16 khi làm sai có emoji…), đã sửa. Giới hạn đã chấp
+nhận: hai lỗi bù nhau thành một ngoặc `{A|B}` hợp lệ bọc qua dấu ngăn mẫu thì không phân biệt được với cách khách cố ý viết
+`{Bài A|Bài B}` để chọn ngẫu nhiên một bài (19 nội dung thật), nên không báo.
+
+Ba vòng cuối liên tiếp (hạt giống 14, 15, 16; mỗi vòng 5.030 nội dung) không còn vi phạm; chạy lại hạt giống 1–4 và 11, 13 trên bản
+cuối cũng sạch. Kiểm sau cùng: campaign-core 567 đạt (`contentSyntax.test.ts` 47 ca), API `contentSyntaxGuard` 7, Web 1.696,
+smoke Desktop 13 nhóm, typecheck WebApp (campaign-core, web, api) và Desktop (node, web) sạch, md5 hai bản `contentSyntax.ts` trùng.
+Câu cho khách mới (chờ duyệt): chặn link từ chối ngoài tin Zalo, hai câu `format_split`.
