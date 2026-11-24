@@ -1,0 +1,50 @@
+{
+  "migration": "migration_v649_message_opt_out_channels",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "appliedAtVietnam": "2026-11-24T23:00:31+07:00",
+  "requestedBy": "anh: \"Run v649\"",
+  "ledgerVersion": "20261124160031",
+  "appliedFile": "migrations/migration_v649_message_opt_out_channels.sql",
+  "ledgerStatementMd5": "5be1d8efd7b26a341354bf4a3aba6797",
+  "fileMd5": "5be1d8efd7b26a341354bf4a3aba6797",
+  "note": "Apply qua MCP apply_migration, nguyên văn file. Không apply lại. Công tắc message_opt_out.channels để tắt cả ba kênh; chưa deploy API/Web, chưa build Desktop.",
+  "preflight": {
+    "checkedAtVietnam": "2026-11-24T22:56:20+07:00",
+    "activeClientBackends": 3,
+    "ledgerHadV649": false,
+    "lastLedgerBefore": "20261124145753 migration_v648_notification_email_opt_out",
+    "otherBranchesWithV649": "không (git log --all akaAgent, akaAgentWebApp)",
+    "checkZaloProsrcMd5": "debba6a72e49cf2ad16b7ac764fc2e06",
+    "listSmsDueProsrcMd5": "9b7c118534bf14c7ace4a4c60fc68755",
+    "listOptOutCustomersProsrcMd5": "90a3006ec70fec161ec7eb5862c10368",
+    "optOutRows": 42073,
+    "listSmsDueCallers24h": "chỉ service_role, 150 lượt POST từ dịch vụ gửi SMS (206.223.224.237/238), 100% 200",
+    "note": "Hàm danh sách SMS đổi sang VOLATILE; dịch vụ gọi bằng POST nên PostgREST vẫn nhận. Vai trò service_role có USAGE schema private."
+  },
+  "postflight": {
+    "checkZaloProsrcMd5": "ac2e86861e1f637408567421298e90d8",
+    "listSmsDueProsrcMd5": "f8eefecfdc649eb1cddd50b6b4b6b0fb",
+    "listOptOutCustomersProsrcMd5": "933b5ae82c41fdf9c4b7b4d7dd3a3858",
+    "listSmsDue": "plpgsql VOLATILE, SECURITY INVOKER",
+    "optOutRowsByChannel": { "zalo": 42073 },
+    "setting": "{\"sms\":false,\"email\":false,\"facebook\":false}",
+    "channelEnabled": { "sms": false, "email": false, "facebook": false },
+    "opt02": "auto_error id 186 public_code OPT02, 1 chính sách nguồn v649",
+    "grants": {
+      "aka_agent_prepare_message_opt_out": "service_role, aka_agent_desktop",
+      "aka_agent_check_message_opt_out": "service_role, aka_agent_desktop",
+      "aka_agent_inspect_message_opt_out": "service_role",
+      "private.aka_agent_message_opt_out_channel_enabled": "service_role",
+      "private.aka_agent_sms_opt_out_render": "service_role"
+    },
+    "listSmsDueParity": "service_role, giao dịch chỉ đọc: 34 tài khoản có chiến dịch SMS chờ xử lý, 805 dòng, 0 tài khoản khác thân hàm cũ (so json từng dòng)",
+    "postgrestReload": "nhận thông báo 16:00:31.8 UTC, truy vấn schema 1.198 ms",
+    "restErrors15_56to16_01UTC": { "5xx": 0, "503": 0, "p50Ms": "46-48" },
+    "firstCallsAfterApply": {
+      "rpc/aka_agent_list_sms_due_input_data": "16:01:03 UTC, 200 (dịch vụ gửi SMS)",
+      "rpc/aka_agent_check_zalo_message_opt_out": "14 lượt từ 16:00:35 UTC, 100% 200"
+    },
+    "postgresErrors": "không lỗi ERROR/FATAL nào nhắc opt_out / lock timeout từ 15:58 UTC"
+  },
+  "rollback": "migrations/rollback_v649_message_opt_out_channels.sql"
+}
