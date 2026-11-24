@@ -1,6 +1,9 @@
-# Phương án: chặn nội dung sai cú pháp biến / ngoặc (nhiều nội dung bị gộp vào một tin)
+# Phương án: chặn lưu nội dung sai cú pháp biến / ngoặc (nhiều nội dung bị gộp vào một tin)
 
 Ngày lập: 24/11/2026. Trạng thái: **chờ anh duyệt, chưa code, chưa đổi gì trên production.**
+
+Phạm vi (anh chốt lại 24/11): **chỉ kiểm ở giao diện và chặn tương ứng ở API lúc lưu. Không can thiệp vào logic chạy.**
+Bản đầu của phương án có thêm phần bộ chạy tạm dừng chiến dịch (mã CFG21, một migration); phần đó đã bỏ.
 
 ## 1. Sự cố
 
@@ -14,10 +17,7 @@ Nguyên nhân trong code (đã tái hiện bằng bộ tách thật: nội dung 
   mọi dấu `|` phía sau không còn là dấu ngăn mẫu.
 - Biến chỉ được thay khi khớp đúng `#{SEX{...}}` ([src/shared/campaignContentTemplate.ts](../src/shared/campaignContentTemplate.ts)),
   nên biến thiếu ngoặc được gửi nguyên văn.
-- Không nơi nào báo cho khách: form Desktop, form Web, app iOS, API lưu và cả ba bộ chạy đều nhận nội dung này im lặng.
-
-Cùng một bộ tách đang có ở 5 nơi: Desktop `src/shared`, lõi `packages/campaign-engine/src/content` (giống Desktop từng byte),
-WebApp `packages/campaign-core`, WebApp `apps/api/src/shared`, và bản chép lõi ở ChatApi. Cả 5 đều xử lý như nhau.
+- Không nơi nào báo cho khách: form Desktop, form Web, app iOS và API lưu đều nhận nội dung này im lặng.
 
 ## 2. Số đo trên production (quét chỉ đọc 24/11/2026)
 
@@ -26,7 +26,7 @@ WebApp `packages/campaign-core`, WebApp `apps/api/src/shared`, và bản chép l
 | Loại | Số chiến dịch | Ghi chú |
 |---|---|---|
 | Nhiều mẫu bị gộp vào một tin | 9 (5 tổ chức: 485, 1744, 1871, 1877, 2189) | 59428, 61004, 48492, 42610, 9031, 9108, 9164, 47257, 9019 |
-| trong đó đang chờ / đang chạy | 2 | 59428 (tổ chức 1871, VPS bộ cũ), 61004 (tổ chức 2189, Fly engine v2) |
+| trong đó đang chờ / đang chạy | 2 | 59428 (tổ chức 1871), 61004 (tổ chức 2189) |
 | Biến hỏng bị gửi nguyên văn, không gộp | 2 | 45029, 45030 (tổ chức 1133, đã hoàn thành) |
 | Ngoặc lệch nhưng không ảnh hưởng tin gửi | 17 | dấu `}` thừa, hoặc `{` lẻ trong bài không có `\|` |
 
@@ -41,21 +41,21 @@ Ngoài cột nội dung chính:
 - 3 chiến dịch email của tổ chức 1454 dùng `#{INPUT_Fullname}` (sai chữ hoa) nên gửi nguyên văn.
 
 Kết luận: lỗi hiếm (khoảng 0,05% chiến dịch) nhưng mỗi lần xảy ra là hàng trăm tin sai tới khách của khách, không gửi lại được.
-Phần quét `extra_settings` mới chỉ tìm mẫu `#{SEX{`, chưa chạy bộ tách đầy đủ; bước 1 của đợt 1 sẽ quét lại bằng bộ kiểm mới.
+Phần quét `extra_settings` mới chỉ tìm mẫu `#{SEX{`, chưa chạy bộ tách đầy đủ; đợt 1 sẽ quét lại bằng bộ kiểm mới.
 
 ## 3. Nguyên tắc
 
-1. Nội dung sai cú pháp không được gửi đi. Không tự đoán ý khách lúc chạy.
-2. Khách phải thấy lỗi ngay lúc gõ, bằng câu tiếng Việt chỉ đúng chỗ sai và cách sửa.
-3. Một bộ kiểm duy nhất cho form Desktop, form Web, iOS, API lưu và bộ chạy. Không viết luật riêng từng nơi.
-4. Không đổi cách tách của nội dung đúng cú pháp. Bộ tách `contentSpin` giữ nguyên.
-5. Có công tắc tắt khẩn cho phần chặn, vì bộ kiểm sai là khách không lưu / không chạy được.
+1. Khách phải thấy lỗi ngay lúc gõ, bằng câu tiếng Việt chỉ đúng chỗ sai và cách sửa.
+2. Nội dung sai cú pháp không lưu được: form chặn, API chặn lại lần nữa.
+3. Một bộ kiểm duy nhất cho form Desktop, form Web, iOS và API. Không viết luật riêng từng nơi.
+4. Không đụng logic chạy: bộ tách `contentSpin`, bộ lập lịch, lõi engine và ChatApi giữ nguyên. Không migration.
+5. Có công tắc tắt khẩn cho phần chặn, vì bộ kiểm bắt nhầm là khách không lưu được.
 
 ## 4. Bộ kiểm cú pháp dùng chung
 
-Module mới `contentSyntax.ts`, tự đứng một mình (không import gì), viết ở WebApp `packages/campaign-core/src/` rồi chép nguyên văn
-sang Desktop `src/shared/` và lõi `packages/campaign-engine/src/content/` (bài kiểm so md5 như các hợp đồng dùng chung khác;
-ChatApi nhận qua `scripts/sync-campaign-engine.cjs`).
+Module mới `contentSyntax.ts`, tự đứng một mình (không import gì), viết ở WebApp `packages/campaign-core/src/` (Web, iOS và API
+cùng dùng) rồi chép nguyên văn sang Desktop `src/shared/` (bài kiểm so md5 như các hợp đồng dùng chung khác).
+Không chép vào lõi `packages/campaign-engine`.
 
 ```ts
 analyzeContentSyntax(text, { channel, html }) => {
@@ -82,7 +82,7 @@ Danh sách biến hợp lệ lấy từ code đang chạy: `TODAY(...)`, `TOMORR
 `ORIGINAL_NAME`, `INPUT_FULLNAME`, `UID`, `PHONE`, `MOBILE`, `EMAIL`, `INFO1`–`INFO5`, `STOP_MESSAGES_LINK`.
 Ký tự thoát giữ như hiện nay: `\{`, `\}`, `\|`, `\\`.
 
-"Chặn" nghĩa là: không lưu được, và bộ chạy không gửi. "Cảnh báo" nghĩa là: hiện câu nhắc, vẫn lưu và chạy được.
+"Chặn" nghĩa là không lưu được, ở form lẫn API. "Cảnh báo" nghĩa là hiện câu nhắc, vẫn lưu được.
 
 ### 4.2. Sửa giúp
 
@@ -92,7 +92,7 @@ Chỉ với lỗi có đúng một cách sửa:
 - `#{TÊN_BIẾN_HỢP_LỆ` thiếu `}`: thêm `}`.
 - Biến sai chữ hoa / thường của một biến hợp lệ: đổi về đúng tên.
 
-Nút "Sửa giúp" chỉ sửa khi khách bấm. Không tự sửa lúc lưu hay lúc chạy.
+Nút "Sửa giúp" chỉ sửa khi khách bấm. Không tự sửa lúc lưu.
 
 ### 4.3. Câu cho khách (bản nháp, chờ anh duyệt từng câu)
 
@@ -105,7 +105,7 @@ Nút "Sửa giúp" chỉ sửa khi khách bấm. Không tự sửa lúc lưu hay
 | W1 | Dấu `{` ở "…" chưa có dấu `}` đóng. |
 | W2 | Dấu `}` ở "…" không có dấu `{` mở. |
 | Dòng đếm | Nội dung này có N mẫu, gửi luân phiên. |
-| Ghi chú khi bộ chạy dừng | Nội dung chiến dịch có lỗi nên chưa gửi: <câu lỗi đầu tiên> Vui lòng sửa nội dung rồi bấm Tiếp tục. |
+| Khi bấm Lưu mà còn lỗi | Nội dung còn lỗi cú pháp nên chưa lưu được. Vui lòng sửa các chỗ được đánh dấu. |
 
 ## 5. Giao diện
 
@@ -134,55 +134,46 @@ Chỗ sửa:
 
 Trước khi code giao diện em sẽ gửi bản thiết kế (trang xem thử) để anh duyệt, như các tính năng trước.
 
-## 6. Chặn lúc lưu (phía máy chủ)
+## 6. Chặn ở API lúc lưu
 
-Giao diện chỉ che được bản app mới. Phía máy chủ chặn thêm:
+Form chỉ che được bản app mới và người dùng đi qua form. API chặn lại bằng đúng bộ kiểm đó:
 
-- **API Web** (`aka-agent-control.service.ts`, cạnh `validateStopMessagesSettings`): tạo / sửa chiến dịch, sửa nhanh, mẫu nội dung,
-  Quy trình tự động. Lỗi mức Chặn trả 400 mã `campaign_content_syntax_invalid` kèm câu ở 4.3. Che Web, iOS mọi phiên bản và
-  tab Web chưa tải lại.
-- **Desktop tiến trình chính** (`campaignRepository.createCampaign` / `updateCampaign`, lưu mẫu nội dung): kiểm trước khi ghi DB.
+- **API Web** (`apps/api/src/modules/aka-agent-control/aka-agent-control.service.ts`, cạnh `validateStopMessagesSettings`): tạo
+  chiến dịch, sửa chiến dịch, sửa nhanh, nhân bản, Agent tạo chiến dịch, mẫu nội dung, bước gửi của Quy trình tự động.
+  Còn lỗi mức Chặn thì trả 400, mã `campaign_content_syntax_invalid`, kèm câu ở 4.3 và tên ô sai để form đánh dấu đúng chỗ.
+  Che được Web, iOS mọi phiên bản và tab Web chưa tải lại.
+- **Chỉ kiểm ô nội dung có trong yêu cầu lưu.** Sửa nhanh lịch chạy, giới hạn, tạm dừng / tiếp tục của một chiến dịch cũ đang
+  có nội dung lỗi vẫn làm được; lưu cả form thì phải sửa nội dung trước.
+- **Desktop** không lưu qua API Web mà ghi DB từ tiến trình chính. Chỗ tương ứng là đường lưu của tiến trình chính
+  (`campaignRepository.createCampaign` / `updateCampaign`, lưu mẫu nội dung): kiểm trước khi ghi, trả đúng mã và câu như API Web.
+  Đây vẫn là bước lưu, không phải logic chạy.
 
-Không đề xuất trigger DB từ chối ghi ở đợt này: các đường ghi tự động (tạo chiến dịch SMS con, chiến dịch up tin, chiến dịch của
-Quy trình, nhân bản) sẽ lỗi giữa lượt chạy khi nội dung nguồn vốn đã sai, và bảng `auto_campaigns` là bảng nóng. Hệ quả: bản
-Desktop cũ vẫn lưu được nội dung sai cho tới khi khách cập nhật; phần này do bộ chạy (mục 7) và script quét (mục 8) đỡ.
+Công tắc: một khoá `auto_system_settings` ba mức `block` / `warn` (chỉ nhắc, vẫn lưu) / `off`. Thiếu dòng = `block`.
+API Web đọc mỗi lần lưu, form Web lấy mức này từ API, Desktop đọc chung câu đọc cài đặt lúc đăng nhập. Không cần migration.
 
-## 7. Logic chạy
+## 7. Phần không làm: logic chạy
 
-Hiện chưa bộ chạy nào kiểm (đã đọc `dev_3` mới nhất; từ 22/11 không nhánh nào sửa `contentSpin` hay phần chuẩn bị nội dung).
+Theo anh chốt, bộ chạy không đổi gì. Hệ quả cần biết:
 
-Hành vi đề xuất: **đầu lượt chạy, nội dung còn lỗi mức Chặn thì không gửi gì, tạm dừng chiến dịch kèm ghi chú chỉ chỗ sai.**
-Data giữ nguyên trong hàng đợi, không tính lượt, không cộng chuỗi lỗi. Khách sửa nội dung rồi bấm Tiếp tục là chạy tiếp.
-Khi chiến dịch bị tạm dừng, trung tâm thông báo sẵn có sẽ báo cho khách (chuông, Trợ lý aka, email nếu bật).
+1. **Chiến dịch đã lưu với nội dung lỗi vẫn gửi như hiện nay** cho tới khi khách mở ra sửa. Phần này chỉ xử lý được bằng mục 8.
+2. **Bản Desktop cũ vẫn lưu được nội dung lỗi**, vì nó ghi thẳng DB, không qua API Web và chưa có bước kiểm. Hết khi khách
+   cập nhật app.
+3. **Chiến dịch do hệ thống tự tạo trong lúc chạy** (chiến dịch up tin, chiến dịch SMS gửi kèm) chép nội dung từ chiến dịch
+   nguồn, không qua form hay API. Nguồn đã được chặn lúc lưu thì bản chép cũng sạch; nguồn cũ còn lỗi thì bản chép lỗi theo.
 
-| Bộ chạy | Cách làm | Cần phát hành |
-|---|---|---|
-| Engine v2 (Desktop + Fly) | Thêm luật vào `packages/campaign-engine/src/validation.ts`, gọi trong `validateZaloMessagePhone`, `shareAwareValidate`, phiên Facebook / Website (`session.issues`). Dùng đúng đường "kiểm cấu hình đầu lượt" đang có cho CFG10–CFG20: báo một lần, DB quyết định tạm dừng. Mã mới `err_cfg_content_syntax`, mã công khai **CFG21** | Migration (dưới) → chép lõi sang ChatApi, deploy `worker` → bản Desktop mới |
-| Bộ cũ Desktop / App Server | Thêm kiểm cạnh `getAdvancedContentConfigError` trong `campaignScheduler.ts` (5 chỗ gọi: 1274, 2134, 4595, 6009, 7513) và đường SMS (`smsContent.ts`) | Build + cài App Server VPS; bản Desktop mới |
-| Bộ cũ ChatApi (`zaloCampaignExecutor.ts`) | Cùng luật, cho vài cấu hình hiếm còn rơi về bộ cũ trên Fly | Cùng lần deploy `worker` |
+Lưới đỡ cho ba trường hợp này là script quét ở mục 8, chạy lại sau mỗi đợt phát hành.
 
-Migration (chỉ dữ liệu, theo mẫu CFG16 của V501): một dòng `auto_error` (`err_cfg_content_syntax`, CFG21, lớp `content_config`),
-một dòng `auto_outcome_policies` (không tính lượt, không cộng chuỗi, data về hàng đợi, tạm dừng chiến dịch). Phải apply trước khi
-lõi mới chạy, nếu không tín hiệu mới rơi về lỗi chung. Số migration lấy theo sổ production ngay trước lúc apply.
-
-Hai điểm cần biết:
-
-- Bộ chạy chỉ dừng với lỗi mức Chặn. 17 chiến dịch "ngoặc lệch nhưng vô hại" ở mục 2 không bị dừng.
-- Công tắc tắt khẩn: một khoá `auto_system_settings` cho ba mức `off` / `warn` (giao diện chỉ nhắc, bộ chạy không dừng) / `block`.
-  Thiếu dòng = `block` sau khi phát hành. Cách bộ chạy đọc khoá này em chốt lúc code (ưu tiên đường đọc thiết lập sẵn có, không
-  thêm request).
-
-## 8. Chiến dịch đang lỗi (việc trước khi có code)
+## 8. Chiến dịch đang lỗi
 
 Đang chờ / đang chạy với nội dung lỗi: 59428 (1871), 61004 (2189), 49656 (560), 60005 (2116, đang tạm dừng).
-Mỗi lượt chạy tiếp là thêm tin sai. Ba cách, anh chọn ở mục 10:
+Mỗi lượt chạy tiếp là thêm tin sai, và vì không đụng bộ chạy nên chỉ có cách xử lý tay. Ba cách, anh chọn ở mục 10:
 
 1. Tạm dừng 59428, 61004, 49656 kèm ghi chú chỉ chỗ sai, rồi CSKH báo khách sửa.
 2. Sửa hộ nội dung (chỉ thêm đúng dấu `}` thiếu), ghi biên nhận trước / sau.
 3. Không đụng DB, chỉ gửi danh sách cho CSKH liên hệ.
 
 Kèm theo: script quét chỉ đọc `scripts/content-syntax/scan-prod.cjs` (xuất nội dung ra tệp, chạy bộ kiểm thật, in danh sách
-chiến dịch + mẫu nội dung lỗi theo tổ chức). Chạy lại sau mỗi đợt phát hành cho tới khi các bản app cũ hết.
+chiến dịch + mẫu nội dung lỗi theo tổ chức, kèm trạng thái và số tin đã gửi).
 
 ## 9. Kiểm thử
 
@@ -194,34 +185,34 @@ chiến dịch + mẫu nội dung lỗi theo tổ chức). Chạy lại sau mỗ
   các ca thoát ký tự `\{ \} \|`; nội dung HTML; biến lồng trong ngoặc xoay vòng `{a #{FULL_NAME}|b}`.
 - **Giao diện**: bài kiểm form thật trên Electron (Desktop) và Playwright (Web): gõ nội dung của khách → thấy câu lỗi, dòng đếm,
   không lưu được; bấm "Sửa giúp" → lưu được, 3 mẫu.
-- **Bộ chạy**: ca mới trong smoke lõi và bộ kịch bản engine: nội dung lỗi → 0 lệnh gửi, chiến dịch tạm dừng, ghi chú đúng câu,
-  data còn trong hàng đợi; sửa nội dung → chạy tiếp. Bộ cũ: ca tương tự trên bộ lập lịch nạp ngoài Electron.
-- md5 ba bản `contentSyntax.ts` (WebApp, Desktop, lõi) trùng nhau.
+- **API**: gọi thẳng API (bỏ qua form) với nội dung lỗi → 400 đúng mã, không ghi gì; nội dung đúng và nội dung chỉ có cảnh báo →
+  lưu như cũ; sửa nhanh ô khác của chiến dịch cũ đang lỗi → vẫn lưu được; công tắc `warn` / `off` → lưu được.
+- md5 hai bản `contentSyntax.ts` (WebApp, Desktop) trùng nhau.
+- Bộ chạy không đổi nên không thêm bài kiểm bộ chạy; chạy lại hai typecheck và bộ kiểm lõi để xác nhận không lệch.
 
 ## 10. Việc cần anh quyết
 
-1. **Bộ chạy gặp nội dung lỗi**: tạm dừng, không gửi (em đề xuất), hay vẫn gửi và chỉ tách lại cho đúng?
-2. **B3 (biến lạ / sai dạng)**: chặn (em đề xuất, vì cũng làm lộ chữ `#{...}` tới người nhận) hay chỉ cảnh báo?
-3. **Chiến dịch đang lỗi (mục 8)**: cách 1, 2 hay 3? Em đề xuất cách 1 cho 59428, 61004, 49656.
-4. **Câu cho khách (4.3)**: anh duyệt hoặc sửa từng câu.
-5. **Thứ tự phát hành**: em đề xuất Web + API trước (khách bị lỗi đang dùng Web, deploy nhanh nhất), rồi migration CFG21 →
-   `worker` Fly → App Server VPS → Desktop → iOS.
+1. **B3 (biến lạ / sai dạng)**: chặn (em đề xuất, vì cũng làm lộ chữ `#{...}` tới người nhận) hay chỉ cảnh báo?
+2. **Chiến dịch đang lỗi (mục 8)**: cách 1, 2 hay 3? Em đề xuất cách 1 cho 59428, 61004, 49656.
+3. **Câu cho khách (4.3)**: anh duyệt hoặc sửa từng câu.
+4. **Desktop**: em hiểu "chặn tương ứng với API" ở Desktop là kiểm ở đường lưu của tiến trình chính (mục 6). Nếu anh chỉ muốn
+   kiểm ở form Desktop thì em bỏ bước này.
 
 ## 11. Thứ tự làm sau khi duyệt
 
 | Đợt | Nội dung | Kết quả |
 |---|---|---|
-| 0 | Xử lý chiến dịch đang lỗi theo quyết định 3 | Ngừng gửi thêm tin sai |
-| 1 | `contentSyntax.ts` + bài kiểm + quét dữ liệu thật | Danh sách lỗi đầy đủ, số dương tính giả |
-| 2 | Thiết kế giao diện, anh duyệt; Web + API | Khách Web / iOS bị chặn lúc lưu |
-| 3 | Migration CFG21; lõi engine; bộ cũ; ChatApi | Bộ chạy không gửi nội dung lỗi |
-| 4 | Form Desktop; iOS | Đủ ba nền tảng |
+| 0 | Xử lý chiến dịch đang lỗi theo quyết định 2 | Ngừng gửi thêm tin sai |
+| 1 | `contentSyntax.ts` + bài kiểm + quét dữ liệu thật | Danh sách lỗi đầy đủ, số bắt nhầm |
+| 2 | Thiết kế giao diện, anh duyệt | Chốt cách hiển thị và câu chữ |
+| 3 | Web + API Web, deploy | Khách Web / iOS bị chặn lúc lưu |
+| 4 | Form Desktop + đường lưu Desktop; iOS | Đủ ba nền tảng (theo bản phát hành) |
 | 5 | Quét lại production sau mỗi lần phát hành | Xác nhận không còn chiến dịch lỗi đang chạy |
 
-Gỡ: công tắc về `off` (có hiệu lực không cần phát hành); migration CFG21 có bản gỡ; code giao diện và bộ chạy không đổi dữ liệu.
+Gỡ: công tắc về `off` (có hiệu lực không cần phát hành). Không có migration, không đổi dữ liệu.
 
 ## 12. Ngoài phạm vi
 
-- Không đổi bộ tách `contentSpin` (nội dung đúng cú pháp chạy y như cũ).
-- Không gửi lại / đính chính các tin đã gửi sai.
-- Không gộp 5 bản chép `contentSpin` về một nguồn (việc riêng).
+- Logic chạy: bộ tách `contentSpin`, bộ lập lịch Desktop / App Server, lõi engine v2, ChatApi (anh chốt 24/11).
+- Gửi lại / đính chính các tin đã gửi sai.
+- Gộp các bản chép `contentSpin` về một nguồn (việc riêng).
