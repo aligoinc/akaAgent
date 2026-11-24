@@ -20,7 +20,7 @@ function scheduler(db = {}) {
   s.calls = []
   s.logCampaignProgress = async (_c, text) => { s.logs.push(text) }
   s.supabase = {
-    prepareMessageOptOut: async (...args) => { s.calls.push(['prepare', ...args]); if (db.fail) throw new Error('mất mạng'); return { id: ID, isOptedOut: db.optedOut === true } },
+    prepareMessageOptOut: async (...args) => { s.calls.push(['prepare', ...args]); if (db.fail) throw new Error(db.fail === true ? 'mất mạng' : db.fail); return { id: ID, isOptedOut: db.optedOut === true } },
     checkMessageOptOut: async (...args) => { s.calls.push(['check', ...args]); if (db.fail) throw new Error('mất mạng'); return db.optedOut === true },
   }
   return s
@@ -84,6 +84,16 @@ async function check(name, fn) {
     assert.deepEqual(await s.resolveChannelOptOut(account, c, { email: 'a@x.com' }), { blocked: null })
     assert.match(s.logs[0], /Không thể kiểm tra từ chối nhận tin; vẫn tiếp tục gửi/)
     assert.equal(s.applyChannelOptOutLink(c, `Chào ${TOKEN}`), 'Chào https://b.akabiz.biz/s/error')
+    assert.equal(s.applyChannelOptOutLink(c, 'Chào'), 'Chào')
+  })
+
+  await check('kênh vừa tắt trên DB (đăng nhập trước lúc tắt): bỏ biến, không dòng cuối, không cảnh báo', async () => {
+    channels = { sms: false, email: true, facebook: false }
+    const s = scheduler({ fail: 'Không thể tạo link từ chối nhận tin: message_opt_out_channel_disabled' })
+    const c = campaign('email_send', { zaloOptOutLinkEnabled: true })
+    assert.deepEqual(await s.resolveChannelOptOut(account, c, { email: 'a@x.com' }), { blocked: null })
+    assert.equal(s.logs.length, 0)
+    assert.equal(s.applyChannelOptOutLink(c, `Chào ${TOKEN}`), 'Chào ')
     assert.equal(s.applyChannelOptOutLink(c, 'Chào'), 'Chào')
   })
 

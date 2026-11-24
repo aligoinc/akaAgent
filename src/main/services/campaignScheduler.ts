@@ -8891,8 +8891,14 @@ export class CampaignScheduler {
         return { blocked: channel }
       }
     } catch (err) {
+      const message = this.getZaloErrorMessage(err)
+      if (message.includes('message_opt_out_channel_disabled')) {
+        // Kênh vừa bị tắt trên DB (công tắc đọc lúc đăng nhập còn cũ): coi như kênh tắt, biến bị bỏ, không dòng cuối.
+        this.channelOptOutContexts.delete(campaign.id)
+        return { blocked: null }
+      }
       await this.logCampaignProgress(campaign,
-        `⚠️ Không thể kiểm tra từ chối nhận tin; vẫn tiếp tục gửi: ${this.getZaloErrorMessage(err) || 'Lỗi không xác định'}`).catch(() => {})
+        `⚠️ Không thể kiểm tra từ chối nhận tin; vẫn tiếp tục gửi: ${message || 'Lỗi không xác định'}`).catch(() => {})
     }
     return { blocked: null }
   }
