@@ -1,0 +1,1221 @@
+{
+  "version": "10.5.0",
+  "previous_release": {
+    "version": "10.4.0",
+    "source_commit": "4621949a",
+    "installer_windows_sha256": "50e3f6196cdcbbda08305f5a482db24f0dd0afa3fc1ec7c8d259b637ca29fa19",
+    "note": "Bộ cài 10.4.0 đang trên feed (tải lên 23:14–23:15 VN 22/11, cùng số byte với bản build)."
+  },
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.5.0",
+  "worktree_used": true,
+  "source_branch": "codex/release-10.5.0",
+  "source_commit": "dd4395eddb926a65c73a820a15f72a5ebbd19dae",
+  "source_base_commit": "3d63c4536faeb5b1d4629560624c3010636b8da1",
+  "source_base_ref": "origin/dev_3 (sau PR #779)",
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "version_note": "Commit chỉ đổi version 10.4.0 → 10.5.0 ở package.json, package-lock.json (hai chỗ của gói gốc), version.txt.",
+  "new_since_previous": [
+    "#778 khung \"Sau khi chạy: đưa khách vào nhóm\" trong form chiến dịch (thường + Agent) và trang Tự động hóa ba thẻ (Quy trình = trang Web nhúng, Từ chiến dịch, Quy tắc cũ); V627 đã apply",
+    "#779 chỉ version + biên nhận 10.4.0"
+  ],
+  "dependencies": "npm ci trong worktree xong undefined VN 23/11; better-sqlite3 dựng lại cho Electron arm64, checksum ced697fc… như repo chính",
+  "build_window_vn": {
+    "desktop": "2026-11-23 20:52:56 - 20:56:25",
+    "app_server": null
+  },
+  "build_input_manifest": {
+    "files": 1886,
+    "scope": "file Git theo dõi dưới src/, scripts/, build/, packages/ và 9 file cấu hình gốc",
+    "sha256_before": "2885b41a568beb9f287eb4fa3f58eaea97d0bb0723827f0e7c72a12ad3abc5d5",
+    "sha256_after": "2885b41a568beb9f287eb4fa3f58eaea97d0bb0723827f0e7c72a12ad3abc5d5",
+    "identical": true
+  },
+  "checks_passed": [
+    "typecheck-node",
+    "typecheck-web",
+    "snapshot-smoke",
+    "idle-reads-smoke",
+    "share-repeat-smoke",
+    "listener-stop-smoke",
+    "session-clock-skew-smoke",
+    "media-timeout-smoke",
+    "engine-desktop-smoke",
+    "renewal-reminder-smoke",
+    "member-matches-smoke",
+    "zalo-server-on-fly-login-smoke",
+    "account-snapshot-chat-sync-smoke",
+    "result-actions-service-smoke",
+    "result-actions-ui-smoke",
+    "aff-partner-smoke",
+    "engine-check-all",
+    "repeat-scheduler-smoke",
+    "repeat-v561-smoke",
+    "repeat-ui-smoke",
+    "repeat-runtime-e2e",
+    "fb-sql-smoke",
+    "fb-copy-smoke",
+    "fb-core-smoke",
+    "fb-error-signs-smoke",
+    "fb-policy-parity-smoke",
+    "fb-legacy-catalog-smoke",
+    "fb-v563-smoke",
+    "fb-desktop-fb-smoke",
+    "fb-workflow-hooks-smoke",
+    "fb-page-trace-smoke",
+    "fb-screenshots-smoke",
+    "fb-autocheck-smoke",
+    "fb-wait-reason-smoke",
+    "fb-replay",
+    "fb-scenarios",
+    "engine-scenarios-fb-repeat",
+    "fb-v564-smoke",
+    "zalo-qr-proxy-reject-smoke",
+    "sleep-guard-smoke",
+    "fb-v575-smoke",
+    "fb-progress-format-smoke",
+    "fb-electron-real-smoke",
+    "fb-scenarios-prod-db",
+    "fb-search-admins-smoke",
+    "fb-search-export-logic-smoke",
+    "found-data-export-ui-smoke",
+    "fb-search-card-parser-smoke",
+    "fb-search-card-service-smoke",
+    "engine-scenarios-prod-db",
+    "target-check-v571-smoke",
+    "fb-v572-smoke",
+    "send-exclusion-v573-smoke",
+    "fb-error-watch-smoke",
+    "fb-error-watch-agent-smoke",
+    "orphan-runs-v576-smoke",
+    "v581-smoke",
+    "fb-business-token-v589-smoke",
+    "ai-chat-desktop-image-smoke",
+    "ai-chat-edge-image-smoke",
+    "ai-chat-images-ui-smoke",
+    "fb-clock-rollback-smoke",
+    "multi-slot-v585-smoke",
+    "repeat-v561-with-v585-smoke",
+    "error-review-v588-smoke",
+    "engine-error-review-ui-smoke",
+    "upgrade-portal-ui-smoke",
+    "fb-v591-smoke",
+    "fb-scenarios-interrupt",
+    "error-watch-v593-smoke",
+    "error-watch-v594-smoke",
+    "error-watch-v599-smoke",
+    "error-watch-v602-smoke",
+    "fb-v598-smoke",
+    "fb-v597-smoke",
+    "fb-v603-smoke",
+    "facebook-messages-smoke",
+    "data-scan-browser-help-smoke",
+    "engine-v601-smoke",
+    "facebook-tab-login-probe-smoke",
+    "fb-v607-smoke",
+    "find-data-app-smoke",
+    "find-data-v608-test",
+    "find-data-group-admin-smoke",
+    "find-data-form-bundle-ui-smoke",
+    "find-data-form-group-admin-ui-smoke",
+    "account-actions-smoke",
+    "limit-progress-smoke",
+    "engagement-config-bound-smoke",
+    "engagement-config-bound-real-fetch",
+    "engagement-chaos-sim",
+    "engagement-v615-smoke",
+    "fb-v616-smoke",
+    "fb-v617-smoke",
+    "web-scan-v618-smoke",
+    "web-scan-runner-smoke",
+    "web-scan-push-smoke",
+    "web-scan-form-ui-smoke",
+    "server-rest-smoke-patched",
+    "post-bump-fixes-smoke-patched",
+    "post-bump-rotation-smoke-patched",
+    "post-bump-rotation-replay-patched",
+    "upgrade-portal-smoke-patched",
+    "akabiz-auto-sync-desktop-smoke",
+    "akabiz-auto-sync-ui-smoke",
+    "notification-toast-smoke",
+    "notification-toast-ui-smoke",
+    "notification-v621-smoke",
+    "notification-v624-smoke",
+    "campaign-result-groups-desktop-smoke",
+    "campaign-result-groups-ui-smoke",
+    "journey-web-embed-electron-smoke"
+  ],
+  "checks_failed_explained": {
+    "server-rest-smoke": "Lỗi của bài kiểm như 10.3.0 / 10.4.0 (thông báo giống hệt 10.4.0, so log). Bản chép đã vá chạy ngay trong run-checks dưới tên server-rest-smoke-patched và đạt. Lỗi của bài kiểm như 10.3.0 (thông báo giống hệt): VM dựng runAccountCampaignQueue thiếu isWebAccountPlatform (#770). Bản chép server-rest-smoke-webplatform.cjs chạy trong run-checks (server-rest-smoke-patched): đạt. Bài kiểm trên dev_3 chưa sửa.",
+    "message-status-sync-smoke": "Hỏng sẵn, thông báo giống hệt 10.4.0 (so log). Lỗi có sẵn, giống hệt 9.7.0 → 10.2.0: hỏng ở nhóm \"file nối DB, Desktop\" (\"phải có hẹn giờ gửi lô\"). Có từ nhánh #672; tính năng đang tắt (chưa có dòng zalo.message_status_sync.enabled), V525/V526 chưa apply.",
+    "fb-replay-20261118": "Phát lại bằng bản chép 18/11: 1.138 dòng khớp, 2 khác chưa giải thích, giống hệt 10.0.0 → 10.4.0. Phát lại bằng bản chép 18/11: 1.138 dòng khớp, 2 khác chưa giải thích như 10.0.0 → 10.2.0 (Up tin 51975, đăng nhóm 55640; đã ghi ở docs/ENGINE_V2_FACEBOOK_PROGRESS_PARITY.md). replay.cjs thoát 1 khi còn khác chưa giải thích.",
+    "post-bump-fixes-smoke": "Lỗi của bài kiểm như 10.3.0 / 10.4.0 (thông báo giống hệt 10.4.0, so log). Bản chép đã vá chạy ngay trong run-checks dưới tên post-bump-fixes-smoke-patched và đạt. Lỗi của bài kiểm như 10.3.0 (cửa sổ 6.000 ký tự của reportFacebookEngineRows). Bản chép nới lên 8.000 chạy trong run-checks (post-bump-fixes-smoke-patched): đạt.",
+    "post-bump-rotation-smoke": "Lỗi của bài kiểm như 10.3.0 / 10.4.0 (thông báo giống hệt 10.4.0, so log). Bản chép đã vá chạy ngay trong run-checks dưới tên post-bump-rotation-smoke-patched và đạt. Lỗi của bài kiểm như 10.3.0 (harness thiếu isGroupPostAnonymous). Bản chép chạy trong run-checks (post-bump-rotation-smoke-patched): đạt.",
+    "post-bump-rotation-replay": "Lỗi của bài kiểm như 10.3.0 / 10.4.0 (thông báo giống hệt 10.4.0, so log). Bản chép đã vá chạy ngay trong run-checks dưới tên post-bump-rotation-replay-patched và đạt. Cùng harness với post-bump-rotation-smoke. Bản chép chạy trong run-checks (post-bump-rotation-replay-patched): đạt, ghi post-bump-rotation-replay.json.",
+    "upgrade-portal-desktop-smoke": "Lỗi của bài kiểm như 10.3.0 / 10.4.0 (thông báo giống hệt 10.4.0, so log). Bản chép đã vá chạy ngay trong run-checks dưới tên upgrade-portal-desktop-smoke-patched và đạt. Lỗi của bài kiểm như 10.2.0 / 10.3.0 (khoá extraAction của uiStore). Bản chép chạy trong run-checks (upgrade-portal-smoke-patched): đạt.",
+    "pending-reason-smoke": "Hỏng sẵn, thông báo giống hệt 10.4.0 (so log). Lỗi có sẵn, thông báo giống hệt 10.3.0 (đã kiểm hỏng y hệt trên mã 10.2.0 37efb347): harness chặn module ./supabaseClient.",
+    "engagement-smoke": "Hỏng sẵn, thông báo giống hệt 10.4.0 (so log). Lỗi có sẵn, thông báo giống hệt 10.3.0 (đã kiểm hỏng y hệt trên mã 10.2.0 37efb347): VM của createCampaignDetail thiếu writeManagedActionResult.",
+    "notification-v622-smoke": "Lỗi của bài kiểm theo giờ chạy: v622_tests.sql đặt lịch 60 chiến dịch ở now() + 2 giờ và chiến dịch đăng fanpage ở now() + 3 giờ; chạy lúc 21:33 VN thì chiến dịch đăng fanpage (00:33) rơi sang ngày mai nên ca \"hơn 50 chiến dịch\" ra tổng 62 thay vì 63. Bài hỏng từ 21:00 VN (không phải từ 23:00 như ghi ở 10.4.0). Bản chép patched-v622/ chỉ đổi hai khoảng thành + 20 / + 40 phút, chạy lại lúc 21:33:52: đạt cả 11 ca (03r-notification-v622-smoke-short-offsets.log)."
+  },
+  "check_highlights": {
+    "engine_check_all_ok_steps": 35,
+    "fb_replay_export_20261116": {
+      "matched": 1171,
+      "decided": 7,
+      "unexplained": 0
+    },
+    "fb_replay_export_20261118": {
+      "matched": 1138,
+      "decided": 0,
+      "unexplained": 2
+    },
+    "fb_scenarios_default": {
+      "seeds": 3,
+      "sends": 182,
+      "violations": 0
+    },
+    "fb_scenarios_prod_db_v575_v576": {
+      "seeds": 20,
+      "sends": 1108,
+      "violations": 0
+    },
+    "fb_scenarios_interrupt_pages": {
+      "seeds": 12,
+      "sends": 799,
+      "violations": 0
+    },
+    "engagement_chaos_sim": [
+      "worktree seed=1 desktop healthy sends=31171 theo dõi=100% đăng ký=100% trả lời ghi=99.93% đã xem ghi=99.88%",
+      "worktree seed=1 desktop chaos sends=31171 theo dõi=99.81% đăng ký=99.29% trả lời ghi=99.01% đã xem ghi=99.09%",
+      "worktree seed=1 vps healthy sends=71756 theo dõi=100% đăng ký=100% trả lời ghi=99.86% đã xem ghi=99.86%",
+      "worktree seed=1 vps chaos sends=71756 theo dõi=99.92% đăng ký=99.9% trả lời ghi=99.57% đã xem ghi=99.68%"
+    ],
+    "engine_scenarios_fb_repeat": {
+      "runs": 37,
+      "sends": 179,
+      "new_violations": 0,
+      "known_violations": 0,
+      "scenario_failures": 0
+    },
+    "engine_scenarios_prod_db_v601": {
+      "runs": 532,
+      "sends": 2981,
+      "new_violations": 0,
+      "known_violations": 1,
+      "scenario_failures": 0
+    },
+    "post_bump_replay_21_days": {
+      "posts": 4846,
+      "dup_posts_pct_old": 56,
+      "dup_posts_pct_new": 13.1,
+      "multi_account_posts": 1717,
+      "multi_account_dup_pct_old": 83,
+      "multi_account_dup_pct_new": 7.1
+    }
+  },
+  "reruns_outside_run_checks": [
+    {
+      "label": "notification-v622-smoke-short-offsets",
+      "command": "bash dist/build-10.5.0-work/patched-v622/smoke_v622_short_offsets.sh (bản chép bash 3.2, lịch now() + 20 / 40 phút thay + 2 / 3 giờ)",
+      "time_vn": "21:33:52-21:33:54",
+      "result": "exit=0"
+    }
+  ],
+  "desktop": {
+    "checks": {
+      "typecheck_node": "passed",
+      "typecheck_renderer": "passed",
+      "packaged_output_parity": "passed",
+      "desktop_secret_absence": "passed",
+      "source_markers": "passed",
+      "existing_installers_preserved": 86,
+      "host_native_restored": true
+    },
+    "source_markers_kept": "Mọi dấu của 10.0.0 → 10.4.0 (markers-new.json của năm bản, main + renderer) và dấu giữ từ 9.9.0",
+    "source_markers_new_in_1050": [
+      {
+        "pr": "#778",
+        "where": "main",
+        "marker": "campaign-result-groups:call",
+        "what": "kênh IPC của khung \"Sau khi chạy: đưa khách vào nhóm\""
+      },
+      {
+        "pr": "#778",
+        "where": "main",
+        "marker": "/api/aka-agent/desktop/v1/campaign-result-groups",
+        "what": "API Web của khung Sau khi chạy (token phiên Desktop)"
+      },
+      {
+        "pr": "#778",
+        "where": "main",
+        "marker": "aka_agent_control_session",
+        "what": "Tự động hóa › Quy trình: cookie phiên Web đặt vào phân vùng webview"
+      },
+      {
+        "pr": "#778",
+        "where": "main",
+        "marker": "persist:akaagent_web_",
+        "what": "Tự động hóa › Quy trình: phân vùng webview riêng theo tổ chức / nhân viên"
+      },
+      {
+        "pr": "#778",
+        "where": "renderer",
+        "marker": "Sau khi chạy: đưa khách vào nhóm",
+        "what": "khung trong form chiến dịch (thường + Agent)"
+      },
+      {
+        "pr": "#778",
+        "where": "renderer",
+        "marker": "Quy trình tự động: dựng kéo thả hoặc nhờ Agent dựng, chạy trên máy chủ.",
+        "what": "thẻ Quy trình (webview trang Tự động hóa của Web)"
+      }
+    ],
+    "absent_from_main": [
+      "aka_agent_zalo_server_on_fly_v1 (V498, bỏ ở #679)"
+    ],
+    "artifacts": [
+      {
+        "id": "win",
+        "platform": "Windows x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.5.0/dist/akaAgent-Setup-10.5.0.exe",
+        "version": "10.5.0",
+        "resource_version": "10.5.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 627,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 89,
+        "new_markers_absent_in_1040": true,
+        "windows_execution_tested": false,
+        "pe_versions": {
+          "installer": {
+            "version": "10.5.0",
+            "file_version_ms": 655365,
+            "string_file_version": [
+              "10.5.0"
+            ],
+            "string_product_version": [
+              "10.5.0"
+            ],
+            "machine": "14c",
+            "authenticode_present": false
+          },
+          "app": {
+            "version": "10.5.0",
+            "file_version_ms": 655365,
+            "string_file_version": [
+              "10.5.0"
+            ],
+            "string_product_version": [
+              "10.5.0.0"
+            ],
+            "machine": "8664",
+            "authenticode_present": false
+          }
+        },
+        "installer_payload_parity": true,
+        "bytes": 153547600,
+        "sha256": "c1c3e91f49438b0f9f5ad501bf3dc31ae5bf9d4c305a148df6e6d50e9d12281e",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0/akaAgent-Setup-10.5.0.exe"
+      },
+      {
+        "id": "arm",
+        "platform": "macOS ARM64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.5.0/dist/akaAgent.dmg",
+        "version": "10.5.0",
+        "resource_version": "10.5.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 89,
+        "new_markers_absent_in_1040": true,
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "arm64",
+          "bundle_short_version": "10.5.0",
+          "bundle_version": "10.5.0",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 183197254,
+        "sha256": "aa2b12098ffd5d4f18ad7fdea64230b52379b25022c217205a1372ca0075c567",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0/akaAgent.dmg"
+      },
+      {
+        "id": "intel",
+        "platform": "macOS Intel x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.5.0/dist/akaAgentIntel.dmg",
+        "version": "10.5.0",
+        "resource_version": "10.5.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 89,
+        "new_markers_absent_in_1040": true,
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "x86_64",
+          "bundle_short_version": "10.5.0",
+          "bundle_version": "10.5.0",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 190352183,
+        "sha256": "cf565fd2126279e4c8abc87d85209a271d744e2b18c440a36b7022cff91bf6a6",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0/akaAgentIntel.dmg"
+      }
+    ]
+  },
+  "app_server": {
+    "built": false,
+    "previous_server": {
+      "version": "10.3.0",
+      "source_commit": "120d54a7",
+      "installed_on_vps": "chưa rõ; App Server 10.3.0 chưa cài VPS theo ghi chú 22/11"
+    },
+    "graph_files": 255,
+    "changed_since_server_1030": [
+      "src/shared/types.ts"
+    ],
+    "why": "Trong 255 file của gói App Server chỉ src/shared/types.ts đổi sau 10.3.0 (#776), và chỉ đổi kiểu TypeScript (thêm trường tuỳ chọn upcomingRunAts / display, thêm loại assistant), không ra mã chạy; nên bộ cài App Server 10.3.0 vẫn đúng mã, không build lại."
+  },
+  "existing_installers": {
+    "checked_unchanged": 86,
+    "note": "Bộ cài .exe/.dmg trong dist/ và dist-server/ của repo chính giữ nguyên checksum sau build"
+  },
+  "main_checkout": {
+    "note": "Không sửa code, không commit, không đổi nhánh checkout chính. CLAUDE.md của checkout chính có thay đổi chưa commit của nhiều phiên nên chỉ ghi checksum trước / sau, không kiểm giữ nguyên.",
+    "before": {
+      "head": "3d63c4536faeb5b1d4629560624c3010636b8da1",
+      "branch": "dev_3",
+      "claude_md_sha256": "3a44b9a55d213113f264f954cca199fc2cd0136082d3e053419829580cc6d30a",
+      "status_short": "M CLAUDE.md"
+    },
+    "after": {
+      "head": "3d63c4536faeb5b1d4629560624c3010636b8da1",
+      "branch": "dev_3",
+      "claude_md_sha256": "3a44b9a55d213113f264f954cca199fc2cd0136082d3e053419829580cc6d30a",
+      "status_short": "M CLAUDE.md"
+    }
+  },
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "time_vn": "20:57:40-20:57:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "time_vn": "20:57:43-20:57:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "snapshot-smoke",
+      "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+      "time_vn": "20:57:44-20:57:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "idle-reads-smoke",
+      "command": "node scripts/desktop-ui-idle-reads-logic-smoke.cjs",
+      "time_vn": "20:57:45-20:57:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "share-repeat-smoke",
+      "command": "node scripts/zalo-share-repeat-smoke-test.cjs",
+      "time_vn": "20:57:45-20:57:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "time_vn": "20:57:45-20:57:45",
+      "result": "exit=1"
+    },
+    {
+      "label": "listener-stop-smoke",
+      "command": "node scripts/zalo-listener-stop-retry-smoke.cjs",
+      "time_vn": "20:57:45-20:57:56",
+      "result": "exit=0"
+    },
+    {
+      "label": "session-clock-skew-smoke",
+      "command": "node scripts/desktop-session-rls/session-clock-skew-smoke.cjs",
+      "time_vn": "20:57:56-20:57:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "media-timeout-smoke",
+      "command": "node scripts/campaign-media-timeout-smoke-test.cjs",
+      "time_vn": "20:57:57-20:57:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-desktop-smoke",
+      "command": "node scripts/campaign-engine-desktop-smoke.cjs",
+      "time_vn": "20:57:57-20:58:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "renewal-reminder-smoke",
+      "command": "node scripts/renewal-reminder-desktop-smoke.cjs",
+      "time_vn": "20:58:04-20:58:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "member-matches-smoke",
+      "command": "node scripts/data-group-member-matches-service-smoke.cjs",
+      "time_vn": "20:58:04-20:58:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "message-status-sync-smoke",
+      "command": "node scripts/zalo-message-status-sync-smoke.cjs",
+      "time_vn": "20:58:05-20:58:05",
+      "result": "exit=1"
+    },
+    {
+      "label": "zalo-server-on-fly-login-smoke",
+      "command": "node scripts/zalo-server-on-fly-login-smoke.cjs",
+      "time_vn": "20:58:05-20:58:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-snapshot-chat-sync-smoke",
+      "command": "node scripts/desktop-account-snapshot-chat-sync-smoke.cjs",
+      "time_vn": "20:58:05-20:58:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-service-smoke",
+      "command": "node scripts/campaign-result-actions-service-smoke.cjs",
+      "time_vn": "20:58:05-20:58:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-ui-smoke",
+      "command": "node scripts/run-campaign-result-actions-ui-smoke.cjs",
+      "time_vn": "20:58:06-20:58:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "aff-partner-smoke",
+      "command": "node scripts/aff-partner-desktop-smoke.cjs",
+      "time_vn": "20:58:12-20:58:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-check-all",
+      "command": "node scripts/campaign-outcome-engine-check-all.cjs",
+      "time_vn": "20:58:12-20:59:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-scheduler-smoke",
+      "command": "node scripts/campaign-repeat-scheduler-smoke.cjs",
+      "time_vn": "20:59:45-20:59:46",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-v561-smoke",
+      "command": "node scripts/campaign-repeat-v561-smoke.cjs",
+      "time_vn": "20:59:46-20:59:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-ui-smoke",
+      "command": "node scripts/run-campaign-repeat-ui-smoke.cjs",
+      "time_vn": "20:59:49-20:59:54",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-runtime-e2e",
+      "command": "node scripts/campaign-repeat-runtime-e2e.cjs",
+      "time_vn": "20:59:54-20:59:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-sql-smoke",
+      "command": "node scripts/engine-v2-facebook/sql-smoke.cjs",
+      "time_vn": "20:59:58-21:00:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-copy-smoke",
+      "command": "node scripts/engine-v2-facebook/copy-smoke.cjs",
+      "time_vn": "21:00:01-21:00:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-core-smoke",
+      "command": "node scripts/engine-v2-facebook/core-smoke.cjs",
+      "time_vn": "21:00:04-21:00:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-signs-smoke",
+      "command": "node scripts/engine-v2-facebook/error-signs-smoke.cjs",
+      "time_vn": "21:00:08-21:00:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-policy-parity-smoke",
+      "command": "node scripts/engine-v2-facebook/policy-parity-smoke.cjs",
+      "time_vn": "21:00:08-21:00:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-legacy-catalog-smoke",
+      "command": "node scripts/engine-v2-facebook/legacy-catalog-smoke.cjs",
+      "time_vn": "21:00:15-21:00:18",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v563-smoke",
+      "command": "node scripts/engine-v2-facebook/v563-smoke.cjs",
+      "time_vn": "21:00:18-21:00:35",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-desktop-fb-smoke",
+      "command": "node scripts/engine-v2-facebook/desktop-fb-smoke.cjs",
+      "time_vn": "21:00:35-21:02:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-workflow-hooks-smoke",
+      "command": "node scripts/engine-v2-facebook/workflow-hooks-smoke.cjs",
+      "time_vn": "21:02:26-21:02:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-page-trace-smoke",
+      "command": "node scripts/engine-v2-facebook/page-trace-smoke.cjs",
+      "time_vn": "21:02:26-21:02:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-screenshots-smoke",
+      "command": "node scripts/engine-v2-facebook/screenshots-smoke.cjs",
+      "time_vn": "21:02:26-21:02:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-autocheck-smoke",
+      "command": "node scripts/engine-v2-facebook/autocheck-smoke.cjs",
+      "time_vn": "21:02:29-21:02:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-wait-reason-smoke",
+      "command": "node scripts/engine-v2-facebook/wait-reason-smoke.cjs",
+      "time_vn": "21:02:29-21:02:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-replay",
+      "command": "node scripts/engine-v2-facebook/replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/engine-v2-fb-replay-2026-11-16.json",
+      "time_vn": "21:02:29-21:02:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-scenarios",
+      "command": "node scripts/engine-v2-facebook/scenarios.cjs",
+      "time_vn": "21:02:44-21:03:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-fb-repeat",
+      "command": "env SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 node scripts/engine-v2-scenarios/run.cjs --skip-general",
+      "time_vn": "21:03:14-21:03:21",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v564-smoke",
+      "command": "node scripts/engine-v2-facebook/v564-smoke.cjs",
+      "time_vn": "21:03:21-21:03:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-qr-proxy-reject-smoke",
+      "command": "node scripts/zalo-qr-proxy-reject-smoke.cjs",
+      "time_vn": "21:03:25-21:03:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "sleep-guard-smoke",
+      "command": "node scripts/desktop-sleep-guard-smoke.cjs",
+      "time_vn": "21:03:25-21:03:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v575-smoke",
+      "command": "node scripts/engine-v2-facebook/v575-smoke.cjs",
+      "time_vn": "21:03:26-21:03:37",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-progress-format-smoke",
+      "command": "node scripts/engine-v2-facebook/progress-format-smoke.cjs",
+      "time_vn": "21:03:37-21:03:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-electron-real-smoke",
+      "command": "node scripts/engine-v2-facebook/electron-real-smoke.cjs",
+      "time_vn": "21:03:38-21:04:21",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-replay-20261118",
+      "command": "node scripts/engine-v2-facebook/replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/engine-v2-fb-replay-2026-11-18.json",
+      "time_vn": "21:04:21-21:04:39",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-scenarios-prod-db",
+      "command": "env FB_SCENARIO_ORPHAN_RUNS=1 node scripts/engine-v2-facebook/scenarios.cjs --seeds 20 --crash 0.08 --dbchaos 0.05",
+      "time_vn": "21:04:39-21:08:32",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-fixes-smoke",
+      "command": "node scripts/post-bump-fixes-smoke.cjs",
+      "time_vn": "21:08:32-21:08:32",
+      "result": "exit=1"
+    },
+    {
+      "label": "post-bump-rotation-smoke",
+      "command": "node scripts/post-bump-content-rotation-smoke.cjs",
+      "time_vn": "21:08:32-21:08:35",
+      "result": "exit=1"
+    },
+    {
+      "label": "post-bump-rotation-replay",
+      "command": "node scripts/post-bump-content-rotation-replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/post-bump-20261118.json --out /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/post-bump-rotation-replay.json",
+      "time_vn": "21:08:35-21:08:44",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-search-admins-smoke",
+      "command": "env LC_ALL=C node scripts/facebook-search-groups/admins-smoke.cjs",
+      "time_vn": "21:08:44-21:09:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-export-logic-smoke",
+      "command": "node scripts/facebook-search-groups/export-logic-smoke.cjs",
+      "time_vn": "21:09:33-21:09:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "found-data-export-ui-smoke",
+      "command": "node scripts/run-campaign-found-data-export-ui-smoke.cjs",
+      "time_vn": "21:09:33-21:09:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-card-parser-smoke",
+      "command": "node scripts/facebook-search-groups/card-parser-smoke.cjs",
+      "time_vn": "21:09:55-21:09:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-card-service-smoke",
+      "command": "node scripts/facebook-search-groups/card-service-smoke.cjs",
+      "time_vn": "21:09:55-21:09:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-prod-db",
+      "command": "env SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 SCENARIO_TARGET_CHECK=1 SCENARIO_V575=1 SCENARIO_V581=1 SCENARIO_ORPHAN_RUNS=1 SCENARIO_MULTI_SLOT_ARRAY=1 node scripts/engine-v2-scenarios/run.cjs",
+      "time_vn": "21:09:58-21:10:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "target-check-v571-smoke",
+      "command": "node scripts/engine-v2-target-check-v571-smoke.cjs",
+      "time_vn": "21:10:25-21:10:34",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v572-smoke",
+      "command": "node scripts/engine-v2-facebook/v572-smoke.cjs",
+      "time_vn": "21:10:34-21:11:46",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v573-smoke",
+      "command": "node scripts/send-exclusion-v573-smoke.cjs",
+      "time_vn": "21:11:46-21:11:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-watch-smoke",
+      "command": "node scripts/engine-v2-facebook/error-watch-smoke.cjs",
+      "time_vn": "21:11:50-21:11:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-watch-agent-smoke",
+      "command": "node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs",
+      "time_vn": "21:11:57-21:12:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "orphan-runs-v576-smoke",
+      "command": "node scripts/engine-v2-orphan-runs-v576-smoke.cjs",
+      "time_vn": "21:12:01-21:12:28",
+      "result": "exit=0"
+    },
+    {
+      "label": "v581-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-outcome-engine-v581-smoke.cjs",
+      "time_vn": "21:12:28-21:12:36",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-business-token-v589-smoke",
+      "command": "env LC_ALL=C node scripts/facebook-business-token-v589-smoke.cjs",
+      "time_vn": "21:12:36-21:12:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-desktop-image-smoke",
+      "command": "bash scripts/ai-chat/desktop_image_smoke.sh",
+      "time_vn": "21:12:38-21:12:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-edge-image-smoke",
+      "command": "node scripts/ai-chat/edge_agent_image_smoke.mjs",
+      "time_vn": "21:12:38-21:12:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-images-ui-smoke",
+      "command": "env AI_CHAT_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-ai-chat-images-ui-smoke.cjs",
+      "time_vn": "21:12:38-21:12:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-clock-rollback-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/clock-rollback-smoke.cjs",
+      "time_vn": "21:12:45-21:12:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "multi-slot-v585-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-multi-slot-array-v585-smoke.cjs",
+      "time_vn": "21:12:48-21:12:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-v561-with-v585-smoke",
+      "command": "env WITH_V585=1 LC_ALL=C node scripts/campaign-repeat-v561-smoke.cjs",
+      "time_vn": "21:12:57-21:13:03",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-review-v588-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-review-v588-smoke.cjs",
+      "time_vn": "21:13:03-21:13:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-error-review-ui-smoke",
+      "command": "node scripts/run-engine-error-review-ui-smoke.cjs",
+      "time_vn": "21:13:07-21:13:18",
+      "result": "exit=0"
+    },
+    {
+      "label": "upgrade-portal-desktop-smoke",
+      "command": "node scripts/upgrade-portal-desktop-smoke.cjs",
+      "time_vn": "21:13:18-21:13:18",
+      "result": "exit=1"
+    },
+    {
+      "label": "upgrade-portal-ui-smoke",
+      "command": "env UPGRADE_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-upgrade-portal-ui-smoke.cjs",
+      "time_vn": "21:13:18-21:13:36",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v591-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v591-smoke.cjs",
+      "time_vn": "21:13:36-21:13:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-scenarios-interrupt",
+      "command": "node scripts/engine-v2-facebook/scenarios.cjs --seeds 12 --interrupt 0.08 --pages 3",
+      "time_vn": "21:13:49-21:15:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v593-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v593-smoke.cjs",
+      "time_vn": "21:15:23-21:15:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v594-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs",
+      "time_vn": "21:15:27-21:15:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v599-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v599-smoke.cjs",
+      "time_vn": "21:15:30-21:15:34",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v602-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v602-smoke.cjs",
+      "time_vn": "21:15:34-21:15:37",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v598-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v598-smoke.cjs",
+      "time_vn": "21:15:37-21:16:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v597-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v597-smoke.cjs",
+      "time_vn": "21:16:05-21:16:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v603-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v603-smoke.cjs",
+      "time_vn": "21:16:11-21:16:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "facebook-messages-smoke",
+      "command": "node scripts/facebook-messages-smoke.cjs",
+      "time_vn": "21:16:30-21:16:36",
+      "result": "exit=0"
+    },
+    {
+      "label": "data-scan-browser-help-smoke",
+      "command": "node scripts/data-scan-browser-help-smoke.cjs",
+      "time_vn": "21:16:36-21:17:21",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-v601-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-outcome-engine-v601-smoke.cjs",
+      "time_vn": "21:17:21-21:17:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "facebook-tab-login-probe-smoke",
+      "command": "node scripts/facebook-tab-login-probe-smoke.cjs",
+      "time_vn": "21:17:23-21:17:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v607-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v607-smoke.cjs",
+      "time_vn": "21:17:33-21:17:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-app-smoke",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin LC_ALL=C node scripts/find-data-push/app-smoke.cjs",
+      "time_vn": "21:17:58-21:18:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-v608-test",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin LC_ALL=C bash scripts/find-data-push/test_v608.sh",
+      "time_vn": "21:18:01-21:18:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-group-admin-smoke",
+      "command": "node scripts/find-data-push/group-admin-data-groups-smoke.cjs",
+      "time_vn": "21:18:06-21:18:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-form-bundle-ui-smoke",
+      "command": "node scripts/find-data-push/run-form-bundle-ui-smoke.cjs",
+      "time_vn": "21:18:08-21:18:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-form-group-admin-ui-smoke",
+      "command": "node scripts/find-data-push/run-form-group-admin-ui-smoke.cjs",
+      "time_vn": "21:18:16-21:18:19",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-actions-smoke",
+      "command": "node scripts/campaign-account-actions-smoke.cjs",
+      "time_vn": "21:18:19-21:18:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "limit-progress-smoke",
+      "command": "node scripts/campaign-limit-progress-smoke.cjs",
+      "time_vn": "21:18:20-21:18:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "pending-reason-smoke",
+      "command": "node scripts/campaign-pending-reason-smoke.cjs",
+      "time_vn": "21:18:20-21:18:20",
+      "result": "exit=1"
+    },
+    {
+      "label": "engagement-smoke",
+      "command": "node scripts/zalo-campaign-engagement-smoke-test.cjs",
+      "time_vn": "21:18:20-21:18:22",
+      "result": "exit=1"
+    },
+    {
+      "label": "engagement-config-bound-smoke",
+      "command": "node scripts/zalo-campaign-engagement-config-bound-smoke.cjs",
+      "time_vn": "21:18:22-21:18:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-config-bound-real-fetch",
+      "command": "env ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron scripts/zalo-campaign-engagement-config-bound-real-fetch.cjs",
+      "time_vn": "21:18:27-21:18:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-chaos-sim",
+      "command": "node scripts/zalo-campaign-engagement-chaos-sim.cjs --seeds 1",
+      "time_vn": "21:18:49-21:25:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-v615-smoke",
+      "command": "env LC_ALL=C node scripts/run-zalo-engagement-v615-smoke.cjs",
+      "time_vn": "21:25:48-21:25:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v616-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v616-smoke.cjs",
+      "time_vn": "21:25:49-21:31:19",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v617-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v617-smoke.cjs",
+      "time_vn": "21:31:19-21:32:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-v618-smoke",
+      "command": "env LC_ALL=C node scripts/web-scan/v618-smoke.cjs",
+      "time_vn": "21:32:16-21:32:19",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-runner-smoke",
+      "command": "node scripts/web-scan/runner-smoke.cjs",
+      "time_vn": "21:32:19-21:32:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-push-smoke",
+      "command": "env LC_ALL=C node scripts/web-scan/push-smoke.cjs",
+      "time_vn": "21:32:20-21:32:22",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-form-ui-smoke",
+      "command": "node scripts/web-scan/form-ui-smoke.cjs",
+      "time_vn": "21:32:22-21:32:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/server-rest-smoke-webplatform.cjs",
+      "time_vn": "21:32:30-21:32:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-fixes-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/patched-post-bump/scripts/post-bump-fixes-smoke.cjs",
+      "time_vn": "21:32:30-21:32:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-rotation-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/patched-post-bump/scripts/post-bump-content-rotation-smoke.cjs",
+      "time_vn": "21:32:31-21:32:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-rotation-replay-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/patched-post-bump/scripts/post-bump-content-rotation-replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/post-bump-20261118.json --out /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/post-bump-rotation-replay.json",
+      "time_vn": "21:32:33-21:32:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "upgrade-portal-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/upgrade-portal-smoke-extraaction.cjs",
+      "time_vn": "21:32:47-21:32:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "akabiz-auto-sync-desktop-smoke",
+      "command": "env ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron scripts/akabiz-auto-sync-desktop-smoke.cjs",
+      "time_vn": "21:32:47-21:32:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "akabiz-auto-sync-ui-smoke",
+      "command": "env AKABIZ_AUTO_SYNC_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-akabiz-auto-sync-ui-smoke.cjs",
+      "time_vn": "21:32:47-21:32:54",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-toast-smoke",
+      "command": "node scripts/notification-toast-desktop/smoke.cjs",
+      "time_vn": "21:32:54-21:32:54",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-toast-ui-smoke",
+      "command": "env TOAST_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/notification-toast-desktop/run-toast-ui-smoke.cjs",
+      "time_vn": "21:32:54-21:33:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v621-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/bash32/smoke_v621.sh",
+      "time_vn": "21:33:05-21:33:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v622-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/bash32/smoke_v622.sh",
+      "time_vn": "21:33:11-21:33:12",
+      "result": "exit=1"
+    },
+    {
+      "label": "notification-v624-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.5.0-work/bash32/smoke_v624.sh",
+      "time_vn": "21:33:12-21:33:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-result-groups-desktop-smoke",
+      "command": "node scripts/campaign-result-groups-desktop-smoke.cjs",
+      "time_vn": "21:33:16-21:33:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-result-groups-ui-smoke",
+      "command": "env CRG_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-result-groups-ui-smoke.cjs",
+      "time_vn": "21:33:16-21:33:19",
+      "result": "exit=0"
+    },
+    {
+      "label": "journey-web-embed-electron-smoke",
+      "command": "node scripts/journey-web-embed-electron-smoke.cjs",
+      "time_vn": "21:33:19-21:33:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "win",
+      "command": "npm run build:win",
+      "time_vn": "2026-11-23 20:52:56 - 2026-11-23 20:54:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "arm",
+      "command": "npm run build:mac",
+      "time_vn": "2026-11-23 20:54:26 - 2026-11-23 20:55:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "intel",
+      "command": "npm run build:mac:intel",
+      "time_vn": "2026-11-23 20:55:26 - 2026-11-23 20:56:25",
+      "result": "exit=0"
+    }
+  ],
+  "uploaded": false,
+  "published": false,
+  "feed_changed": false,
+  "database_changed": false,
+  "services_deployed_by_build": false,
+  "settings_read_at_build": {
+    "read_at_vn": "2026-11-23 20:54:29",
+    "affiliate.program": "{\"audience\": \"all\", \"holdDays\": 7, \"minPayout\": 200000, \"trialReward\": 20000, \"purchaseRate\": 0.1, \"visitWindowDays\": 90, \"purchaseWindowDays\": 90, \"trialRewardMonthlyCap\": 30}",
+    "ai_chat.enabled": "true",
+    "campaign.repeat_after_completion": "{\"audience\":\"all\",\"sweeper\":true}",
+    "campaign.wait_note_minutes": "10",
+    "desktop.updates.startup_prompt_max_version": null,
+    "engine.error_watch": null,
+    "engine.facebook": "{\"mode\":\"all\"}",
+    "engine.target_check": "{\"mode\": \"all\", \"ingest\": true, \"ingestChunk\": 5000, \"ingestBudgetMs\": 40000, \"organizationIds\": [526], \"backfillDayHours\": [8, 18], \"backfillDayBudgetMs\": 3000, \"backfillThresholdIds\": 50000}",
+    "facebook.block_hang_minutes": "10",
+    "facebook.max_comments": "20",
+    "notifications.assistant_inbox": "{\"audience\":\"all\"}",
+    "notifications.default_reports": "{\"audience\":\"off\",\"batch\":200}",
+    "renewal.reminder": "{\"audience\":\"all\",\"bell\":true,\"legacyBanner\":true}",
+    "web_scan.campaigns": "{\"organizationIds\":[1],\"limits\":{\"defaultDaily\":100,\"maxDaily\":500,\"defaultSleepSeconds\":15,\"minSleepSeconds\":10},\"batdongsanLoginCookies\":[]}",
+    "zalo.campaign_engagement.enabled": "true",
+    "desktop.sleep_guard": "chưa có dòng (mặc định Mac bật, Windows tắt, 10 phút, settleSeconds 60)",
+    "zalo.message_status_sync.enabled": "chưa có dòng (tắt)",
+    "facebook.error_signs (md5)": "a8eb20650fc32f7541c6622b7f51caee",
+    "migrations_present_since_v588": [
+      "migration_v627_group_adds_facebook",
+      "migration_v629_send_success_reasons",
+      "migration_v630_recipient_agents_haiku_config",
+      "migration_v516_chat_push_devices"
+    ]
+  },
+  "limitations": [
+    "Windows chưa ký Authenticode, chưa cài/chạy trên Windows thật.",
+    "Mac ký ad-hoc, chưa notarize; Intel chỉ thử SQLite qua Rosetta.",
+    "Chưa chạy luồng đăng nhập, chiến dịch hay Facebook / Zalo thật trên bộ cài.",
+    "Sau khi chạy / Tự động hóa (#778): chưa chạy với API Web thật và tài khoản thật; bài Electron thật dùng máy chủ cục bộ đóng vai API + trang Web nhúng.",
+    "Bài DB V621 / V622 / V624 chạy bản chép cho bash 3.2 của Mac (bài gốc dùng declare -A, mở rộng mảng rỗng dưới set -u).",
+    "Smoke zalo-message-status-sync hỏng sẵn từ nhánh #672 (xem checks_failed_explained)."
+  ]
+}

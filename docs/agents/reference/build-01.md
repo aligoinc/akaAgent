@@ -116,6 +116,13 @@ trên bash 3.2 của Mac (`"${AS[@]}"` rỗng dưới `set -u`, `declare -A`): d
 chạy bộ kiểm trước 22:00 hoặc từ 00:02 (lúc 00:00:44 `campaign-repeat-v561-smoke` còn hỏng ở nhóm engine kết thúc lượt, 00:01:13 thì đạt). `akabiz-auto-sync-desktop-smoke` cần `better-sqlite3` cho Node: chạy bằng
 `ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron …` thay vì `npm rebuild` (rebuild đổi module của worktree mà build đang dùng).
 
+**Build 10.5.0 (23/11/2026, chỉ Desktop).** `dist/build-10.5.0-work/` của repo chính, script sinh từ 10.4.0 (đổi worktree, số bản,
+`(10<<16)+5`); đối chứng là main / renderer giải nén từ bộ cài 10.4.0 đang trên feed. Ba bài DB V621 / V622 / V624 chạy thẳng bằng bản chép
+`bash32/` trong `run-checks.sh`. Đính chính 10.4.0: `smoke_v622` hỏng theo giờ chạy từ **21:00 VN**, không phải 23:00 (`v622_tests.sql` đặt
+chiến dịch đăng fanpage ở `now() + 3 giờ`); V621 vẫn từ 23:00. Muốn chạy V622 sau 21:00 thì dùng bản chép `dist/build-10.5.0-work/patched-v622/`
+(chỉ đổi hai khoảng thành + 20 / + 40 phút). Bộ kiểm chạy 20:57–21:33 VN (~36 phút cho 122 bước), nên bắt đầu trước 21:00 thì mọi bài theo giờ đều qua
+trừ V622.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
