@@ -244,12 +244,12 @@ lỗi vẫn sửa được lịch, giới hạn, trạng thái; form thì kiểm
 ### Chạy bộ kiểm trên dữ liệu thật (chỉ đọc, 24/11)
 
 22.362 ô nội dung có biến / ngoặc (nội dung chính, nội dung nâng cao, lời mời kết bạn, tên gợi nhớ, các ô SMS / comment, mẫu
-nội dung). Mọi dòng bị chặn đã xem tay, đều là lỗi thật:
+nội dung). Bộ kiểm chặn 30 ô ở 28 chiến dịch / mẫu nội dung; em đã xem tay cả 30, đều là lỗi thật:
 
 | Loại | Ở đâu | Số |
 |---|---|---|
-| Biến thiếu ngoặc đóng | 9 chiến dịch bị gộp mẫu ở mục 2, cộng lời mời kết bạn / nội dung nâng cao | 18 ô |
-| Biến lạ hoặc sai dạng, bị gửi nguyên văn | `#{INPUT_Fullname}` (1454), `#{INPUT FULLNAME}` (1836), `#{FULLNAME}` (1), `#{INPUT_NAME}` (713), `#{NAME}` (1293), `#{SEX{…} }` (2219, 2116, một mẫu nội dung) | 18 ô |
+| Biến hoặc ngoặc chưa đóng | 9 chiến dịch bị gộp mẫu ở mục 2, cộng lời mời kết bạn / nội dung nâng cao | 17 ô |
+| Biến lạ hoặc sai dạng, bị gửi nguyên văn | `#{INPUT_Fullname}` (1454), `#{INPUT FULLNAME}` (1836), `#{FULLNAME}` (1), `#{INPUT_NAME}` (713), `#{NAME}` (1293), `#{SEX{…} }` (2219, 2116, một mẫu nội dung) | 13 ô |
 
 Hai điều dữ liệu thật buộc phải đổi so với bản nháp:
 
