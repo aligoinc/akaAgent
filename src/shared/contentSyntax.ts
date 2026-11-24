@@ -19,6 +19,9 @@ export type ContentSyntaxCode =
   | 'brace_stray'
   | 'hashtag_spin'
   | 'token_empty_on_channel'
+  | 'separator_escaped'
+  | 'variant_fragment'
+  | 'legacy_token'
 
 export interface ContentSyntaxFix {
   start: number
@@ -73,6 +76,10 @@ const DEFAULT_SEX_EXAMPLE = '#{SEX{anh-chị-anh/chị}}'
 const ZALO_PROFILE_ONLY_TOKENS = ['FULL_NAME', 'ORIGINAL_NAME']
 
 const ESCAPABLE = '{}|\\'
+const HTML_TAG_HINT = /<\/?(p|div|br|span|strong|em|b|i|u|s|a|ul|ol|li|h[1-6]|blockquote|img|table|tr|td)\b[^>]*>/i
+/** Một mẫu từ ngần này ký tự trở xuống, đứng cạnh mẫu dài hơn `FRAGMENT_LONG_LENGTH`, bị coi là mẩu do dấu | trang trí cắt ra. */
+const FRAGMENT_SHORT_LENGTH = 25
+const FRAGMENT_LONG_LENGTH = 150
 
 function isEscapedSpecial(value: string, index: number): boolean {
   return value[index] === '\\' && index + 1 < value.length && ESCAPABLE.indexOf(value[index + 1]) >= 0
@@ -174,6 +181,91 @@ export function actualVariantSeparatorIndexes(content: string | null | undefined
   return separatorIndexes
 }
 
+/** Từ `index` lùi về trước chỉ gặp khoảng trắng rồi tới đầu dòng / đầu nội dung. */
+function atLineStart(value: string, index: number): boolean {
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const char = value[cursor]
+    if (char === '\n' || char === '\r') return true
+    if (char !== ' ' && char !== '\t') return false
+  }
+  return true
+}
+
+/** Từ `index` đi tiếp chỉ gặp khoảng trắng rồi tới cuối dòng / cuối nội dung. */
+function atLineEnd(value: string, index: number): boolean {
+  for (let cursor = index; cursor < value.length; cursor += 1) {
+    const char = value[cursor]
+    if (char === '\n' || char === '\r') return true
+    if (char !== ' ' && char !== '\t') return false
+  }
+  return true
+}
+
+/**
+ * Dấu `|` ngoài cùng chia làm hai loại theo chỗ đứng: sát chỗ xuống dòng (gần như chắc là dấu ngăn mẫu) và nằm giữa
+ * dòng (có thể chỉ là ký tự trang trí như "2PN | 65m²").
+ */
+export function variantSeparatorPlacement(content: string | null | undefined): { boundary: number[]; inline: number[] } {
+  const value = String(content || '')
+  const boundary: number[] = []
+  const inline: number[] = []
+  for (const index of actualVariantSeparatorIndexes(value)) {
+    if (atLineStart(value, index) || atLineEnd(value, index + 1)) boundary.push(index)
+    else inline.push(index)
+  }
+  return { boundary, inline }
+}
+
+/**
+ * Tách một khối nội dung tại các dấu `|` sát chỗ xuống dòng; dấu `|` giữa dòng giữ nguyên trong từng phần.
+ * Dùng khi một ô "Biến thể" của mẫu nội dung chứa nhiều mẫu khách gõ liền nhau.
+ */
+export function splitAtBoundarySeparators(content: string | null | undefined): string[] {
+  const value = String(content || '')
+  const parts: string[] = []
+  let start = 0
+  for (const index of variantSeparatorPlacement(value).boundary) {
+    const part = value.slice(start, index).trim()
+    if (part) parts.push(part)
+    start = index + 1
+  }
+  const last = value.slice(start).trim()
+  if (last) parts.push(last)
+  return parts
+}
+
+/**
+ * Mỗi ô "Biến thể" của mẫu nội dung là một khối nguyên. Ô nào chứa nhiều nội dung khách gõ liền nhau (dấu `|` sát chỗ
+ * xuống dòng) thì tách ra từng nội dung. Ô có định dạng (HTML) giữ nguyên: vị trí dấu `|` không khớp với chuỗi HTML.
+ */
+export function expandPackedVariants(variants: Array<string | null | undefined>): string[] {
+  const expanded: string[] = []
+  for (const variant of variants) {
+    const text = String(variant || '')
+    if (!text.trim()) continue
+    if (HTML_TAG_HINT.test(text)) expanded.push(text)
+    else for (const part of splitAtBoundarySeparators(text)) expanded.push(part)
+  }
+  return expanded
+}
+
+/** Câu hỏi khi áp / lưu một mẫu có ô biến thể chứa nhiều nội dung. `null` = không có gì để tách. */
+export function packedVariantsPrompt(variants: Array<string | null | undefined>): {
+  total: number; title: string; message: string; confirmText: string; cancelText: string
+} | null {
+  const kept = variants.filter(variant => String(variant || '').trim()).length
+  const total = expandPackedVariants(variants).length
+  if (total <= kept) return null
+  return {
+    total,
+    title: 'Một biến thể đang chứa nhiều nội dung',
+    message: `Có ô biến thể chứa nhiều nội dung ngăn bằng dấu |. Tách ra thì sẽ có ${total} nội dung gửi luân phiên. `
+      + 'Giữ nguyên thì các nội dung trong ô đó được gửi chung một tin, kèm ký tự |.',
+    confirmText: `Tách thành ${total} nội dung`,
+    cancelText: 'Giữ nguyên',
+  }
+}
+
 function countVariants(value: string, separators: number[]): number {
   let count = 0
   let start = 0
@@ -187,7 +279,6 @@ function countVariants(value: string, separators: number[]): number {
 
 // ── HTML → chữ ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-const HTML_TAG_HINT = /<\/?(p|div|br|span|strong|em|b|i|u|s|a|ul|ol|li|h[1-6]|blockquote|img|table|tr|td)\b[^>]*>/i
 
 function htmlToText(html: string): string {
   return html
@@ -427,6 +518,30 @@ function scanToken(scan: Scan, index: number): number {
   return index + 1
 }
 
+const LEGACY_TOKEN = /\[(fullname_original|fullname_web|fullname|mobile|phone|email|info[1-5]|vocative_web)\]/gi
+const LEGACY_TOKEN_MAP: Record<string, string> = {
+  fullname: '#{INPUT_FULLNAME}', fullname_web: '#{FULL_NAME}', fullname_original: '#{ORIGINAL_NAME}',
+  mobile: '#{PHONE}', phone: '#{PHONE}', email: '#{EMAIL}',
+  info1: '#{INFO1}', info2: '#{INFO2}', info3: '#{INFO3}', info4: '#{INFO4}', info5: '#{INFO5}',
+}
+
+/** Biến kiểu akaBiz cũ (`[fullname]`, `[Vocative_web]`…): akaAgent không thay nên bị gửi nguyên văn. */
+function scanLegacyTokens(scan: Scan): void {
+  if (!usesTokens(scan.channel)) return
+  LEGACY_TOKEN.lastIndex = 0
+  let match: RegExpExecArray | null
+  while ((match = LEGACY_TOKEN.exec(scan.text)) !== null) {
+    const key = match[1].toLowerCase()
+    const capital = match[1].charAt(0) !== match[1].charAt(0).toLowerCase()
+    const replacement = key === 'vocative_web'
+      ? (capital ? '#{SEX{Anh-Chị-Anh/Chị}}' : DEFAULT_SEX_EXAMPLE)
+      : LEGACY_TOKEN_MAP[key]
+    push(scan, 'legacy_token', 'warn', match.index, match.index + match[0].length,
+      `${match[0]} là biến của phần mềm akaBiz cũ. akaAgent không thay biến này nên sẽ gửi nguyên văn. Biến tương ứng là ${replacement}.`,
+      { start: match.index, end: match.index + match[0].length, text: replacement })
+  }
+}
+
 function resolveHtml(text: string, html: boolean | 'auto' | undefined): boolean {
   if (html === true) return true
   if (html === 'auto') return HTML_TAG_HINT.test(text)
@@ -443,8 +558,10 @@ export function analyzeContentSyntax(content: string | null | undefined, options
   const openBraces: Array<{ index: number; closed: boolean }> = []
   const stack: number[] = []
   const pipes: Array<{ index: number; inside: number }> = []
+  const escapedPipes: number[] = []
   for (let index = 0; index < text.length; index += 1) {
     if (isEscapedSpecial(text, index)) {
+      if (text[index + 1] === '|' && stack.length === 0) escapedPipes.push(index)
       index += 1
       continue
     }
@@ -484,6 +601,41 @@ export function analyzeContentSyntax(content: string | null | undefined, options
     }
   }
 
+  // Dấu ngăn mẫu bị vô hiệu: `\|` đứng sát chỗ xuống dòng. App tự thêm `\` khi áp một biến thể của mẫu nội dung có
+  // nhiều mẫu gõ liền nhau, nên hai mẫu bị gửi chung một tin.
+  for (const index of escapedPipes) {
+    if (!atLineStart(text, index) && !atLineEnd(text, index + 2)) continue
+    push(scan, 'separator_escaped', 'warn', index, index + 2,
+      'Dấu | này có dấu \\ đứng trước nên không còn ngăn mẫu: phần trước và phần sau nó sẽ được gửi chung một tin, kèm ký tự |. Nếu đây là chỗ ngăn hai mẫu, hãy bỏ dấu \\.',
+      { start: index, end: index + 2, text: '|' })
+  }
+
+  // Dấu | trang trí bị hiểu là dấu ngăn mẫu: một mẫu chỉ vài chữ đứng cạnh mẫu dài, dấu | nằm giữa dòng.
+  if (actual.length > 0) {
+    const lengths: number[] = []
+    const bounds: Array<[number, number]> = []
+    let from = 0
+    for (let position = 0; position <= actual.length; position += 1) {
+      const to = position < actual.length ? actual[position] : text.length
+      lengths.push(text.slice(from, to).trim().length)
+      bounds.push([from, to])
+      from = to + 1
+    }
+    if (Math.max.apply(null, lengths) > FRAGMENT_LONG_LENGTH) {
+      actual.forEach((separator, position) => {
+        if (atLineStart(text, separator) || atLineEnd(text, separator + 1)) return
+        const side = lengths[position] > 0 && lengths[position] <= FRAGMENT_SHORT_LENGTH ? position
+          : lengths[position + 1] > 0 && lengths[position + 1] <= FRAGMENT_SHORT_LENGTH ? position + 1 : -1
+        if (side < 0) return
+        const fragment = text.slice(bounds[side][0], bounds[side][1]).trim()
+        push(scan, 'variant_fragment', 'warn', separator, separator + 1,
+          `Dấu | này đang tách "${fragment}" thành một mẫu riêng: tới lượt mẫu đó người nhận chỉ nhận được ${lengths[side]} ký tự này. Nếu chỉ muốn hiện ký tự |, hãy viết \\|.`,
+          { start: separator, end: separator + 1, text: '\\|' })
+      })
+    }
+  }
+  scanLegacyTokens(scan)
+
   scan.issues.sort((left, right) => left.start - right.start || left.end - right.end)
   return {
     text,
@@ -520,13 +672,17 @@ export function contentSyntaxBlockMessage(label: string, result: ContentSyntaxRe
   return `${label} còn lỗi cú pháp nên chưa lưu được: ${first.message}${merged}${more}`
 }
 
-/** Áp mọi "Sửa giúp" có sẵn, lặp tới khi không còn gì để sửa (tối đa 5 vòng). Không dùng cho HTML. */
+/**
+ * Áp "Sửa giúp" hàng loạt, lặp tới khi không còn gì để sửa (tối đa 5 vòng). Không dùng cho HTML.
+ * Mặc định chỉ sửa lỗi mức chặn; cảnh báo (dấu `\|`, mẩu vụn, biến akaBiz cũ, dấu } thừa) là việc khách tự quyết từng chỗ,
+ * muốn sửa hàng loạt thì nêu rõ `codes`.
+ */
 export function applyContentSyntaxFixes(content: string, options: ContentSyntaxOptions, codes?: ContentSyntaxCode[]): string {
   let text = String(content || '')
   for (let round = 0; round < 5; round += 1) {
     const result = analyzeContentSyntax(text, { channel: options.channel, html: false })
     const fixes = result.issues
-      .filter(issue => issue.fix && issue.code !== 'brace_stray' && (!codes || codes.indexOf(issue.code) >= 0))
+      .filter(issue => issue.fix && (codes ? codes.indexOf(issue.code) >= 0 : issue.severity === 'block'))
       .map(issue => issue.fix as ContentSyntaxFix)
       .sort((left, right) => right.start - left.start)
     if (fixes.length === 0) break
@@ -568,6 +724,10 @@ export interface CampaignContentFieldReport {
   field: string
   label: string
   result: ContentSyntaxResult
+  /** Giá trị gốc của ô và cách ô đó được kiểm (để áp "Sửa giúp" lúc lưu). */
+  value: string
+  channel: ContentSyntaxChannel
+  html: boolean
 }
 
 function fieldText(value: unknown): string | null {
@@ -584,7 +744,7 @@ export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput):
     if (text === null) return
     const result = analyzeContentSyntax(text, { channel: fieldChannel, html })
     if (warnOnly) for (const issue of result.issues) issue.severity = 'warn'
-    reports.push({ field, label, result })
+    reports.push({ field, label, result, value: text, channel: fieldChannel, html: resolveHtml(text, html) })
   }
   const mainHtml: boolean | 'auto' = extra.formattedContentEnabled === true || extra.emailBodyIsHtml === true ? true : 'auto'
 
@@ -628,6 +788,106 @@ export function checkCampaignContentSyntax(input: CampaignContentSyntaxInput, mo
     }
   }
   return { ok: true, field: null, message: '', reports }
+}
+
+// ── Cảnh báo hỏi lại lúc lưu ────────────────────────────────────────────────────────────────────────────────────
+
+/** Ba cảnh báo "nội dung có thể gửi không đúng ý" được hỏi lại một lần lúc lưu. */
+export const CONTENT_SYNTAX_SAVE_WARNING_CODES: ContentSyntaxCode[] = ['separator_escaped', 'variant_fragment', 'legacy_token']
+
+export interface CampaignContentSaveWarning {
+  count: number
+  /** Dấu nhận ra đúng nội dung đã hỏi: khách chọn "Vẫn lưu" thì không hỏi lại cùng nội dung đó. */
+  signature: string
+  title: string
+  message: string
+  /** Giá trị đã sửa theo khoá ô (`content`, `advancedContentItems[2].content`…); rỗng khi không sửa hộ được. */
+  fixes: Record<string, string>
+  fixText: string
+  keepText: string
+  backText: string
+}
+
+/**
+ * Câu hỏi lúc lưu khi nội dung có dấu ngăn mẫu bị vô hiệu, mẩu vài chữ do dấu | trang trí hoặc biến akaBiz cũ.
+ * `null` = không có gì để hỏi (hoặc công tắc đang `off`). Không chặn lưu: khách chọn sửa giúp hoặc vẫn lưu.
+ */
+export function campaignContentSaveWarning(input: CampaignContentSyntaxInput, mode: ContentSyntaxGuardMode = 'block'): CampaignContentSaveWarning | null {
+  if (mode === 'off') return null
+  const counts: Record<string, number> = {}
+  const fixes: Record<string, string> = {}
+  const signature: string[] = []
+  let count = 0
+  let legacyExample = ''
+  let legacyReplacement = ''
+  for (const report of analyzeCampaignContentFields(input)) {
+    const found = report.result.issues.filter(issue => CONTENT_SYNTAX_SAVE_WARNING_CODES.indexOf(issue.code) >= 0)
+    if (found.length === 0) continue
+    count += found.length
+    signature.push(report.field, report.value)
+    for (const issue of found) {
+      counts[issue.code] = (counts[issue.code] || 0) + 1
+      if (issue.code === 'legacy_token' && !legacyExample) {
+        legacyExample = report.result.text.slice(issue.start, issue.end)
+        legacyReplacement = issue.fix ? issue.fix.text : ''
+      }
+    }
+    if (!report.html) {
+      // Chỉ sửa đúng các chỗ vừa nêu (một lượt): chỗ mới lộ ra sau khi sửa sẽ được hỏi ở lần lưu kế tiếp.
+      let fixed = report.value
+      let lastStart = fixed.length + 1
+      const ordered = found.filter(issue => issue.fix).map(issue => issue.fix as ContentSyntaxFix).sort((left, right) => right.start - left.start)
+      for (const fix of ordered) {
+        if (fix.end > lastStart) continue
+        fixed = fixed.slice(0, fix.start) + fix.text + fixed.slice(fix.end)
+        lastStart = fix.start
+      }
+      if (fixed !== report.value) fixes[report.field] = fixed
+    }
+  }
+  if (count === 0) return null
+  const fixable = Object.keys(fixes).length > 0
+  const lines: string[] = []
+  if (counts.separator_escaped) {
+    lines.push(`• ${counts.separator_escaped} dấu \\| nằm riêng ở đầu hoặc cuối dòng nên các mẫu hai bên đang gửi chung một tin.`
+      + (fixable ? ' Sửa giúp: đổi thành dấu | để tách mẫu.' : ''))
+  }
+  if (counts.variant_fragment) {
+    lines.push(`• ${counts.variant_fragment} dấu | giữa dòng đang cắt một mẩu vài chữ thành mẫu riêng.`
+      + (fixable ? ' Sửa giúp: đổi thành \\| để chỉ hiện ký tự |.' : ''))
+  }
+  if (counts.legacy_token) {
+    lines.push(`• ${counts.legacy_token} biến của phần mềm akaBiz cũ (ví dụ ${legacyExample}) sẽ bị gửi nguyên văn.`
+      + (fixable && legacyReplacement ? ` Sửa giúp: đổi sang biến tương ứng (${legacyReplacement}).` : ''))
+  }
+  return {
+    count,
+    signature: signature.join('\u0001'),
+    title: 'Nội dung có chỗ cần xem lại',
+    message: `Nội dung có thể gửi không đúng ý bạn:\n${lines.join('\n')}`
+      + (fixable ? '\n\nBấm "Sửa giúp" để phần mềm sửa các chỗ này, bạn xem lại rồi lưu.' : ''),
+    fixes,
+    fixText: 'Sửa giúp',
+    keepText: 'Vẫn lưu',
+    backText: 'Quay lại sửa',
+  }
+}
+
+/** Áp `fixes` của `campaignContentSaveWarning` vào một bản ghi phẳng kiểu form (`content`, `friendRequestMessage`, `advancedContentItems`…). */
+export function applyCampaignContentFixes<T extends object>(values: T, fixes: Record<string, string>): T {
+  const next: Record<string, unknown> = { ...(values as Record<string, unknown>) }
+  for (const field of Object.keys(fixes)) {
+    const item = /^advancedContentItems\[(\d+)\]\.(content|emailSubject)$/.exec(field)
+    if (item) {
+      const rows = Array.isArray(next.advancedContentItems) ? next.advancedContentItems.slice() : []
+      const index = Number(item[1])
+      if (rows[index] && typeof rows[index] === 'object') {
+        rows[index] = { ...(rows[index] as Record<string, unknown>), [item[2]]: fixes[field] }
+        next.advancedContentItems = rows
+      }
+    } else if (typeof next[field] === 'string') next[field] = fixes[field]
+  }
+  return next as T
 }
 
 /** Đọc giá trị của khoá cài đặt `campaign.content_syntax_guard`. Thiếu hoặc không hiểu = `block`. */

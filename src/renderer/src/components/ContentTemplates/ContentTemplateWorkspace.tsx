@@ -1,3 +1,4 @@
+import { expandPackedVariants, packedVariantsPrompt } from '../../../../shared/contentSyntax'
 import { canManageGroup } from '../../../../shared/groupSharing'
 import { GroupSharingButton, GroupSharingBadge, GroupCopyButton } from '../DataGroups/GroupSharingPanel'
 import { STOP_MESSAGES_INSERT_TEXT, STOP_MESSAGES_LINK_TOKEN } from '../../../../shared/zaloMessageOptOut'
@@ -1015,7 +1016,7 @@ export default function ContentTemplateWorkspace({
     )
   }
 
-  const saveTemplate = async () => {
+  const saveTemplate = async (splitPacked?: boolean) => {
     const name = editor.name.replace(/\s+/g, ' ').trim()
     if (!name) {
       showAlert('Vui lòng nhập tên mẫu nội dung.', 'error')
@@ -1027,9 +1028,20 @@ export default function ContentTemplateWorkspace({
     for (const channelName of CHANNELS) {
       const current = editor.channels[channelName]
       const rich = isRichChannel(channelName, current)
-      const variants = current.variants.map(variant => ({
+      let variants = current.variants.map(variant => ({
         text: rich ? sanitizeFormattedContent(variant.text) : variant.text.trim()
       }))
+      // Một ô biến thể chứa nhiều nội dung ngăn bằng dấu |: hỏi khách muốn tách thành từng biến thể hay giữ nguyên.
+      const packedPrompt = !rich && current.enabled ? packedVariantsPrompt(variants.map(variant => variant.text)) : null
+      if (packedPrompt && splitPacked === undefined) {
+        setEditorChannel(channelName)
+        showConfirm(`${CHANNEL_META[channelName].label}: ${packedPrompt.message}`, () => { window.setTimeout(() => void saveTemplate(true), 0) }, {
+          title: packedPrompt.title, confirmText: packedPrompt.confirmText, cancelText: packedPrompt.cancelText, variant: 'primary',
+          onCancel: () => { window.setTimeout(() => void saveTemplate(false), 0) }
+        })
+        return
+      }
+      if (packedPrompt && splitPacked) variants = expandPackedVariants(variants.map(variant => variant.text)).map(text => ({ text }))
       const channel: ContentTemplateChannelConfig = {
         ...current,
         variants,

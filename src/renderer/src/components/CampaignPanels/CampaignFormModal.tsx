@@ -1,4 +1,4 @@
-import { checkCampaignContentSyntax } from '../../../../shared/contentSyntax'
+import { applyCampaignContentFixes, campaignContentSaveWarning, checkCampaignContentSyntax, expandPackedVariants, packedVariantsPrompt } from '../../../../shared/contentSyntax'
 import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
 import CampaignFacebookAi from './CampaignFacebookAi'
 import { FACEBOOK_AI_SECTIONS, campaignSectionAiSupportsAction, facebookAiSnapshot, type FacebookAiKind, type FacebookAiPatch } from '../../../../shared/campaignFacebookAi'
@@ -4088,6 +4088,7 @@ export default function CampaignFormModal({
     () => showSplitDataOption && splitDataAcrossAccounts ? dedupeCampaignDataForSplit(formData.actionId, details) : null,
     [showSplitDataOption, splitDataAcrossAccounts, formData.actionId, details])
   const sharedDataConfirmedRef = useRef(false)
+  const contentWarningAcceptedRef = useRef<string | null>(null)
   const [detailsPage, setDetailsPage] = useState(1)
   const detailsPageCount = Math.max(1, Math.ceil(details.length / CAMPAIGN_DETAILS_PAGE_SIZE))
   const visibleDetailsPage = Math.min(detailsPage, detailsPageCount)
@@ -5509,7 +5510,7 @@ export default function CampaignFormModal({
     return 'facebook_post'
   }
 
-  const applyContentTemplate = (template: ContentTemplate) => {
+  const applyContentTemplate = (template: ContentTemplate, splitPacked?: boolean) => {
     if (!contentTemplatePicker) return
     const target = contentTemplatePicker.target
     const channelName = getContentTemplateTargetChannel(target)
@@ -5523,9 +5524,19 @@ export default function CampaignFormModal({
       channelName === 'email' || supportsFormattedContent(formData.actionId)
     )
     const applyRich = resolved.rich && targetSupportsRich
-    const variants = resolved.rich && !applyRich
+    const templateVariants = resolved.rich && !applyRich
       ? resolved.variants.map(variant => formattedContentToPlainText(variant)).filter(Boolean)
       : resolved.variants
+    // Một ô "Biến thể" chứa nhiều nội dung ngăn bằng dấu |: hỏi khách muốn tách hay giữ nguyên, không âm thầm thoát dấu |.
+    const packedPrompt = applyRich ? null : packedVariantsPrompt(templateVariants)
+    if (packedPrompt && splitPacked === undefined) {
+      showConfirm(packedPrompt.message, () => { window.setTimeout(() => applyContentTemplate(template, true), 0) }, {
+        title: packedPrompt.title, confirmText: packedPrompt.confirmText, cancelText: packedPrompt.cancelText, variant: 'primary',
+        onCancel: () => { window.setTimeout(() => applyContentTemplate(template, false), 0) }
+      })
+      return
+    }
+    const variants = packedPrompt && splitPacked ? expandPackedVariants(templateVariants) : templateVariants
     if (variants.length === 0) {
       showAlert('Mẫu này không còn nội dung sau khi chuyển sang văn bản thường.', 'error')
       return
@@ -7354,7 +7365,7 @@ export default function CampaignFormModal({
     }
     {
       // Biến / ngoặc viết dở làm nhiều mẫu bị gộp vào một tin hoặc bị gửi nguyên văn: không cho lưu.
-      const syntaxVerdict = checkCampaignContentSyntax({
+      const syntaxInput = {
         actionId: formData.actionId,
         content: isAdvancedContentMode ? undefined : formData.content,
         extraSettings: {
@@ -7370,8 +7381,28 @@ export default function CampaignFormModal({
           postBumpContent: formData.postBumpContent,
           newsfeedCommentContent: formData.newsfeedCommentContent
         }
-      }, useDesktopPollingStore.getState().settings.contentSyntaxGuard ?? 'block')
+      }
+      const syntaxMode = useDesktopPollingStore.getState().settings.contentSyntaxGuard ?? 'block'
+      const syntaxVerdict = checkCampaignContentSyntax(syntaxInput, syntaxMode)
       if (!syntaxVerdict.ok) { showAlert(syntaxVerdict.message, 'error'); return }
+      // Dấu ngăn mẫu bị vô hiệu, mẩu vài chữ do dấu | trang trí, biến akaBiz cũ: hỏi một lần, không chặn lưu.
+      const contentWarning = campaignContentSaveWarning(syntaxInput, syntaxMode)
+      if (contentWarning && contentWarningAcceptedRef.current !== contentWarning.signature) {
+        const saveAnyway = () => {
+          contentWarningAcceptedRef.current = contentWarning.signature
+          sharedDataConfirmedRef.current = sharedDataConfirmed
+          window.setTimeout(() => { void handleSave() }, 0)
+        }
+        if (Object.keys(contentWarning.fixes).length > 0) {
+          showConfirm(contentWarning.message, () => {
+            setFormData(current => applyCampaignContentFixes(current, contentWarning.fixes))
+            showAlert('Đã sửa nội dung. Vui lòng xem lại rồi lưu.', 'success')
+          }, { title: contentWarning.title, confirmText: contentWarning.fixText, cancelText: contentWarning.keepText, variant: 'primary', onCancel: saveAnyway })
+        } else {
+          showConfirm(contentWarning.message, saveAnyway, { title: contentWarning.title, confirmText: contentWarning.keepText, cancelText: contentWarning.backText, variant: 'primary' })
+        }
+        return
+      }
     }
     if (requiresMainContentOrMedia && !isAdvancedGroupSource && !hasMainContentText && !hasSelectedMainMedia) {
       showAlert(

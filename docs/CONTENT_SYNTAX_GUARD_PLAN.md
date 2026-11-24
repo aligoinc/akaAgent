@@ -277,7 +277,7 @@ Chiến dịch đang chờ chạy có lỗi mức chặn (danh sách đầy đ�
 Deploy API / Web trước (chặn được Web, iOS mọi phiên bản), rồi phát hành Desktop. Không migration. Muốn chỉ nhắc mà chưa
 chặn trong những ngày đầu: thêm dòng `campaign.content_syntax_guard` = `warn` trước khi deploy.
 
-## 14. Rà các lỗi tương tự ở mục soạn nội dung (24/11/2026, chỉ đọc, chưa sửa gì)
+## 14. Rà các lỗi tương tự ở mục soạn nội dung (24/11/2026, chỉ đọc; phần sửa ở mục 15)
 
 Anh hỏi còn kiểu lỗi nào khác làm hệ thống gửi cả nội dung mà không tách mẫu. Em đọc mọi đường tách mẫu trong code rồi đối chiếu
 27.185 chiến dịch chưa xoá. Số đếm dưới đây lọc bằng SQL theo dấu hiệu (dấu `|` nằm sát chỗ xuống dòng, độ dài từng phần), nên
@@ -308,7 +308,7 @@ Ca 1 là ca giống sự cố gốc nhất (nhiều mẫu vào một tin) và đ
 - Bộ chạy cũ của ChatApi (`zaloCampaignExecutor.ts`) không có trong hai repo của phiên này nên chưa đọc; lõi engine v2 chép từ
   repo này thì đã rà.
 
-### Đề xuất (chưa làm, chờ anh quyết)
+### Đề xuất (anh bảo "thực thi tất cả" 24/11; tình trạng ở mục 15)
 
 1. Bộ kiểm thêm luật cho ca 1: dấu `\|` nằm sát chỗ xuống dòng hoặc cuối nội dung → báo "dấu ngăn mẫu này đang bị vô hiệu",
    có "Sửa giúp" bỏ dấu `\`. Mức chặn hay nhắc tuỳ anh; em đề xuất nhắc vì có khách cố ý thoát dấu `|` trang trí.
@@ -318,3 +318,52 @@ Ca 1 là ca giống sự cố gốc nhất (nhiều mẫu vào một tin) và đ
    ngắn đứng cạnh mẫu dài, gợi ý viết `\|` nếu muốn giữ ký tự.
 4. Ca 3: cảnh báo kèm "Sửa giúp" đổi `[fullname]` → `#{INPUT_FULLNAME}`, `[fullname_web]` → `#{FULL_NAME}`… (bảng đổi đã có ở
    WebApp `zalo-import.prepare.ts`).
+
+## 15. Thực thi bốn đề xuất của mục 14 (24/11/2026)
+
+Anh bảo "thực thi tất cả." Vẫn giữ nguyên tắc ở mục 3: chỉ giao diện và đường lưu, không đụng logic chạy, không migration,
+chưa đổi gì trên production. Code ở nhánh `claude/ecstatic-carson-0q5vlw` của hai repo, chưa merge, chưa deploy, chưa build.
+
+### Đã làm
+
+| Đề xuất | Cách làm | Ở đâu |
+|---|---|---|
+| 1. Dấu ngăn mẫu bị vô hiệu | Luật `separator_escaped` (nhắc): dấu `\\|` ngoài cùng nằm ở đầu hoặc cuối một dòng. "Sửa giúp" đổi thành `\|`. Dấu `\\|` giữa dòng không nhắc (khách cố ý giữ ký tự) | `contentSyntax.ts` |
+| 2. Sửa gốc ở mẫu nội dung | Một ô "Biến thể" có dấu `\|` đứng ở đầu / cuối dòng thì hỏi "Tách thành N nội dung" hay "Giữ nguyên" (`packedVariantsPrompt`, `expandPackedVariants`): lúc **áp mẫu** vào chiến dịch (form thường + form Agent của Desktop, form Web, cả chế độ nâng cao) và lúc **lưu mẫu** (Desktop `ContentTemplateWorkspace`, Web `TemplatesPage`). Ô có định dạng không hỏi | hai form Desktop, `CampaignContentForm.tsx`, hai màn mẫu nội dung |
+| 3. Mẩu vài chữ do dấu `\|` trang trí | Luật `variant_fragment` (nhắc): dấu `\|` giữa dòng, một bên ≤ 25 ký tự trong khi có mẫu > 150 ký tự. "Sửa giúp" đổi thành `\\|` | `contentSyntax.ts` |
+| 4. Biến akaBiz cũ | Luật `legacy_token` (nhắc): `[fullname]`, `[fullname_web]`, `[fullname_original]`, `[mobile]`, `[phone]`, `[email]`, `[info1–5]`, `[Vocative_web]`. "Sửa giúp" đổi sang `#{INPUT_FULLNAME}`, `#{FULL_NAME}`, `#{ORIGINAL_NAME}`, `#{PHONE}`, `#{EMAIL}`, `#{INFO1–5}`, `#{SEX{Anh-Chị-Anh/Chị}}`. Chỉ ở kênh có biến (Zalo, SMS, Email, Gọi tự động) | `contentSyntax.ts` |
+| Hiện ba cảnh báo cho khách | Trước đó cảnh báo chỉ nằm trong kết quả bộ kiểm, không form nào hiện. Nay lúc bấm Lưu, nội dung có một trong ba cảnh báo thì hỏi một lần (`campaignContentSaveWarning`): nút "Sửa giúp" sửa đúng các chỗ đã nêu rồi để khách xem lại (không tự lưu), nút "Vẫn lưu" lưu như đang viết, dấu X quay lại form. Đã chọn "Vẫn lưu" thì không hỏi lại cùng nội dung đó. Nội dung có định dạng không sửa hộ được: chỉ còn "Vẫn lưu" / "Quay lại sửa" | hai form Desktop, `CampaignFormPage.tsx` (Web) |
+| Hộp xác nhận hai lựa chọn | `ConfirmOptions.onCancel`: nút bên trái chạy lựa chọn thứ hai, dấu X chỉ đóng | Desktop `uiStore.ts` + `ConfirmModal.tsx`, Web `UiFeedback.tsx` |
+
+Ba cảnh báo không chặn lưu ở form, API hay đường lưu Desktop. `applyContentSyntaxFixes` mặc định chỉ sửa lỗi mức chặn; muốn
+sửa cảnh báo phải nêu mã. "Sửa giúp" lúc lưu chỉ sửa một lượt: chỗ mới lộ ra sau khi sửa (ví dụ tách mẫu xong mới thấy một
+mẩu vài chữ) được hỏi ở lần lưu kế tiếp.
+
+### Chạy trên dữ liệu thật (chỉ đọc, 24/11)
+
+Xuất 5.120 nội dung chế độ Cơ bản (mọi chiến dịch có `\|` hoặc biến akaBiz cũ, cộng chiến dịch 30 ngày gần đây có dấu `|` và
+dài hơn 150 ký tự) rồi chạy bộ kiểm: 113 nội dung chỉ có cảnh báo, 4 có lỗi chặn (đã biết), 5.003 sạch. Theo loại: 40 dấu
+ngăn bị vô hiệu ở 29 nội dung, 123 mẩu vài chữ ở 64 chiến dịch (38 mẩu khác nhau, xem từng mẩu: tên dự án, số điện thoại,
+tiêu đề, địa chỉ; một ca "Chào" có thể là khách cố ý), 66 biến akaBiz cũ ở 19 nội dung.
+
+### Kiểm
+
+- WebApp: `contentSyntax.test.ts` 30 ca (có ca hỏi lúc lưu, ca tách ô biến thể, 6.000 chuỗi ngẫu nhiên), campaign-core 555 đạt,
+  `UiFeedback.test.tsx` thêm ca nút bên trái, typecheck Web + API sạch.
+- Desktop: `WEBAPP_REPO=… node scripts/content-syntax/desktop-smoke.cjs` 12 nhóm (md5 trùng bản WebApp; tách ô biến thể rồi đưa
+  qua `serializeContentVariants` + bộ tách đang chạy ra đúng số mẫu), hai typecheck sạch.
+
+### Chưa làm / giới hạn
+
+1. Chưa chạy trong Electron thật, chưa có bài kiểm giao diện cho các hộp hỏi mới.
+2. iOS chưa có bước hỏi lúc lưu và chưa hỏi khi áp mẫu (iOS chỉ nhận lỗi chặn từ API).
+3. Sửa nhanh nội dung trên Desktop và bước gửi của Quy trình tự động không qua form nên không có bước hỏi.
+4. Chiến dịch và mẫu đã lưu không đổi: 31 chiến dịch đang gộp mẫu vì dấu `\|`, 143 mẫu nội dung có ô chứa nhiều nội dung vẫn như
+   cũ tới khi khách mở ra lưu lại (lúc đó mới được hỏi).
+5. Mẫu có định dạng mà áp vào form không hỗ trợ định dạng trên Desktop: hỏi theo bản văn bản thường sau khi chuyển.
+6. Câu cho khách của các hộp hỏi là bản nháp, chờ anh duyệt:
+   - Tách ô biến thể: "Một biến thể đang chứa nhiều nội dung" / "Có ô biến thể chứa nhiều nội dung ngăn bằng dấu |. Tách ra thì
+     sẽ có N nội dung gửi luân phiên. Giữ nguyên thì các nội dung trong ô đó được gửi chung một tin, kèm ký tự |." / "Tách thành
+     N nội dung" / "Giữ nguyên".
+   - Hỏi lúc lưu: "Nội dung có chỗ cần xem lại" / "Nội dung có thể gửi không đúng ý bạn:" + từng dòng / "Sửa giúp" / "Vẫn lưu" /
+     "Quay lại sửa" / "Đã sửa nội dung. Vui lòng xem lại rồi lưu."

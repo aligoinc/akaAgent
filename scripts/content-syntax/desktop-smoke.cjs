@@ -107,13 +107,88 @@ check('công tắc: thiếu dòng = chặn, warn / off cho lưu', () => {
   throwsSyntax(() => guard.assertCampaignContentSyntax({ actionId: 'zalo_message_phone', content: BAD }))
 })
 
+check('ba cảnh báo mới: dấu ngăn bị vô hiệu, mẩu ngắn do dấu | trang trí, biến akaBiz cũ (không chặn lưu)', () => {
+  const codes = (text, options = { channel: 'zalo' }) => syntax.analyzeContentSyntax(text, options).issues.map(issue => `${issue.code}:${issue.severity}`)
+  const escaped = 'Mẫu một dài\n\\|\nMẫu hai dài'
+  assert.deepEqual(codes(escaped), ['separator_escaped:warn'])
+  assert.equal(spin.splitContentVariants(escaped).length, 1)
+  const fixedEscaped = syntax.applyContentSyntaxFixes(escaped, { channel: 'zalo' }, ['separator_escaped'])
+  assert.equal(spin.splitContentVariants(fixedEscaped).length, 2)
+  // Dấu \| giữa dòng là chữ khách muốn giữ: không nhắc.
+  assert.deepEqual(codes('Giá 100k \\| 200k cho anh chị'), [])
+
+  const long = 'Nội dung chào hàng đầy đủ của shop. '.repeat(6)
+  assert.deepEqual(codes(`Hotline | 0900 000 000\n${long}`), ['variant_fragment:warn'])
+  assert.deepEqual(codes(`${long}|\n${long}`), [])
+
+  assert.deepEqual(codes('Chào [fullname], số [mobile]'), ['legacy_token:warn', 'legacy_token:warn'])
+  assert.equal(syntax.applyContentSyntaxFixes('Chào [fullname], số [mobile]', { channel: 'zalo' }, ['legacy_token']), 'Chào #{INPUT_FULLNAME}, số #{PHONE}')
+  // Mặc định "Sửa giúp tất cả" chỉ sửa lỗi chặn, không tự đổi chỗ đang là cảnh báo.
+  assert.equal(syntax.applyContentSyntaxFixes('Chào [fullname]', { channel: 'zalo' }), 'Chào [fullname]')
+  // Cảnh báo không chặn đường lưu.
+  guard.assertCampaignContentSyntax({ actionId: 'zalo_message_phone', content: `${escaped}\nChào [fullname]` })
+})
+
+check('mẫu nội dung: ô biến thể chứa nhiều nội dung thì hỏi tách; tách xong bộ tách đang chạy ra đúng số mẫu', () => {
+  const packed = ['Nội dung A dòng 1\nA dòng 2\n|\nNội dung B\n|\nNội dung C', 'Nội dung D']
+  const prompt = syntax.packedVariantsPrompt(packed)
+  assert.equal(prompt.total, 4)
+  assert.equal(prompt.confirmText, 'Tách thành 4 nội dung')
+  assert.equal(prompt.cancelText, 'Giữ nguyên')
+  const expanded = syntax.expandPackedVariants(packed)
+  assert.deepEqual(expanded.map(text => text.trim()), ['Nội dung A dòng 1\nA dòng 2', 'Nội dung B', 'Nội dung C', 'Nội dung D'])
+  // Dấu | giữa dòng (trang trí) và ô có định dạng không bị tách, không hỏi.
+  assert.equal(syntax.packedVariantsPrompt(['Giá 100k | 200k', '<p>a</p>\n|\n<p>b</p>']), null)
+  assert.equal(syntax.packedVariantsPrompt(['Một nội dung', 'Hai nội dung']), null)
+  let serialize = null
+  for (const file of ['contentSpin.js']) {
+    const mod = require(path.join(out, 'shared', file))
+    if (typeof mod.serializeContentVariants === 'function') serialize = mod.serializeContentVariants
+  }
+  if (serialize) {
+    assert.equal(spin.splitContentVariants(serialize(packed)).length, 2, 'giữ nguyên = 2 mẫu như trước')
+    assert.equal(spin.splitContentVariants(serialize(expanded)).length, 4, 'tách = 4 mẫu')
+  }
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+  for (const form of ['CampaignFormModal.tsx', 'CampaignAgentFormModal.tsx']) {
+    assert.match(read(`src/renderer/src/components/CampaignPanels/${form}`), /packedVariantsPrompt\(templateVariants\)/)
+  }
+  assert.match(read('src/renderer/src/components/ContentTemplates/ContentTemplateWorkspace.tsx'), /packedVariantsPrompt\(/)
+  assert.match(read('src/renderer/src/components/CampaignPanels/ConfirmModal.tsx'), /onCancel/)
+})
+
+check('hỏi lại lúc lưu: gom cảnh báo, "Sửa giúp" chỉ sửa đúng chỗ đã nêu, hai form đã nối', () => {
+  const long = 'Nội dung chào hàng đầy đủ của shop. '.repeat(6)
+  const form = { name: 'Chiến dịch', content: `Chào [fullname]\n${long}\n\\|\n${long}`, friendRequestMessage: 'Chào [Fullname]', advancedContentItems: [] }
+  const input = { actionId: 'zalo_message_phone', content: form.content, extraSettings: { friendRequestMessage: form.friendRequestMessage } }
+  const warning = syntax.campaignContentSaveWarning(input)
+  assert.equal(warning.count, 3)
+  assert.equal(warning.fixText, 'Sửa giúp')
+  assert.equal(warning.keepText, 'Vẫn lưu')
+  const fixed = syntax.applyCampaignContentFixes(form, warning.fixes)
+  assert.equal(fixed.name, 'Chiến dịch')
+  assert.equal(fixed.friendRequestMessage, 'Chào #{INPUT_FULLNAME}')
+  assert.equal(spin.splitContentVariants(form.content).length, 1)
+  assert.equal(spin.splitContentVariants(fixed.content).length, 2)
+  assert.equal(syntax.campaignContentSaveWarning({ ...input, content: fixed.content, extraSettings: { friendRequestMessage: fixed.friendRequestMessage } }), null)
+  assert.equal(syntax.campaignContentSaveWarning(input, 'off'), null)
+  // Cảnh báo không làm đường lưu của tiến trình chính từ chối.
+  guard.assertCampaignContentSyntax(input)
+  const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+  for (const file of ['CampaignFormModal.tsx', 'CampaignAgentFormModal.tsx']) {
+    const source = read(`src/renderer/src/components/CampaignPanels/${file}`)
+    assert.match(source, /campaignContentSaveWarning\(syntaxInput, syntaxMode\)/)
+    assert.match(source, /applyCampaignContentFixes\(current, contentWarning\.fixes\)/)
+  }
+})
+
 check('đường lưu IPC và hai form đã gọi bộ chặn; bộ lập lịch và lõi engine không gọi', () => {
   const read = file => fs.readFileSync(path.join(root, file), 'utf8')
   assert.match(read('src/main/ipc/handlers/campaignHandlers.ts'), /assertCampaignContentSyntax\(\{\s*actionId: campaignData\?\.actionId/)
   assert.match(read('src/main/ipc/handlers/campaignHandlers.ts'), /changedCampaignContentFields\(/)
   assert.match(read('src/main/ipc/handlers/contentTemplateHandlers.ts'), /assertTemplateContentSyntax\(templateData\)/)
   for (const form of ['CampaignFormModal.tsx', 'CampaignAgentFormModal.tsx']) {
-    assert.match(read(`src/renderer/src/components/CampaignPanels/${form}`), /checkCampaignContentSyntax\(\{/)
+    assert.match(read(`src/renderer/src/components/CampaignPanels/${form}`), /checkCampaignContentSyntax\(syntaxInput, syntaxMode\)/)
   }
   assert.doesNotMatch(read('src/main/services/campaignScheduler.ts'), /contentSyntax/)
   const engine = path.join(root, 'packages/campaign-engine/src')
