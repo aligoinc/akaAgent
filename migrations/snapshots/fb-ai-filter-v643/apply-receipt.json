@@ -1,0 +1,30 @@
+{
+  "migration": "migration_v643_aka_settings_sonnet_filter_models",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "24/11/2026: \"dùng thêm haiku 5.5 để đánh giá / thêm dòng ai model tương ứng / đổi open ai 5.5 nano thành luna 6 / đối với aka cài đặt box này dùng sonet 5.5\"",
+  "applied_at_vn": "2026-11-24 14:52:45",
+  "ledger_version": "20261124075245",
+  "ledger_md5": "1e6b4f87c86cb837fbdeb8ec054f4643",
+  "file_md5": "1e6b4f87c86cb837fbdeb8ec054f4643",
+  "ddl": false,
+  "postgrest_schema_reload": false,
+  "after": {
+    "ai_model": [
+      {"id": 39, "code": "campaign_form_aka_settings_sonnet_5_5", "model": "claude-sonnet-5-5", "default_body": {"max_tokens": 16384}, "api_key": "chép từ ai_model 27 trong SQL"},
+      {"id": 40, "code": "fb_ai_content_filter_haiku_5_5", "model": "claude-haiku-5-5", "default_body": {"max_tokens": 4096}, "api_key": "chép từ ai_model 24 trong SQL"}
+    ],
+    "ai_form_configs_17": {"model_id": 39, "request_options": {"output_config": {"effort": "medium"}}, "commentPostSort": {"type": ["string", "null"]}, "updated_at": "2026-11-24T07:52:45Z"},
+    "ai_using_fb_prepare_seeding_iterations_ai_filter": {"model_id_before": 1, "model_id_after": 16}
+  },
+  "checks_before_apply": [
+    "Sonnet 5.5 với khuôn box 17 cũ: 400 'Enum value does not match declared type [string, null]' (5 lượt); bỏ enum: 15/15 lượt 200 end_turn, effort high/medium/low",
+    "Sonnet 5.5 với khuôn box 15: 400 'too many parameters with union types (38, limit 16)' — box 15 giữ gpt-6.1-sol",
+    "node scripts/fb-ai-filter/v643-schema-check.cjs: 4/4 (khuôn mới qua compileFormAiSchema, câu trả lời thật qua parseFacebookAiResponse, lựa chọn ngoài danh sách bị từ chối)",
+    "PGBIN=/usr/lib/postgresql/16/bin python3 scripts/fb-ai-filter/test_v643.py: 9/9 (apply, chạy lại bị từ chối, gỡ trả khuôn trùng từng byte)",
+    "ai_log form_config 5 (Haiku, đường Claude của form qua API chuyển tiếp): 6 lượt thành công hôm 24/11"
+  ],
+  "checks_after_apply": [
+    "Gọi thử đúng cấu hình đã lưu (ai_model 39 + ai_form_configs 17): 200 end_turn trong dưới 6 giây, 2.264 token vào / 197 token ra, điền đúng 3 ô"
+  ],
+  "rollback": "migrations/rollback_v643_aka_settings_sonnet_filter_models.sql (box 17 về ai_model 21 và khuôn cũ, mã lọc bài cũ về ai_model 1, tắt hai dòng ai_model mới)"
+}

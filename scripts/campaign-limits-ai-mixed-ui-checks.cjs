@@ -12,6 +12,7 @@ module.exports = async function checkMixedWindows(page) {
   }
   const resolve = async patch => {
     await page.evaluate(patch => window.scheduleSmoke.resolve({ ok: true, patch }), patch)
+    await panel.getByRole('button', { name: 'Xong', exact: true }).click()
     await panel.waitFor({ state: 'detached' })
   }
   await trigger.scrollIntoViewIfNeeded()
