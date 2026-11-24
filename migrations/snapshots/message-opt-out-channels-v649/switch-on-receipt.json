@@ -1,0 +1,27 @@
+{
+  "change": "auto_system_settings message_opt_out.channels: bật cả ba kênh",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "changedAtVietnam": "2026-11-24T23:15:40+07:00",
+  "requestedBy": "anh: \"Bật công tấc đi\"",
+  "settingId": 172,
+  "before": "{\"sms\":false,\"email\":false,\"facebook\":false}",
+  "after": "{\"sms\":true,\"email\":true,\"facebook\":true}",
+  "statement": "UPDATE public.auto_system_settings SET value = '{\"sms\":true,\"email\":true,\"facebook\":true}' WHERE key = 'message_opt_out.channels' AND value = '{\"sms\":false,\"email\":false,\"facebook\":false}'",
+  "note": "Chỉ dữ liệu, không DDL nên PostgREST không nạp lại schema. Cột updated_at của auto_system_settings không có trigger nên vẫn là giờ apply V649. Zalo không đọc công tắc này (đi đường RPC cũ).",
+  "preflight": {
+    "smsCampaignsWithFlag": 0,
+    "smsCampaignsWithTokenInContent": 0,
+    "smsCampaignsPendingOrRunning": 42,
+    "emailFacebookCampaignsWithFlag": 0,
+    "oldWebOptOutPage": "aka_agent_confirm_zalo_message_opt_out(uuid) cập nhật theo id, không lọc kênh (md5 prosrc bc78175d…); aka_agent_inspect_zalo_message_opt_out(uuid) cũng theo id. Bản Web đang chạy xác nhận được link SMS / email / Facebook, chỉ câu chữ trên trang còn nói Zalo tới khi deploy Web mới."
+  },
+  "postflight": {
+    "rowsForKey": 1,
+    "channelEnabled": { "sms": true, "email": true, "facebook": true },
+    "optOutRowsByChannel": { "zalo": 42073 },
+    "listSmsDue": "service_role, giao dịch chỉ đọc tự huỷ: 34 tài khoản, 805 dòng (bằng lúc apply V649), 0 dòng có link, 0 dòng có câu cuối, 0 dòng còn nguyên biến",
+    "restAfterSwitch16_15_40to16_16_20UTC": { "requests": 7358, "5xx": 0, "optOutRpcErrors": 0 }
+  },
+  "effect": "Chưa khách nào nhận link: API / Web chưa deploy và Desktop chưa phát hành nên chưa form nào bật được zaloOptOutLinkEnabled cho SMS / email / Facebook; đường SMS chỉ bỏ qua người đã từ chối SMS (hiện 0).",
+  "rollback": "UPDATE public.auto_system_settings SET value = '{\"sms\":false,\"email\":false,\"facebook\":false}' WHERE key = 'message_opt_out.channels'; có hiệu lực ngay ở hàm DB và Desktop đang chạy (RPC chuẩn bị link báo message_opt_out_channel_disabled). Tắt riêng một kênh thì đặt kênh đó false."
+}
