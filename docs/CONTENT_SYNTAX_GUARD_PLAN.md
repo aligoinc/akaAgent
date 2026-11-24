@@ -436,3 +436,42 @@ dịch đang chạy nào. Nhắc: `brace_literal` 67 chiến dịch (8 đang ch�
 Kiểm: campaign-core 557 đạt (`contentSyntax.test.ts` 37 ca), API `contentSyntaxGuard.test.ts` 7 ca, smoke Desktop 13 nhóm,
 typecheck Desktop (node + web) và WebApp (campaign-core, web, api) sạch. Câu cho khách là bản nháp, chờ anh duyệt (đầy đủ trong
 `contentSyntax.ts`, phần `campaignContentSaveWarning` và các `push(...)` mới). iOS vẫn chỉ nhận lỗi chặn từ API.
+
+## 18. Vòng kiểm thử ngẫu nhiên và các bản sửa (24/11/2026)
+
+Anh yêu cầu "Kiểm thử và cải tiến … lấy mẫu ngẫu nhiên > kiểm thử > phát hiện lỗi > fix > lấy mẫu ngẫu nhiên > kiểm thử … cho đến khi
+ít nhất 3 vòng không còn vấn đề gì". Cùng nhánh, chưa merge / deploy / build, không migration, không đụng logic chạy.
+
+**Bộ thử** `scripts/content-syntax/fuzz-loop.cjs` (chỉ chạy cục bộ, không gọi DB):
+`node scripts/content-syntax/fuzz-loop.cjs --seed N [--cases 3000] [--real <pool.json> --real-cases 2000] [--dump <file>]`;
+`--replay <dump1,dump2>` chạy lại đúng các ca đã ghi sau khi sửa. Mỗi vòng ~5.000 nội dung trên 12 ô / kênh (Zalo theo SĐT,
+thành viên nhóm, group, chia sẻ, có định dạng, nâng cao, lời mời kết bạn, tên gợi nhớ, SMS, email, Facebook tin nhắn / comment):
+30 mẫu viết tay, nội dung sinh đúng (biết trước số mẫu), nội dung cố tình sai (bỏ / thêm ngoặc, biến hỏng, `\|`, dấu `|` giữa dòng,
+`||`, `{` mở dở; 1–3 lỗi chồng nhau), và nội dung thật lấy chỉ đọc từ DB (file pool để ngoài repo, không commit). Bộ thử nạp
+code thật (bộ kiểm, bộ tách `contentSpin`, `renderCampaignTemplateText`, `renderSmsInputContent`, bộ tách nội dung có định dạng,
+`convertHtmlToZaloMessage`, đường lưu Desktop `contentSyntaxGuard`), dựng tin khách thật sự nhận (nhiều hồ sơ người nhận × nhiều
+cách chọn spin) rồi kiểm 14 tính chất: tin còn `#{` thì phải báo / chặn (T1), chặn vì biến thì tin thật phải còn biến hỏng (T2),
+ngoặc ngoài ý muốn phải báo (T3, T4), đếm mẫu khớp bộ tách thật (T5, T14), nội dung đúng không bị chặn (T6), gộp mẫu phải báo (T7),
+độ dài "chắc chắn vượt" đúng với tin thật khi data rỗng (T8), "Sửa giúp" không sinh lỗi chặn / không đổi chữ ngoài chỗ sửa (T9, T12),
+chia sẻ có biến phải chặn (T10), số dòng data thiếu cột đúng (T11), đường lưu Desktop chặn đúng như bộ kiểm (T13).
+
+**Kết quả**: 16 vòng (hạt giống 1–16). Lỗi thật của bộ kiểm tìm ra và đã sửa:
+
+| Lỗi | Sửa |
+|---|---|
+| `#{STOP_MESSAGES_LINK}` ở lời mời kết bạn / tên gợi nhớ / SMS / email / Facebook bị gửi nguyên văn mà không báo | chỉ điền ở nội dung tin nhắn Zalo; ô khác chặn (tên gợi nhớ nhắc) |
+| "Sửa giúp" gợi ý biến mà ô không điền được (chia sẻ, link từ chối ngoài tin Zalo, biến akaBiz cũ `[fullname]` khi gửi chia sẻ) | không gợi ý, chỉ nhắc |
+| Nội dung có định dạng: biến / đoạn xoay vòng bị thẻ (in đậm, xuống dòng) chen giữa nên bộ chạy không điền / không xoay vòng | mã mới `format_split`: biến chặn, đoạn xoay vòng hỏi lúc lưu |
+| Nội dung có định dạng: bộ kiểm chèn xuống dòng giữa các đoạn, bộ tách thật nối liền (dấu `\` cuối đoạn này thoát ký tự đầu đoạn sau) nên đếm mẫu lệch | chữ nối liền như bộ tách thật, chỗ xuống dòng ghi riêng cho luật theo dòng và độ dài |
+| Độ dài: biến gửi nguyên văn tính 0 ký tự; nội dung có định dạng đếm cả đoạn thay vì từng đoạn chữ; không bỏ khoảng trắng hai đầu như bộ chạy (biến rỗng ở cuối); xưng hô lấy phần ngắn nhất của từng biến riêng thay vì cùng một giới tính | sửa cả bốn; biến hỏng (thiếu ngoặc, sai dạng) thì chưa tính độ dài vì bộ chạy điền lệch không đoán được (lỗi biến đã được báo) |
+| Biến akaBiz cũ / chỗ trống nằm trong một biến (`#{TODAY(DD/MM [fullname] YYYY)}`) bị báo và "sửa" thành biến lồng | bỏ qua chữ nằm trong biến |
+| Ngoặc nằm trong phần bộ chạy điền biến xưng hô (`#{SEX{anh{-chị}}`) bị báo là ngoặc không xoay vòng | bỏ qua |
+
+Phần còn lại là lỗi của chính bộ thử (cách dựng tin, lấy mẫu chưa đủ, vị trí UTF-16 khi làm sai có emoji…), đã sửa. Giới hạn đã chấp
+nhận: hai lỗi bù nhau thành một ngoặc `{A|B}` hợp lệ bọc qua dấu ngăn mẫu thì không phân biệt được với cách khách cố ý viết
+`{Bài A|Bài B}` để chọn ngẫu nhiên một bài (19 nội dung thật), nên không báo.
+
+Ba vòng cuối liên tiếp (hạt giống 14, 15, 16; mỗi vòng 5.030 nội dung) không còn vi phạm; chạy lại hạt giống 1–4 và 11, 13 trên bản
+cuối cũng sạch. Kiểm sau cùng: campaign-core 567 đạt (`contentSyntax.test.ts` 47 ca), API `contentSyntaxGuard` 7, Web 1.696,
+smoke Desktop 13 nhóm, typecheck WebApp (campaign-core, web, api) và Desktop (node, web) sạch, md5 hai bản `contentSyntax.ts` trùng.
+Câu cho khách mới (chờ duyệt): chặn link từ chối ngoài tin Zalo, hai câu `format_split`.

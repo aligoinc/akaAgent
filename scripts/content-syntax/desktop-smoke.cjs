@@ -211,7 +211,7 @@ check('rà 24/11: ngoặc không xoay vòng, chỗ trống, chia sẻ, Facebook,
     inputRows: [{ name: 'A', info1: 'a' }, { name: '', info1: 'b' }]
   })
   assert.equal(warning.count, 5)
-  for (const text of ['mẫu số 2) dài 2.400', 'Lời mời kết bạn dài 160', 'Tên gợi nhớ dài ít nhất 56', 'Viết nội dung cho mỗi lượt chạy', '1/2 dòng data chưa có Tên']) {
+  for (const text of ['mẫu số 2) dài 2.400', 'Lời mời kết bạn dài 160', 'Tên gợi nhớ dài ít nhất 55', 'Viết nội dung cho mỗi lượt chạy', '1/2 dòng data chưa có Tên']) {
     assert.ok(warning.message.includes(text), text)
   }
   // Chỉ nhắc khi chắc chắn vượt: tên gợi nhớ ngắn mà nhiều biến thì không nhắc.

@@ -27,6 +27,7 @@ export type ContentSyntaxCode =
   | 'token_unsupported_here'
   | 'token_group_target'
   | 'too_long'
+  | 'format_split'
 
 export interface ContentSyntaxFix {
   start: number
@@ -67,6 +68,11 @@ export interface ContentSyntaxOptions {
    * biến tên là tên group. Mặc định `person`.
    */
   audience?: 'person' | 'group' | 'share'
+  /**
+   * Ô này có điền `#{STOP_MESSAGES_LINK}` không: chỉ nội dung tin nhắn Zalo (lời mời kết bạn, tên gợi nhớ, SMS, email, Facebook
+   * gửi nguyên văn). Mặc định: kênh `zalo`.
+   */
+  stopLink?: boolean
   /** Giới hạn độ dài: chỉ báo khi chắc chắn vượt (biến tính phần ít nhất, spin tính lựa chọn dài nhất). */
   maxLength?: ContentLengthLimit
 }
@@ -212,9 +218,13 @@ export function actualVariantSeparatorIndexes(content: string | null | undefined
   return separatorIndexes
 }
 
-/** Từ `index` lùi về trước chỉ gặp khoảng trắng rồi tới đầu dòng / đầu nội dung. */
-function atLineStart(value: string, index: number): boolean {
+/**
+ * Từ `index` lùi về trước chỉ gặp khoảng trắng rồi tới đầu dòng / đầu nội dung. `breaks`: chỗ xuống dòng của nội dung có
+ * định dạng (xuống dòng nằm ngay trước vị trí đó).
+ */
+function atLineStart(value: string, index: number, breaks: number[] = []): boolean {
   for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (breaks.indexOf(cursor + 1) >= 0) return true
     const char = value[cursor]
     if (char === '\n' || char === '\r') return true
     if (char !== ' ' && char !== '\t') return false
@@ -223,8 +233,9 @@ function atLineStart(value: string, index: number): boolean {
 }
 
 /** Từ `index` đi tiếp chỉ gặp khoảng trắng rồi tới cuối dòng / cuối nội dung. */
-function atLineEnd(value: string, index: number): boolean {
+function atLineEnd(value: string, index: number, breaks: number[] = []): boolean {
   for (let cursor = index; cursor < value.length; cursor += 1) {
+    if (breaks.indexOf(cursor) >= 0) return true
     const char = value[cursor]
     if (char === '\n' || char === '\r') return true
     if (char !== ' ' && char !== '\t') return false
@@ -311,10 +322,31 @@ function countVariants(value: string, separators: number[]): number {
 // ── HTML → chữ ──────────────────────────────────────────────────────────────────────────────────────────────────
 
 
-function htmlToText(html: string): string {
-  return html
-    .replace(/<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/blockquote)\b[^>]*>/gi, '\n')
-    .replace(/<[^>]*>/g, '')
+/**
+ * Chữ của nội dung có định dạng, kèm các vị trí giữa hai đoạn chữ (mỗi thẻ HTML). Bộ chạy điền biến và xoay vòng cho TỪNG
+ * đoạn chữ riêng (`transformFormattedContentText`), nên biến / đoạn xoay vòng vắt qua ranh giới sẽ không được xử lý.
+ * Chữ nối liền các đoạn, không chèn xuống dòng, đúng như bộ tách mẫu (`collectFormattedText`): dấu `\` cuối đoạn này đi với
+ * ký tự đầu đoạn sau. Chỗ xuống dòng (hết đoạn, `<br>`) ghi riêng ở `breaks` (lặp lại khi xuống nhiều dòng).
+ */
+function htmlToText(html: string): { text: string; boundaries: number[]; breaks: number[] } {
+  let text = ''
+  const boundaries: number[] = []
+  const breaks: number[] = []
+  const tag = /<[^>]*>/g
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = tag.exec(html)) !== null) {
+    text += decodeHtmlEntities(html.slice(last, match.index))
+    if (boundaries[boundaries.length - 1] !== text.length) boundaries.push(text.length)
+    if (/^<(br|\/p|\/div|\/li|\/h[1-6]|\/tr|\/blockquote)\b/i.test(match[0])) breaks.push(text.length)
+    last = match.index + match[0].length
+  }
+  text += decodeHtmlEntities(html.slice(last))
+  return { text, boundaries, breaks }
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
     .replace(/&nbsp;/gi, ' ')
     .replace(/&lt;/gi, '<')
     .replace(/&gt;/gi, '>')
@@ -367,8 +399,15 @@ interface Scan {
   text: string
   channel: ContentSyntaxChannel
   audience: 'person' | 'group' | 'share'
+  stopLink: boolean
   allowFix: boolean
   issues: ContentSyntaxIssue[]
+  /** Nội dung có định dạng: vị trí giữa hai đoạn chữ (xem `htmlToText`). Rỗng với chữ thường. */
+  boundaries: number[]
+  /** Các biến đã nhận ra (để kiểm biến bị định dạng chia cắt). */
+  tokens: Array<[number, number]>
+  /** Nội dung có định dạng: chỗ xuống dòng (xem `htmlToText`). */
+  breaks: number[]
 }
 
 function push(
@@ -428,6 +467,12 @@ function checkWellFormedToken(scan: Scan, start: number, end: number, name: stri
       push(scan, 'token_group_target', 'warn', start, end,
         `Tin gửi vào group nên ${token} không biết giới tính, luôn ra "${parts[2] || parts[0] || ''}".`)
     }
+  }
+
+  if (shape === 'simple' && name === 'STOP_MESSAGES_LINK' && !scan.stopLink) {
+    push(scan, 'token_unsupported_here', 'block', start, end,
+      `${token} chỉ dùng được trong nội dung tin nhắn Zalo, ở đây sẽ bị gửi nguyên văn. Hãy bỏ biến này.`)
+    return
   }
 
   if (shape === 'simple') {
@@ -517,16 +562,19 @@ function scanToken(scan: Scan, index: number): number {
 
   const simple = TOKEN_SIMPLE.exec(rest)
   if (simple) {
+    scan.tokens.push([index, index + simple[0].length])
     checkWellFormedToken(scan, index, index + simple[0].length, simple[1], 'simple', '')
     return index + simple[0].length - 1
   }
   const date = TOKEN_DATE.exec(rest)
   if (date) {
+    scan.tokens.push([index, index + date[0].length])
     checkWellFormedToken(scan, index, index + date[0].length, date[1], 'date', date[2])
     return index + date[0].length - 1
   }
   const brace = TOKEN_BRACE.exec(rest)
   if (brace) {
+    scan.tokens.push([index, index + brace[0].length])
     checkWellFormedToken(scan, index, index + brace[0].length, brace[1], 'brace', brace[2])
     return index + brace[0].length - 1
   }
@@ -563,6 +611,7 @@ function scanToken(scan: Scan, index: number): number {
   }
 
   if (balancedEnd !== null) {
+    scan.tokens.push([index, balancedEnd + 1])
     if (scan.channel === 'facebook' && scan.audience !== 'share' && FACEBOOK_TOKEN.test(balanced)) return balancedEnd
     if (tokenChannel) {
       const loose = looseTokenFix(balanced)
@@ -599,12 +648,15 @@ function scanLegacyTokens(scan: Scan): void {
   LEGACY_TOKEN.lastIndex = 0
   let match: RegExpExecArray | null
   while ((match = LEGACY_TOKEN.exec(scan.text)) !== null) {
+    if (insideToken(scan, match.index, match.index + match[0].length)) continue
     const key = match[1].toLowerCase()
     const capital = match[1].charAt(0) !== match[1].charAt(0).toLowerCase()
     let replacement = key === 'vocative_web'
       ? (capital ? '#{SEX{Anh-Chị-Anh/Chị}}' : DEFAULT_SEX_EXAMPLE)
       : LEGACY_TOKEN_MAP[key]
     if (scan.channel === 'facebook') replacement = key === 'fullname' || key === 'fullname_web' || key === 'fullname_original' ? '#{FULL_NAME}' : ''
+    // Gửi dạng chia sẻ không điền biến nào: không gợi ý đổi sang biến (sửa xong lại bị chặn).
+    if (scan.audience === 'share') replacement = ''
     push(scan, 'legacy_token', 'warn', match.index, match.index + match[0].length,
       `${match[0]} là biến của phần mềm akaBiz cũ. akaAgent không thay biến này nên sẽ gửi nguyên văn.`
         + (replacement ? ` Biến tương ứng là ${replacement}.` : ''),
@@ -616,11 +668,57 @@ function insideIssue(scan: Scan, index: number): boolean {
   return scan.issues.some(issue => index >= issue.start && index < issue.end)
 }
 
-/** Kênh này điền được biến `name` (dùng khi gợi ý sửa một đoạn ngoặc thành biến). */
-function tokenAllowedOn(channel: ContentSyntaxChannel, name: string): boolean {
-  if (!usesTokens(channel)) return false
-  if (channel === 'facebook') return name === 'FULL_NAME'
+/** Nằm trong một biến đã nhận ra: chữ trong biến (vd định dạng ngày) không phải chỗ để báo / sửa riêng. */
+function insideToken(scan: Scan, start: number, end: number): boolean {
+  return scan.tokens.some(([from, to]) => start > from && end <= to)
+}
+
+/** Ô này điền được biến `name` (dùng khi gợi ý sửa một đoạn ngoặc thành biến: không gợi ý biến sẽ bị chặn). */
+function tokenAllowedOn(scan: Scan, name: string): boolean {
+  if (!usesTokens(scan.channel) || scan.audience === 'share') return false
+  if (scan.channel === 'facebook') return name === 'FULL_NAME'
+  if (name === 'STOP_MESSAGES_LINK') return scan.stopLink
   return true
+}
+
+function crossesBoundary(scan: Scan, start: number, end: number): boolean {
+  return scan.boundaries.some(boundary => boundary > start && boundary < end)
+}
+
+/** Nội dung có định dạng: biến / đoạn xoay vòng vắt qua hai đoạn chữ (thẻ in đậm, xuống dòng chen giữa). */
+function scanFormatSplits(scan: Scan): void {
+  if (scan.boundaries.length === 0) return
+  for (const [start, end] of scan.tokens) {
+    if (!crossesBoundary(scan, start, end) || scan.issues.some(issue => issue.start === start && issue.severity === 'block')) continue
+    push(scan, 'format_split', usesTokens(scan.channel) ? 'block' : 'warn', start, end,
+      `Biến ${excerptOf(scan.text, start, end)} bị định dạng (in đậm, in nghiêng, xuống dòng…) chen giữa nên sẽ bị gửi nguyên văn. `
+        + 'Hãy để cả biến trên cùng một dòng và cùng một kiểu chữ.')
+  }
+  const walk = (from: number, to: number, depth: number): void => {
+    if (depth > 20) return
+    const text = scan.text
+    for (let index = from; index < to; index += 1) {
+      if (isEscapedSpecial(text, index)) {
+        index += 1
+        continue
+      }
+      const tokenEnd = findTemplateTokenEnd(text, index)
+      if (tokenEnd !== null) {
+        index = tokenEnd
+        continue
+      }
+      const spinEnd = findSpinGroupEnd(text, index)
+      if (spinEnd === null || spinEnd >= to) continue
+      if (crossesBoundary(scan, index, spinEnd + 1)) {
+        push(scan, 'format_split', 'warn', index, spinEnd + 1,
+          `Đoạn xoay vòng ${excerptOf(text, index, spinEnd + 1)} bị xuống dòng hoặc định dạng khác nhau chen giữa nên không được xoay vòng: `
+            + 'người nhận thấy nguyên dấu ngoặc và dấu |. Hãy để cả đoạn { } trên cùng một dòng và cùng một kiểu chữ.')
+      }
+      walk(index + 1, spinEnd, depth + 1)
+      index = spinEnd
+    }
+  }
+  walk(0, scan.text.length, 0)
 }
 
 function reportLiteralBrace(scan: Scan, start: number, end: number): void {
@@ -629,15 +727,15 @@ function reportLiteralBrace(scan: Scan, start: number, end: number): void {
   const parts = inner.split('-')
   let fix = ''
   const sexMissingHash = /^\s*SEX\s*\{([^{}|]*)\}\s*$/i.exec(inner)
-  if (sexMissingHash && tokenAllowedOn(scan.channel, SEX_TOKEN) && scan.channel !== 'facebook') {
+  if (sexMissingHash && tokenAllowedOn(scan, SEX_TOKEN) && scan.channel !== 'facebook') {
     fix = `#{${SEX_TOKEN}{${sexMissingHash[1]}}}`
-  } else if (tokenAllowedOn(scan.channel, SEX_TOKEN) && scan.channel !== 'facebook' && parts.length === 3
+  } else if (tokenAllowedOn(scan, SEX_TOKEN) && scan.channel !== 'facebook' && parts.length === 3
     && parts.every(part => part.trim() && part.length <= 15 && !/[{}|#\n]/.test(part))
     && ADDRESS_WORD.test(parts[0].trim().normalize('NFC'))) {
     fix = `#{${SEX_TOKEN}{${inner}}}`
   } else {
     const closest = closestSimpleToken(inner)
-    if (closest && tokenAllowedOn(scan.channel, closest)) fix = `#{${closest}}`
+    if (closest && tokenAllowedOn(scan, closest)) fix = `#{${closest}}`
   }
   const shown = excerptOf(text, start, end + 1)
   push(scan, 'brace_literal', 'warn', start, end + 1,
@@ -645,6 +743,15 @@ function reportLiteralBrace(scan: Scan, start: number, end: number): void {
       ? `${shown} sẽ được gửi nguyên cả dấu ngoặc. Muốn điền thông tin của người nhận thì viết ${fix}.`
       : `${shown} không có dấu | bên trong nên không được xoay vòng: người nhận thấy nguyên cả dấu ngoặc. Muốn xoay vòng thì ngăn các lựa chọn bằng dấu |, ví dụ {Chào|Xin chào}; muốn hiện dấu ngoặc thì viết \\{ và \\}.`,
     fix ? { start, end: end + 1, text: fix } : undefined)
+}
+
+/** Chỗ bộ chạy thay bằng giá trị: đúng hai regex có ngoặc lồng của campaignContentTemplate.ts. */
+function runtimeTokenRanges(text: string): Array<[number, number]> {
+  const ranges: Array<[number, number]> = []
+  const pattern = /#\{SEX\{[^}]*\}\}|#\{(?:TODAY|TOMORROW|YESTERDAY)\([^}]*\)\}/g
+  let match: RegExpExecArray | null
+  while ((match = pattern.exec(text)) !== null) ranges.push([match.index, match.index + match[0].length])
+  return ranges
 }
 
 /** Ngoặc `{…}` đóng đủ mà không có dấu `|` ngoài cùng bên trong: bộ chạy giữ nguyên cả dấu ngoặc. */
@@ -662,6 +769,10 @@ function scanLiteralBraces(scan: Scan, from: number, to: number, depth = 0): voi
       continue
     }
     if (text[index] !== '{' || (index > 0 && text[index - 1] === '#')) continue
+    // Ngoặc ngay sau tên biến (`#{SEX{…`) là phần của biến viết dở, đã có lỗi riêng; ngoặc nằm trong chỗ bộ chạy điền biến
+    // xưng hô / ngày (regex `#{SEX{[^}]*}}`, `#{TODAY([^}]*)}`) bị thay mất nên không tới tay người nhận.
+    if (/#\{\s*[A-Za-z_][A-Za-z_0-9]*\s*$/.test(text.slice(Math.max(0, index - 40), index))) continue
+    if (runtimeTokenRanges(text).some(([from, to]) => index > from && index < to)) continue
     const spinEnd = findSpinGroupEnd(text, index)
     if (spinEnd !== null && spinEnd < to) {
       scanLiteralBraces(scan, index + 1, spinEnd, depth + 1)
@@ -687,7 +798,8 @@ function scanPlaceholders(scan: Scan): void {
   while ((match = PLACEHOLDER.exec(scan.text)) !== null) {
     const inner = match[1].trim().normalize('NFC')
     LEGACY_TOKEN.lastIndex = 0
-    if (LEGACY_TOKEN.test(match[0]) || !PLACEHOLDER_WORDS.test(inner) || insideIssue(scan, match.index)) continue
+    if (LEGACY_TOKEN.test(match[0]) || !PLACEHOLDER_WORDS.test(inner) || insideIssue(scan, match.index)
+      || insideToken(scan, match.index, match.index + match[0].length)) continue
     push(scan, 'placeholder_unfilled', 'warn', match.index, match.index + match[0].length,
       `${match[0]} trông như chỗ trống của bài mẫu chưa được điền nên sẽ được gửi nguyên văn. Hãy thay bằng nội dung thật`
         + (scan.channel === 'facebook' ? ' hoặc biến #{FULL_NAME}.' : ' hoặc biến cá nhân hoá như #{FULL_NAME}.'))
@@ -725,51 +837,73 @@ function splitSpinOptions(inner: string): string[] {
  * Độ dài ít nhất của một biến sau khi điền: biến lấy từ data / hồ sơ tính 0 (có thể rỗng), xưng hô tính lựa chọn ngắn nhất,
  * ngày tính đúng định dạng. Nhờ vậy câu "quá dài" chỉ hiện khi chắc chắn vượt, không phụ thuộc tên người nhận dài hay ngắn.
  */
-function tokenMinLength(token: string): number {
+function tokenMinLength(token: string, scan: Scan, gender: SexChoice): number {
+  // Gửi dạng chia sẻ không điền biến; biến ô này không điền được (link từ chối ngoài tin Zalo, Facebook) gửi nguyên văn.
+  if (scan.audience === 'share') return token.length
+  if (scan.channel === 'facebook') return FACEBOOK_TOKEN.test(token) ? (/FULL_NAME/i.test(token) ? 0 : 10) : token.length
   const brace = TOKEN_BRACE.exec(token)
-  if (brace && brace[1].toUpperCase() === SEX_TOKEN) {
-    return brace[2].split('-').reduce((shortest, part) => Math.min(shortest, part.length), Number.MAX_SAFE_INTEGER)
+  if (brace && brace[0] === token && brace[1] === SEX_TOKEN) {
+    // Như renderSex: nam / nữ / chưa rõ (chưa rõ mà trống thì lấy nam, rồi nữ).
+    // Mọi biến xưng hô trong tin cùng theo giới tính của một người nhận: bộ đo thử từng giới tính rồi lấy tin ngắn nhất.
+    const [male = '', female = '', unknown = ''] = brace[2].split('-')
+    return (gender === 'male' ? male : gender === 'female' ? female : (unknown || male || female)).length
   }
   const date = TOKEN_DATE.exec(token)
-  if (date && has(DATE_TOKENS, date[1].toUpperCase())) return date[2].replace(/YYYY/g, '0000').length
+  if (date && date[0] === token && has(DATE_TOKENS, date[1])) return date[2].replace(/YYYY/g, '0000').length
   const simple = TOKEN_SIMPLE.exec(token)
-  if (simple && (has(SIMPLE_TOKENS, simple[1]) || has(DATE_TOKENS, simple[1]))) return 0
+  if (simple && simple[0] === token && has(SIMPLE_TOKENS, simple[1])) {
+    return simple[1] === 'STOP_MESSAGES_LINK' && !scan.stopLink ? token.length : 0
+  }
   // Biến không có trong hệ thống bị gửi nguyên văn.
   return token.length
 }
 
-/** Độ dài của lựa chọn spin dài nhất, biến tính phần ít nhất (xem `tokenMinLength`). */
-function estimatedLength(value: string, depth = 0): { length: number; tokens: boolean } {
-  let length = 0
+type SexChoice = 'male' | 'female' | 'unknown'
+const SEX_CHOICES: SexChoice[] = ['male', 'female', 'unknown']
+
+/** Biến dạng `#{TÊN}` không có trong hệ thống: bộ chạy gửi nguyên văn, độ dài chắc chắn. */
+function isPlainUnknownToken(value: string): boolean {
+  const simple = TOKEN_SIMPLE.exec(value)
+  return simple !== null && simple[0] === value
+}
+
+/**
+ * Chữ ngắn nhất chắc chắn gửi đi của lựa chọn spin dài nhất: biến thay bằng đúng số ký tự ít nhất (xem `tokenMinLength`),
+ * biến gửi nguyên văn giữ nguyên. Trả chữ (không chỉ độ dài) để bỏ được khoảng trắng hai đầu như bộ chạy.
+ */
+function estimatedText(value: string, scan: Scan, gender: SexChoice, depth = 0): { text: string; tokens: boolean } {
+  let text = ''
   let tokens = false
   for (let index = 0; index < value.length; index += 1) {
     if (isEscapedSpecial(value, index)) {
-      length += 1
+      text += value[index + 1]
       index += 1
       continue
     }
     const tokenEnd = findTemplateTokenEnd(value, index)
     if (tokenEnd !== null) {
-      length += tokenMinLength(value.slice(index, tokenEnd + 1))
+      const token = value.slice(index, tokenEnd + 1)
+      const min = tokenMinLength(token, scan, gender)
+      text += min === token.length ? token : 'x'.repeat(min)
       tokens = true
       index = tokenEnd
       continue
     }
     const spinEnd = depth < 20 ? findSpinGroupEnd(value, index) : null
     if (spinEnd !== null) {
-      let longest = 0
+      let longest = ''
       for (const option of splitSpinOptions(value.slice(index + 1, spinEnd))) {
-        const estimate = estimatedLength(option, depth + 1)
-        longest = Math.max(longest, estimate.length)
+        const estimate = estimatedText(option, scan, gender, depth + 1)
+        if (estimate.text.length > longest.length) longest = estimate.text
         tokens = tokens || estimate.tokens
       }
-      length += longest
+      text += longest
       index = spinEnd
       continue
     }
-    length += 1
+    text += value[index]
   }
-  return { length, tokens }
+  return { text, tokens }
 }
 
 function formatCount(value: number): string {
@@ -790,11 +924,29 @@ function scanLength(scan: Scan, limit: ContentLengthLimit, separators: number[])
   const filled = bounds.filter(([from, to]) => text.slice(from, to).trim())
   filled.forEach(([from, to], position) => {
     const segment = text.slice(from, to)
-    const estimate = estimatedLength(segment.trim())
-    if (estimate.length <= limit.limit) return
     const start = from + (segment.length - segment.trimStart().length)
+    const end = from + segment.trimEnd().length
+    // Nội dung có định dạng: bộ chạy xoay vòng / điền biến từng đoạn chữ riêng, nên tính từng đoạn rồi cộng lại.
+    // Biến hỏng (thiếu ngoặc, sai dạng) bộ chạy điền lệch không đoán được: lỗi biến đã được báo, chưa tính độ dài tới khi sửa.
+    if (scan.issues.some(issue => issue.start < end && issue.end > start && (issue.code === 'token_unclosed' || issue.code === 'token_malformed'
+      || (issue.code === 'token_unknown' && !isPlainUnknownToken(text.slice(issue.start, issue.end)))))) return
+    const cuts = [start, ...scan.boundaries.filter(boundary => boundary > start && boundary < end), end]
+    const estimate = { length: Number.POSITIVE_INFINITY, tokens: false }
+    for (const gender of SEX_CHOICES) {
+      let built = ''
+      for (let piece = 0; piece + 1 < cuts.length; piece += 1) {
+        // Hết đoạn / `<br>` thành dấu xuống dòng trong tin gửi đi.
+        if (piece > 0) built += '\n'.repeat(scan.breaks.filter(position => position === cuts[piece]).length)
+        const part = estimatedText(text.slice(cuts[piece], cuts[piece + 1]), scan, gender)
+        built += part.text
+        estimate.tokens = estimate.tokens || part.tokens
+      }
+      // Bộ chạy bỏ khoảng trắng hai đầu tin (biến rỗng ở đầu / cuối để lại khoảng trắng thừa).
+      estimate.length = Math.min(estimate.length, built.trim().length)
+    }
+    if (estimate.length <= limit.limit) return
     const which = filled.length > 1 ? ` (mẫu số ${position + 1})` : ''
-    push(scan, 'too_long', 'warn', start, from + segment.trimEnd().length,
+    push(scan, 'too_long', 'warn', start, end,
       `${limit.label}${which} dài ${estimate.tokens ? 'ít nhất ' : ''}${formatCount(estimate.length)} ký tự`
         + `${estimate.tokens ? ' (chưa tính phần điền thông tin người nhận)' : ''}. ${limit.consequence}`)
   })
@@ -809,8 +961,11 @@ function resolveHtml(text: string, html: boolean | 'auto' | undefined): boolean 
 export function analyzeContentSyntax(content: string | null | undefined, options: ContentSyntaxOptions): ContentSyntaxResult {
   const raw = String(content || '')
   const isHtml = resolveHtml(raw, options.html)
-  const text = isHtml ? htmlToText(raw) : raw
-  const scan: Scan = { text, channel: options.channel, audience: options.audience || 'person', allowFix: !isHtml, issues: [] }
+  const converted = isHtml ? htmlToText(raw) : { text: raw, boundaries: [] as number[], breaks: [] as number[] }
+  const text = converted.text
+  const scan: Scan = { text, channel: options.channel, audience: options.audience || 'person',
+    stopLink: options.stopLink ?? options.channel === 'zalo', allowFix: !isHtml, issues: [],
+    boundaries: converted.boundaries, tokens: [], breaks: converted.breaks }
 
   // Quét "khoan dung": biến viết dở coi như đã đóng, ngoặc { mở dở coi như chữ thường.
   const openBraces: Array<{ index: number; closed: boolean }> = []
@@ -862,7 +1017,7 @@ export function analyzeContentSyntax(content: string | null | undefined, options
   // Dấu ngăn mẫu bị vô hiệu: `\|` đứng sát chỗ xuống dòng. App tự thêm `\` khi áp một biến thể của mẫu nội dung có
   // nhiều mẫu gõ liền nhau, nên hai mẫu bị gửi chung một tin.
   for (const index of escapedPipes) {
-    if (!atLineStart(text, index) && !atLineEnd(text, index + 2)) continue
+    if (!atLineStart(text, index, scan.breaks) && !atLineEnd(text, index + 2, scan.breaks)) continue
     push(scan, 'separator_escaped', 'warn', index, index + 2,
       'Dấu | này có dấu \\ đứng trước nên không còn ngăn mẫu: phần trước và phần sau nó sẽ được gửi chung một tin, kèm ký tự |. Nếu đây là chỗ ngăn hai mẫu, hãy bỏ dấu \\.',
       { start: index, end: index + 2, text: '|' })
@@ -881,7 +1036,7 @@ export function analyzeContentSyntax(content: string | null | undefined, options
     }
     if (Math.max.apply(null, lengths) > FRAGMENT_LONG_LENGTH) {
       actual.forEach((separator, position) => {
-        if (atLineStart(text, separator) || atLineEnd(text, separator + 1)) return
+        if (atLineStart(text, separator, scan.breaks) || atLineEnd(text, separator + 1, scan.breaks)) return
         const side = lengths[position] > 0 && lengths[position] <= FRAGMENT_SHORT_LENGTH ? position
           : lengths[position + 1] > 0 && lengths[position + 1] <= FRAGMENT_SHORT_LENGTH ? position + 1 : -1
         if (side < 0) return
@@ -893,6 +1048,7 @@ export function analyzeContentSyntax(content: string | null | undefined, options
     }
   }
   scanLegacyTokens(scan)
+  scanFormatSplits(scan)
   if (usesTokens(options.channel)) scanLiteralBraces(scan, 0, text.length)
   scanPlaceholders(scan)
   if (options.maxLength) scanLength(scan, options.maxLength, actual)
@@ -1014,7 +1170,7 @@ export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput):
   const extra = (input.extraSettings && typeof input.extraSettings === 'object' ? input.extraSettings : {}) as Record<string, unknown>
   const reports: CampaignContentFieldReport[] = []
   const add = (field: string, label: string, value: unknown, fieldChannel: ContentSyntaxChannel, html: boolean | 'auto',
-    warnOnly = false, more: Pick<ContentSyntaxOptions, 'audience' | 'maxLength'> = {}) => {
+    warnOnly = false, more: Pick<ContentSyntaxOptions, 'audience' | 'maxLength' | 'stopLink'> = {}) => {
     const text = fieldText(value)
     if (text === null) return
     const result = analyzeContentSyntax(text, { channel: fieldChannel, html, ...more })
@@ -1043,15 +1199,17 @@ export function analyzeCampaignContentFields(input: CampaignContentSyntaxInput):
       add(`advancedContentItems[${index}].emailSubject`, `Tiêu đề email của nội dung ${index + 1}`, row.emailSubject, 'email', false)
     })
   }
-  add('friendRequestMessage', 'Lời mời kết bạn', extra.friendRequestMessage, 'zalo', false, false, extra.enableAddFriend === true ? {
-    maxLength: { limit: ZALO_FRIEND_REQUEST_MAX_LENGTH, label: 'Lời mời kết bạn', perVariant: true,
-      consequence: `Zalo chỉ nhận lời mời tối đa ${ZALO_FRIEND_REQUEST_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt.` },
-  } : {})
+  add('friendRequestMessage', 'Lời mời kết bạn', extra.friendRequestMessage, 'zalo', false, false, {
+    stopLink: false,
+    ...(extra.enableAddFriend === true ? { maxLength: { limit: ZALO_FRIEND_REQUEST_MAX_LENGTH, label: 'Lời mời kết bạn', perVariant: true,
+      consequence: `Zalo chỉ nhận lời mời tối đa ${ZALO_FRIEND_REQUEST_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt.` } } : {}),
+  })
   // Tên gợi nhớ là nhãn nội bộ của khách (nhiều khách cố ý viết kiểu `#{TÊN DỰ ÁN}`): chỉ nhắc, không chặn.
-  add('zaloAliasTemplate', 'Tên gợi nhớ', extra.zaloAliasTemplate, 'zalo', false, true, extra.enableZaloAlias === true ? {
-    maxLength: { limit: ZALO_ALIAS_MAX_LENGTH, label: 'Tên gợi nhớ', perVariant: false,
-      consequence: `Zalo chỉ nhận tên gợi nhớ tối đa ${ZALO_ALIAS_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt hoặc không đổi được tên.` },
-  } : {})
+  add('zaloAliasTemplate', 'Tên gợi nhớ', extra.zaloAliasTemplate, 'zalo', false, true, {
+    stopLink: false,
+    ...(extra.enableZaloAlias === true ? { maxLength: { limit: ZALO_ALIAS_MAX_LENGTH, label: 'Tên gợi nhớ', perVariant: false,
+      consequence: `Zalo chỉ nhận tên gợi nhớ tối đa ${ZALO_ALIAS_MAX_LENGTH} ký tự nên phần sau sẽ bị cắt hoặc không đổi được tên.` } } : {}),
+  })
   add('internalSmsContent', 'Nội dung SMS gửi kèm', extra.internalSmsContent, 'sms', false)
   add('externalSmsContent', 'Nội dung SMS gửi kèm (akaBiz Sms)', extra.externalSmsContent, 'other', false)
   // Comment / up tin / comment newsfeed chỉ có ở chiến dịch Facebook và được điền biến như nội dung Facebook.
@@ -1088,6 +1246,7 @@ export function checkCampaignContentSyntax(input: CampaignContentSyntaxInput, mo
 /** Các cảnh báo "nội dung có thể gửi không đúng ý" được hỏi lại một lần lúc lưu. */
 export const CONTENT_SYNTAX_SAVE_WARNING_CODES: ContentSyntaxCode[] = [
   'separator_escaped', 'variant_fragment', 'legacy_token', 'brace_literal', 'placeholder_unfilled', 'token_group_target', 'too_long',
+  'format_split',
 ]
 
 const INPUT_COLUMN_LABELS: Record<string, string> = {
@@ -1223,6 +1382,10 @@ export function campaignContentSaveWarning(input: CampaignContentSyntaxInput, mo
   if (counts.token_group_target) {
     lines.push(`• Tin gửi vào group nên biến cá nhân hoá (ví dụ ${examples.token_group_target}) không ra thông tin từng người:`
       + ' biến tên là tên group, biến xưng hô luôn ra lựa chọn thứ ba.')
+  }
+  if (counts.format_split) {
+    lines.push(`• ${counts.format_split} đoạn xoay vòng { } bị xuống dòng hoặc định dạng khác nhau chen giữa (ví dụ ${excerptOf(examples.format_split, 0, examples.format_split.length)})`
+      + ' nên người nhận thấy nguyên dấu ngoặc và dấu |.')
   }
   for (const line of tooLong) lines.push(line)
   if (aiMain || aiComment) {
