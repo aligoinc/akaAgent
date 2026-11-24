@@ -425,13 +425,13 @@ logic chạy (bộ tách, bộ lập lịch, lõi engine, ChatApi).
 | 6 | `token_unsupported_here`: gửi dạng chia sẻ (bạn bè / group) mà nội dung có biến; đường lưu Desktop và API kiểm lại nội dung cả khi chỉ bật chia sẻ | chặn |
 | 7 | Kênh mới `facebook` (nội dung + comment / up tin / comment newsfeed của chiến dịch Facebook): biến hệ thống khác `#{FULL_NAME}` và ngày bị chặn; biến lạ trang trí chỉ nhắc | chặn |
 | 8 | `token_group_target`: nhắn group kiểu thường có biến tên / xưng hô | hỏi lúc lưu |
-| 9, 10 | `too_long`: ước lượng sau khi xoay vòng (lấy lựa chọn dài nhất) và điền biến (tên 15 ký tự): tin Zalo > 2.300, lời mời kết bạn > 150 khi bật kết bạn, tên gợi nhớ > 50 khi bật đổi tên | hỏi lúc lưu |
+| 9, 10 | `too_long`: chỉ khi chắc chắn vượt (anh duyệt đề xuất này sau đợt đầu): spin lấy lựa chọn dài nhất, biến data / tên tính 0 ký tự, xưng hô lấy lựa chọn ngắn nhất, ngày đúng định dạng. Tin Zalo > 2.300, lời mời kết bạn > 150 khi bật kết bạn, tên gợi nhớ > 50 khi bật đổi tên | hỏi lúc lưu |
 
 Các ý ít gặp (mẫu trùng, mẫu vô hình, link dính dấu `|`, email HTML bị tách, ngày sai định dạng) chưa làm.
 
 Chạy trên 27.185 chiến dịch thật (chỉ đọc): chặn mới chỉ 4 chiến dịch đã hoàn thành (3 gửi dạng chia sẻ, 1 Facebook), không chiến
 dịch đang chạy nào. Nhắc: `brace_literal` 67 chiến dịch (8 đang chờ), `placeholder_unfilled` 39 (11), `token_group_target` 3 (1),
-`too_long` 79 (6; phần lớn là tên gợi nhớ ước lượng 51–60 ký tự).
+`too_long` 24 (1 đang chờ; trước khi đổi sang "chắc chắn vượt" là 79, phần lớn là tên gợi nhớ ước lượng 51–60 ký tự).
 
 Kiểm: campaign-core 557 đạt (`contentSyntax.test.ts` 37 ca), API `contentSyntaxGuard.test.ts` 7 ca, smoke Desktop 13 nhóm,
 typecheck Desktop (node + web) và WebApp (campaign-core, web, api) sạch. Câu cho khách là bản nháp, chờ anh duyệt (đầy đủ trong

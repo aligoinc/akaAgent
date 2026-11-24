@@ -67,7 +67,7 @@ export interface ContentSyntaxOptions {
    * biến tên là tên group. Mặc định `person`.
    */
   audience?: 'person' | 'group' | 'share'
-  /** Giới hạn độ dài sau khi điền biến (ước lượng). */
+  /** Giới hạn độ dài: chỉ báo khi chắc chắn vượt (biến tính phần ít nhất, spin tính lựa chọn dài nhất). */
   maxLength?: ContentLengthLimit
 }
 
@@ -721,27 +721,24 @@ function splitSpinOptions(inner: string): string[] {
   return options
 }
 
-/** Độ dài ước lượng của một biến sau khi điền (tên khoảng 15 ký tự). */
-function tokenSampleLength(token: string): number {
+/**
+ * Độ dài ít nhất của một biến sau khi điền: biến lấy từ data / hồ sơ tính 0 (có thể rỗng), xưng hô tính lựa chọn ngắn nhất,
+ * ngày tính đúng định dạng. Nhờ vậy câu "quá dài" chỉ hiện khi chắc chắn vượt, không phụ thuộc tên người nhận dài hay ngắn.
+ */
+function tokenMinLength(token: string): number {
   const brace = TOKEN_BRACE.exec(token)
   if (brace && brace[1].toUpperCase() === SEX_TOKEN) {
-    return brace[2].split('-').reduce((longest, part) => Math.max(longest, part.length), 0)
+    return brace[2].split('-').reduce((shortest, part) => Math.min(shortest, part.length), Number.MAX_SAFE_INTEGER)
   }
   const date = TOKEN_DATE.exec(token)
   if (date && has(DATE_TOKENS, date[1].toUpperCase())) return date[2].replace(/YYYY/g, '0000').length
   const simple = TOKEN_SIMPLE.exec(token)
-  const name = simple ? simple[1].toUpperCase() : ''
-  if (has(NAME_TOKENS, name)) return 15
-  if (name === 'PHONE' || name === 'MOBILE') return 10
-  if (name === 'EMAIL') return 20
-  if (name === 'UID') return 18
-  if (name === 'STOP_MESSAGES_LINK') return 40
-  if (/^INFO[1-5]$/.test(name)) return 10
-  if (has(DATE_TOKENS, name)) return 10
+  if (simple && (has(SIMPLE_TOKENS, simple[1]) || has(DATE_TOKENS, simple[1]))) return 0
+  // Biến không có trong hệ thống bị gửi nguyên văn.
   return token.length
 }
 
-/** Độ dài dài nhất có thể của một đoạn sau khi xoay vòng và điền biến (ước lượng). */
+/** Độ dài của lựa chọn spin dài nhất, biến tính phần ít nhất (xem `tokenMinLength`). */
 function estimatedLength(value: string, depth = 0): { length: number; tokens: boolean } {
   let length = 0
   let tokens = false
@@ -753,7 +750,7 @@ function estimatedLength(value: string, depth = 0): { length: number; tokens: bo
     }
     const tokenEnd = findTemplateTokenEnd(value, index)
     if (tokenEnd !== null) {
-      length += tokenSampleLength(value.slice(index, tokenEnd + 1))
+      length += tokenMinLength(value.slice(index, tokenEnd + 1))
       tokens = true
       index = tokenEnd
       continue
@@ -798,8 +795,8 @@ function scanLength(scan: Scan, limit: ContentLengthLimit, separators: number[])
     const start = from + (segment.length - segment.trimStart().length)
     const which = filled.length > 1 ? ` (mẫu số ${position + 1})` : ''
     push(scan, 'too_long', 'warn', start, from + segment.trimEnd().length,
-      `${limit.label}${which} dài ${estimate.tokens ? 'khoảng ' : ''}${formatCount(estimate.length)} ký tự`
-        + `${estimate.tokens ? ' (tính cả phần điền thông tin người nhận)' : ''}. ${limit.consequence}`)
+      `${limit.label}${which} dài ${estimate.tokens ? 'ít nhất ' : ''}${formatCount(estimate.length)} ký tự`
+        + `${estimate.tokens ? ' (chưa tính phần điền thông tin người nhận)' : ''}. ${limit.consequence}`)
   })
 }
 

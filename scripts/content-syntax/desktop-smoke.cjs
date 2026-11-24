@@ -207,13 +207,16 @@ check('rà 24/11: ngoặc không xoay vòng, chỗ trống, chia sẻ, Facebook,
 
   const warning = syntax.campaignContentSaveWarning({
     actionId: 'zalo_message_phone', content: `Chào #{INPUT_FULLNAME}\n|\n${'x'.repeat(2400)}`,
-    extraSettings: { rewriteContentEachRun: true, enableAddFriend: true, friendRequestMessage: 'k'.repeat(160), enableZaloAlias: true, zaloAliasTemplate: 'Khách #{FULL_NAME} - #{PHONE} - #{INFO1} - dự án' },
+    extraSettings: { rewriteContentEachRun: true, enableAddFriend: true, friendRequestMessage: 'k'.repeat(160), enableZaloAlias: true, zaloAliasTemplate: 'Khách hàng tiềm năng dự án Vinhomes Grand Park quận 9 - #{FULL_NAME}' },
     inputRows: [{ name: 'A', info1: 'a' }, { name: '', info1: 'b' }]
   })
   assert.equal(warning.count, 5)
-  for (const text of ['mẫu số 2) dài 2.400', 'Lời mời kết bạn dài 160', 'Tên gợi nhớ dài khoảng', 'Viết nội dung cho mỗi lượt chạy', '1/2 dòng data chưa có Tên']) {
+  for (const text of ['mẫu số 2) dài 2.400', 'Lời mời kết bạn dài 160', 'Tên gợi nhớ dài ít nhất 56', 'Viết nội dung cho mỗi lượt chạy', '1/2 dòng data chưa có Tên']) {
     assert.ok(warning.message.includes(text), text)
   }
+  // Chỉ nhắc khi chắc chắn vượt: tên gợi nhớ ngắn mà nhiều biến thì không nhắc.
+  assert.equal(syntax.campaignContentSaveWarning({ actionId: 'zalo_message_phone', content: 'Chào bạn',
+    extraSettings: { enableZaloAlias: true, zaloAliasTemplate: '#{FULL_NAME} - #{PHONE} - #{INFO1} - #{INFO2} - dự án' } }), null)
   // Tắt lời mời / đổi tên thì không nhắc độ dài.
   assert.equal(syntax.campaignContentSaveWarning({ actionId: 'zalo_message_phone', content: 'Chào bạn',
     extraSettings: { enableAddFriend: false, friendRequestMessage: 'k'.repeat(160), enableZaloAlias: false, zaloAliasTemplate: 'x'.repeat(80) } }), null)
