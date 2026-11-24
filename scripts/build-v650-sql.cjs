@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// V648: engine v2 không đánh "hoàn thành" chiến dịch lịch tuần / tháng có "làm mới data" khi chạy xong danh sách trong ngày
+// V650: engine v2 không đánh "hoàn thành" chiến dịch lịch tuần / tháng có "làm mới data" khi chạy xong danh sách trong ngày
 // (anh duyệt phương án 24/11/2026: "Vậy hãy thực thi phương án").
 //
 // Trước: aka_agent_engine_finish_campaign_v2 hoàn thành chiến dịch; tới lượt bảo trì lịch ngày chạy kế (Desktop / App Server
@@ -14,7 +14,9 @@
 //
 // Nguồn: thân finish_campaign_v2 trong file V618 p2 đã apply (md5 pg_get_functiondef production đọc chỉ đọc 24/11/2026: ed7406cb…).
 // Thân hàm mới không ghi số migration trong chú thích: đổi số thì md5 thân hàm không đổi.
-// Chạy: node scripts/build-v648-sql.cjs (ghi migration + bản gỡ). Không sửa tay hai file đó.
+// Đổi số V648 → V650 ngày 25/11/2026 (anh: "Đổi số V650"): sổ production đã có migration_v648_notification_email_opt_out và V649
+// (akaAgentWebApp, apply 24/11) nên bản mang số cũ tự từ chối chạy. Chỉ đổi số; thân hàm, md5 và cách gỡ giữ nguyên.
+// Chạy: node scripts/build-v650-sql.cjs (ghi migration + bản gỡ). Không sửa tay hai file đó.
 'use strict'
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -23,7 +25,7 @@ const path = require('node:path')
 const ROOT = path.resolve(__dirname, '..')
 const md5 = text => crypto.createHash('md5').update(text, 'utf8').digest('hex')
 
-const VERSION = 'v648'
+const VERSION = 'v650'
 const NAME = `migration_${VERSION}_engine_recurring_refresh_pass`
 const ROLLBACK_NAME = `rollback_${VERSION}_engine_recurring_refresh_pass`
 const SIG = 'public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'

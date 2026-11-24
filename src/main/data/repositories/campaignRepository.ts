@@ -1081,7 +1081,7 @@ function getVietnamWeekdayNumber(date: Date): number {
 }
 
 // Chỉ nhận số thập phân viết thường ("5", "05", "+5", "5.", "5.0", "1e1"); Number() còn nhận "0x1f" / "0b11" / "0o7" mà engine v2 (SQL
-// numeric) và luật chung bỏ qua (giả lập lịch 24/11/2026). Giống hệt ChatApi campaignRuntimeRepository.ts và V648.
+// numeric) và luật chung bỏ qua (giả lập lịch 24/11/2026). Giống hệt ChatApi campaignRuntimeRepository.ts và V650.
 const SCHEDULE_DAY_TOKEN = /^\+?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/
 
 function parseNumberList(value: string | undefined, min: number, max: number): number[] {

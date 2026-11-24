@@ -1,5 +1,5 @@
-// Engine v2: hàm thật aka_agent_engine_finish_campaign_v2 (bản V648) trên Postgres cục bộ dùng một lần, DB dựng như production
-// (bootstrap của bộ kịch bản, engine Facebook, V561, V585, thân V618 p2, rồi V648). Mỗi ca: tạo chiến dịch + data đã xong, nhận lượt
+// Engine v2: hàm thật aka_agent_engine_finish_campaign_v2 (bản V650) trên Postgres cục bộ dùng một lần, DB dựng như production
+// (bootstrap của bộ kịch bản, engine Facebook, V561, V585, thân V618 p2, rồi V650). Mỗi ca: tạo chiến dịch + data đã xong, nhận lượt
 // (không còn data → no_target, giữ lease), gọi hàm kết thúc lượt, đọc lại chiến dịch + data.
 'use strict'
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
@@ -7,17 +7,17 @@ const { bootstrap: engineBootstrap } = require('../engine-v2-scenarios/bootstrap
 const { applyFacebookMigrations } = require('../engine-v2-facebook/fixture.cjs')
 const { applyCampaignRepeatV561 } = require('../fixtures/campaign-outcome-engine/campaign-repeat-v561.cjs')
 const V585 = require('../build-v585-sql.cjs')
-const V648 = require('../build-v648-sql.cjs')
+const V650 = require('../build-v650-sql.cjs')
 
-async function openEngine({ port = Number(process.env.SIM_ENGINE_PORT || 55649), withV648 = true } = {}) {
+async function openEngine({ port = Number(process.env.SIM_ENGINE_PORT || 55649), withV650 = true } = {}) {
   const { connect, stop } = startCluster({ port, label: 'aka-sched-sim-' })
   const db = await connect()
   await engineBootstrap(db, [])
   await applyFacebookMigrations(db)
   await applyCampaignRepeatV561(db)
   await db.query(V585.migration)
-  await db.query(V648.texts.live)
-  if (withV648) await db.query(V648.migration)
+  await db.query(V650.texts.live)
+  if (withV650) await db.query(V650.migration)
   await db.query(`INSERT INTO public.org_organization(id, name, use_new_zalo_runtime) VALUES (601, 'Org', true) ON CONFLICT (id) DO NOTHING`)
   await db.query(`INSERT INTO public.org_staff(id, organization_id) VALUES (7101, 601) ON CONFLICT (id) DO NOTHING`)
   await db.query(`INSERT INTO public.org_organization_product (organization_id, product_id, package_type, expiration_date)

@@ -2679,7 +2679,7 @@ export class CampaignScheduler {
   /**
    * Lịch tuần / tháng có "làm mới data": chạy xong danh sách trong ngày thì không "hoàn thành" mà đặt lại data (trừ "tạm dừng") và
    * hẹn ngày chạy kế (anh duyệt 24/11/2026). Trước đó chiến dịch hiện "✅ Hoàn thành" mỗi ngày tới lượt bảo trì lịch của ngày chạy kế,
-   * khách tưởng chiến dịch đã kết thúc. Engine v2 làm cùng việc trong finish_campaign_v2 (V648). Bỏ qua: up tin, sinh nhật, đề xuất
+   * khách tưởng chiến dịch đã kết thúc. Engine v2 làm cùng việc trong finish_campaign_v2 (V650). Bỏ qua: up tin, sinh nhật, đề xuất
    * kết bạn, huỷ lời mời (bảo trì lịch có cách riêng); Zalo Server đang giữ lượt mà không phải nhắn bạn bè / nhắn nhóm (RPC chuyển lượt
    * của Server chỉ nhận hai loại đó). Ngày chạy kế quá ngày kết thúc / không tính được thì hoàn thành như cũ.
    */

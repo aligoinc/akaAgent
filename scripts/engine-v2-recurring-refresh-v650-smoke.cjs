@@ -1,7 +1,7 @@
-// V648: engine v2 hẹn ngày chạy kế cho lịch tuần / tháng có làm mới data thay vì "hoàn thành". Kiểm trên PostgreSQL cục bộ dùng một lần:
-// DB engine v2 như production (bootstrap của bộ kịch bản, engine Facebook, V561, V585, thân finish của V618 p2), rồi apply V648.
+// V650: engine v2 hẹn ngày chạy kế cho lịch tuần / tháng có làm mới data thay vì "hoàn thành". Kiểm trên PostgreSQL cục bộ dùng một lần:
+// DB engine v2 như production (bootstrap của bộ kịch bản, engine Facebook, V561, V585, thân finish của V618 p2), rồi apply V650.
 // Không mạng, không dữ liệu khách.
-// Chạy: CHAT_REPO=<thư mục có module pg> PG17_BIN=<bin Postgres> LC_ALL=C node scripts/engine-v2-recurring-refresh-v648-smoke.cjs
+// Chạy: CHAT_REPO=<thư mục có module pg> PG17_BIN=<bin Postgres> LC_ALL=C node scripts/engine-v2-recurring-refresh-v650-smoke.cjs
 'use strict'
 const assert = require('node:assert/strict')
 const { startCluster } = require('./fixtures/campaign-outcome-engine/pg-fixture.cjs')
@@ -9,30 +9,30 @@ const { bootstrap: engineBootstrap } = require('./engine-v2-scenarios/bootstrap.
 const { applyFacebookMigrations } = require('./engine-v2-facebook/fixture.cjs')
 const { applyCampaignRepeatV561 } = require('./fixtures/campaign-outcome-engine/campaign-repeat-v561.cjs')
 const V585 = require('./build-v585-sql.cjs')
-const V648 = require('./build-v648-sql.cjs')
-const PORT = Number(process.env.V648_TEST_PORT || 55648)
+const V650 = require('./build-v650-sql.cjs')
+const PORT = Number(process.env.V650_TEST_PORT || 55650)
 
 const vnMinuteNow = () => { const d = new Date(Date.now() + 7 * 3600e3); return d.getUTCHours() * 60 + d.getUTCMinutes() }
 const hhmm = m => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`
 
 async function main() {
-  const { connect, stop } = startCluster({ port: PORT, label: 'aka-v648-' })
+  const { connect, stop } = startCluster({ port: PORT, label: 'aka-v650-' })
   const db = await connect()
   let checks = 0
   const pass = label => { checks++; console.log('PASS', label) }
   const one = async (sql, args = []) => (await db.query(sql, args)).rows[0]
   const val = async (sql, args = []) => Object.values((await db.query(sql, args)).rows[0] || {})[0]
   const rpc = async (fn, ...args) => val(`SELECT public.${fn}(${args.map((_, i) => `$${i + 1}`).join(', ')})`, args)
-  const finishMd5 = () => val(`SELECT md5(pg_get_functiondef(to_regprocedure($1)))`, [V648.SIG])
+  const finishMd5 = () => val(`SELECT md5(pg_get_functiondef(to_regprocedure($1)))`, [V650.SIG])
   const acl = () => val(`SELECT coalesce(p.proacl::text, '') || '|' || pg_get_userbyid(p.proowner) || '|' || p.prosecdef::text || '|' || p.provolatile::text
-    || '|' || coalesce(p.proconfig::text, '') FROM pg_proc p WHERE p.oid = to_regprocedure($1)`, [V648.SIG])
+    || '|' || coalesce(p.proconfig::text, '') FROM pg_proc p WHERE p.oid = to_regprocedure($1)`, [V650.SIG])
   try {
     await engineBootstrap(db, [])
     await applyFacebookMigrations(db)
     await applyCampaignRepeatV561(db)
     await db.query(V585.migration)
-    await db.query(V648.texts.live)
-    assert.equal(await finishMd5(), V648.LIVE_MD5, 'fixture: thân finish_campaign_v2 như production (V618 p2)')
+    await db.query(V650.texts.live)
+    assert.equal(await finishMd5(), V650.LIVE_MD5, 'fixture: thân finish_campaign_v2 như production (V618 p2)')
 
     // ---- Dữ liệu thử ------------------------------------------------------------------------------------------------------
     let nextId = 985000
@@ -60,12 +60,12 @@ async function main() {
       if (paused > 0) await db.query(`UPDATE public.auto_campaign_input_data SET status = 'tạm dừng', note = 'nhóm đã mất' WHERE id = ANY($1)`, [ids.slice(0, paused)])
       return { account, campaign, staff, ids, lease: null }
     }
-    const ctx = c => JSON.stringify({ staffId: c.staff, accountId: c.account, campaignId: c.campaign, runnerId: 'fly:v648', runtimeTarget: 'fly',
+    const ctx = c => JSON.stringify({ staffId: c.staff, accountId: c.account, campaignId: c.campaign, runnerId: 'fly:v650', runtimeTarget: 'fly',
       leaseToken: c.lease ?? null, actions: [{ code: 'zalo_find_phone_user' }, { code: 'zalo_message_stranger' }] })
     const claim = async c => { const res = await rpc('aka_agent_engine_claim_target_v1', ctx(c)); if (res.leaseToken) c.lease = res.leaseToken; return res }
     let rk = 0
     const okDone = cl => rpc('aka_agent_engine_report_v1', cl.targetRunId, cl.leaseToken,
-      JSON.stringify([{ resultKey: `v648-smoke:${++rk}`, actionCode: 'zalo_find_phone_user', ok: true, phase: 'after_send', statusCode: 'campaign_detail_success' }]), true, false)
+      JSON.stringify([{ resultKey: `v650-smoke:${++rk}`, actionCode: 'zalo_find_phone_user', ok: true, phase: 'after_send', statusCode: 'campaign_detail_success' }]), true, false)
     const finish = c => rpc('aka_agent_engine_finish_campaign_v2', c.account, c.lease, null)
     const release = async c => { const r = await rpc('aka_agent_engine_release_v1', c.account, c.lease); c.lease = null; return r }
     const runAll = async c => { for (;;) { const cl = await claim(c); if (cl.status !== 'claimed') return cl; await okDone(cl) } }
@@ -99,19 +99,19 @@ async function main() {
     const vnHourNow = vnDate().getUTCHours()
     if (vnHourNow >= 23) { console.log('NOTE bỏ qua: chạy sau 00:00 và trước 23:00 giờ Việt Nam'); return }
 
-    // ---- 1. Trước V648: tái hiện "hoàn thành" mỗi ngày --------------------------------------------------------------------------------
+    // ---- 1. Trước V650: tái hiện "hoàn thành" mỗi ngày --------------------------------------------------------------------------------
     const bug = await pass1({})
     assert.deepEqual([bug.f.reason, bug.after.status], ['completed', 'hoàn thành'], 'thân V618: lịch tuần làm mới data → hoàn thành')
-    pass('trước V648 (thân như production): lịch tuần làm mới data chạy xong → hoàn thành')
+    pass('trước V650 (thân như production): lịch tuần làm mới data chạy xong → hoàn thành')
 
     // ---- 2. Apply, quyền, không chạy lại -----------------------------------------------------------------------------------------------
     const aclBefore = await acl()
-    await db.query(V648.migration.replace(/COMMIT;\s*$/, 'ROLLBACK;'))
-    assert.equal(await finishMd5(), V648.LIVE_MD5, 'apply rồi ROLLBACK không để lại gì')
-    await db.query(V648.migration)
-    assert.equal(await finishMd5(), V648.NEW_MD5)
+    await db.query(V650.migration.replace(/COMMIT;\s*$/, 'ROLLBACK;'))
+    assert.equal(await finishMd5(), V650.LIVE_MD5, 'apply rồi ROLLBACK không để lại gì')
+    await db.query(V650.migration)
+    assert.equal(await finishMd5(), V650.NEW_MD5)
     assert.equal(await acl(), aclBefore, 'chủ sở hữu, quyền, thuộc tính, thiết lập của hàm giữ nguyên')
-    await assert.rejects(db.query(V648.migration), /đã chạy \(finish\)/)
+    await assert.rejects(db.query(V650.migration), /đã chạy \(finish\)/)
     await db.query('ROLLBACK')
     pass('apply rồi ROLLBACK không để lại gì; apply thật đúng md5; quyền giữ nguyên; apply lần hai bị chặn')
 
@@ -167,10 +167,10 @@ async function main() {
     pass('lượt kế: trước giờ hẹn không nhận data; tới giờ chạy lại đủ danh sách')
 
     // ---- 7. Gỡ -------------------------------------------------------------------------------------------------------------------------
-    await db.query(V648.rollback)
-    assert.equal(await finishMd5(), V648.LIVE_MD5)
+    await db.query(V650.rollback)
+    assert.equal(await finishMd5(), V650.LIVE_MD5)
     assert.equal(await acl(), aclBefore)
-    await assert.rejects(db.query(V648.rollback), /hàm đã là bản trước/)
+    await assert.rejects(db.query(V650.rollback), /hàm đã là bản trước/)
     await db.query('ROLLBACK')
     const back = await pass1({})
     assert.deepEqual([back.f.reason, back.after.status], ['completed', 'hoàn thành'], 'gỡ xong: lại như cũ')
