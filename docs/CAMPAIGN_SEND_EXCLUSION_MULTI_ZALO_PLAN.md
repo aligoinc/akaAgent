@@ -326,3 +326,40 @@ từng nguồn và số chưa xác định (sẽ kiểm lúc chạy). Không đ�
 ### 12.5 Chưa làm / ghi nhận
 
 - "Chống gửi lặp N ngày" (tính năng khác) cũng đặt khoá theo UID nên có thể sót khi UID đổi; ngoài phạm vi, chưa sửa.
+- "Chiến dịch đã gửi" tính cả lượt Zalo đã nhận một phần (`operationState = committed` mà trạng thái "thất bại": người nhận đã nhận
+  ảnh nhưng chưa nhận chữ, hoặc ngược lại; đo 25/11: ~0,5% lượt nhắn người lạ), vì khách đó đã nhận nội dung của chiến dịch. Lượt "không
+  rõ đã gửi" (UNK01, `unknown`) không tính.
+
+### 12.6 Kiểm thử và đo (25/11/2026)
+
+- Bộ kiểm ngẫu nhiên `scripts/send-exclusion-v657-fuzz.cjs` (PostgreSQL cục bộ có hàm nhận data / loại trừ đúng bản production):
+  dựng thế giới giả gồm người thật (SĐT / Global ID), nhiều nick Zalo với Zalo ID riêng đổi theo thời gian, hai tài khoản cùng một
+  nick, `zalo_users` thiếu dòng hoặc Global ID trống, lịch sử Tìm SĐT có lần tra cũ ra Global ID khác, danh sách / Nhóm data / chiến
+  dịch bị xoá sau khi lưu, nguồn của nhân viên / tổ chức khác làm mồi. So DB với một bản tính độc lập viết bằng JS ở 6 chỗ: bảng đối
+  chiếu, hàm so khớp bước A và bước B, `remote`, bước nhận data của engine (data bị loại tạm dừng đúng lý do, data khác được nhận đúng
+  thứ tự), `precheck` của bộ chạy cũ, xem trước (theo chiến dịch và theo danh sách data, nhiều trang). Đối chiếu thêm với "sự thật":
+  không bao giờ loại nhầm người; bước A loại thì bước B cũng loại.
+  `PG_MODULE_DIR=<thư mục có node_modules/pg> LC_ALL=C node scripts/send-exclusion-v657-fuzz.cjs --rounds 10 --seed N --rows 40`.
+  Lượt đầu tìm ra 2 lỗi, đã sửa: Nhóm data SĐT luôn được chọn trước Nhóm Zalo UID thay vì xếp theo tên; bước nạp bảng đối chiếu nhảy
+  mốc tới `max(id)` nên dòng Tìm SĐT commit muộn bị bỏ sót mãi (nay đọc lại 5.000 id đã qua mỗi lượt). Sau khi sửa: 3 lượt liền sạch
+  (seed 21–23, 30 thế giới, 1.200 data; độ phủ in ở cuối mỗi lượt). Smoke `scripts/send-exclusion-v657-smoke.cjs` 15 ca, 2 ca mới đỏ
+  trên bản trước.
+- Phát lại dữ liệu thật (production, chỉ đọc): người đã nhận tin ở 2 chiến dịch của cùng nhân viên; giả sử chiến dịch sau loại trừ
+  "đã gửi ở chiến dịch trước": 310/310 cặp (2 mẫu, 22 tổ chức, có cặp khác tài khoản) được nhận ra ở bước B; khớp theo SĐT không lần
+  nào trỏ sang Global ID khác (0 loại nhầm). Liên hệ của Nhóm data SĐT 18.228/18.228 lưu SĐT đã chuẩn hoá; Nhóm data Zalo UID
+  2.689/2.689 là liên hệ `person` gắn tài khoản, 99,6% có Global ID qua `zalo_users`. Mọi tài khoản có nhân viên cùng tổ chức (0 lệch / 12.045).
+- Tốc độ (EXPLAIN ANALYZE chỉ đọc trên production, tổ chức 194 tài khoản / 147 Zalo): Nhóm data (4 nhóm, SĐT + Global ID) ~3.500 khối,
+  dưới 10 ms khi nóng; chiến dịch đã gửi 10 chiến dịch 2,4 ms. Hai chỗ đã sửa sau khi đo: danh sách tài khoản của tổ chức quét cả
+  bảng `auto_accounts` (không có chỉ mục theo tổ chức, ~2.100 khối mỗi data) → đi qua nhân viên; chiến dịch đã gửi tra theo chỉ mục
+  chiến dịch (đọc mọi data và mọi kết quả gửi của chiến dịch, 0,5–2,2 giây) → ép tra theo chỉ mục SĐT / Zalo ID (`campaign_id+0`).
+  Bước nạp bảng đối chiếu: ~0,44 giây mỗi 10.000 id khi đọc đĩa; lần đầu ~18 triệu id (~5 GB đọc đĩa), ngân sách 8 giây mỗi phút
+  nên xong trong ~1,5–2 giờ: apply buổi tối.
+
+### 12.7 Fly (ChatApi)
+
+Bước A chạy trong hàm nhận data nên có hiệu lực ở cả Fly khi apply V657. Bước B cần cổng Fly gửi `clientVersion` và có `remote`: đã
+làm ở ChatApi nhánh `claude/festive-rubin-5zi6qe` (đồng bộ lõi bằng `scripts/sync-campaign-engine.cjs`, lõi thêm export
+`SEND_EXCLUSION_CLIENT_VERSION`; `flyZaloPort.ts` thêm `sendExclusionRemote`; repository nhận thao tác `remote`). Chưa deploy: tới lúc
+đó cấu hình mới chạy trên Fly dừng an toàn bằng `send_exclusion_client_outdated` như trước. Lần đồng bộ này kéo theo phần lõi của quét
+data website (V618: kiểu `remainingDaily` / `remainingWindow`, `web/registry.ts`) đã có trên `dev_3` mà ChatApi chưa có; chỉ thêm kiểu
+và export, Fly không chạy loại chiến dịch web.
