@@ -60,7 +60,7 @@ const server = http.createServer((request, response) => {
       state.token = 'tok_' + 'a'.repeat(20) + state.logins
       state.valid = true
       response.setHeader('content-type', 'application/json')
-      response.end(JSON.stringify({ status: 1, errorCode: 0, message: 'ok', data: { status: 'active', token: state.token, me: { id: 7, organization: { id: 9 } } } }))
+      response.end(JSON.stringify({ status: 1, errorCode: 0, message: 'ok', data: { status: 'active', token: state.token, me: { staff: { id: 7 }, organization: { id: 9 } } } }))
       return
     }
     if (url.pathname === '/api/aka-agent/control/v1/auth/logout') {
@@ -169,7 +169,7 @@ app.whenReady().then(async () => {
     server.removeAllListeners('request')
     server.on('request', (request, response) => {
       const url = new URL(request.url, 'http://x')
-      if (url.pathname.endsWith('/auth/native/login')) { state.logins += 1; response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ status: 1, errorCode: 0, message: 'ok', data: { status: 'active', token: 'tok_' + 'b'.repeat(24), me: { id: 7, organization: { id: 9 } } } })); return }
+      if (url.pathname.endsWith('/auth/native/login')) { state.logins += 1; response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ status: 1, errorCode: 0, message: 'ok', data: { status: 'active', token: 'tok_' + 'b'.repeat(24), me: { staff: { id: 7 }, organization: { id: 9 } } } })); return }
       if (url.pathname.endsWith('/auth/logout')) { state.logouts.push(request.headers.authorization || null); response.end('{}'); return }
       if (url.pathname.endsWith('/me')) { response.statusCode = 401; response.end('{}'); return }
       response.setHeader('content-type', 'text/html; charset=utf-8'); response.end(PAGE)
@@ -190,6 +190,20 @@ app.whenReady().then(async () => {
     assert.ok(state.logouts.length >= 2, JSON.stringify(state.logouts))
     assert.ok(state.logouts.every(value => /^Bearer tok_/.test(value)))
     ok('đăng xuất: xoá cookie phiên của phân vùng, thu hồi phiên native trên máy chủ')
+    // 9. API trả phiên của nhân viên khác (khuôn thật { staff: { id }, organization: { id } }): không đặt cookie, báo không khớp.
+    server.removeAllListeners('request')
+    server.on('request', (request, response) => {
+      const url = new URL(request.url, 'http://x')
+      if (url.pathname.endsWith('/auth/native/login')) { response.setHeader('content-type', 'application/json'); response.end(JSON.stringify({ status: 1, errorCode: 0, message: 'ok', data: { status: 'active', token: 'tok_' + 'c'.repeat(24), me: { staff: { id: 8 }, organization: { id: 9 } } } })); return }
+      response.end('{}')
+    })
+    const other = new JourneyWebService(win, 7, 9)
+    const mismatch = await other.prepare('light', null)
+    assert.equal(mismatch.status, 'error')
+    assert.match(mismatch.message || '', /không khớp tài khoản/)
+    assert.equal((await session.fromPartition(mismatch.partition).cookies.get({ name: 'aka_agent_control_session' })).length, 0)
+    await other.dispose()
+    ok('phiên của nhân viên khác: không đặt cookie, báo không khớp')
     console.log('\n' + passed + ' PASS')
     server.close()
     app.exit(0)

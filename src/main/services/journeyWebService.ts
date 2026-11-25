@@ -28,7 +28,7 @@ class JourneyWebAuthError extends Error {}
 interface NativeLoginBody {
   status?: number
   message?: string
-  data?: { status?: string; token?: string; me?: { id?: number; organization?: { id?: number } } }
+  data?: { status?: string; token?: string; me?: { staff?: { id?: number }; organization?: { id?: number } } }
 }
 
 function isJourneyOrigin(value: string): boolean {
@@ -173,7 +173,8 @@ export class JourneyWebService {
       const token = body.data.token
       const me = body.data.me
       if (typeof token !== 'string' || !/^[A-Za-z0-9._~-]{16,512}$/.test(token)) throw new Error('journey_web_token_invalid')
-      if (me && (Number(me.id) !== this.staffId || Number(me.organization?.id) !== this.organizationId)) {
+      // Khuôn `me` của API Web: { staff: { id }, organization: { id } } (không có `me.id`).
+      if (me && (Number(me.staff?.id) !== this.staffId || Number(me.organization?.id) !== this.organizationId)) {
         throw new JourneyWebAuthError('Phiên Tự động hóa không khớp tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.')
       }
       await this.browserSession.cookies.set({
