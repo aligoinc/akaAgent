@@ -1,0 +1,22 @@
+{
+  "note": "Chạy thử trên production trong giao dịch tự huỷ (RAISE ở cuối rồi ROLLBACK), 25/11/2026. Không lưu gì; kiểm sau đó: không còn bảng/hàm/trigger/cài đặt/lịch nào của tính năng, trạng thái 62/63 vẫn tắt, 3 kết quả bị ghi thử trạng thái phụ về lại NULL.",
+  "v525_v526": {
+    "at_utc": "2026-11-25T10:28:14Z/10:28:23Z",
+    "files_md5": {"migration_v525": "1250bb56209c1632b3865ed3dd94906c", "migration_v526": "342d5840ca23eb7262c7a39f9c00d364"},
+    "function_bodies_md5": "9ee566ee43c1d12f1d257787139e9408 (trùng bản chạy trên PostgreSQL 16 cục bộ)",
+    "install_ms": 190, "trigger_ms": 12,
+    "scope_on_1500_real_sends": {"server_eligible": 251, "qr_eligible": 62, "server_akachat_rejected": 16},
+    "register": {"tried": 1500, "registered": 1452, "errors": 0, "ms": 699},
+    "ingest": {"batch_500_ms": 70, "batch_1462_ms": 116, "rejected_akachat_accounts": 9},
+    "marks": {"delivered": 1452, "seen": 469, "reacted": 20},
+    "result_status_flush": {"picked": 3, "updated": 3, "sub_status_id": 34, "ms": 195},
+    "side_job": "chạy, không lỗi",
+    "not_covered": "reply (sự kiện bị cắt ở 2.000 / lô trong bài thử, đã kiểm ở bộ kiểm cục bộ); hàm nhận lô Desktop (bài thử đọc bảng tạm dưới vai trò Desktop nên lỗi quyền của bài thử, bộ kiểm cục bộ có kiểm)"
+  },
+  "v653": {
+    "campaign": 62202,
+    "before_after_identical_when_new_table_empty": "12/12 (v2, v3, gộp theo người nhận × all/seen/none/responded) + tab Báo cáo",
+    "with_test_rows_40_sends_25_delivered_10_seen": {"received": [403, 403], "seen": [382, 382], "none": [1552, 1552], "note": "[kết quả hàm, đếm tay]"},
+    "new_body_md5": {"v2": "71ba4bd7631da7100831a8dfe6a3648f", "v3": "e9009c99441e5f268c04b30e1fef4de8", "recipients": "85076e4f0f4a021fc1e32269ec8b207f", "run_report": "354247b27de86de38f6970c66db768c4"}
+  }
+}
