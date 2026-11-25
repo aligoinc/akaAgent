@@ -45,6 +45,23 @@ BEGIN
  END LOOP;
 END $rv$;
 
+CREATE FUNCTION private.aka_agent_zalo_own_global_ids(p_account bigint)
+ RETURNS text[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+ -- V657: Global ID của chính nick Zalo mà tài khoản đang đăng nhập (zalo_accounts.metadata của Desktop, chat_zalo_account của Fly).
+ -- Đo 25/11: ~19% dòng zalo_users (62% dòng quét thành viên nhóm, 701 tài khoản) mang Global ID này thay cho Global ID của người kia
+ -- (Zalo trả Global ID của người xem khi đọc hồ sơ thành viên nhóm) ⇒ không bao giờ dùng làm Global ID của người nhận.
+ SELECT COALESCE(array_agg(DISTINCT g) FILTER (WHERE g IS NOT NULL),'{}') FROM (
+  SELECT NULLIF(btrim(za.metadata->>'globalId'),'') g FROM public.auto_accounts a JOIN public.zalo_accounts za ON za.id=a.zalo_account_id WHERE a.id=p_account
+  UNION ALL
+  SELECT NULLIF(btrim(ca.global_id),'') FROM public.chat_zalo_account_organization ao JOIN public.chat_zalo_account ca ON ca.id=ao.chat_zalo_account_id
+   WHERE ao.auto_account_id=p_account) x;
+$function$;
+REVOKE ALL ON FUNCTION private.aka_agent_zalo_own_global_ids(bigint) FROM PUBLIC;
+
 CREATE FUNCTION private.aka_agent_zalo_phone_identity_ingest(p_budget_ms integer DEFAULT NULL, p_chunk integer DEFAULT NULL)
  RETURNS jsonb
  LANGUAGE plpgsql
@@ -77,10 +94,12 @@ BEGIN
   v_to:=least(v_from+v_chunk,v_max);
   WITH src AS (
    SELECT DISTINCT ON (x.ph) x.ph, x.gid, x.created_at, x.id FROM (
-    SELECT public.aka_agent_internal_normalize_phone(COALESCE(d.data->'target'->>'phone','')) ph, NULLIF(btrim(COALESCE(d.data->'target'->>'globalId','')),'') gid, d.created_at, d.id
+    SELECT public.aka_agent_internal_normalize_phone(COALESCE(d.data->'target'->>'phone','')) ph, NULLIF(btrim(COALESCE(d.data->'target'->>'globalId','')),'') gid, d.created_at, d.id,
+      d.account_id
      FROM public.auto_campaign_details d
      WHERE d.id>v_from AND d.id<=v_to AND d.action_code='zalo_find_phone_user' AND d.status='thành công') x
-   WHERE x.ph<>'' AND x.gid IS NOT NULL ORDER BY x.ph, x.id DESC),
+   -- Bỏ Global ID của chính nick tra số (đo 25/11: 0 / 91.109 lượt; chặn phòng khi Zalo trả nhầm như khi đọc hồ sơ thành viên nhóm).
+   WHERE x.ph<>'' AND x.gid IS NOT NULL AND NOT (x.gid=ANY(private.aka_agent_zalo_own_global_ids(x.account_id))) ORDER BY x.ph, x.id DESC),
   up AS (
    INSERT INTO private.auto_zalo_phone_identity AS t (phone, global_id, seen_at, detail_id)
    SELECT ph, gid, created_at, id FROM src
@@ -102,6 +121,7 @@ BEGIN
  FOREACH v_role IN ARRAY ARRAY['anon','authenticated','aka_agent_desktop','aka_agent_chat_api','service_role'] LOOP
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=v_role) THEN
    EXECUTE format('REVOKE ALL ON FUNCTION private.aka_agent_zalo_phone_identity_ingest(integer,integer) FROM %I', v_role);
+   EXECUTE format('REVOKE ALL ON FUNCTION private.aka_agent_zalo_own_global_ids(bigint) FROM %I', v_role);
   END IF;
  END LOOP;
 END $rv2$;

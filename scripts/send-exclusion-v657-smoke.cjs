@@ -293,6 +293,117 @@ async function main() {
       assert.equal(Number((await one(`SELECT last_detail_id l FROM private.auto_zalo_phone_identity_state`)).l) >= last, true)
     })
 
+    // ---------------------------------------------------------------- Global ID ghi sai trong zalo_users (đo 25/11 trên production)
+    // Nick của tài khoản J: Global ID GOWN ghi ở zalo_accounts.metadata. Thành viên nhóm M1, M2 (người khác nhau) bị ghi GOWN.
+    const GOWN = 'OWNNICK0000000000000000000000001'
+    const zaNick = id()
+    await ins('zalo_accounts', { id: zaNick, zalo_uid: 'NICK-J', metadata: { globalId: GOWN } })
+    const J = id(); await acc(J, { zalo_account_id: zaNick })
+    const J2 = id(); await acc(J2, { zalo_account_id: zaNick }) // cùng nick với J
+    await zu(J, 'uJ-m1', GOWN, { zalo_name: 'Mai' })
+    await zu(J, 'uJ-m2', GOWN, { zalo_name: 'Lan' })
+    await zu(J2, 'uJ-m1', GOWN, { zalo_name: 'Mai' })
+
+    await check('Global ID của chính nick ghi cho thành viên nhóm không gom họ thành một người (bước A và B)', async () => {
+      const cm2 = await contact(J, 'person', 'uJ-m2')
+      const bl = await group({ purpose: 'zalo_friend_blocklist', account_id: J, contact_type: 'person', name: 'DS của J' })
+      await member(bl, cm2)
+      const A = id(); await acc(A)
+      await zu(A, 'uA-m1', GOWN, { zalo_name: 'Mai' }) // người M1 ở Zalo A (dòng ghi đúng hay sai đều không được khớp M2)
+      const c = await campaign(J, 'zalo_message_group_member', { blocklistIds: [bl] })
+      const a = await match(c, J, null, null, 'uJ-m1', false)
+      assert.equal(a.match, null); assert.equal(a.globalId, null); assert.equal(a.needGlobalId, true)
+      // Sau khi đọc hồ sơ: Zalo trả Global ID của chính nick ⇒ bỏ, vẫn không xác định ⇒ không gửi (unknown), không loại nhầm.
+      const b = await match(c, J, null, GOWN, 'uJ-m1', true)
+      assert.equal(b.match, null); assert.equal(b.unknown, 'Chưa xác định được khách để kiểm tra loại trừ.')
+      // Danh sách của chính J có M2: data M2 (cùng Zalo ID) bị loại dù không có Global ID dùng được.
+      const m2 = await match(c, J, null, null, 'uJ-m2', false)
+      assert.equal(m2.match?.note, 'Thuộc danh sách Zalo ID loại trừ “DS của J”.')
+      const cA = await campaign(A, 'zalo_message_group_member', { blocklistIds: [bl] })
+      assert.equal((await match(cA, A, null, null, 'uA-m1', false)).match, null)
+      assert.equal((await one(`SELECT private.aka_agent_zalo_gid_ok($1, $2) r`, [J, GOWN])).r, false)
+    })
+
+    await check('Global ID gom nhiều người mà không biết nick (≥ 2 dòng, mỗi dòng một tên; > 3 dòng) bị bỏ; người đổi Zalo ID (cùng tên) giữ', async () => {
+      const K = id(); await acc(K)
+      await zu(K, 'uK-1', 'GVIEWERK000000000000000000000001', { zalo_name: 'An' })
+      await zu(K, 'uK-2', 'GVIEWERK000000000000000000000001', { zalo_name: 'Bình' })
+      for (let i = 0; i < 3; i++) await zu(K, 'uK-v' + i, 'GREALPERSONV00000000000000000001', { zalo_name: 'Châu' })
+      for (let i = 0; i < 4; i++) await zu(K, 'uK-s' + i, 'GSAMENAME00000000000000000000001', { zalo_name: 'Dũng' })
+      const ok = async g => (await one(`SELECT private.aka_agent_zalo_gid_ok($1, $2) r`, [K, g])).r
+      assert.equal(await ok('GVIEWERK000000000000000000000001'), false)
+      assert.equal(await ok('GREALPERSONV00000000000000000001'), true)
+      assert.equal(await ok('GSAMENAME00000000000000000000001'), false)
+      assert.equal(await ok('GNOROWS000000000000000000000001'), true)
+      assert.equal(await ok('  '), false)
+    })
+
+    await check('chiến dịch đã gửi: Zalo ID trùng chuỗi ở nick khác (người khác) không bị coi là đã gửi', async () => {
+      const L = id(); await acc(L)      // nick khác, đã gửi cho người Q (Zalo ID 'uSAME')
+      const A = id(); await acc(A)      // người P ở A có Zalo ID cùng chuỗi 'uSAME'
+      await zu(L, 'uSAME', 'GQ000000000000000000000000000001', { zalo_name: 'Q' })
+      await zu(A, 'uSAME', 'GP000000000000000000000000000001', { zalo_name: 'P' })
+      await zu(A, 'uP-other', 'GP000000000000000000000000000001', { zalo_name: 'P' })
+      const sent = await campaign(L, 'zalo_message_friend', null)
+      const ri = await row(sent, { uid: 'uSAME' })
+      await detail(sent, ri, L, 'zalo_message_friend', 'thành công', { target: { uid: 'uSAME', globalId: 'GQ000000000000000000000000000001' } })
+      const c = await campaign(A, 'zalo_message_friend', { sentCampaignIds: [sent] })
+      assert.equal((await match(c, A, null, null, 'uSAME', false)).match, null)
+      assert.equal((await match(c, A, null, 'GP000000000000000000000000000001', 'uP-other', true)).match, null)
+      // Người Q thật (Zalo ID khác ở A, cùng Global ID) thì có.
+      await zu(A, 'uQ-at-A', 'GQ000000000000000000000000000001', { zalo_name: 'Q' })
+      assert.equal((await match(c, A, null, null, 'uQ-at-A', false)).match?.kind, 'campaign')
+    })
+
+    await check('tài khoản cùng nick so thẳng Zalo ID riêng (Nhóm data Zalo UID, chiến dịch đã gửi) khi không có Global ID', async () => {
+      const cm = await contact(J2, 'person', 'uJ-m2')
+      const g = await group({ purpose: 'data_group', data_type_category_item_id: catPerson, name: 'UID J2' })
+      await member(g, cm)
+      const sent = await campaign(J2, 'zalo_message_friend', null)
+      const ri = await row(sent, { uid: 'uJ-m1' })
+      await detail(sent, ri, J2, 'zalo_message_friend', 'thành công', { target: { uid: 'uJ-m1' } })
+      const c = await campaign(J, 'zalo_message_group_member', { dataGroupIds: [g], sentCampaignIds: [sent] })
+      assert.equal((await match(c, J, null, null, 'uJ-m2', false)).match?.note, 'Có trong Nhóm data “UID J2”.')
+      assert.equal((await match(c, J, null, null, ' uJ-m1 ', false)).match?.kind, 'campaign')
+      assert.deepEqual((await one(`SELECT private.aka_agent_zalo_same_nick_accounts($1) r`, [J])).r.map(Number).sort(), [J, J2].sort((x, y) => x - y))
+    })
+
+    await check('hiệu năng: Global ID của nick có 30.000 dòng ghi sai ở tài khoản của nick đó — so khớp không quét các dòng đó', async () => {
+      const zaH = id(); const GH = 'OWNNICKH000000000000000000000001'
+      await ins('zalo_accounts', { id: zaH, zalo_uid: 'NICK-H', metadata: { globalId: GH } })
+      const H = id(); await acc(H, { zalo_account_id: zaH })
+      await db.query(`INSERT INTO public.zalo_users (id, account_id, zalo_uid, global_id, zalo_name, staff_id, organization_id, is_fr)
+        SELECT 50000000+g, $1, 'uH-'||g, $2, 'Người '||g, $3, $4, 0 FROM generate_series(1,30000) g`, [H, GH, STAFF, ORG])
+      // Dữ liệu nền 100.000 dòng / 2.000 tài khoản: thống kê như production (DB thử chỉ vài tài khoản thì planner quét cả bảng).
+      await db.query(`INSERT INTO public.zalo_users (id, account_id, zalo_uid, global_id, zalo_name, staff_id, organization_id, is_fr)
+        SELECT 60000000+g, 80000000+(g%2000), 'f'||g, md5(g::text), 'F', 1, 1, 0 FROM generate_series(1,100000) g`)
+      await db.query('ANALYZE public.zalo_users')
+      const blH = await group({ purpose: 'zalo_friend_blocklist', account_id: H, contact_type: 'person', name: 'DS H' })
+      for (let i = 1; i <= 200; i++) await member(blH, await contact(H, 'person', 'uH-' + i))
+      const gH = await group({ purpose: 'data_group', data_type_category_item_id: catPerson, name: 'UID H' })
+      await member(gH, await contact(H, 'person', 'uH-5'))
+      const sentH = await campaign(H, 'zalo_message_friend', null)
+      for (let i = 1; i <= 50; i++) { const ri = await row(sentH, { uid: 'uH-' + i }); await detail(sentH, ri, H, 'zalo_message_friend', 'thành công', { target: { uid: 'uH-' + i } }) }
+      // Người nhận ở A chính là chủ nick H (Global ID GH ghi đúng ở A).
+      const A = id(); await acc(A)
+      await zu(A, 'uA-owner', GH, { zalo_name: 'Chủ H' })
+      const c = await campaign(A, 'zalo_message_friend', { blocklistIds: [blH], dataGroupIds: [gH], sentCampaignIds: [sentH] })
+      const t0 = process.hrtime.bigint()
+      for (let i = 0; i < 10; i++) {
+        const m = await match(c, A, null, null, 'uA-owner', false)
+        assert.equal(m.match, null); assert.equal(m.globalId, GH)
+      }
+      const ms = Number(process.hrtime.bigint() - t0) / 1e6 / 10
+      assert.ok(ms < 60, `mỗi lần so ${ms.toFixed(1)} ms`)
+    })
+
+    await check('bảng đối chiếu bỏ lần tra số trả Global ID của chính nick tra số', async () => {
+      const c = await campaign(J, 'zalo_message_phone', null)
+      await detail(c, null, J, 'zalo_find_phone_user', 'thành công', { target: { phone: '0933 111 222', globalId: GOWN } })
+      await one(`SELECT private.aka_agent_zalo_phone_identity_ingest(5000, 1000) r`)
+      assert.equal(await one(`SELECT global_id FROM private.auto_zalo_phone_identity WHERE phone='0933111222'`), undefined)
+    })
+
     await check('gỡ V657 trả đúng md5 production; apply lại được', async () => {
       await T.rollbackV657()
       await T.applyV657()

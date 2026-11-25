@@ -1,5 +1,6 @@
 -- V657 phần 2: loại trừ gửi so khớp theo SĐT / Global ID, lọc ở bước nhận data (docs/CAMPAIGN_SEND_EXCLUSION_MULTI_ZALO_PLAN.md mục 12).
--- SINH TỪ scripts/build-v657-sql.cjs, không sửa tay. Cần phần 1. Thêm 4 hàm private (khoá người nhận, so khớp, bật bước lọc, bước lọc);
+-- SINH TỪ scripts/build-v657-sql.cjs, không sửa tay. Cần phần 1. Thêm 6 hàm private (Global ID dùng được, tài khoản cùng nick, khoá người
+-- nhận, so khớp, bật bước lọc, bước lọc);
 -- viết lại private.aka_agent_send_exclusion_remote / _block_facts; vá snapshot (bộ chạy mới so cả danh sách của Zalo đang gửi theo Global
 -- ID), aka_agent_campaign_send_exclusion_runtime (thao tác precheck; "đã gửi N ngày" theo mọi Zalo ID của Global ID),
 -- aka_agent_engine_send_exclusion_v1 (như trên), aka_agent_send_exclusion_v2 (thao tác preview), aka_agent_engine_claim_target_v1
@@ -26,6 +27,49 @@ BEGIN
  END LOOP;
 END $pre$;
 
+-- ===================================================================================================== Global ID dùng được, nick
+CREATE FUNCTION private.aka_agent_zalo_gid_ok(p_account bigint, p_gid text)
+ RETURNS boolean
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+ -- V657: Global ID p_gid ghi ở zalo_users của tài khoản p_account có dùng được làm Global ID của MỘT người không. Không khi:
+ --  - là Global ID của chính nick đang đăng nhập (Zalo trả Global ID người xem khi đọc hồ sơ thành viên nhóm);
+ --  - hơn 3 dòng cùng Global ID ở tài khoản này, hoặc 2–3 dòng mà mỗi dòng một tên (đo 25/11 toàn bảng: người đổi Zalo ID thật có
+ --    2–3 dòng cùng tên, không từ quét nhóm; Global ID ghi sai có 4 tới hàng nghìn dòng, mỗi dòng một người).
+ SELECT NULLIF(btrim(COALESCE(p_gid,'')),'') IS NOT NULL
+  AND NOT (btrim(p_gid)=ANY(private.aka_agent_zalo_own_global_ids(p_account)))
+  AND (SELECT count(*)<=3 AND NOT (count(*)>=2 AND count(DISTINCT x.nm)=count(*)) FROM (
+    SELECT lower(btrim(COALESCE(NULLIF(btrim(zu.zalo_name),''),NULLIF(btrim(zu.display_name),'')))) nm FROM public.zalo_users zu
+     WHERE zu.account_id=p_account AND zu.global_id=btrim(p_gid) AND zu.global_id IS NOT NULL AND zu.global_id<>'' LIMIT 4) x);
+$function$;
+
+CREATE FUNCTION private.aka_agent_zalo_same_nick_accounts(p_account bigint)
+ RETURNS bigint[]
+ LANGUAGE sql
+ STABLE SECURITY DEFINER
+ SET search_path TO 'pg_catalog', 'public'
+AS $function$
+ -- V657: tài khoản cùng tổ chức đăng nhập cùng nick Zalo với p_account (kể cả chính nó). Zalo ID riêng chỉ có nghĩa trong một nick, nên
+ -- hai tài khoản cùng nick so thẳng Zalo ID riêng được (không cần Global ID). Nick: zalo_accounts.zalo_uid (Desktop) / chat_zalo_account.zalo_id (Fly).
+ WITH me AS (
+  SELECT a.organization_id org, za.zalo_uid zuid, ca.zalo_id czid FROM public.auto_accounts a
+   LEFT JOIN public.zalo_accounts za ON za.id=a.zalo_account_id
+   LEFT JOIN public.chat_zalo_account_organization ao ON ao.auto_account_id=a.id
+   LEFT JOIN public.chat_zalo_account ca ON ca.id=ao.chat_zalo_account_id
+  WHERE a.id=p_account)
+ SELECT COALESCE(array_agg(DISTINCT x.id ORDER BY x.id),ARRAY[p_account]) FROM (
+  SELECT p_account id
+  UNION ALL
+  SELECT a.id FROM me JOIN public.zalo_accounts za ON za.zalo_uid IN (NULLIF(btrim(me.zuid),''),NULLIF(btrim(me.czid),''))
+   JOIN public.auto_accounts a ON a.zalo_account_id=za.id AND a.organization_id=me.org
+  UNION ALL
+  SELECT ao.auto_account_id FROM me JOIN public.chat_zalo_account ca ON ca.zalo_id IN (NULLIF(btrim(me.zuid),''),NULLIF(btrim(me.czid),''))
+   JOIN public.chat_zalo_account_organization ao ON ao.chat_zalo_account_id=ca.id AND ao.organization_id=me.org
+ ) x WHERE x.id IS NOT NULL;
+$function$;
+
 -- ===================================================================================================== khoá người nhận
 CREATE FUNCTION private.aka_agent_send_exclusion_person_keys(p_account bigint, p_uid text, p_phone text, p_email text, p_global_id text)
  RETURNS text[]
@@ -35,9 +79,11 @@ CREATE FUNCTION private.aka_agent_send_exclusion_person_keys(p_account bigint, p
 AS $function$
  -- V657: khoá lịch sử gửi (aka_agent_internal_delivery_cooldown_target_keys) của người nhận ở một tài khoản, cộng khoá của MỌI Zalo ID
  -- riêng mà tài khoản đó từng ghi cho cùng Global ID (Zalo ID riêng đổi theo thời gian ngay trên một nick; đo 25/11: 18% cặp lần tra).
- WITH g AS (
+ WITH g0 AS (
   SELECT COALESCE(NULLIF(btrim(COALESCE(p_global_id,'')),''),
-   (SELECT NULLIF(btrim(zu.global_id),'') FROM public.zalo_users zu WHERE zu.account_id=p_account AND zu.zalo_uid=btrim(COALESCE(p_uid,'')))) gid)
+   (SELECT NULLIF(btrim(zu.global_id),'') FROM public.zalo_users zu WHERE zu.account_id=p_account AND zu.zalo_uid=btrim(COALESCE(p_uid,'')))) gid),
+ -- Global ID ghi sai (của chính nick, gom nhiều người) thì không mở rộng.
+ g AS (SELECT g0.gid FROM g0 WHERE private.aka_agent_zalo_gid_ok(p_account,g0.gid))
  SELECT COALESCE(array_agg(DISTINCT k ORDER BY k),'{}') FROM (
   SELECT unnest(public.aka_agent_internal_delivery_cooldown_target_keys('zalo_person',p_uid,p_phone,p_email)) k
   UNION ALL
@@ -56,23 +102,30 @@ CREATE FUNCTION private.aka_agent_send_exclusion_match(p_campaign public.auto_ca
 AS $function$
 -- V657 (docs/CAMPAIGN_SEND_EXCLUSION_MULTI_ZALO_PLAN.md mục 12): một người = SĐT đã chuẩn hoá + Global ID. Zalo ID riêng chỉ dùng để
 -- tra Global ID (zalo_users của tài khoản gửi), và một Global ID đổi ra MỌI Zalo ID riêng đã ghi ở từng tài khoản. Trùng SĐT hoặc trùng
--- Global ID là cùng một người (SĐT ↔ Global ID một-một, đo 25/11). Nguồn: danh sách Zalo ID (mọi Zalo, kể cả Zalo đang gửi), Nhóm data
--- (SĐT / Zalo UID), chiến dịch đã gửi (đã nhận tin nhắn thành công). Khớp nhiều nguồn thì lấy theo thứ tự đó, trong mỗi loại theo tên, id.
+-- Global ID là cùng một người (SĐT ↔ Global ID một-một, đo 25/11). Hai tài khoản cùng nick Zalo so thẳng Zalo ID riêng. Global ID ghi
+-- sai trong zalo_users (của chính nick, gom nhiều người: private.aka_agent_zalo_gid_ok) không bao giờ dùng. Nguồn: danh sách Zalo ID
+-- (mọi Zalo, kể cả Zalo đang gửi), Nhóm data (SĐT / Zalo UID), chiến dịch đã gửi (đã nhận tin nhắn thành công). Khớp nhiều nguồn thì lấy
+-- theo thứ tự đó, trong mỗi loại theo tên, id.
 -- needGlobalId: còn nguồn cần Global ID mà chưa có (bước nhận data của chiến dịch theo SĐT thì để bước sau khi tra số kiểm lại);
 -- p_final = true (sau khi tra số / đọc hồ sơ) thì trả unknown: không gửi.
 DECLARE v_phone text; v_gid text; v_gid_from text; v_phones text[]; v_accounts bigint[]; v_zalo_accounts bigint[]; v_match jsonb;
  v_need boolean:=false; v_lists bigint[]; v_groups bigint[]; v_has_person boolean; v_has_phone_group boolean; sc record; v_at timestamptz; v_at2 timestamptz;
- v_gid_uids text[];
+ v_gid_uids text[]; v_uid text; v_nick bigint[]; v_cand_uids text[]; v_gid_accounts bigint[];
 BEGIN
  v_phone:=NULLIF(public.aka_agent_internal_normalize_phone(COALESCE(p_phone,'')),'');
+ v_uid:=NULLIF(btrim(COALESCE(p_uid,'')),'');
  v_gid:=NULLIF(btrim(COALESCE(p_global_id,'')),'');
+ -- Global ID của chính nick đang gửi không phải của người nhận.
+ IF v_gid IS NOT NULL AND v_gid=ANY(private.aka_agent_zalo_own_global_ids(p_account)) THEN v_gid:=NULL; END IF;
  IF v_gid IS NOT NULL THEN v_gid_from:='target'; END IF;
- IF v_gid IS NULL AND NULLIF(btrim(COALESCE(p_uid,'')),'') IS NOT NULL THEN
-  SELECT NULLIF(btrim(zu.global_id),'') INTO v_gid FROM public.zalo_users zu WHERE zu.account_id=p_account AND zu.zalo_uid=btrim(p_uid);
+ IF v_gid IS NULL AND v_uid IS NOT NULL THEN
+  SELECT NULLIF(btrim(zu.global_id),'') INTO v_gid FROM public.zalo_users zu WHERE zu.account_id=p_account AND zu.zalo_uid=v_uid;
+  IF NOT private.aka_agent_zalo_gid_ok(p_account,v_gid) THEN v_gid:=NULL; END IF;
   IF v_gid IS NOT NULL THEN v_gid_from:='uid'; END IF;
  END IF;
  IF v_gid IS NULL AND v_phone IS NOT NULL THEN
   SELECT i.global_id INTO v_gid FROM private.auto_zalo_phone_identity i WHERE i.phone=v_phone;
+  IF v_gid IS NOT NULL AND v_gid=ANY(private.aka_agent_zalo_own_global_ids(p_account)) THEN v_gid:=NULL; END IF;
   IF v_gid IS NOT NULL THEN v_gid_from:='phone_history'; END IF;
  END IF;
  IF v_phone IS NOT NULL THEN v_phones:=ARRAY[v_phone];
@@ -80,6 +133,8 @@ BEGIN
   SELECT COALESCE(array_agg(i.phone ORDER BY i.phone),'{}') INTO v_phones FROM private.auto_zalo_phone_identity i WHERE i.global_id=v_gid;
  ELSE v_phones:='{}';
  END IF;
+ -- Tài khoản cùng nick với tài khoản gửi: so thẳng Zalo ID riêng của data.
+ v_nick:=CASE WHEN v_uid IS NOT NULL THEN private.aka_agent_zalo_same_nick_accounts(p_account) ELSE '{}' END;
  -- Tài khoản của tổ chức (đi qua nhân viên: auto_accounts không có chỉ mục theo tổ chức). Chỉ khi có Nhóm data / chiến dịch đã gửi.
  IF cardinality(private.aka_agent_send_exclusion_ids(p_selection->'dataGroupIds'))>0 OR cardinality(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds'))>0 THEN
   SELECT COALESCE(array_agg(a.id ORDER BY a.id),'{}'), COALESCE(array_agg(a.id ORDER BY a.id) FILTER (WHERE a.flatform_type='zalo'),'{}')
@@ -87,25 +142,39 @@ BEGIN
    WHERE s.organization_id=p_campaign.organization_id AND a.organization_id=p_campaign.organization_id;
  END IF;
 
- -- 1. Danh sách Zalo ID loại trừ (mọi Zalo, kể cả Zalo đang gửi): thành viên → Global ID qua zalo_users của tài khoản của danh sách.
+ -- Tài khoản Zalo của tổ chức có dòng zalo_users mang Global ID này và Global ID dùng được ở đó (kiểm một lần mỗi tài khoản, trước khi
+ -- quét dòng: Global ID của một nick có thể là Global ID ghi sai của hàng chục nghìn dòng ở tài khoản của nick đó).
+ IF v_gid IS NOT NULL AND cardinality(v_zalo_accounts)>0 THEN
+  SELECT COALESCE(array_agg(a.id ORDER BY a.id),'{}') INTO v_gid_accounts FROM unnest(v_zalo_accounts) a(id)
+   WHERE CASE WHEN EXISTS(SELECT 1 FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'')
+     THEN private.aka_agent_zalo_gid_ok(a.id,v_gid) ELSE false END;
+ ELSE v_gid_accounts:='{}';
+ END IF;
+
+ -- 1. Danh sách Zalo ID loại trừ (mọi Zalo, kể cả Zalo đang gửi): thành viên → Global ID qua zalo_users của tài khoản của danh sách;
+ -- danh sách của tài khoản cùng nick: so thẳng Zalo ID riêng.
  SELECT COALESCE(array_agg(bl.id),'{}') INTO v_lists FROM public.auto_account_contact_groups bl
   WHERE bl.id=ANY(private.aka_agent_send_exclusion_ids(p_selection->'blocklistIds')) AND NOT bl.is_delete AND bl.purpose='zalo_friend_blocklist'
     AND bl.staff_id=p_campaign.staff_id AND bl.organization_id=p_campaign.organization_id;
  IF cardinality(v_lists)>0 THEN
-  IF v_gid IS NULL THEN v_need:=true;
-  ELSE
-   SELECT jsonb_build_object('kind','blocklist','id',bl.id,'name',bl.name,'note',format('Thuộc danh sách Zalo ID loại trừ “%s”.',bl.name)) INTO v_match
-    FROM public.auto_account_contact_groups bl
-    WHERE bl.id=ANY(v_lists) AND EXISTS(
+  SELECT jsonb_build_object('kind','blocklist','id',bl.id,'name',bl.name,'note',format('Thuộc danh sách Zalo ID loại trừ “%s”.',bl.name)) INTO v_match
+   FROM public.auto_account_contact_groups bl
+   WHERE bl.id=ANY(v_lists) AND (
+     (v_gid IS NOT NULL AND CASE WHEN private.aka_agent_zalo_gid_ok(bl.account_id,v_gid) THEN EXISTS(
       SELECT 1 FROM public.zalo_users zu
        JOIN public.auto_account_contacts ac ON ac.account_id=bl.account_id AND ac.contact_type='person' AND ac.uid=zu.zalo_uid AND NOT ac.is_delete
        JOIN public.auto_account_contact_group_members m ON m.group_id=bl.id AND m.contact_id=ac.id AND NOT m.is_delete
-      WHERE zu.account_id=bl.account_id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'')
-    ORDER BY bl.name, bl.id LIMIT 1;
-  END IF;
+      WHERE zu.account_id=bl.account_id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'') ELSE false END)
+     OR (bl.account_id=ANY(v_nick) AND EXISTS(
+      SELECT 1 FROM public.auto_account_contacts ac
+       JOIN public.auto_account_contact_group_members m ON m.group_id=bl.id AND m.contact_id=ac.id AND NOT m.is_delete
+      WHERE ac.account_id=bl.account_id AND ac.contact_type='person' AND ac.uid=v_uid AND NOT ac.is_delete)))
+   ORDER BY bl.name, bl.id LIMIT 1;
+  IF v_match IS NULL AND v_gid IS NULL THEN v_need:=true; END IF;
  END IF;
 
- -- 2. Nhóm data (Số điện thoại / Zalo User): liên hệ loại SĐT so SĐT (uid = SĐT chuẩn hoá), liên hệ Zalo so Global ID.
+ -- 2. Nhóm data (Số điện thoại / Zalo User): liên hệ loại SĐT so SĐT (uid = SĐT chuẩn hoá), liên hệ Zalo so Global ID (hoặc so thẳng
+ -- Zalo ID riêng khi liên hệ thuộc tài khoản cùng nick).
  IF v_match IS NULL THEN
   SELECT COALESCE(array_agg(g.id),'{}'), COALESCE(bool_or(ci.code='zalo_person'),false), COALESCE(bool_or(ci.code='phone'),false)
    INTO v_groups, v_has_person, v_has_phone_group
@@ -125,10 +194,15 @@ BEGIN
      ) cand
      JOIN public.auto_account_contact_group_members m ON m.contact_id=cand.id AND m.group_id=ANY(v_groups) AND NOT m.is_delete
      UNION ALL
-     SELECT m.group_id FROM unnest(v_zalo_accounts) a(id)
+     SELECT m.group_id FROM unnest(v_gid_accounts) a(id)
       CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE v_has_person AND zu.account_id=a.id AND zu.global_id=v_gid
         AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
       JOIN public.auto_account_contacts ct ON ct.account_id=a.id AND ct.contact_type='person' AND ct.uid=zu.zalo_uid AND NOT ct.is_delete
+      JOIN public.auto_account_contact_group_members m ON m.contact_id=ct.id AND m.group_id=ANY(v_groups) AND NOT m.is_delete
+     UNION ALL
+     SELECT m.group_id FROM unnest(v_nick) a(id)
+      JOIN public.auto_account_contacts ct ON v_has_person AND ct.account_id=a.id AND ct.contact_type='person' AND ct.uid=v_uid AND NOT ct.is_delete
+       AND ct.organization_id=p_campaign.organization_id
       JOIN public.auto_account_contact_group_members m ON m.contact_id=ct.id AND m.group_id=ANY(v_groups) AND NOT m.is_delete
     ) h JOIN public.auto_account_contact_groups g ON g.id=h.group_id
     ORDER BY g.name, g.id LIMIT 1;
@@ -137,13 +211,19 @@ BEGIN
   END IF;
  END IF;
 
- -- 3. Chiến dịch đã gửi: data của chiến dịch đó có cùng SĐT, hoặc có Zalo ID riêng thuộc cùng Global ID, và đã nhận tin nhắn
- -- (bạn bè / người lạ) thành công. Tra qua idx_campaign_input_cooldown_phone / _uid rồi idx_campaign_details_input_data_id.
- IF v_match IS NULL AND v_gid IS NOT NULL AND cardinality(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds'))>0 THEN
-  -- Mọi Zalo ID riêng của Global ID ở các tài khoản Zalo của tổ chức (tính một lần cho mọi chiến dịch).
-  SELECT COALESCE(array_agg(DISTINCT lower(btrim(zu.zalo_uid))),'{}') INTO v_gid_uids FROM unnest(v_zalo_accounts) a(id)
-   CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
-   WHERE btrim(zu.zalo_uid)<>'';
+ -- 3. Chiến dịch đã gửi: data của chiến dịch đó có cùng SĐT, hoặc có Zalo ID riêng của cùng người (Zalo ID của data thuộc Global ID ở
+ -- tài khoản đã gửi, hoặc kết quả gửi ghi Global ID đó, hoặc tài khoản đã gửi cùng nick và cùng Zalo ID), và đã nhận tin nhắn (bạn bè /
+ -- người lạ) thành công. Zalo ID riêng có thể trùng giữa các nick (đo 25/11) nên không so Zalo ID khác nick. Tra qua
+ -- idx_campaign_input_cooldown_phone / _uid rồi idx_campaign_details_input_data_id.
+ IF v_match IS NULL AND cardinality(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds'))>0 THEN
+  v_gid_uids:='{}';
+  IF v_gid IS NOT NULL THEN
+   -- Mọi Zalo ID riêng của Global ID ở các tài khoản Zalo của tổ chức (tính một lần cho mọi chiến dịch).
+   SELECT COALESCE(array_agg(DISTINCT lower(btrim(zu.zalo_uid))),'{}') INTO v_gid_uids FROM unnest(v_gid_accounts) a(id)
+    CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
+    WHERE btrim(zu.zalo_uid)<>'';
+  END IF;
+  SELECT COALESCE(array_agg(DISTINCT u),'{}') INTO v_cand_uids FROM unnest(v_gid_uids || CASE WHEN v_uid IS NOT NULL THEN ARRAY[lower(v_uid)] ELSE '{}'::text[] END) u;
  END IF;
  IF v_match IS NULL THEN
   FOR sc IN SELECT c.id, c.name FROM public.auto_campaigns c
@@ -160,16 +240,20 @@ BEGIN
        AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
       AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click'))) OFFSET 0) dd;
    END IF;
-   IF v_gid IS NOT NULL THEN
-    SELECT max(dd.created_at) INTO v_at2 FROM unnest(v_gid_uids) u(uid)
-     CROSS JOIN LATERAL (SELECT i.id FROM public.auto_campaign_input_data i WHERE md5(lower(btrim(i.uid)))=md5(u.uid)
+   IF cardinality(v_cand_uids)>0 THEN
+    SELECT max(dd.created_at) INTO v_at2 FROM unnest(v_cand_uids) u(uid)
+     CROSS JOIN LATERAL (SELECT i.id, btrim(i.uid) iuid FROM public.auto_campaign_input_data i WHERE md5(lower(btrim(i.uid)))=md5(u.uid)
        AND i.uid IS NOT NULL AND btrim(i.uid)<>'' AND i.campaign_id+0=sc.id OFFSET 0) i
      CROSS JOIN LATERAL (SELECT d.created_at FROM public.auto_campaign_details d WHERE d.input_data_id=i.id AND d.campaign_id+0=sc.id
        AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
-      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click'))) OFFSET 0) dd;
-   ELSE
-    v_need:=true;
+      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click')))
+       AND ((v_uid IS NOT NULL AND d.account_id=ANY(v_nick) AND lower(i.iuid)=lower(v_uid))
+         OR (v_gid IS NOT NULL AND private.aka_agent_zalo_gid_ok(d.account_id,v_gid) AND (
+           NULLIF(btrim(d.data->'target'->>'globalId'),'')=v_gid
+           OR EXISTS(SELECT 1 FROM public.zalo_users zu WHERE zu.account_id=d.account_id AND zu.zalo_uid=i.iuid AND zu.global_id=v_gid))))
+       OFFSET 0) dd;
    END IF;
+   IF v_gid IS NULL THEN v_need:=true; END IF;
    v_at:=greatest(v_at,v_at2);
    IF v_at IS NOT NULL THEN
     v_match:=jsonb_build_object('kind','campaign','id',sc.id,'name',sc.name,'sentAt',v_at,
@@ -295,7 +379,8 @@ BEGIN
  SELECT ARRAY(SELECT DISTINCT f.source_key FROM jsonb_array_elements(p_rules) r JOIN public.auto_filter_fields f ON f.id=(r->>'fieldId')::bigint
    WHERE r->>'isEnabled'='true' ORDER BY 1) INTO v_sources;
  IF cardinality(v_sources)=0 THEN RETURN jsonb_build_object('accountId',p_block_account,'state','empty'); END IF;
- IF p_global_id IS NOT NULL THEN
+ -- Global ID ghi sai ở Zalo này (của chính nick, gom nhiều người) thì không có Zalo ID nào của người nhận ở đây.
+ IF p_global_id IS NOT NULL AND private.aka_agent_zalo_gid_ok(p_block_account,p_global_id) THEN
   SELECT COALESCE(array_agg(zu.zalo_uid ORDER BY zu.id),'{}'), COALESCE(bool_or(zu.is_fr=1),false) INTO v_uids, v_any_fr FROM public.zalo_users zu
    WHERE zu.account_id=p_block_account AND zu.global_id=p_global_id AND zu.global_id IS NOT NULL AND zu.global_id<>'';
  END IF;
@@ -1473,7 +1558,7 @@ END $function$
 DO $acl$
 DECLARE v_role text; v_fn text;
 BEGIN
- FOREACH v_fn IN ARRAY ARRAY['private.aka_agent_send_exclusion_person_keys(bigint,text,text,text,text)', 'private.aka_agent_send_exclusion_match(public.auto_campaigns,bigint,jsonb,text,text,text,boolean)', 'private.aka_agent_send_exclusion_precheck_on(public.auto_campaigns,bigint)', 'private.aka_agent_send_exclusion_precheck(public.auto_campaigns,bigint,text,text)'] LOOP
+ FOREACH v_fn IN ARRAY ARRAY['private.aka_agent_zalo_gid_ok(bigint,text)', 'private.aka_agent_zalo_same_nick_accounts(bigint)', 'private.aka_agent_send_exclusion_person_keys(bigint,text,text,text,text)', 'private.aka_agent_send_exclusion_match(public.auto_campaigns,bigint,jsonb,text,text,text,boolean)', 'private.aka_agent_send_exclusion_precheck_on(public.auto_campaigns,bigint)', 'private.aka_agent_send_exclusion_precheck(public.auto_campaigns,bigint,text,text)'] LOOP
   EXECUTE format('REVOKE ALL ON FUNCTION %s FROM PUBLIC', v_fn);
   FOREACH v_role IN ARRAY ARRAY['anon','authenticated','aka_agent_desktop','aka_agent_chat_api','service_role'] LOOP
    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname=v_role) THEN EXECUTE format('REVOKE ALL ON FUNCTION %s FROM %I', v_fn, v_role); END IF;

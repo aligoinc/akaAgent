@@ -1,4 +1,4 @@
--- Gỡ V657 phần 2: trả 7 hàm về đúng thân production 25/11 (kiểm md5), xoá 4 hàm private mới.
+-- Gỡ V657 phần 2: trả 7 hàm về đúng thân production 25/11 (kiểm md5), xoá 6 hàm private mới.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 CREATE OR REPLACE FUNCTION private.aka_agent_send_exclusion_snapshot(p_campaign public.auto_campaigns, p_account bigint, p_v2 boolean)
@@ -1241,6 +1241,8 @@ DROP FUNCTION private.aka_agent_send_exclusion_precheck(public.auto_campaigns,bi
 DROP FUNCTION private.aka_agent_send_exclusion_precheck_on(public.auto_campaigns,bigint);
 DROP FUNCTION private.aka_agent_send_exclusion_match(public.auto_campaigns,bigint,jsonb,text,text,text,boolean);
 DROP FUNCTION private.aka_agent_send_exclusion_person_keys(bigint,text,text,text,text);
+DROP FUNCTION private.aka_agent_zalo_same_nick_accounts(bigint);
+DROP FUNCTION private.aka_agent_zalo_gid_ok(bigint,text);
 DO $post$
 DECLARE r record; v_md5 text;
 BEGIN

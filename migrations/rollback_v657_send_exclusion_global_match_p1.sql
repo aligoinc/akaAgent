@@ -11,6 +11,7 @@ BEGIN
  END IF;
 END $g$;
 DROP FUNCTION private.aka_agent_zalo_phone_identity_ingest(integer,integer);
+DROP FUNCTION private.aka_agent_zalo_own_global_ids(bigint);
 DROP TABLE private.auto_zalo_phone_identity_state;
 DROP TABLE private.auto_zalo_phone_identity;
 DELETE FROM public.auto_system_settings WHERE key='send_exclusion.identity';

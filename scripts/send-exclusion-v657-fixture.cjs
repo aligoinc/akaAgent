@@ -77,6 +77,10 @@ async function buildDb({ port = 55700 + Math.floor(Math.random() * 200), label =
       ALTER TABLE auto_campaign_details ADD COLUMN IF NOT EXISTS policy_snapshot jsonb;
       CREATE TABLE IF NOT EXISTS auto_data_group_recipients(group_id bigint, staff_id bigint, PRIMARY KEY(group_id, staff_id));
       CREATE TABLE IF NOT EXISTS zalo_accounts(id bigint PRIMARY KEY, zalo_uid text);
+      ALTER TABLE zalo_accounts ADD COLUMN IF NOT EXISTS metadata jsonb;
+      CREATE TABLE IF NOT EXISTS chat_zalo_account(id bigint PRIMARY KEY, zalo_id text UNIQUE, global_id text);
+      CREATE UNIQUE INDEX IF NOT EXISTS zalo_accounts_zalo_uid_key_t ON public.zalo_accounts (zalo_uid);
+      CREATE INDEX IF NOT EXISTS idx_auto_accounts_zalo_account_id_t ON public.auto_accounts (zalo_account_id);
       CREATE TABLE IF NOT EXISTS auto_campaign_detail_zalo_engagement(campaign_detail_id bigint PRIMARY KEY, organization_id bigint, staff_id bigint, account_id bigint,
         account_zalo_uid text, target_zalo_uid text, action_type text, sent_at timestamptz, tracking_until timestamptz, friended_at timestamptz, rejected_at timestamptz);
       CREATE INDEX IF NOT EXISTS idx_campaign_input_cooldown_phone ON public.auto_campaign_input_data (md5(normalize_phone(phone))) WHERE phone IS NOT NULL AND btrim(phone) <> '';

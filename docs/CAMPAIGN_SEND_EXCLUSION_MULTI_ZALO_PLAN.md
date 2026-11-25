@@ -287,11 +287,31 @@ chính Zalo đang gửi cũng so theo Global ID; (5) kiểm SĐT trước bướ
 - Người nhận theo UID không có SĐT (Zalo ẩn số), Global ID qua `zalo_users(tài khoản gửi, UID)` ~99,8%.
 - Hai hàm chuẩn hoá SĐT khớp với số di động, khác ở số bàn / `0084…`: so khớp dùng `aka_agent_internal_normalize_phone` (chỉ số
   di động hợp lệ; số khác coi như không có SĐT).
+- **`zalo_users.global_id` ghi sai hàng loạt** (đo lại 25/11 chiều khi kiểm thử theo yêu cầu "kiểm thử và cải tiến"): ~19% dòng có
+  Global ID (701 / 4.218 tài khoản; 62% dòng quét thành viên nhóm, `raw_payload.source = 'profile'` có `zaloGroupId`) mang **Global ID
+  của chính nick đang đăng nhập** thay cho Global ID của thành viên (một tài khoản: 23.483 / 24.474 dòng cùng một Global ID, mỗi dòng
+  một người). Global ID của nick ghi ở `zalo_accounts.metadata.globalId` (Desktop) và / hoặc `chat_zalo_account.global_id` (Fly); hai
+  nơi trùng nhau chỉ 49 / 486 tài khoản có cả hai; 117 tài khoản không ghi ở đâu. Toàn bảng: cặp (tài khoản, Global ID) có từ 4 dòng
+  đều là ghi sai; người đổi Zalo ID thật có 2–3 dòng cùng tên, không từ quét nhóm. Kết quả gửi / tra số (`data.target.globalId`) không
+  bị: 0 / 91.109 lượt tra số, 0 / 117.555 lượt nhắn tin mang Global ID của nick. ⇒ con số "99,7% / 99,5% có Global ID" ở trên tính cả
+  dòng ghi sai.
+- Zalo ID riêng trùng chuỗi giữa hai nick khác nhau (người khác nhau) có thật (mẫu 1%: 380 cặp khác Global ID, phần lớn do dòng ghi
+  sai, còn lại là trùng thật).
 
 ### 12.2 Quy tắc
 
 - Khoá của một người: SĐT đã chuẩn hoá và Global ID. Không so Zalo ID riêng; UID chỉ dùng để tra Global ID qua `zalo_users`, và một
   Global ID đổi ra **mọi** UID đã ghi nhận ở tài khoản đó.
+- Global ID ở `zalo_users` chỉ dùng khi dùng được (`private.aka_agent_zalo_gid_ok(tài khoản, Global ID)`): không phải Global ID của
+  chính nick (`private.aka_agent_zalo_own_global_ids`), không quá 3 dòng cùng Global ID ở tài khoản đó, không phải 2–3 dòng mà mỗi
+  dòng một tên. Global ID người nhận gửi về (tra số / hồ sơ) là của chính nick đang gửi thì bỏ. Bảng đối chiếu bỏ lần tra số trả Global
+  ID của chính nick tra số.
+- Hai tài khoản cùng nick (`zalo_accounts.zalo_uid` / `chat_zalo_account.zalo_id` trùng, cùng tổ chức;
+  `private.aka_agent_zalo_same_nick_accounts`) so thẳng Zalo ID riêng: danh sách / Nhóm data Zalo UID / chiến dịch đã gửi của tài
+  khoản cùng nick khớp khi cùng Zalo ID, không cần Global ID (người trong Nhóm data quét từ nhóm mà Global ID ghi sai vẫn nhận ra).
+- Chiến dịch đã gửi theo Zalo ID: Zalo ID của data đã gửi phải thuộc đúng người ở chính tài khoản đã gửi (`zalo_users` của tài khoản
+  đó, Global ID dùng được), hoặc kết quả gửi ghi Global ID đó, hoặc tài khoản đã gửi cùng nick và cùng Zalo ID; không so Zalo ID khác
+  nick.
 - Cùng một người khi trùng SĐT hoặc trùng Global ID. Vì SĐT ↔ Global ID một-một (12.1), kết quả giống "cả hai có SĐT thì so SĐT,
   thiếu thì so Global ID"; bộ kiểm đối chiếu tính cả hai cách và báo nếu khác.
 - Nguồn và khoá:
@@ -326,7 +346,22 @@ từng nguồn và số chưa xác định (sẽ kiểm lúc chạy). Không đ�
 ### 12.5 Chưa làm / ghi nhận
 
 - "Chống gửi lặp N ngày" (tính năng khác) cũng đặt khoá theo UID nên có thể sót khi UID đổi; ngoài phạm vi, chưa sửa.
-- "Chiến dịch đã gửi" tính cả lượt Zalo đã nhận một phần (`operationState = committed` mà trạng thái "thất bại": người nhận đã nhận
+- SĐT đổi chủ: bước A dùng Global ID của lần tra số gần nhất (bảng đối chiếu). SĐT đã sang chủ mới mà chưa ai tra lại thì bước A có
+  thể loại chủ mới theo danh sách / Nhóm data Zalo UID / chiến dịch theo Zalo ID của chủ cũ (bước B có Global ID thật thì không). Đo
+  25/11: 0 SĐT có 2 Global ID (2.700 SĐT từ 04/09; 83.980 SĐT / 91.013 lượt tra trong 1 ngày). Bộ kiểm có chế độ `--recycle 1` để đo.
+- Tài khoản không ghi Global ID của nick ở đâu mà chỉ có 1 dòng ghi sai (thành viên nhóm 1 người) thì không nhận ra dòng đó.
+- Khoá của một người: SĐT đã chuẩn hoá và Global ID. Không so Zalo ID riêng; UID chỉ dùng để tra Global ID qua `zalo_users`, và một
+  Global ID đổi ra **mọi** UID đã ghi nhận ở tài khoản đó.
+- Global ID ở `zalo_users` chỉ dùng khi dùng được (`private.aka_agent_zalo_gid_ok(tài khoản, Global ID)`): không phải Global ID của
+  chính nick (`private.aka_agent_zalo_own_global_ids`), không quá 3 dòng cùng Global ID ở tài khoản đó, không phải 2–3 dòng mà mỗi
+  dòng một tên. Global ID người nhận gửi về (tra số / hồ sơ) là của chính nick đang gửi thì bỏ. Bảng đối chiếu bỏ lần tra số trả Global
+  ID của chính nick tra số.
+- Hai tài khoản cùng nick (`zalo_accounts.zalo_uid` / `chat_zalo_account.zalo_id` trùng, cùng tổ chức;
+  `private.aka_agent_zalo_same_nick_accounts`) so thẳng Zalo ID riêng: danh sách / Nhóm data Zalo UID / chiến dịch đã gửi của tài
+  khoản cùng nick khớp khi cùng Zalo ID, không cần Global ID (người trong Nhóm data quét từ nhóm mà Global ID ghi sai vẫn nhận ra).
+- Chiến dịch đã gửi theo Zalo ID: Zalo ID của data đã gửi phải thuộc đúng người ở chính tài khoản đã gửi (`zalo_users` của tài khoản
+  đó, Global ID dùng được), hoặc kết quả gửi ghi Global ID đó, hoặc tài khoản đã gửi cùng nick và cùng Zalo ID; không so Zalo ID khác
+  nick. (`operationState = committed` mà trạng thái "thất bại": người nhận đã nhận
   ảnh nhưng chưa nhận chữ, hoặc ngược lại; đo 25/11: ~0,5% lượt nhắn người lạ), vì khách đó đã nhận nội dung của chiến dịch. Lượt "không
   rõ đã gửi" (UNK01, `unknown`) không tính.
 
