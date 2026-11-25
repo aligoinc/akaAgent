@@ -9,28 +9,41 @@ Bản thiết kế (5 màn, màn Desktop bấm thử được): https://claude.a
 
 Trạng thái: chưa code, chưa có migration, chưa đổi gì trên production. Mọi số liệu dưới đây đọc chỉ đọc ngày 25/11/2026.
 
+## 0. Anh đã chốt (25/11/2026)
+
+1. **Có email ở 1 trong 3 chỗ** (`org_staff.email`, `org_organization.email`, `aka_customer.email`) **thì không hỏi.**
+2. Nếu có hỏi lại thì **hiện nguyên email** để khách chỉ cần bấm xác nhận, không bắt nhập email mới.
+3. Người lưu là **admin tổ chức** thì lưu vào cả `org_staff`, `org_organization`, `aka_customer`; người khác chỉ lưu
+   `org_staff`.
+4. Nhập email mới thì **ghi đè** email cũ. **Cả ba bảng có thêm danh sách email**: email cũ chuyển vào danh sách, email mới
+   cũng vào danh sách.
+5. Tắt form bằng × thì **mỗi ngày hỏi lại một lần**, kèm nhãn "Thêm email" trên thanh trên cùng.
+6. **Lưu ngay + gửi thư xác nhận**, thư không chứa mật khẩu.
+
+"CRM" trong tài liệu này là bảng `aka_customer` (hồ sơ khách trong trang quản lý crm.akabiz.net), nối qua
+`org_organization.customer_id`.
+
 ## 1. Số liệu hiện tại
 
 Phạm vi: nhân viên `org_staff` đang hoạt động, tổ chức có ít nhất một gói còn hạn (`org_organization_product`, theo ngày VN),
-có mở Desktop (presence) hoặc Web/iOS (`auto_control_sessions`) trong 30 ngày.
+có mở Desktop (presence) hoặc Web/iOS (`auto_control_sessions`) trong 30 ngày: **1.053 người**.
 
-| Chỉ số | Số người |
+| Theo luật đã chốt | Số người |
 | --- | --- |
-| Đang dùng gói, có dùng app trong 30 ngày | 1.054 |
-| Chưa có email ở **tài khoản đăng nhập** (`org_staff.email` trống/sai) | **952** |
-| Trong đó hiện **không tự lấy lại tài khoản được** (không email tài khoản, không email tổ chức) | ~769 |
-| Không có email ở **bất cứ đâu** (tài khoản, tổ chức, CRM) | 278 |
-| Có sẵn email ở hồ sơ tổ chức / CRM, gợi ý một chạm được | ~670 |
-| Là chủ tài khoản của tổ chức (`is_admin`) | 916 / 952 |
-| Tổ chức có nhiều tài khoản | 38 / 952 |
-| Chỉ có gói dùng thử | 45 / 952 |
-| Có dùng Desktop hoặc Web / có dùng iPhone / chỉ dùng iPhone | 951 / 29 / 1 |
+| Admin không có email ở cả 3 chỗ → **thấy form** | **127** |
+| Tài khoản nhân viên (không phải admin) chưa có email riêng → thấy form (xem Q9) | 35 |
+| Admin có email ở tổ chức / CRM nhưng `org_staff.email` trống → không hỏi | 788 |
+| … trong đó chỉ có email ở CRM (hiện **không tự lấy lại tài khoản được**, xem Q10) | 603 |
+| Admin có email ở cả tổ chức lẫn CRM mà hai email khác nhau | 0 |
+
+Toàn bảng: `org_staff` 137 / 2.298 dòng có email, `org_organization` 332 / 2.229, `aka_customer` 20.968 / 107.622
+(1.284 dòng nối với một tổ chức).
 
 Các nơi đang dùng email của khách:
 
 - **Lấy lại tài khoản** (cổng CRM `/gia-han/lay-lai-tai-khoan`): khớp **cả** email lẫn SĐT trên cùng `org_organization`
-  hoặc `org_staff` rồi gửi tên đăng nhập + mật khẩu (SqlServerDashboard `docs/trang-gia-han-khach-hang.md`). Không đọc
-  `aka_customer.email`.
+  hoặc `org_staff` rồi gửi tên đăng nhập + mật khẩu (SqlServerDashboard `docs/trang-gia-han-khach-hang.md`). **Không đọc
+  `aka_customer.email`.**
 - **Thông báo** (Chào ngày mới, báo cáo, chiến dịch hoàn thành): lượt gieo `private.aka_agent_notification_seed_defaults`
   mỗi giờ tự điền email từ `private.aka_agent_notification_email_candidates()` (nguồn `profile` = `org_staff.email`, hoặc
   email tổ chức khi tổ chức chỉ có 1 tài khoản; nguồn `crm` = `aka_customer.email`), đánh dấu luôn là đã xác nhận, và
@@ -48,9 +61,12 @@ Tính năng này là việc xin email cho tài khoản, thay quyết định "kh
 Đủ cả 5 điều kiện:
 
 1. Nhân viên đang hoạt động (`is_active`, chưa xoá), được dùng akaAgent (`aka_agent_app_access_staff_allowed`).
-2. Tổ chức có gói còn hạn (gồm cả dùng thử, xem câu hỏi Q6). Đã hết gói thì app đang ở màn Gia hạn, không hiện form.
-3. **Chưa có email dùng được** (định nghĩa ở Q1; khuyên: `org_staff.email` trống hoặc sai định dạng / tên miền gõ nhầm).
-4. Chưa tắt form trong khoảng thời gian chờ (Q2; khuyên: tắt rồi thì hôm sau mới hiện lại).
+2. Tổ chức có gói còn hạn (gồm cả dùng thử, Q6). Đã hết gói thì app đang ở màn Gia hạn, không hiện form.
+3. **Không có email dùng được:**
+   - admin (`org_staff.is_admin`): không có ở cả `org_staff.email`, `org_organization.email`, `aka_customer.email`;
+   - tài khoản khác: `org_staff.email` trống (Q9).
+   "Dùng được" = đúng định dạng và không thuộc danh sách tên miền gõ nhầm của `aka_agent_notification_email_candidates`.
+4. Chưa tắt form trong hôm nay (tắt thì hôm sau hỏi lại).
 5. Công tắc `account.email_prompt` cho phép (`audience` off / admin_akabiz / orgs / all).
 
 ### 2.2 Khi nào hiện
@@ -69,78 +85,140 @@ Tính năng này là việc xin email cho tài khoản, thay quyết định "kh
   hộp thoại khó đóng.
 - Đóng xong: thanh trên cùng còn nhãn nhỏ **"Thêm email"** (có chấm vàng) để khách tự mở lại; nhãn mất khi đã lưu email.
 
-### 2.4 Nội dung form (đã dựng trong bản thiết kế)
+### 2.4 Hai màn của form (đã dựng trong bản thiết kế)
+
+**Màn nhập** (khách chưa có email nào):
 
 - Nhãn nhỏ "BẢO VỆ TÀI KHOẢN", tiêu đề **"Giữ tài khoản luôn trong tầm tay"**, dòng phụ "Tài khoản **<tên đăng nhập>** chưa
   có email. Thêm ngay, chỉ mất 10 giây."
 - Ba lợi ích, đúng ba mục đích anh nêu: *Quên mật khẩu, lấy lại trong 1 phút* · *Nhận bản cài và link đăng nhập* ·
   *Lưu sẵn thông tin tài khoản*.
-- Ô "Email của bạn" có biểu tượng thư; gõ phần trước `@` thì hiện nút chọn nhanh `@gmail.com` `@yahoo.com` `@outlook.com`
-  `@icloud.com`.
+- Ô "Email của bạn"; gõ phần trước `@` thì hiện nút chọn nhanh `@gmail.com` `@yahoo.com` `@outlook.com` `@icloud.com`.
 - Gõ nhầm tên miền (`gmial.com`, `gmail.con`, `gmail.vn`…) thì hiện "Có phải bạn muốn nhập …@gmail.com?" với **Sửa giúp** /
-  **Giữ nguyên**; nút Lưu chờ khách chọn. Danh sách tên miền nhầm dùng chung với `aka_agent_notification_email_candidates`.
-- Nút chính **Lưu email**, dòng cam kết dưới nút: "Email chỉ dùng cho tài khoản và thông báo của phần mềm. Đổi được bất cứ
-  lúc nào trong Thông tin tài khoản."
-- **Biến thể một chạm** (Q1): nếu hồ sơ tổ chức / CRM đã có email (khoảng 670 người), form hỏi "Đây có phải email của bạn?"
-  và hiện email đã che (`ho••••••@gmail.com`), nút **Đúng, dùng email này** và **Dùng email khác**. Email thật không gửi
-  xuống app; app chỉ gửi "dùng email gợi ý", DB tự lấy.
-- **Đã lưu**: dấu tích xanh, "Đã lưu email", "Thông tin tài khoản sẽ gửi về <email>. Chúng tôi vừa gửi một thư xác nhận…",
-  khối "Trong thư có" (tên đăng nhập + gói + hạn, link tải bản cài + link đăng nhập Web, link Lấy lại tài khoản),
-  nút **Vào làm việc**.
+  **Giữ nguyên**; nút Lưu chờ khách chọn.
+- Nút chính **Lưu email**, dòng cam kết: "Email chỉ dùng cho tài khoản và thông báo của phần mềm. Đổi được bất cứ lúc nào
+  trong Thông tin tài khoản."
+
+**Màn xác nhận** (chỉ dùng khi có lý do hỏi lại người đã có email, Q10 / mục 2.5):
+
+- Tiêu đề **"Bạn vẫn dùng email này chứ?"**, hiện **nguyên email** (không che), nút chính **Đúng, tôi đang dùng email này**,
+  nút phụ **Đổi sang email khác** (mở màn nhập). Không bắt nhập gì.
+- Email hiện ra là email của chính tài khoản đang đăng nhập (admin thấy email tổ chức / CRM của tổ chức mình), không lộ cho
+  người khác.
+
+**Đã lưu**: dấu tích xanh, "Đã lưu email", "Thông tin tài khoản sẽ gửi về <email>. Chúng tôi vừa gửi một thư xác nhận…",
+khối "Trong thư có" (tên đăng nhập + gói + hạn, link tải bản cài + link đăng nhập Web, link Lấy lại tài khoản), nút
+**Vào làm việc**.
+
+### 2.5 Khi nào hỏi lại người đã có email
+
+Mặc định **không hỏi** (chốt 1). Màn xác nhận để sẵn cho các trường hợp sau, mỗi trường hợp chỉ bật khi anh đồng ý:
+
+- Q10: 788 admin có email ở tổ chức / CRM mà tài khoản trống (xem mục 3.3).
+- Sau này: thư gửi tới email bị trả về, hoặc email chưa từng được khách xác nhận quá lâu.
 
 ## 3. Lưu email ở đâu
 
-**Anh chốt Q4 (25/11/2026):** người lưu là **admin tổ chức** thì lưu vào cả `org_staff`, `org_organization` và
-`aka_customer`; không phải admin thì chỉ lưu `org_staff`.
+### 3.1 Theo vai trò
 
-| Người lưu | `org_staff.email` | `org_organization.email` | `aka_customer.email` |
+| Người lưu | `org_staff` | `org_organization` | `aka_customer` (khách của `org_organization.customer_id`) |
 | --- | --- | --- | --- |
-| Admin tổ chức (`org_staff.is_admin = true`) | ghi | ghi | ghi |
-| Tài khoản khác | ghi | không | không |
+| Admin tổ chức (`org_staff.is_admin = true`) | ghi đè `email`, cập nhật danh sách | ghi đè `email`, cập nhật danh sách | ghi đè `email`, cập nhật danh sách |
+| Tài khoản khác | ghi đè `email`, cập nhật danh sách | không | không |
 
-Chi tiết đã kiểm trên dữ liệu thật 25/11 (916 admin đang dùng gói chưa có email tài khoản):
-
-- **"Admin"** = cờ `org_staff.is_admin`. Lệch với `org_organization.staff_admin_id` ở 4 người, 1 tổ chức có 2 admin cùng
-  chưa có email (ai lưu sau thì email tổ chức / CRM là của người đó).
-- **Khách CRM nào**: lấy `org_organization.customer_id` (luôn có). 229 admin có `org_staff.akacustomer_id` trống, số còn lại
-  trùng với khách của tổ chức. Không có index unique theo email trên `aka_customer`.
-- **Đã có email sẵn**: CRM đã có email ở **785 / 916** admin, tổ chức đã có email ở **183 / 916**. Ghi đè hay chỉ điền khi
-  trống: chờ anh chốt (Q4b). Dù chọn cách nào, email cũ được lưu lại trong bảng trạng thái (mục 5.1) để tra cứu và trả lại.
+- **"Admin"** = cờ `org_staff.is_admin`. Lệch với `org_organization.staff_admin_id` ở 4 người; 1 tổ chức có 2 admin cùng
+  chưa có email (ai lưu sau thì email tổ chức / CRM là của người đó; email trước vẫn còn trong danh sách).
+- **Khách CRM nào**: luôn lấy `org_organization.customer_id` (luôn có). 229 admin có `org_staff.akacustomer_id` trống, số còn
+  lại trùng với khách của tổ chức. Không có index unique theo email trên `aka_customer`.
+- Ba lệnh ghi nằm trong **một giao dịch**: lỗi ở bước nào thì không ghi bước nào.
+- Cờ "Từ chối nhận email CSKH" (`aka_customer.is_email_unsubscribed`) giữ nguyên khi đổi email.
+- Hệ quả: email CSKH tự động của CRM gửi tới email mới; trang "Lấy lại tài khoản" dùng được ngay với email mới + SĐT.
 - Ghi `org_organization.email` chạy trigger đồng bộ đơn hàng CRM (`trg_sync_organization_orders` → `aka_order`). Ghi
   `aka_customer.email` chạy các trigger BEFORE UPDATE có sẵn (`trigger_customer_updated_at`, `trg_auto_pipeline_stage`,
   `trg_auto_map_staff_id`…), giống khi sale sửa khách. Mỗi khách chỉ ghi một lần nên chấp nhận được.
-- Cờ "Từ chối nhận email CSKH" (`aka_customer.is_email_unsubscribed`) giữ nguyên khi đổi email.
-- Hệ quả của việc ghi CRM: email CSKH tự động của CRM (nhắc gia hạn, timeline) gửi tới email mới.
-- `org_staff.email` là chỗ cổng "Lấy lại tài khoản" đọc (khớp cùng SĐT của tài khoản) và là nguồn `profile` của thông báo;
-  không có index unique, trigger UPDATE của `org_staff` không xét cột email.
-- Ba lệnh ghi nằm trong cùng một giao dịch: lỗi ở bước nào thì không ghi bước nào.
 
-Hệ quả có sẵn, cần biết: trong vòng 1 giờ sau khi lưu, lượt gieo thông báo tự bật email "Chào ngày mới" 07:00 cho tài khoản
-này (nếu tài khoản chưa từng được tự điền và chưa từ chối). Form nói "thông báo của phần mềm" nên khớp; muốn rõ hơn có thể
-thêm một dòng "Báo cáo chiến dịch mỗi sáng, tắt được bất cứ lúc nào" (Q7).
+### 3.2 Danh sách email (`email_list`) trên cả ba bảng
 
-Đổi email sau này: thêm dòng **Email** + nút **Đổi** trong "Thông tin tài khoản" (Desktop, Web, iOS), vì form hứa điều này.
+- Cột mới `email_list text[] NOT NULL DEFAULT '{}'` trên `org_staff`, `org_organization`, `aka_customer`.
+- Nội dung: mọi email từng dùng, viết thường, không trùng, **mới nhất đứng đầu**, **gồm cả email hiện tại**; tối đa 20 email.
+- Cập nhật bằng **trigger** `BEFORE INSERT OR UPDATE OF email` trên từng bảng: email đổi thì đưa email mới lên đầu và giữ
+  email cũ trong danh sách. Nhờ trigger, danh sách đúng cho **mọi đường sửa email**, không chỉ form này: sale sửa trong CRM,
+  quản lý nhân viên trên Web, đăng ký dùng thử, lệnh SQL tay.
+- Xoá trống `email` thì danh sách giữ nguyên (không mất lịch sử).
+- Điền sẵn cho dữ liệu cũ (chạy một lần, buổi tối, chia lô 200 dòng): `org_staff` 137 dòng, `org_organization` 332 dòng,
+  `aka_customer` 1.284 dòng nối với tổ chức. 19.684 khách CRM còn lại (khách tiềm năng chưa dùng phần mềm) không điền sẵn để
+  khỏi chạm 2 vạn dòng CRM; danh sách của họ bắt đầu từ lần đổi email đầu tiên. Lưu ý: điền sẵn `aka_customer` làm đổi
+  `updated_at` của 1.284 khách đó (trigger có sẵn).
 
-## 4. Xác minh email (Q3)
+### 3.3 Admin có email ở tổ chức / CRM nhưng tài khoản trống (788 người)
 
-| Cách | Ưu | Nhược |
-| --- | --- | --- |
-| **A. Lưu ngay, gửi thư xác nhận** (khuyên) | Một bước, ít người bỏ dở; gõ nhầm vẫn bắt được nhờ gợi ý tên miền | Email gõ nhầm phần tên (`hoangmia@`) vẫn được lưu tới khi khách tự sửa |
-| B. Mã 6 số ngay trong form | Chắc chắn đúng email | Thêm một bước, phải chờ thư; khách đang muốn vào làm việc dễ bấm × |
-| C. Không xác minh | Đơn giản nhất | Không biết email nào thật |
+Theo chốt 1, nhóm này **không bị hỏi**. Nhưng 603 người trong đó chỉ có email ở CRM, mà trang "Lấy lại tài khoản" không đọc
+CRM, nên họ vẫn **không tự lấy lại tài khoản được**. Ở những người có cả hai, email tổ chức và email CRM luôn trùng nhau.
+Cách xử lý chờ anh chốt (Q10).
 
-Với A: thư chào **không chứa mật khẩu** (email chưa xác nhận). Mật khẩu chỉ gửi qua luồng "Lấy lại tài khoản" có sẵn (phải
-khớp cả SĐT). Thư có nút **Xác nhận email** và dòng "Không phải bạn? Bấm vào đây" (gỡ email khỏi tài khoản).
-Trạng thái xác nhận lưu ở bảng mới (mục 5), không thêm cột vào `org_staff`.
+### 3.4 Khác
+
+- Hệ quả có sẵn: trong vòng 1 giờ sau khi lưu, lượt gieo thông báo tự bật email "Chào ngày mới" 07:00 cho tài khoản này
+  (nếu tài khoản chưa từng được tự điền và chưa từ chối). Có thể thêm một dòng "Báo cáo chiến dịch mỗi sáng, tắt được bất cứ
+  lúc nào" trong form (Q7).
+- Đổi email sau này: thêm dòng **Email** + nút **Đổi** trong "Thông tin tài khoản" (Desktop, Web, iOS), cùng luật ghi ở 3.1.
+
+## 4. Xác minh email (đã chốt: lưu ngay + thư xác nhận)
+
+- Thư chào **không chứa mật khẩu** (email chưa xác nhận). Mật khẩu chỉ gửi qua luồng "Lấy lại tài khoản" có sẵn (phải khớp
+  cả SĐT).
+- Thư có: tên đăng nhập, gói + hạn, link tải bản cài, link đăng nhập Web, link Lấy lại tài khoản, nút **Xác nhận email** và
+  dòng "Không phải bạn? Bấm vào đây" (gỡ email khỏi tài khoản, email vẫn nằm trong danh sách để tra cứu).
+- Trạng thái xác nhận lưu ở bảng trạng thái (mục 5.1), không thêm cột xác nhận vào `org_staff`.
+- Gửi bằng bộ gửi email của trung tâm thông báo (worker 30 giây của API Web trên Fly, tài khoản gửi có cờ
+  `is_send_noti_akabiz`); thêm loại nội dung `account.email_saved`. Link xác nhận ký HMAC như link từ chối email của CRM,
+  không lưu mã.
 
 ## 5. Kỹ thuật (để duyệt, chưa làm)
 
 ### 5.1 Database: SQL nháp, **chưa chạy, cần anh duyệt** (CLAUDE.md: không tự thêm bảng / cột)
 
-Số migration lấy lúc apply (kiểm sổ `supabase_migrations.schema_migrations` và mọi nhánh ngay trước khi apply).
+Số migration lấy lúc apply (kiểm sổ `supabase_migrations.schema_migrations` và mọi nhánh ngay trước khi apply). Ba bảng đều
+nóng (`org_staff` đọc mỗi lần đăng nhập, `aka_customer` cron CRM liên tục): mỗi `ALTER TABLE` một giao dịch riêng, chỉ vài
+mili giây, `lock_timeout` 3 giây, chạy buổi tối; mỗi lệnh làm PostgREST nạp lại schema một lần.
 
 ```sql
--- Trạng thái form của từng tài khoản: không thêm cột vào org_staff (bảng nóng).
+-- Phần 1: ba cột danh sách email (mỗi lệnh một giao dịch; DEFAULT hằng số nên không viết lại bảng).
+SET lock_timeout = '3s';
+ALTER TABLE public.org_staff        ADD COLUMN email_list text[] NOT NULL DEFAULT '{}';
+-- (giao dịch mới)
+SET lock_timeout = '3s';
+ALTER TABLE public.org_organization ADD COLUMN email_list text[] NOT NULL DEFAULT '{}';
+-- (giao dịch mới)
+SET lock_timeout = '3s';
+ALTER TABLE public.aka_customer     ADD COLUMN email_list text[] NOT NULL DEFAULT '{}';
+
+-- Phần 2: trigger giữ danh sách, dùng chung cho ba bảng.
+CREATE FUNCTION private.track_email_list() RETURNS trigger
+LANGUAGE plpgsql SET search_path = pg_catalog, public AS $$
+DECLARE
+  v_new text := lower(btrim(coalesce(NEW.email, '')));
+  v_old text := CASE WHEN TG_OP = 'UPDATE' THEN lower(btrim(coalesce(OLD.email, ''))) ELSE '' END;
+BEGIN
+  IF v_new = '' OR v_new = v_old AND v_new = any (NEW.email_list) THEN RETURN NEW; END IF;
+  NEW.email_list := (
+    SELECT coalesce(array_agg(e ORDER BY ord), '{}')
+      FROM (SELECT e, min(ord) AS ord
+              FROM unnest(array[v_new, nullif(v_old, '')] || NEW.email_list) WITH ORDINALITY AS t(e, ord)
+             WHERE e IS NOT NULL AND e <> ''
+             GROUP BY e
+             ORDER BY min(ord)
+             LIMIT 20) x);
+  RETURN NEW;
+END $$;
+CREATE TRIGGER trg_email_list_track BEFORE INSERT OR UPDATE OF email ON public.org_staff
+  FOR EACH ROW EXECUTE FUNCTION private.track_email_list();
+CREATE TRIGGER trg_email_list_track BEFORE INSERT OR UPDATE OF email ON public.org_organization
+  FOR EACH ROW EXECUTE FUNCTION private.track_email_list();
+CREATE TRIGGER trg_email_list_track BEFORE INSERT OR UPDATE OF email ON public.aka_customer
+  FOR EACH ROW EXECUTE FUNCTION private.track_email_list();
+
+-- Phần 3: trạng thái form của từng tài khoản (không thêm cột trạng thái vào org_staff).
 CREATE TABLE private.aka_staff_email_prompt (
   staff_id          bigint PRIMARY KEY REFERENCES public.org_staff(id) ON DELETE CASCADE,
   organization_id   bigint NOT NULL,
@@ -150,12 +228,10 @@ CREATE TABLE private.aka_staff_email_prompt (
   last_dismissed_at timestamptz,
   saved_at          timestamptz,
   saved_email       text,
-  saved_source      text CHECK (saved_source IN ('typed', 'suggestion')),
+  saved_mode        text CHECK (saved_mode IN ('typed', 'confirmed')),
   saved_client      text CHECK (saved_client IN ('desktop', 'web', 'ios')),
   saved_as_admin    boolean,
-  org_email_before  text,   -- email tổ chức trước khi ghi (chỉ khi người lưu là admin)
-  crm_email_before  text,   -- email CRM trước khi ghi (chỉ khi người lưu là admin)
-  crm_customer_id   bigint, -- khách CRM đã ghi (org_organization.customer_id)
+  crm_customer_id   bigint,
   verify_sent_at    timestamptz,
   verified_at       timestamptz,
   updated_at        timestamptz NOT NULL DEFAULT now()
@@ -165,24 +241,25 @@ REVOKE ALL ON private.aka_staff_email_prompt FROM PUBLIC, anon, authenticated, a
 
 -- Công tắc: mặc định tắt.
 INSERT INTO public.auto_system_settings (key, value, is_active)
-VALUES ('account.email_prompt',
-        '{"audience":"off","repromptHours":24,"verify":"link","adminWrite":"overwrite"}', true)
+VALUES ('account.email_prompt', '{"audience":"off","repromptHours":24,"verify":"link"}', true)
 ON CONFLICT (key) DO NOTHING;
+
+-- Phần 4 (chạy riêng, buổi tối, chia lô 200 dòng): điền danh sách cho dữ liệu cũ.
+-- UPDATE ... SET email_list = array[lower(btrim(email))]
+--  WHERE nullif(btrim(email), '') IS NOT NULL AND email_list = '{}' AND id IN (<lô>);
+-- org_staff 137, org_organization 332, aka_customer 1.284 (chỉ khách nối với tổ chức).
 ```
 
 Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, action, payload)`:
 
 - `public.aka_agent_email_prompt(p_action, p_payload)`: chỉ `aka_agent_desktop`, nhân viên lấy từ phiên Desktop.
 - `public.aka_agent_control_email_prompt(p_staff_id, p_org_id, p_action, p_payload)`: chỉ `service_role` (API Web cho Web/iOS).
-- Lệnh `state` → `{show, username, suggestion: {masked, source} | null}`; `save` `{email | useSuggestion, client}` → kiểm
-  định dạng + tên miền nhầm, ghi `org_staff.email`; người lưu là admin (`is_admin`) thì ghi thêm `org_organization.email` và
-  `aka_customer.email` của `org_organization.customer_id` (theo `adminWrite`: `overwrite` hoặc `fill_empty`, Q4b), lưu email
-  cũ vào `*_before`; cả ba trong một giao dịch, ghi `saved_*`; `dismiss` `{client}` →
-  tăng `dismiss_count`. `save` tối đa 5 lần / giờ / tài khoản. Email thật của gợi ý không bao giờ trả ra.
-
-Gửi thư chào + xác nhận: dùng bộ gửi email của trung tâm thông báo (worker 30 giây của API Web trên Fly, tài khoản gửi có cờ
-`is_send_noti_akabiz`); thêm một loại nội dung `account.email_saved`. Link xác nhận ký HMAC như link từ chối email của CRM,
-không lưu mã.
+- Lệnh:
+  - `state` → `{show: 'none' | 'enter' | 'confirm', username, email}` (`email` chỉ có ở `confirm`, là email của chính
+    tài khoản / tổ chức đang đăng nhập);
+  - `save` `{email | confirm: true, client}` → kiểm định dạng + tên miền nhầm, ghi theo bảng 3.1 trong một giao dịch
+    (trigger tự cập nhật `email_list`), ghi `saved_*`, xếp thư xác nhận; tối đa 5 lần / giờ / tài khoản;
+  - `dismiss` `{client}` → tăng `dismiss_count`, đặt `last_dismissed_at`.
 
 ### 5.2 Desktop (akaAgent)
 
@@ -190,7 +267,7 @@ không lưu mã.
 - Một IPC `email-prompt:call` → RPC `aka_agent_email_prompt`; trả `{ok,data}|{ok:false,code,message}`; DB chưa có hàm thì
   im lặng không hiện form.
 - Số lượt gọi DB: 1 lượt `state` lúc vào app (và 1 lượt khi sang ngày mới nếu chưa lưu), 1 lượt khi lưu hoặc đóng.
-- Component `components/EmailPrompt/` (hộp thoại + nhãn "Thêm email" trên TopBar), store riêng, gắn trong `App.tsx` cạnh
+- Component `components/EmailPrompt/` (hai màn + nhãn "Thêm email" trên TopBar), store riêng, gắn trong `App.tsx` cạnh
   `RenewalReminderHost`; hàng đợi hộp thoại để không chồng lên nhắc gia hạn / cập nhật.
 - Hợp đồng dùng chung `src/shared/emailPrompt.ts` chép nguyên văn từ WebApp `packages/control-api` (như các tính năng khác).
 
@@ -198,26 +275,34 @@ không lưu mã.
 
 - `/me` trả thêm `emailPrompt` (đỡ một request); `POST /api/aka-agent/control/v1/me/email-prompt` cho `save` / `dismiss`.
 - Web: cùng hộp thoại như Desktop. iOS: tấm trượt từ dưới lên (màn iPhone trong bản thiết kế), vùng bấm nút × 40 px.
-- Khuyên làm Desktop + Web trước (phủ 951 / 952 người; chỉ 29 người có dùng iPhone, 1 người chỉ dùng iPhone), iOS ở bản phát hành sau.
+- Khuyên làm Desktop + Web trước (phủ gần hết người dùng; chỉ 29 người có dùng iPhone, 1 người chỉ dùng iPhone), iOS ở bản
+  phát hành sau.
+
+### 5.4 CRM (SqlServerDashboard)
+
+- Hồ sơ khách hiện thêm danh sách email (`aka_customer.email_list`), chỉ đọc.
+- Nếu chọn cách C ở Q10: trang "Lấy lại tài khoản" khớp thêm `aka_customer.email` + SĐT.
 
 ## 6. Đưa vào dùng và đo
 
-1. Anh duyệt SQL → apply (buổi tối, có DDL nên PostgREST nạp lại schema).
+1. Anh duyệt SQL → apply phần 1–3 (buổi tối) → phần 4 chia lô.
 2. Deploy API/Web, công tắc `audience: admin_akabiz` để nội bộ thử; rồi `all`. Tắt khẩn cấp: `audience: off`, có hiệu lực ngay.
 3. Phát hành Desktop (bản app cũ không có form, không ảnh hưởng).
-4. Đo hằng ngày từ bảng `private.aka_staff_email_prompt`: số người thấy form, số lần đóng, số người lưu (gõ tay / một chạm),
-   số người xác nhận, số người "Lấy lại tài khoản" thành công.
+4. Đo hằng ngày từ bảng `private.aka_staff_email_prompt`: số người thấy form, số lần đóng, số người lưu (gõ tay / xác nhận),
+   số người xác nhận qua thư, số người "Lấy lại tài khoản" thành công.
 
-## 7. Câu hỏi cần anh chốt
+## 7. Câu hỏi còn mở
 
 | # | Câu hỏi | Lựa chọn | Khuyên |
 | --- | --- | --- | --- |
-| Q1 | **Đã chốt 25/11: chỉ email tài khoản đăng nhập** (kèm biến thể một chạm). Thế nào là "đã có email" | A. Chỉ email của tài khoản đăng nhập: **952** người thấy form · B. Có email ở bất cứ đâu (tài khoản, tổ chức, CRM): **278** người | A, kèm biến thể một chạm cho ~670 người đã có email trong hồ sơ |
-| Q2 | **Đã chốt 25/11: mỗi ngày một lần**, kèm nhãn "Thêm email". Bấm × rồi khi nào hiện lại | Mỗi lần đăng nhập · Mỗi ngày một lần · Giãn dần (1, 3, 7 ngày) | Mỗi ngày một lần, không giới hạn số ngày, kèm nhãn "Thêm email" |
-| Q3 | **Đã chốt 25/11: lưu ngay + thư xác nhận, thư không chứa mật khẩu**. Xác minh email | A. Lưu ngay + thư xác nhận · B. Mã 6 số trong form · C. Không xác minh | A, thư không chứa mật khẩu |
-| Q4 | Ghi thêm vào hồ sơ tổ chức / CRM | **Đã chốt 25/11**: admin tổ chức ghi cả `org_staff`, `org_organization`, `aka_customer`; người khác chỉ `org_staff` | |
-| Q4b | Tổ chức / CRM (`aka_customer`, nối qua `org_organization.customer_id`) đã có email khác (CRM 785, tổ chức 183 trong 916 admin) | Ghi đè bằng email khách vừa nhập · Chỉ điền khi đang trống | Ghi đè (khách tự nhập là mới nhất), lưu email cũ để trả lại |
 | Q5 | Nền tảng | Desktop + Web trước · Cả iOS cùng lúc | Desktop + Web trước |
-| Q6 | Khách đang dùng thử có thấy không | Có · Không | Có (45 người) |
+| Q6 | Khách đang dùng thử có thấy không | Có · Không | Có |
 | Q7 | Nói rõ email báo cáo mỗi sáng sẽ tự bật | Thêm một dòng trong form · Không nói thêm | Thêm một dòng |
-| Q8 | Tổ chức nhiều tài khoản (38 người) | Mỗi tài khoản tự nhập email riêng · Chỉ hỏi chủ tổ chức | Mỗi tài khoản tự nhập |
+| Q9 | Tài khoản nhân viên (không phải admin) mà tổ chức / CRM đã có email | Vẫn hỏi email riêng (35 người) · Không hỏi (0 người) | Vẫn hỏi: email tổ chức / CRM là hộp thư của admin, nhân viên chỉ lấy lại được tài khoản của mình bằng email riêng |
+| Q10 | 788 admin có email ở tổ chức / CRM nhưng tài khoản trống (603 người hiện không tự lấy lại tài khoản được) | A. Tự chép email đó vào tài khoản (và tổ chức nếu trống) khi admin đăng nhập, không hỏi · B. Hỏi xác nhận một lần bằng màn xác nhận, khách bấm "Đúng" · C. Không chép; sửa trang Lấy lại tài khoản đọc thêm CRM | A: đúng luật "có 1 trong 3 thì không hỏi", lấy lại tài khoản dùng được ngay, rải theo lượt đăng nhập nên không ghi hàng loạt |
+
+Đã chốt và bỏ khỏi bảng: Q1 (có 1 trong 3 thì không hỏi), Q2 (mỗi ngày hỏi lại một lần), Q3 (lưu ngay + thư xác nhận),
+Q4 / Q4b (admin ghi cả ba, ghi đè, có danh sách email). Q8 (tổ chức nhiều tài khoản) gộp vào Q9.
+
+Trigger danh sách email (phần 2 của 5.1) đã chạy thử trên PostgreSQL 16 trong máy 25/11: nhập mới, đổi, gõ lại email cũ
+(khác hoa / thường), xoá trống rồi nhập lại, dòng cũ có email mà danh sách trống: đều cho danh sách đúng.
