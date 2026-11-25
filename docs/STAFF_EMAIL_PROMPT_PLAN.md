@@ -19,7 +19,7 @@ Trạng thái (25/11/2026, anh: "Đồng ý thực thi phương án"): **đã co
   + tổ chức / tài khoản mẫu + email cố tình sai; mô hình viết độc lập so từng kết quả và dữ liệu sau; so bộ kiểm email
   phía giao diện với DB trên 4.000 chuỗi; mọi kết quả RPC qua hàm đọc của app), WebApp
   `apps/api/src/modules/email-prompt/emailPrompt.fuzz.test.ts` (thư, link ký, bộ gửi). Tìm ra 4 lỗi của V652, sửa ở
-  **[V656](../migrations/migration_v656_staff_email_prompt_fixes.sql) (chưa apply production, chờ anh duyệt)**, sinh bằng
+  **[V656](../migrations/migration_v656_staff_email_prompt_fixes.sql) (đã apply akachat 17:58:03 VN 25/11 theo yêu cầu ("Có"); sổ `20261125105803`, md5 sổ = file `5fab69c8…`, không apply lại, 0 lỗi 5xx; [biên nhận](../migrations/snapshots/staff-email-prompt-v656/apply-receipt.json))**, sinh bằng
   `python3 scripts/staff-email-prompt/build-v656-sql.py` (khoá md5 thân hàm production):
   1. công tắc `{"audience":"orgs"}` thiếu `organizationIds` bật form cho MỌI tài khoản (`v_enabled` NULL);
   2. bộ gửi thư lỗi khi `limit` không phải số;
