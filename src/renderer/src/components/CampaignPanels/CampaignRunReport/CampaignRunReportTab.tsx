@@ -270,14 +270,18 @@ function EngagementSection({ report }: { report: CampaignRunReport }) {
   const engagement = report.engagement
   if (!engagement || (engagement.message.tracked === 0 && engagement.friend.tracked === 0)) return null
   const { message, friend } = engagement
+  // "Đã nhận" chỉ hiện khi có biên nhận thật (đồng bộ trạng thái tin nhắn Zalo); thiếu nguồn thì không suy ra từ "Đã xem".
+  const showReceived = message.received > message.seen || !message.receivedIsMinimum
   return <Section id="rpt-engagement-title" title="Tương tác Zalo" className="rpt-engagement"
     meta="Tính trên các lượt gửi thành công">
     <div className="rpt-funnels">
       {message.tracked > 0 && <div><h4>Tin nhắn</h4><ul className="rpt-funnel">
         <FunnelRow label="Được theo dõi" value={message.tracked} base={null} tone={1} />
+        {showReceived && <FunnelRow label={message.receivedIsMinimum ? 'Đã nhận*' : 'Đã nhận'} value={message.received} base={message.tracked} tone={2} />}
         <FunnelRow label="Đã xem" value={message.seen} base={message.tracked} tone={2} />
         <FunnelRow label="Có tương tác" value={message.interacted} base={message.tracked} tone={3} />
-      </ul><p className="rpt-note">{n(message.responded)} phản hồi · {n(message.reacted)} thả cảm xúc · trên {n(message.sent)} tin đã gửi</p></div>}
+      </ul><p className="rpt-note">{n(message.responded)} phản hồi · {n(message.reacted)} thả cảm xúc · trên {n(message.sent)} tin đã gửi</p>
+        {showReceived && message.receivedIsMinimum && <p className="rpt-note">* Một số lượt gửi chưa có biên nhận "đã nhận" (tài khoản có akaChat, Zalo trên Fly): những lượt đó chỉ được tính khi khách đã xem hoặc tương tác.</p>}</div>}
       {friend.tracked > 0 && <div><h4>Kết bạn</h4><ul className="rpt-funnel">
         <FunnelRow label="Được theo dõi" value={friend.tracked} base={null} tone={1} />
         <FunnelRow label="Đã đồng ý" value={friend.friended} base={friend.tracked} tone={2} />

@@ -2,6 +2,7 @@ import { AkaBizContactTag, AutoAccount, AutoAccountGroup, AutoProxy, Campaign, C
 import { getCurrentUser } from './currentUser'
 import { serverAccountsUseChatApi } from '../../shared/zaloServerOnFly'
 import { getCampaignEditVersion } from './campaignEditVersion'
+import { mergeZaloMessageStatus } from '../../shared/zaloMessageStatusMarks'
 
 export function mapAccountFromDB(row: Record<string, unknown>): AutoAccount {
   const flatformType = row.flatform_type as string
@@ -597,7 +598,8 @@ export function mapCampaignDetailFromDB(row: Record<string, unknown>): CampaignD
     policySnapshot: (row.policy_snapshot as CampaignDetail['policySnapshot']) ?? null,
     resultKey: (row.result_key as string | null | undefined) ?? null,
     zaloEngagementApplicable: row.zalo_engagement_applicable as boolean | undefined,
-    zaloEngagement: row.zalo_engagement as CampaignDetail['zaloEngagement'],
+    // V653: dòng của đồng bộ trạng thái tin nhắn Zalo đi riêng (`zalo_message_status`); ghép để có mốc "Đã nhận".
+    zaloEngagement: mergeZaloMessageStatus(row.zalo_engagement, row.zalo_message_status) as CampaignDetail['zaloEngagement'],
     id: row.id as number,
     inputDataId: (row.input_data_id as number | null) ?? null,
     campaignId: row.campaign_id as number,

@@ -49,6 +49,8 @@ export function campaignReportSheets(report: CampaignRunReport, campaign: Pick<C
       ['Tương tác Zalo (lượt gửi thành công)', 'Số lượt', ''],
       ['Tin nhắn đã gửi', report.engagement.message.sent, ''],
       ['  được theo dõi', report.engagement.message.tracked, ''],
+      ['  đã nhận', report.engagement.message.received,
+        report.engagement.message.receivedIsMinimum ? 'Số tối thiểu: lượt gửi chưa có biên nhận "đã nhận" chỉ được tính khi đã xem hoặc tương tác' : ''],
       ['  đã xem', report.engagement.message.seen, ''],
       ['  có tương tác', report.engagement.message.interacted, 'Phản hồi hoặc thả cảm xúc'],
       ['  đã phản hồi', report.engagement.message.responded, ''],

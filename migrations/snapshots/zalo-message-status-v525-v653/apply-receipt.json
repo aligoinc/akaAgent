@@ -1,0 +1,24 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Run sql (25/11/2026)",
+  "dry_run_before_apply": "25/11/2026 ~18:38 VN: V653 (bản sau vòng kiểm thử lặp) + bản gỡ trong một giao dịch huỷ; postflight đạt, v2/v3/recipients lọc 'received' = 19, report received 2 / deliveryTracked 2, gỡ trả 4 hàm về md5 production, hàm phụ đã xoá. V525/V526 không đổi kể từ lần chạy thử trước.",
+  "apply_method": "Nội dung tệp tải lên bảng tạm public.ops_migration_stage_20261125 (RLS, chỉ service_role) qua REST, kiểm md5 = tệp, EXECUTE thân migration trong DB và ghi sổ bằng nguyên văn tệp trong cùng giao dịch; bảng tạm đã xoá 18:43 VN.",
+  "applied": [
+    {"version": "20261125114212", "name": "migration_v525_zalo_message_status_sync", "ledger_md5": "1250bb56209c1632b3865ed3dd94906c", "file_md5": "1250bb56209c1632b3865ed3dd94906c"},
+    {"version": "20261125114225", "name": "migration_v526_zalo_message_status_statuses", "ledger_md5": "342d5840ca23eb7262c7a39f9c00d364", "file_md5": "342d5840ca23eb7262c7a39f9c00d364"},
+    {"version": "20261125114244", "name": "migration_v653_zalo_received_marks_readers", "ledger_md5": "1ff4b18b0a3ff677a878b014eacfc2b6", "file_md5": "1ff4b18b0a3ff677a878b014eacfc2b6"}
+  ],
+  "postflight": {
+    "reader_md5": {"v2": "89a01e896acd5672c73ce317ef82ac29", "v3": "061c9a2cb8fe5f0fb2c259df8cf14d5e", "recipients": "5d79a8809416889ecd689b4b3fcff6c9", "run_report": "5b4073a20534ea05a9c06c0c2c10cfe3"},
+    "zalo.message_status_sync.enabled": "false",
+    "zalo.message_status_sync.organization_ids": "all",
+    "auto_status_62_63_active": true,
+    "cron": ["aka-agent-zalo-message-status */5", "aka-agent-zalo-message-status-results * (CALL 19 ms, succeeded)"],
+    "trigger_trg_auto_zalo_status_register": 1,
+    "status_rows": 0,
+    "edge_5xx_18_41_to_18_43_vn": 0,
+    "slow_over_1s": {"18:41": 134, "18:43": 80}
+  },
+  "do_not_reapply": true,
+  "next": "Trước khi bật enabled: đặt zalo.message_status_sync.organization_ids = danh sách tổ chức thử (mặc định 'all' = mọi tổ chức). Deploy API/Web sau V653 (đã có). Rollback: rollback_v653 → rollback_v526 → rollback_v525."
+}
