@@ -19,6 +19,9 @@ import {
   validateExclusionGroup, zaloProfileFacts, type ExclusionFacts, type SendExclusionRemoteFacts, type SendExclusionSnapshot
 } from './sendExclusionRules.js'
 
+/** Nơi chạy gửi {clientVersion} khi lấy 'snapshot' (V654) thì nhận cả cấu hình cần bước 'remote'; xuất cho cổng Fly của ChatApi. */
+export { SEND_EXCLUSION_CLIENT_VERSION, type SendExclusionRemoteFacts } from './sendExclusionRules.js'
+
 /** Mã cổng trong auto_engine_gates. */
 export const SEND_EXCLUSION_GATE = 'send_exclusion'
 export const SEND_EXCLUDED_ERROR_CODE = 'err_engine_send_excluded'
