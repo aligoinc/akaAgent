@@ -212,11 +212,11 @@ không lưu mã.
 
 | # | Câu hỏi | Lựa chọn | Khuyên |
 | --- | --- | --- | --- |
-| Q1 | Thế nào là "đã có email" | A. Chỉ email của tài khoản đăng nhập: **952** người thấy form · B. Có email ở bất cứ đâu (tài khoản, tổ chức, CRM): **278** người | A, kèm biến thể một chạm cho ~670 người đã có email trong hồ sơ |
-| Q2 | Bấm × rồi khi nào hiện lại | Mỗi lần đăng nhập · Mỗi ngày một lần · Giãn dần (1, 3, 7 ngày) | Mỗi ngày một lần, không giới hạn số ngày, kèm nhãn "Thêm email" |
-| Q3 | Xác minh email | A. Lưu ngay + thư xác nhận · B. Mã 6 số trong form · C. Không xác minh | A, thư không chứa mật khẩu |
+| Q1 | **Đã chốt 25/11: chỉ email tài khoản đăng nhập** (kèm biến thể một chạm). Thế nào là "đã có email" | A. Chỉ email của tài khoản đăng nhập: **952** người thấy form · B. Có email ở bất cứ đâu (tài khoản, tổ chức, CRM): **278** người | A, kèm biến thể một chạm cho ~670 người đã có email trong hồ sơ |
+| Q2 | **Đã chốt 25/11: mỗi ngày một lần**, kèm nhãn "Thêm email". Bấm × rồi khi nào hiện lại | Mỗi lần đăng nhập · Mỗi ngày một lần · Giãn dần (1, 3, 7 ngày) | Mỗi ngày một lần, không giới hạn số ngày, kèm nhãn "Thêm email" |
+| Q3 | **Đã chốt 25/11: lưu ngay + thư xác nhận, thư không chứa mật khẩu**. Xác minh email | A. Lưu ngay + thư xác nhận · B. Mã 6 số trong form · C. Không xác minh | A, thư không chứa mật khẩu |
 | Q4 | Ghi thêm vào hồ sơ tổ chức / CRM | **Đã chốt 25/11**: admin tổ chức ghi cả `org_staff`, `org_organization`, `aka_customer`; người khác chỉ `org_staff` | |
-| Q4b | Tổ chức / CRM đã có email khác (CRM 785, tổ chức 183 trong 916 admin) | Ghi đè bằng email khách vừa nhập · Chỉ điền khi đang trống | Ghi đè (khách tự nhập là mới nhất), lưu email cũ để trả lại |
+| Q4b | Tổ chức / CRM (`aka_customer`, nối qua `org_organization.customer_id`) đã có email khác (CRM 785, tổ chức 183 trong 916 admin) | Ghi đè bằng email khách vừa nhập · Chỉ điền khi đang trống | Ghi đè (khách tự nhập là mới nhất), lưu email cũ để trả lại |
 | Q5 | Nền tảng | Desktop + Web trước · Cả iOS cùng lúc | Desktop + Web trước |
 | Q6 | Khách đang dùng thử có thấy không | Có · Không | Có (45 người) |
 | Q7 | Nói rõ email báo cáo mỗi sáng sẽ tự bật | Thêm một dòng trong form · Không nói thêm | Thêm một dòng |
