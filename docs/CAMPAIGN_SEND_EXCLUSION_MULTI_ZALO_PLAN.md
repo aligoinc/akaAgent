@@ -390,6 +390,40 @@ từng nguồn và số chưa xác định (sẽ kiểm lúc chạy). Không đ�
   Bước nạp bảng đối chiếu: ~0,44 giây mỗi 10.000 id khi đọc đĩa; lần đầu ~18 triệu id (~5 GB đọc đĩa), ngân sách 8 giây mỗi phút
   nên xong trong ~1,5–2 giờ: apply buổi tối.
 
+- **Kiểm thử lần hai, 25/11 chiều (anh: "Kiểm thử và cải tiến … lấy data nội bộ + data mẫu + mô phỏng hàng nghìn trường hợp + cố tình
+  tạo mẫu sai lệch … cho đến khi ít nhất 3 vòng không còn vấn đề")**:
+  - Đọc hình dạng dữ liệu thật (chỉ đọc) ⇒ tìm ra Global ID ghi sai trong `zalo_users` và Zalo ID trùng chuỗi giữa nick (12.1); bản
+    V657 trước loại nhầm hàng loạt. Đã sửa (12.2): `private.aka_agent_zalo_own_global_ids` (p1), `_gid_ok`, `_same_nick_accounts` (p2),
+    dùng ở so khớp, khoá "đã gửi N ngày", khối điều kiện Zalo khác, bảng đối chiếu. Các câu theo Global ID có `global_id<>''` để dùng
+    chỉ mục một phần của V654 (thiếu điều kiện này thì đọc mọi dòng của tài khoản); Global ID một nick có hàng chục nghìn dòng ghi sai
+    thì kiểm một lần mỗi tài khoản trước khi quét.
+  - Bộ kiểm ngẫu nhiên viết lại với dữ liệu sai lệch cố ý (đầu file `scripts/send-exclusion-v657-fuzz.cjs`), mặc định 8 thế giới × 120
+    data, chấm "sự thật" trên kết quả của DB; thêm `--recycle 1` (SĐT đổi chủ). Chạy trên bản trước khi sửa: 23 lần loại nhầm người /
+    180 data; bản sau khi sửa: 0.
+  - Phát lại dữ liệu thật: `scripts/send-exclusion-v657-realdata-export.cjs` (chỉ đọc qua REST, file ra ở ngoài repo) xuất 9 tổ chức
+    (tài khoản, nick, ~330.000 dòng `zalo_users`, ~290.000 thành viên Nhóm data / danh sách, ~120.000 data chiến dịch, kết quả gửi / tra
+    số); `scripts/send-exclusion-v657-realdata-replay.cjs` chạy bản trước (`838bb4f7`) và bản mới trên cùng data, mỗi data với từng nguồn
+    riêng lẻ (chiến dịch của chính nó, một Nhóm data, một danh sách, một chiến dịch khác), bước A và bước B (Global ID thật lấy từ kết
+    quả gửi của data), rồi phân loại mọi chỗ khác nhau. Lần đầu (3 tổ chức, 7.840 lần so): bản trước loại nhầm 79 lần do Global ID ghi
+    sai (danh sách Zalo ID: 29 / 31 lần khớp là sai); bản mới nhận lại 100% data đã nhận tin ở chính chiến dịch nguồn (bản trước 99,4%);
+    mọi chỗ khác nhau giải thích được (Global ID ghi sai ở tài khoản gửi hoặc tài khoản nguồn; so thẳng Zalo ID cùng nick; data là chính
+    nick đang gửi ⇒ không xác định ⇒ không gửi).
+  - Hiệu năng: tài khoản nguồn có 30.000 dòng ghi sai cùng Global ID của người nhận: ~5 ms mỗi lần so (smoke có ca này); production
+    dùng Index Only Scan trên `idx_zalo_users_account_global_id` cho bước kiểm mỗi tài khoản (tổ chức 617, 26 tài khoản).
+  - Vòng lặp (mỗi vòng: smoke + bộ kiểm ngẫu nhiên seed mới 8 thế giới × 300 data + phát lại 9 tổ chức thật với mẫu data ngẫu nhiên
+    mới, mọi chỗ khác nhau phải tự giải thích được):
+
+    | Vòng | Smoke | Bộ kiểm ngẫu nhiên | Phát lại 9 tổ chức thật | Bản trước loại nhầm (Global ID ghi sai) | Bản mới nhận ra thêm (Zalo ID cùng nick) | Nhận lại chính nó: mới / trước |
+    |---|---|---|---|---|---|---|
+    | 1 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 4 loại chỗ khác bộ phân loại chưa nhận ra (xem tay: đều là so thẳng Zalo ID cùng nick, đúng) | 225 | — | 777/777 / 755 |
+    | 2 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 222 | 32 | 822/822 / 802 |
+    | 3 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 234 | 39 | 781/781 / 758 |
+    | 4 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 237 | 27 | 777/777 / 757 |
+
+    Vòng 1 tìm ra lỗi của bộ phát lại (kết quả gửi trỏ tới data không xuất; chưa nhận ra so thẳng Zalo ID cùng nick), không phải của
+    V657; đã sửa bộ phát lại rồi chạy 3 vòng mới (2–4), cả ba sạch. Số "lần so" tính cả bước A và bước B. Bản mới chậm hơn bản trước
+    ~5–15% trên dữ liệu thật (36 → 39–42 ms mỗi lần so, tổ chức 617 có 535 nhóm).
+
 ### 12.7 Fly (ChatApi)
 
 Bước A chạy trong hàm nhận data nên có hiệu lực ở cả Fly khi apply V657. Bước B cần cổng Fly gửi `clientVersion` và có `remote`: đã

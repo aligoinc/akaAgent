@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Phát lại V657 trên dữ liệu thật đã xuất (send-exclusion-v657-realdata-export.cjs), PostgreSQL cục bộ, không chạm DB thật.
 // Với mỗi tài khoản Zalo đã chạy chiến dịch: lấy data thật của các chiến dịch đó, chọn MỌI danh sách Zalo ID của nhân viên, MỌI Nhóm data
-// SĐT / Zalo UID của tổ chức, MỌI chiến dịch đã xuất của nhân viên làm nguồn loại trừ, rồi so bản V657 cũ (git HEAD hoặc --old-ref) với bản
+// SĐT / Zalo UID của tổ chức, MỌI chiến dịch đã xuất của nhân viên làm nguồn loại trừ, rồi so bản V657 cũ (--old-ref, mặc định 838bb4f7 = trước khi sửa Global ID ghi sai) với bản
 // hiện tại ở bước A (khoá có sẵn) và bước B (Global ID thật lấy từ kết quả gửi / tra số của chính data đó). Mỗi chỗ khác nhau được phân loại:
 //   - old_junk_gid: bản cũ dùng Global ID không dùng được (của chính nick / gom nhiều người) ⇒ bản cũ loại nhầm;
 //   - old_wrong_gid: Global ID bản cũ dùng khác Global ID thật của data ⇒ bản cũ loại nhầm;
 //   - new_same_nick_uid: bản mới khớp thẳng Zalo ID cùng nick;
 //   - khác: in ra để xem tay.
 // Kiểm thêm "nhận lại chính mình": data đã nhận tin thành công ở chiến dịch của nó (chiến dịch đó nằm trong nguồn) phải bị loại ở bước B.
-//   PG_MODULE_DIR=... LC_ALL=C node scripts/send-exclusion-v657-realdata-replay.cjs <thư mục đã xuất> [--old-ref HEAD] [--per-account 300]
+//   PG_MODULE_DIR=... LC_ALL=C node scripts/send-exclusion-v657-realdata-replay.cjs <thư mục đã xuất> [--old-ref 838bb4f7] [--per-account 300]
 'use strict'
 const fs = require('node:fs')
 const path = require('node:path')
@@ -18,7 +18,7 @@ const { buildDb, ROOT } = require('./send-exclusion-v657-fixture.cjs')
 const args = process.argv.slice(2)
 const dir = args[0]
 const arg = (name, def) => { const i = args.indexOf('--' + name); return i >= 0 ? args[i + 1] : def }
-const OLD_REF = arg('old-ref', 'HEAD')
+const OLD_REF = arg('old-ref', '838bb4f7') // V657 trước khi sửa Global ID ghi sai (25/11)
 const PER_ACCOUNT = Number(arg('per-account', 300))
 // --seed N: lấy ngẫu nhiên data mỗi tài khoản (mỗi vòng kiểm một mẫu khác); không có thì lấy data đầu tiên.
 const SEED = arg('seed', null)
@@ -74,6 +74,9 @@ async function main() {
       await ins('auto_campaigns', s.campaigns.map(c => ({ ...c, schedule: new Date().toISOString(), schedule_type: 'daily', extra_settings: {} })))
       await ins('auto_campaign_input_data', s.inputs)
       const campById = new Map(s.campaigns.map(c => [c.id, c]))
+      // Bộ xuất giới hạn số data mỗi chiến dịch: bỏ kết quả của data không có trong bản xuất.
+      const inputIds = new Set(s.inputs.map(i => i.id))
+      s.details = s.details.filter(d => d.input_data_id == null || inputIds.has(d.input_data_id))
       await ins('auto_campaign_details', s.details.map(d => ({ id: d.id, campaign_id: d.campaign_id, input_data_id: d.input_data_id, account_id: d.account_id, action_code: d.action_code,
         action_name: d.action_code, status: d.status, is_delete: d.is_delete, created_at: d.created_at, data: d.target ? { target: d.target } : {},
         policy_snapshot: d.op ? { operationState: d.op } : null, staff_id: campById.get(d.campaign_id)?.staff_id, organization_id: s.org })))
@@ -176,7 +179,19 @@ async function main() {
           else cls = 'old_only_other'
         } else if (!ko && kn) {
           if (!nick.has(c.account)) nick.set(c.account, (await one(`SELECT private.aka_agent_zalo_same_nick_accounts($1) r`, [c.account])).r.map(Number))
-          cls = c.input.uid && n[st].globalId == null ? 'new_same_nick_uid' : 'new_only_other'
+          // Bản mới khớp nhờ so thẳng Zalo ID ở tài khoản cùng nick (dòng zalo_users ở đó ghi sai hoặc không có): kiểm độc lập.
+          const uid = String(c.input.uid ?? '').trim()
+          let direct = false
+          if (uid && (c.kind === 'blocklist' || c.kind === 'data_group')) {
+            direct = !!(await one(`SELECT 1 x FROM public.auto_account_contact_group_members m JOIN public.auto_account_contacts ct ON ct.id=m.contact_id
+              WHERE m.group_id = ANY($1::bigint[]) AND NOT m.is_delete AND NOT ct.is_delete AND ct.contact_type='person' AND ct.uid=$2 AND ct.account_id = ANY($3::bigint[]) LIMIT 1`,
+              [[...(c.sel.blocklistIds ?? []), ...(c.sel.dataGroupIds ?? [])], uid, nick.get(c.account)]))
+          } else if (uid && c.kind.endsWith('campaign')) {
+            direct = !!(await one(`SELECT 1 x FROM public.auto_campaign_input_data i JOIN public.auto_campaign_details d ON d.input_data_id=i.id
+              WHERE i.campaign_id = ANY($1::bigint[]) AND lower(btrim(i.uid))=lower($2) AND d.account_id = ANY($3::bigint[]) LIMIT 1`, [c.sel.sentCampaignIds, uid, nick.get(c.account)]))
+          }
+          // Data đã nhận tin thành công ở chính chiến dịch nguồn: bản mới nhận ra là đúng (bản cũ sót).
+          cls = direct ? 'new_same_nick_uid' : c.kind === 'own_campaign' && c.selfSent ? 'new_self_recall' : 'new_only_other'
         } else cls = 'different_source'
         const k = `${st.toUpperCase()}:${c.kind}:${cls}`
         out.diffs[k] = (out.diffs[k] ?? 0) + 1
