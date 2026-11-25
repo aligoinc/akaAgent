@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sinh migrations/migration_v654_staff_email_prompt_fixes.sql từ thân hàm V652 p2 (= production, khoá md5 prosrc).
+"""Sinh migrations/migration_v656_staff_email_prompt_fixes.sql từ thân hàm V652 p2 (= production, khoá md5 prosrc).
 
 Sửa (tìm ra bằng scripts/staff-email-prompt/fuzz/fuzz.py, 25/11/2026):
 1. Công tắc {"audience":"orgs"} thiếu organizationIds làm v_enabled = NULL, IF NOT NULL không chặn => bật cho mọi người.
@@ -13,7 +13,7 @@ import hashlib, os, re, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, '..', '..'))
 P2 = open(os.path.join(REPO, 'migrations', 'migration_v652_staff_email_prompt_p2.sql')).read()
-OUT = os.path.join(REPO, 'migrations', 'migration_v654_staff_email_prompt_fixes.sql')
+OUT = os.path.join(REPO, 'migrations', 'migration_v656_staff_email_prompt_fixes.sql')
 
 CORE_MD5 = '761ad6bcc42ea96628490e1ac8952f27'
 WORKER_MD5 = '90bfb299e1aa8ef46f8d26f9dfb8da12'
@@ -105,8 +105,8 @@ work_head = work_head.replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION')
 new_core_md5 = hashlib.md5(core.encode()).hexdigest()
 new_work_md5 = hashlib.md5(work.encode()).hexdigest()
 
-sql = f"""-- V654: sửa form xin email (V652) theo kết quả kiểm thử ngẫu nhiên 25/11/2026.
--- Sinh bằng: python3 scripts/staff-email-prompt/build-v654-sql.py (không sửa tay).
+sql = f"""-- V656: sửa form xin email (V652) theo kết quả kiểm thử ngẫu nhiên 25/11/2026.
+-- Sinh bằng: python3 scripts/staff-email-prompt/build-v656-sql.py (không sửa tay).
 -- 1. Công tắc {{"audience":"orgs"}} thiếu organizationIds bật nhầm cho mọi người -> coi là tắt.
 -- 2. Bộ gửi thư: 'limit' không phải số -> mặc định 20, không lỗi.
 -- 3. "Không phải tôi" trả lại đúng email ngay trước lần lưu (cột mới prev_*_email ở bảng riêng của form).
@@ -120,16 +120,16 @@ SET LOCAL statement_timeout = '30s';
 
 DO $pre$
 BEGIN
-  IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v654_staff_email_prompt_fixes') THEN
-    RAISE EXCEPTION 'V654 đã có trong sổ migration, không chạy lại';
+  IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v656_staff_email_prompt_fixes') THEN
+    RAISE EXCEPTION 'V656 đã có trong sổ migration, không chạy lại';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'private.aka_agent_email_prompt_core(bigint,text,jsonb)'::regprocedure)
      IS DISTINCT FROM '{CORE_MD5}' THEN
-    RAISE EXCEPTION 'V654: thân private.aka_agent_email_prompt_core khác bản V652';
+    RAISE EXCEPTION 'V656: thân private.aka_agent_email_prompt_core khác bản V652';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure)
      IS DISTINCT FROM '{WORKER_MD5}' THEN
-    RAISE EXCEPTION 'V654: thân public.aka_agent_email_prompt_worker khác bản V652';
+    RAISE EXCEPTION 'V656: thân public.aka_agent_email_prompt_worker khác bản V652';
   END IF;
 END $pre$;
 
@@ -138,7 +138,7 @@ ALTER TABLE private.aka_staff_email_prompt
   ADD COLUMN prev_org_email text,
   ADD COLUMN prev_crm_email text;
 COMMENT ON COLUMN private.aka_staff_email_prompt.prev_staff_email IS
-  'V654: email org_staff ngay trước lần lưu gần nhất (để "Không phải tôi" trả lại). prev_org_email / prev_crm_email: tương tự, chỉ khi lưu là admin.';
+  'V656: email org_staff ngay trước lần lưu gần nhất (để "Không phải tôi" trả lại). prev_org_email / prev_crm_email: tương tự, chỉ khi lưu là admin.';
 
 {core_head}{core}$function$;
 
@@ -151,7 +151,7 @@ BEGIN
      IS DISTINCT FROM '{new_core_md5}'
      OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure)
      IS DISTINCT FROM '{new_work_md5}' THEN
-    RAISE EXCEPTION 'V654 postflight: thân hàm khác bản sinh';
+    RAISE EXCEPTION 'V656 postflight: thân hàm khác bản sinh';
   END IF;
   SELECT string_agg(rolname || ':' || fn, ', ' ORDER BY rolname, fn) INTO v_bad
     FROM pg_roles
@@ -161,9 +161,9 @@ BEGIN
     ) AS f(fn, allowed)
    WHERE rolname IN ('anon', 'authenticated', 'service_role', 'aka_agent_desktop', 'aka_agent_chat_api')
      AND has_function_privilege(rolname, fn, 'EXECUTE') IS DISTINCT FROM (rolname = ANY (allowed));
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V654 postflight: quyền gọi hàm sai: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V656 postflight: quyền gọi hàm sai: %', v_bad; END IF;
   IF (public.aka_agent_email_prompt_worker('claim', '{{"limit":"x"}}') ->> 'ok') IS DISTINCT FROM 'true' THEN
-    RAISE EXCEPTION 'V654 postflight: claim với limit sai kiểu phải chạy được';
+    RAISE EXCEPTION 'V656 postflight: claim với limit sai kiểu phải chạy được';
   END IF;
 END $post$;
 
@@ -175,11 +175,11 @@ sql = sql.replace("""  IF (public.aka_agent_email_prompt_worker('claim', '{"limi
      AND (public.aka_agent_email_prompt_worker('claim', '{"limit":"x"}') ->> 'ok') IS DISTINCT FROM 'true' THEN""")
 open(OUT, 'w').write(sql)
 
-# Gỡ V654: trả 2 hàm về thân V652, bỏ 3 cột.
+# Gỡ V656: trả 2 hàm về thân V652, bỏ 3 cột.
 _, core0 = body('private.aka_agent_email_prompt_core')
 _, work0 = body('public.aka_agent_email_prompt_worker')
-rb = f"""-- Gỡ V654: trả private.aka_agent_email_prompt_core và public.aka_agent_email_prompt_worker về thân V652, bỏ 3 cột prev_*.
--- Sinh bằng: python3 scripts/staff-email-prompt/build-v654-sql.py.
+rb = f"""-- Gỡ V656: trả private.aka_agent_email_prompt_core và public.aka_agent_email_prompt_worker về thân V652, bỏ 3 cột prev_*.
+-- Sinh bằng: python3 scripts/staff-email-prompt/build-v656-sql.py.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 {core_head}{core0}$function$;
@@ -192,10 +192,10 @@ DO $post$
 BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'private.aka_agent_email_prompt_core(bigint,text,jsonb)'::regprocedure) IS DISTINCT FROM '{CORE_MD5}'
      OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure) IS DISTINCT FROM '{WORKER_MD5}' THEN
-    RAISE EXCEPTION 'gỡ V654: thân hàm khác V652';
+    RAISE EXCEPTION 'gỡ V656: thân hàm khác V652';
   END IF;
 END $post$;
 COMMIT;
 """
-open(os.path.join(REPO, 'migrations', 'rollback_v654_staff_email_prompt_fixes.sql'), 'w').write(rb)
+open(os.path.join(REPO, 'migrations', 'rollback_v656_staff_email_prompt_fixes.sql'), 'w').write(rb)
 print(OUT, 'core', new_core_md5, 'worker', new_work_md5, 'file', hashlib.md5(sql.encode()).hexdigest())

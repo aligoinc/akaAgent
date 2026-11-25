@@ -1,5 +1,5 @@
--- V654: sửa form xin email (V652) theo kết quả kiểm thử ngẫu nhiên 25/11/2026.
--- Sinh bằng: python3 scripts/staff-email-prompt/build-v654-sql.py (không sửa tay).
+-- V656: sửa form xin email (V652) theo kết quả kiểm thử ngẫu nhiên 25/11/2026.
+-- Sinh bằng: python3 scripts/staff-email-prompt/build-v656-sql.py (không sửa tay).
 -- 1. Công tắc {"audience":"orgs"} thiếu organizationIds bật nhầm cho mọi người -> coi là tắt.
 -- 2. Bộ gửi thư: 'limit' không phải số -> mặc định 20, không lỗi.
 -- 3. "Không phải tôi" trả lại đúng email ngay trước lần lưu (cột mới prev_*_email ở bảng riêng của form).
@@ -13,16 +13,16 @@ SET LOCAL statement_timeout = '30s';
 
 DO $pre$
 BEGIN
-  IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v654_staff_email_prompt_fixes') THEN
-    RAISE EXCEPTION 'V654 đã có trong sổ migration, không chạy lại';
+  IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v656_staff_email_prompt_fixes') THEN
+    RAISE EXCEPTION 'V656 đã có trong sổ migration, không chạy lại';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'private.aka_agent_email_prompt_core(bigint,text,jsonb)'::regprocedure)
      IS DISTINCT FROM '761ad6bcc42ea96628490e1ac8952f27' THEN
-    RAISE EXCEPTION 'V654: thân private.aka_agent_email_prompt_core khác bản V652';
+    RAISE EXCEPTION 'V656: thân private.aka_agent_email_prompt_core khác bản V652';
   END IF;
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure)
      IS DISTINCT FROM '90bfb299e1aa8ef46f8d26f9dfb8da12' THEN
-    RAISE EXCEPTION 'V654: thân public.aka_agent_email_prompt_worker khác bản V652';
+    RAISE EXCEPTION 'V656: thân public.aka_agent_email_prompt_worker khác bản V652';
   END IF;
 END $pre$;
 
@@ -31,7 +31,7 @@ ALTER TABLE private.aka_staff_email_prompt
   ADD COLUMN prev_org_email text,
   ADD COLUMN prev_crm_email text;
 COMMENT ON COLUMN private.aka_staff_email_prompt.prev_staff_email IS
-  'V654: email org_staff ngay trước lần lưu gần nhất (để "Không phải tôi" trả lại). prev_org_email / prev_crm_email: tương tự, chỉ khi lưu là admin.';
+  'V656: email org_staff ngay trước lần lưu gần nhất (để "Không phải tôi" trả lại). prev_org_email / prev_crm_email: tương tự, chỉ khi lưu là admin.';
 
 CREATE OR REPLACE FUNCTION private.aka_agent_email_prompt_core(p_staff_id bigint, p_action text, p_payload jsonb)
 RETURNS jsonb
@@ -395,7 +395,7 @@ BEGIN
      IS DISTINCT FROM '256da4803bfd2421986f718feaed49b3'
      OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure)
      IS DISTINCT FROM 'd2b49aeab57e504bc69cf4faf351e887' THEN
-    RAISE EXCEPTION 'V654 postflight: thân hàm khác bản sinh';
+    RAISE EXCEPTION 'V656 postflight: thân hàm khác bản sinh';
   END IF;
   SELECT string_agg(rolname || ':' || fn, ', ' ORDER BY rolname, fn) INTO v_bad
     FROM pg_roles
@@ -405,10 +405,10 @@ BEGIN
     ) AS f(fn, allowed)
    WHERE rolname IN ('anon', 'authenticated', 'service_role', 'aka_agent_desktop', 'aka_agent_chat_api')
      AND has_function_privilege(rolname, fn, 'EXECUTE') IS DISTINCT FROM (rolname = ANY (allowed));
-  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V654 postflight: quyền gọi hàm sai: %', v_bad; END IF;
+  IF v_bad IS NOT NULL THEN RAISE EXCEPTION 'V656 postflight: quyền gọi hàm sai: %', v_bad; END IF;
   IF NOT EXISTS (SELECT 1 FROM private.aka_staff_email_prompt)
      AND (public.aka_agent_email_prompt_worker('claim', '{"limit":"x"}') ->> 'ok') IS DISTINCT FROM 'true' THEN
-    RAISE EXCEPTION 'V654 postflight: claim với limit sai kiểu phải chạy được';
+    RAISE EXCEPTION 'V656 postflight: claim với limit sai kiểu phải chạy được';
   END IF;
 END $post$;
 

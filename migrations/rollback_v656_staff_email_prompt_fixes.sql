@@ -1,5 +1,5 @@
--- Gỡ V654: trả private.aka_agent_email_prompt_core và public.aka_agent_email_prompt_worker về thân V652, bỏ 3 cột prev_*.
--- Sinh bằng: python3 scripts/staff-email-prompt/build-v654-sql.py.
+-- Gỡ V656: trả private.aka_agent_email_prompt_core và public.aka_agent_email_prompt_worker về thân V652, bỏ 3 cột prev_*.
+-- Sinh bằng: python3 scripts/staff-email-prompt/build-v656-sql.py.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 CREATE OR REPLACE FUNCTION private.aka_agent_email_prompt_core(p_staff_id bigint, p_action text, p_payload jsonb)
@@ -344,7 +344,7 @@ DO $post$
 BEGIN
   IF (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'private.aka_agent_email_prompt_core(bigint,text,jsonb)'::regprocedure) IS DISTINCT FROM '761ad6bcc42ea96628490e1ac8952f27'
      OR (SELECT md5(prosrc) FROM pg_proc WHERE oid = 'public.aka_agent_email_prompt_worker(text,jsonb)'::regprocedure) IS DISTINCT FROM '90bfb299e1aa8ef46f8d26f9dfb8da12' THEN
-    RAISE EXCEPTION 'gỡ V654: thân hàm khác V652';
+    RAISE EXCEPTION 'gỡ V656: thân hàm khác V652';
   END IF;
 END $post$;
 COMMIT;

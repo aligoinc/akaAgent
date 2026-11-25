@@ -1,4 +1,4 @@
--- Kiểm V654 (chạy sau assertions.sql của V652 và V654). Mỗi khẳng định sai thì RAISE.
+-- Kiểm V656 (chạy sau assertions.sql của V652 và V656). Mỗi khẳng định sai thì RAISE.
 \set ON_ERROR_STOP 1
 CREATE FUNCTION pg_temp.eq3(p_label text, p_got anyelement, p_want anyelement) RETURNS void LANGUAGE plpgsql AS $$
 BEGIN
@@ -9,7 +9,7 @@ CREATE FUNCTION pg_temp.st3(p_staff bigint, p_action text, p_payload jsonb DEFAU
   $$ SELECT public.aka_agent_control_email_prompt(p_staff, (SELECT organization_id FROM public.org_staff WHERE id = p_staff), p_action, p_payload) $$;
 
 INSERT INTO public.aka_customer(id, email) VALUES (301, NULL);
-INSERT INTO public.org_organization(id, customer_id, name, email) VALUES (31, 301, 'Org V654', NULL);
+INSERT INTO public.org_organization(id, customer_id, name, email) VALUES (31, 301, 'Org V656', NULL);
 INSERT INTO public.org_staff(id, organization_id, name, username, email, is_admin) VALUES (31, 31, 'Admin', 'a653', NULL, true);
 INSERT INTO public.org_organization_product(organization_id, product_name, package_name, expiration_date, is_deleted, is_paid)
 VALUES (31, 'akaAgent Zalo', 'Gói năm', now() + interval '30 days', false, true);
