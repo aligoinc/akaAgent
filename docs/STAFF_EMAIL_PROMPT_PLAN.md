@@ -7,7 +7,21 @@ thu hút. **Chỉ lên phương án, chưa code.**
 
 Bản thiết kế (5 màn, màn Desktop bấm thử được): https://claude.ai/artifact/NSgiQwdvquGqZPo89ZVVF8
 
-Trạng thái: chưa code, chưa có migration, chưa đổi gì trên production. Mọi số liệu dưới đây đọc chỉ đọc ngày 25/11/2026.
+Trạng thái (25/11/2026, anh: "Đồng ý thực thi phương án"): **đã code, chưa apply / deploy / phát hành.**
+- DB: `migrations/migration_v652_staff_email_prompt_p1/p2/p3.sql` + `rollback_v652_staff_email_prompt.sql`; kiểm
+  `bash scripts/staff-email-prompt/test_v652.sh` (PostgreSQL 16 cục bộ, 85 khẳng định + chạy lại bị chặn + gỡ sạch).
+  **Chưa apply production** (DDL trên 3 bảng nóng: chạy buổi tối, theo yêu cầu).
+- Hợp đồng: WebApp `packages/control-api/src/emailPrompt.ts` = akaAgent `src/shared/emailPrompt.ts` (md5 `efb4547b…`).
+- Desktop (nhánh `claude/relaxed-albattani-c1volz`, `b83a5aa5`): kênh `email-prompt:call`, hộp thoại 3 màn, nhãn
+  "Thêm email", dòng Email trong Thông tin tài khoản; kiểm `node scripts/staff-email-prompt/desktop-email-prompt-smoke.cjs`
+  (12) và `node scripts/staff-email-prompt/run-email-prompt-ui-smoke.cjs` (15, Chromium + IPC giả). Chưa chạy trong Electron thật.
+- Web/API (WebApp cùng tên nhánh, `244cbf2b`): `/api/aka-agent/control/v1/me/email-prompt`, bộ gửi thư xác nhận
+  `EmailPromptMailScheduler`, link `/api/aka-agent/email-prompt/verify` / `not-me`; chi tiết WebApp `docs/STAFF_EMAIL_PROMPT.md`.
+  Gói JS chính của Web chỉ còn ~200 byte dưới trần 2 MiB của PWA.
+- Thứ tự đưa lên: apply V652 p1 → p2 → p3 (tối) → deploy API/Web → bật `account.email_prompt` `admin_akabiz` để thử → `all`
+  → phát hành Desktop.
+
+Mọi số liệu dưới đây đọc chỉ đọc ngày 25/11/2026.
 
 ## 0. Anh đã chốt (25/11/2026)
 
