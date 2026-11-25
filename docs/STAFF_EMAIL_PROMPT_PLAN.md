@@ -7,10 +7,12 @@ thu hút. **Chỉ lên phương án, chưa code.**
 
 Bản thiết kế (5 màn, màn Desktop bấm thử được): https://claude.ai/artifact/NSgiQwdvquGqZPo89ZVVF8
 
-Trạng thái (25/11/2026, anh: "Đồng ý thực thi phương án"): **đã code, chưa apply / deploy / phát hành.**
+Trạng thái (25/11/2026, anh: "Đồng ý thực thi phương án"): **đã code; V652 đã apply production 25/11; chưa deploy API/Web, chưa phát hành Desktop; công tắc `account.email_prompt` = off.**
 - DB: `migrations/migration_v652_staff_email_prompt_p1/p2/p3.sql` + `rollback_v652_staff_email_prompt.sql`; kiểm
   `bash scripts/staff-email-prompt/test_v652.sh` (PostgreSQL 16 cục bộ, 85 khẳng định + chạy lại bị chặn + gỡ sạch).
-  **Chưa apply production** (DDL trên 3 bảng nóng: chạy buổi tối, theo yêu cầu).
+  **Đã apply akachat 25/11/2026 theo yêu cầu ("áp luôn")**: p1 16:48:12, p2 16:59:00, p3 17:19:15 VN (sổ `20261125094812` /
+  `20261125095900` / `20261125101915`, md5 sổ = file, không apply lại); 0 lỗi 5xx/503, phút apply p2 có 787 request
+  quá 1 giây (PostgREST nạp lại schema); p3 điền email_list 137 / 336 / 1.288 dòng; [biên nhận](../migrations/snapshots/staff-email-prompt-v652/apply-receipt.json).
 - Hợp đồng: WebApp `packages/control-api/src/emailPrompt.ts` = akaAgent `src/shared/emailPrompt.ts` (md5 `efb4547b…`).
 - Desktop (nhánh `claude/relaxed-albattani-c1volz`, `b83a5aa5`): kênh `email-prompt:call`, hộp thoại 3 màn, nhãn
   "Thêm email", dòng Email trong Thông tin tài khoản; kiểm `node scripts/staff-email-prompt/desktop-email-prompt-smoke.cjs`
