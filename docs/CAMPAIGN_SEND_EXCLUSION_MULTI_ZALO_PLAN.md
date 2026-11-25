@@ -264,3 +264,65 @@ Hành vi giữ nguyên, cần biết: xoá một Zalo mà danh sách Zalo ID c�
 dừng với "Danh sách Zalo ID loại trừ đã bị xoá" (như xoá chính danh sách: không gửi nhầm khách cần loại trừ), còn khối điều kiện của
 Zalo đã xoá thì bị bỏ qua. Liên hệ đã xoá mềm vẫn được tính nếu còn là thành viên Nhóm data (như hàm đối chiếu V519; production
 0 / 151.006 dòng như vậy).
+
+## 12. So khớp theo SĐT / Global ID và lọc ở bước nhận data (V657, anh duyệt 25/11/2026)
+
+Anh chốt 25/11: Zalo ID riêng chỉ đúng với một tài khoản, nên so khác tài khoản phải theo SĐT (nếu có) rồi tới Global ID; bước loại
+trừ phải là bước lọc đầu tiên, data bị loại không tính là một lần gửi; viết cho cả hai bộ chạy; ở bước lưu chỉ xem trước số lượng.
+Anh đồng ý theo đề xuất cho 5 câu: (1) "chiến dịch đã gửi" = đã nhận tin nhắn thành công; (2) Nhóm data SĐT với chiến dịch theo UID
+dùng bảng đối chiếu SĐT ↔ Global ID lấy từ lịch sử tra số; (3) không xác định được Global ID thì không gửi; (4) danh sách Zalo ID của
+chính Zalo đang gửi cũng so theo Global ID; (5) kiểm SĐT trước bước tra số.
+
+### 12.1 Số đo (production 25/11, chỉ đọc)
+
+- SĐT ↔ Global ID một-một và không đổi: 2.700 SĐT / ~7.400 lượt tra từ 04/09, 0 SĐT có 2 Global ID, 0 Global ID có 2 SĐT;
+  205 số tra lại cách nhau > 30 ngày vẫn cùng Global ID.
+- Zalo ID riêng khác theo nick (84/89 số được nhiều nick tra), trùng khi hai tài khoản akaAgent đăng nhập cùng một nick.
+- **Zalo ID riêng đổi theo thời gian ngay trên cùng một nick**: 44/251 cặp lần tra cùng số cùng nick ra UID khác (dưới 1 ngày 0%,
+  1–7 ngày 14%, trên 7 ngày 21%). `zalo_users` giữ cả UID cũ: 377/54.771 cặp (tài khoản, Global ID) có ≥ 2 UID; 54/1.571 người
+  trong danh sách Zalo ID loại trừ có UID khác trên chính tài khoản đó. V654 lấy một UID (`LIMIT 1`) khi đổi Global ID sang UID ⇒ sót.
+- Định danh theo nguồn: danh sách Zalo ID (71 danh sách) chỉ UID, Global ID 100%; Nhóm data Zalo UID (3.674 nhóm) Global ID 99,8%,
+  SĐT 0,1%; Nhóm data SĐT: Global ID biết qua lịch sử 56%, đã tra không có Zalo 24%, chưa ai tra 20%; chiến dịch theo SĐT, người đã
+  nhận tin: SĐT 100%, Global ID 99,3%; nhắn bạn bè: SĐT 26%, Global ID 96%; thành viên nhóm: SĐT 0%, Global ID 100%.
+- Người nhận theo UID không có SĐT (Zalo ẩn số), Global ID qua `zalo_users(tài khoản gửi, UID)` ~99,8%.
+- Hai hàm chuẩn hoá SĐT khớp với số di động, khác ở số bàn / `0084…`: so khớp dùng `aka_agent_internal_normalize_phone` (chỉ số
+  di động hợp lệ; số khác coi như không có SĐT).
+
+### 12.2 Quy tắc
+
+- Khoá của một người: SĐT đã chuẩn hoá và Global ID. Không so Zalo ID riêng; UID chỉ dùng để tra Global ID qua `zalo_users`, và một
+  Global ID đổi ra **mọi** UID đã ghi nhận ở tài khoản đó.
+- Cùng một người khi trùng SĐT hoặc trùng Global ID. Vì SĐT ↔ Global ID một-một (12.1), kết quả giống "cả hai có SĐT thì so SĐT,
+  thiếu thì so Global ID"; bộ kiểm đối chiếu tính cả hai cách và báo nếu khác.
+- Nguồn và khoá:
+  - Danh sách Zalo ID (mọi Zalo, kể cả Zalo đang gửi): thành viên → Global ID qua `zalo_users(tài khoản của danh sách, UID)`.
+  - Nhóm data SĐT: SĐT của thành viên; người nhận không có SĐT thì Global ID → SĐT qua bảng đối chiếu.
+  - Nhóm data Zalo UID: thành viên → Global ID qua `zalo_users(tài khoản của liên hệ, UID)`.
+  - Chiến dịch đã gửi: dòng kết quả nhắn tin (bạn bè / người lạ) thành công của chiến dịch đó; khoá = SĐT của data và Global ID
+    (qua mọi UID của Global ID ở các tài khoản Zalo của tổ chức).
+  - Điều kiện của Zalo khác: dữ kiện đọc theo mọi UID của Global ID ở Zalo đó (bạn bè nếu một UID là bạn bè, tag nếu một UID có tag,
+    "đã gửi N ngày" theo mọi UID và SĐT).
+- Bảng đối chiếu `private.auto_zalo_phone_identity` (SĐT → Global ID mới nhất) nạp từ kết quả Tìm SĐT thành công trong lịch sử, job
+  mỗi phút; Global ID của một SĐT đổi thì lấy bản mới và đếm số lần đổi để theo dõi.
+
+### 12.3 Hai bước lọc
+
+- **Bước A, bước lọc đầu tiên.** Engine v2: trong `aka_agent_engine_claim_target_v1`, cùng vòng với chống gửi lặp. Bộ chạy cũ: thao
+  tác `precheck` gọi trước bước kiểm từ chối nhận tin / chống gửi lặp. Khoá có sẵn: SĐT của data, Global ID từ UID của data
+  (`zalo_users` của tài khoản gửi), Global ID từ SĐT (bảng đối chiếu). So với danh sách Zalo ID, Nhóm data, chiến dịch đã gửi. Khớp:
+  data "tạm dừng" kèm lý do, lấy data kế tiếp ngay (không gọi Zalo, không tra số, không tính lượt, không nghỉ); lõi engine đang chạy
+  đã in sẵn dòng "⏸️ Bỏ qua …" cho danh sách `cooldownPaused`.
+- **Bước B, sau khi có Global ID thật** (sau tra số, hoặc sau khi đọc hồ sơ người nhận): thao tác `remote` so lại mọi nguồn với
+  Global ID vừa có, trả thêm dữ kiện điều kiện của Zalo khác; điều kiện của chính Zalo đang gửi đọc Zalo như hiện nay. Cần Global ID
+  mà không có thì không gửi (EXC02).
+- Bước A chỉ là đi sớm: mọi người bước A loại thì bước B cũng loại. Công tắc `campaign.send_exclusion_precheck` (`{"enabled":false}`
+  tắt bước A, bước B vẫn chạy).
+
+### 12.4 Xem trước ở bước lưu
+
+Thao tác `preview` của `aka_agent_send_exclusion_v2`: dùng cùng hàm so khớp, chỉ đọc, có trần thời gian; trả số data sẽ bị loại theo
+từng nguồn và số chưa xác định (sẽ kiểm lúc chạy). Không đổi dòng data nào. Điều kiện của từng Zalo không tính trong xem trước.
+
+### 12.5 Chưa làm / ghi nhận
+
+- "Chống gửi lặp N ngày" (tính năng khác) cũng đặt khoá theo UID nên có thể sót khi UID đổi; ngoài phạm vi, chưa sửa.
