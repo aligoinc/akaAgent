@@ -216,7 +216,8 @@ export function makeEngagementSource(ownUid: string | undefined | null, targetUi
 export function engagementDisplay(value: ZaloEngagement | null | undefined, applicable: boolean): string {
   if (!applicable || !value) return ''
   const marks = [[value.delivered_at, 'Đã nhận'], [value.seen_at, 'Đã xem'], [value.responded_at, 'Đã phản hồi'], [value.reacted_at, 'Đã thả cảm xúc'], [value.friended_at, 'Đã kết bạn'], [value.rejected_at, 'Đã từ chối kết bạn']]
-    .filter(([at]) => at).map(([at, label]) => `${label}: ${new Date(at!).toLocaleString('vi-VN')}`)
+    // Giờ không đọc được (dữ liệu hỏng) thì bỏ, không hiện "Invalid Date".
+    .filter(([at]) => at && Number.isFinite(Date.parse(at))).map(([at, label]) => `${label}: ${new Date(at!).toLocaleString('vi-VN')}`)
   return marks.join('\n')
 }
 export const engagementApplicable = (actionCode?: string | null): boolean => ['zalo_message_friend', 'zalo_message_stranger', 'zalo_add_friend'].includes(actionCode || '')

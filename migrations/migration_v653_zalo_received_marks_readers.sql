@@ -20,9 +20,11 @@ SET LOCAL statement_timeout = '60s';
 
 DO $preflight$
 BEGIN
-  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
-     AND EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration\_v653\_%') THEN
-    RAISE EXCEPTION 'v653_already_in_ledger';
+  -- Hai IF lồng nhau: một biểu thức AND vẫn báo lỗi "relation does not exist" khi DB không có bảng sổ migration.
+  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration\_v653\_%') THEN
+      RAISE EXCEPTION 'v653_already_in_ledger';
+    END IF;
   END IF;
   IF to_regclass('public.auto_zalo_message_status') IS NULL THEN
     RAISE EXCEPTION 'v653_requires_v525: public.auto_zalo_message_status missing';
@@ -38,28 +40,28 @@ CREATE FUNCTION private.aka_agent_zalo_marks_filter_sql(p_filter text) RETURNS t
 LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $$
   SELECT '(' || CASE p_filter
     WHEN 'received' THEN
-      'EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND (zs.delivered_at IS NOT NULL'
+      'EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND (zs.delivered_at IS NOT NULL'
       || ' OR zs.seen_at IS NOT NULL OR zs.reacted_at IS NOT NULL OR zs.responded_at IS NOT NULL))'
       || ' OR EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND (e.seen_at IS NOT NULL'
       || ' OR e.reacted_at IS NOT NULL OR e.responded_at IS NOT NULL))'
     WHEN 'seen' THEN
       'EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND e.seen_at IS NOT NULL)'
-      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.seen_at IS NOT NULL)'
+      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND zs.seen_at IS NOT NULL)'
     WHEN 'responded' THEN
       'EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND e.responded_at IS NOT NULL)'
-      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.responded_at IS NOT NULL)'
+      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND zs.responded_at IS NOT NULL)'
     WHEN 'reacted' THEN
       'EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND e.reacted_at IS NOT NULL)'
-      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.reacted_at IS NOT NULL)'
+      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND zs.reacted_at IS NOT NULL)'
     WHEN 'friended' THEN
       'EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND e.friended_at IS NOT NULL)'
-      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.friended_at IS NOT NULL)'
+      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND zs.friended_at IS NOT NULL)'
     WHEN 'none' THEN
       '(EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id)'
-      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id))'
+      || ' OR EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'')))'
       || ' AND NOT EXISTS (SELECT 1 FROM public.auto_campaign_detail_zalo_engagement e WHERE e.campaign_detail_id=d.id AND (e.seen_at IS NOT NULL'
       || ' OR e.responded_at IS NOT NULL OR e.reacted_at IS NOT NULL OR e.friended_at IS NOT NULL))'
-      || ' AND NOT EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND (zs.delivered_at IS NOT NULL'
+      || ' AND NOT EXISTS (SELECT 1 FROM public.auto_zalo_message_status zs WHERE zs.campaign_detail_id=d.id AND zs.campaign_id=d.campaign_id AND d.action_code IN (''zalo_message_friend'',''zalo_message_stranger'',''zalo_add_friend'') AND (zs.delivered_at IS NOT NULL'
       || ' OR zs.seen_at IS NOT NULL OR zs.responded_at IS NOT NULL OR zs.reacted_at IS NOT NULL OR zs.friended_at IS NOT NULL))'
     ELSE 'false'
   END || ')'
@@ -129,6 +131,7 @@ DECLARE
 $f$;
   f4_new constant text := $f$        LEFT JOIN public.auto_campaign_detail_zalo_engagement engagement ON engagement.campaign_detail_id=page.id
         LEFT JOIN public.auto_zalo_message_status message_status ON message_status.campaign_detail_id=page.id
+          AND message_status.campaign_id=detail.campaign_id AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')
 $f$;
   r1_old constant text := $f$      OR v_engagement NOT IN ('all', 'seen', 'responded', 'reacted', 'friended', 'none') THEN$f$;
   r1_new constant text := $f$      OR v_engagement NOT IN ('all', 'received', 'seen', 'responded', 'reacted', 'friended', 'none') THEN$f$;
@@ -143,6 +146,7 @@ $f$;
 $f$;
   r4_new constant text := $f$    LEFT JOIN public.auto_campaign_detail_zalo_engagement AS e ON e.campaign_detail_id = x.id
     LEFT JOIN public.auto_zalo_message_status AS zs ON zs.campaign_detail_id = x.id
+      AND zs.campaign_id = p_campaign_id AND x.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')
 $f$;
   e1_old constant text := $f$        'messageTracked', count(e.campaign_detail_id) FILTER (WHERE d.action_code = ANY(v_message)),
         'responded', count(*) FILTER (WHERE d.action_code = ANY(v_message) AND e.responded_at IS NOT NULL),
@@ -168,7 +172,7 @@ $f$;
         'friended', count(*) FILTER (WHERE d.action_code = v_friend AND m.friended_at IS NOT NULL))
       FROM d
       LEFT JOIN public.auto_campaign_detail_zalo_engagement e ON e.campaign_detail_id = d.id
-      LEFT JOIN public.auto_zalo_message_status zs ON zs.campaign_detail_id = d.id
+      LEFT JOIN public.auto_zalo_message_status zs ON zs.campaign_detail_id = d.id AND zs.campaign_id = p_campaign_id
       CROSS JOIN LATERAL (SELECT e.campaign_detail_id IS NOT NULL OR zs.campaign_detail_id IS NOT NULL AS tracked,
         zs.campaign_detail_id IS NOT NULL AS delivery_tracked, zs.delivered_at,
         LEAST(e.seen_at, zs.seen_at) AS seen_at, LEAST(e.reacted_at, zs.reacted_at) AS reacted_at,
@@ -188,8 +192,8 @@ BEGIN
   v_md5 := v_md5 || jsonb_build_object('run_report', pg_temp.v653_patch(
     'public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb)',
     '4bd734ca25612bfdade631c779373d42', ARRAY[e1_old, e1_new]));
-  -- Postflight: md5 thân mới đúng bản đã chạy thử trên production ngày 25/11/2026 (trong giao dịch huỷ).
-  IF v_md5 IS DISTINCT FROM '{"v2": "71ba4bd7631da7100831a8dfe6a3648f", "v3": "e9009c99441e5f268c04b30e1fef4de8", "recipients": "85076e4f0f4a021fc1e32269ec8b207f", "run_report": "354247b27de86de38f6970c66db768c4"}'::jsonb THEN
+  -- Postflight: md5 thân mới, tính bằng scripts/zalo-received-marks/v653-md5.py từ thân production đọc 25/11/2026.
+  IF v_md5 IS DISTINCT FROM '{"v2": "89a01e896acd5672c73ce317ef82ac29", "v3": "061c9a2cb8fe5f0fb2c259df8cf14d5e", "recipients": "5d79a8809416889ecd689b4b3fcff6c9", "run_report": "5b4073a20534ea05a9c06c0c2c10cfe3"}'::jsonb THEN
     RAISE EXCEPTION 'v653_postflight_md5 %', v_md5;
   END IF;
 END

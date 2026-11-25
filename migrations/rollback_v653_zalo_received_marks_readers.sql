@@ -56,6 +56,7 @@ DECLARE
 $f$;
   f4_new constant text := $f$        LEFT JOIN public.auto_campaign_detail_zalo_engagement engagement ON engagement.campaign_detail_id=page.id
         LEFT JOIN public.auto_zalo_message_status message_status ON message_status.campaign_detail_id=page.id
+          AND message_status.campaign_id=detail.campaign_id AND detail.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')
 $f$;
   r1_old constant text := $f$      OR v_engagement NOT IN ('all', 'seen', 'responded', 'reacted', 'friended', 'none') THEN$f$;
   r1_new constant text := $f$      OR v_engagement NOT IN ('all', 'received', 'seen', 'responded', 'reacted', 'friended', 'none') THEN$f$;
@@ -70,6 +71,7 @@ $f$;
 $f$;
   r4_new constant text := $f$    LEFT JOIN public.auto_campaign_detail_zalo_engagement AS e ON e.campaign_detail_id = x.id
     LEFT JOIN public.auto_zalo_message_status AS zs ON zs.campaign_detail_id = x.id
+      AND zs.campaign_id = p_campaign_id AND x.action_code IN ('zalo_message_friend','zalo_message_stranger','zalo_add_friend')
 $f$;
   e1_old constant text := $f$        'messageTracked', count(e.campaign_detail_id) FILTER (WHERE d.action_code = ANY(v_message)),
         'responded', count(*) FILTER (WHERE d.action_code = ANY(v_message) AND e.responded_at IS NOT NULL),
@@ -95,7 +97,7 @@ $f$;
         'friended', count(*) FILTER (WHERE d.action_code = v_friend AND m.friended_at IS NOT NULL))
       FROM d
       LEFT JOIN public.auto_campaign_detail_zalo_engagement e ON e.campaign_detail_id = d.id
-      LEFT JOIN public.auto_zalo_message_status zs ON zs.campaign_detail_id = d.id
+      LEFT JOIN public.auto_zalo_message_status zs ON zs.campaign_detail_id = d.id AND zs.campaign_id = p_campaign_id
       CROSS JOIN LATERAL (SELECT e.campaign_detail_id IS NOT NULL OR zs.campaign_detail_id IS NOT NULL AS tracked,
         zs.campaign_detail_id IS NOT NULL AS delivery_tracked, zs.delivered_at,
         LEAST(e.seen_at, zs.seen_at) AS seen_at, LEAST(e.reacted_at, zs.reacted_at) AS reacted_at,
@@ -105,16 +107,16 @@ $f$;
 BEGIN
   v_md5 := v_md5 || jsonb_build_object('v2', pg_temp.v653_unpatch(
     'public.aka_agent_list_campaign_details_page_v2(bigint,bigint,bigint,text,text,timestamptz,timestamptz,integer,integer,text,text,text,text)',
-    '71ba4bd7631da7100831a8dfe6a3648f', ARRAY[f4_new, f4_old, f3_new, f3_old, f2_new, f2_old, f1_new, f1_old]));
+    '89a01e896acd5672c73ce317ef82ac29', ARRAY[f4_new, f4_old, f3_new, f3_old, f2_new, f2_old, f1_new, f1_old]));
   v_md5 := v_md5 || jsonb_build_object('v3', pg_temp.v653_unpatch(
     'public.aka_agent_list_campaign_details_page_v3(bigint,bigint,bigint,text,text,timestamptz,timestamptz,integer,integer,text,text,text,text,text)',
-    'e9009c99441e5f268c04b30e1fef4de8', ARRAY[f4_new, f4_old, f3_new, f3_old, f2_new, f2_old, f1_new, f1_old]));
+    '061c9a2cb8fe5f0fb2c259df8cf14d5e', ARRAY[f4_new, f4_old, f3_new, f3_old, f2_new, f2_old, f1_new, f1_old]));
   v_md5 := v_md5 || jsonb_build_object('recipients', pg_temp.v653_unpatch(
     'public.aka_agent_read_campaign_result_recipients(bigint,bigint,text,text,bigint,jsonb)',
-    '85076e4f0f4a021fc1e32269ec8b207f', ARRAY[r4_new, r4_old, r3_new, r3_old, r2_new, r2_old, r1_new, r1_old]));
+    '5d79a8809416889ecd689b4b3fcff6c9', ARRAY[r4_new, r4_old, r3_new, r3_old, r2_new, r2_old, r1_new, r1_old]));
   v_md5 := v_md5 || jsonb_build_object('run_report', pg_temp.v653_unpatch(
     'public.aka_agent_read_campaign_run_report(bigint,bigint,text,text,bigint,jsonb)',
-    '354247b27de86de38f6970c66db768c4', ARRAY[e1_new, e1_old]));
+    '5b4073a20534ea05a9c06c0c2c10cfe3', ARRAY[e1_new, e1_old]));
   IF v_md5 IS DISTINCT FROM '{"v2": "28c26d1e0bd580eb77fef7f4b8352a67", "v3": "4e5c300305409908295c49d5d1941224", "recipients": "3fe7e5982398b42cc73fcc0433109b05", "run_report": "4bd734ca25612bfdade631c779373d42"}'::jsonb THEN
     RAISE EXCEPTION 'v653_rollback_postflight_md5 %', v_md5;
   END IF;

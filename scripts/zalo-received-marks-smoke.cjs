@@ -34,12 +34,24 @@ load().then(m => {
     assert.equal(m.mergeZaloMessageStatus(engagement, null), engagement)
     assert.equal(m.mergeZaloMessageStatus(null, undefined), null)
   })
-  check('có cả hai: mỗi mốc lấy giờ sớm nhất, thêm "đã nhận", giữ hạn theo dõi cũ', () => {
+  check('có cả hai: mỗi mốc lấy giờ sớm nhất, thêm "đã nhận", giờ gửi và hạn theo dòng trạng thái (như Web)', () => {
     const merged = m.mergeZaloMessageStatus(engagement, status)
     assert.equal(merged.delivered_at, status.delivered_at)
     assert.equal(merged.seen_at, '2026-11-25T02:00:00Z')
     assert.equal(merged.responded_at, status.responded_at)
-    assert.equal(merged.tracking_until, engagement.tracking_until)
+    assert.equal(merged.sent_at, status.sent_at)
+    assert.equal(merged.tracking_until, status.reply_until)
+  })
+  check('"Đã nhận" không muộn hơn mốc xem sớm nhất của hai hệ; không biên nhận thì không tự thêm', () => {
+    const merged = m.mergeZaloMessageStatus({ ...engagement, seen_at: '2026-11-25T01:00:10Z' }, status)
+    assert.equal(merged.delivered_at, '2026-11-25T01:00:10Z')
+    assert.equal(m.mergeZaloMessageStatus(engagement, { ...status, delivered_at: null }).delivered_at, null)
+  })
+  check('giờ không đọc được bị bỏ, cột hiển thị không có "Invalid Date"', () => {
+    const merged = m.mergeZaloMessageStatus({ ...engagement, seen_at: 'infinity', rejected_at: 'x' }, { ...status, seen_at: null })
+    assert.equal(merged.seen_at, null)
+    assert.equal(merged.rejected_at, null)
+    assert.equal(m.engagementDisplay({ sent_at: status.sent_at, tracking_until: status.reply_until, seen_at: 'infinity' }, true), '')
   })
   check('chỉ có dòng trạng thái: dựng mốc từ dòng đó (hạn = hạn tính phản hồi)', () => {
     const merged = m.mergeZaloMessageStatus(null, status)
@@ -82,5 +94,5 @@ load().then(m => {
     assert.equal(built.engagement.message.receivedIsMinimum, true)
     assert.equal(built.engagement.message.received, built.engagement.message.seen)
   })
-  console.log(`zalo received marks smoke: ${passed}/8 passed`)
+  console.log(`zalo received marks smoke: ${passed}/10 passed`)
 }).catch(error => { console.error(error); process.exitCode = 1 }).finally(() => fs.rmSync(out, { recursive: true, force: true }))
