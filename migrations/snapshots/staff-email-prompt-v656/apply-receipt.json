@@ -1,0 +1,14 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 25/11/2026: \"Có\" (áp bản sửa sau kiểm thử ngẫu nhiên)",
+  "method": "Supabase MCP apply_migration, file nguyên văn",
+  "ledger": {"version": "20261125105803", "name": "migration_v656_staff_email_prompt_fixes", "md5": "5fab69c80e250b563d3492b702957be7"},
+  "md5_ledger_equals_file": true,
+  "renumbered": "viết là V653 rồi V654; cả hai số đã có phiên khác dùng (V654 send_exclusion_multi_zalo_p1 vào sổ ngay trước lúc áp)",
+  "function_md5_before": {"core": "761ad6bcc42ea96628490e1ac8952f27", "worker": "90bfb299e1aa8ef46f8d26f9dfb8da12"},
+  "function_md5_after": {"core": "256da4803bfd2421986f718feaed49b3", "worker": "d2b49aeab57e504bc69cf4faf351e887"},
+  "new_columns": ["prev_staff_email", "prev_org_email", "prev_crm_email"],
+  "prompt_rows": 0,
+  "setting_account_email_prompt": {"audience": "off"},
+  "edge_logs_10_55_to_10_58_utc": {"errors_5xx": 0, "errors_503": 0}
+}

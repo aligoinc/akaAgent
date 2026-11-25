@@ -2,6 +2,7 @@ import { ArrowUp, Badge, LogOut, RefreshCw } from 'lucide-react'
 import { useAuthStore } from '../../stores/authStore'
 import { useUiStore } from '../../stores/uiStore'
 import RenewalReminderChip from '../RenewalReminder/RenewalReminderChip'
+import EmailPromptChip from '../EmailPrompt/EmailPromptChip'
 
 interface AppUtilityTopbarProps {
   currentVersion: string
@@ -51,6 +52,7 @@ export default function AppUtilityTopbar({
     <header className="app-utility-topbar" aria-label="Thanh công cụ ứng dụng">
       <div className="app-utility-title" title="akaBiz">akaBiz</div>
       <div className="app-utility-actions">
+        <EmailPromptChip />
         <RenewalReminderChip />
         <span className="app-utility-version">v{currentVersion || '...'}</span>
         <button

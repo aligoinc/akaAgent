@@ -35,6 +35,7 @@ import ZaloRuntimeRestartRequiredModal from './components/ZaloRuntimeRestartRequ
 import AppNotificationBar from './components/AppNotificationBar/AppNotificationBar'
 import RenewalReminderBanner from './components/RenewalReminder/RenewalReminderBanner'
 import RenewalReminderHost from './components/RenewalReminder/RenewalReminderHost'
+import EmailPromptHost from './components/EmailPrompt/EmailPromptHost'
 import UpgradePortalHost from './components/UpgradePortal/UpgradePortalHost'
 import { useRenewalReminderStore } from './stores/renewalReminderStore'
 import NotificationsPage, { type NotificationSelectRequest } from './pages/NotificationsPage'
@@ -737,6 +738,7 @@ export default function App() {
       )}
       <CustomerFeedbackLauncher />
       <RenewalReminderHost scope={`${user.organizationId}:${user.staffId}`} />
+      <EmailPromptHost scope={`${user.organizationId}:${user.staffId}`} />
       <NotificationToast
         scope={`${user.organizationId}:${user.staffId}`}
         suppressed={activePage === 'notifications'}

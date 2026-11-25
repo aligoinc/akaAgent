@@ -1,0 +1,19 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 25/11/2026: \"áp luôn\"",
+  "method": "Supabase MCP apply_migration, file nguyên văn",
+  "ledger": [
+    {"version": "20261125094812", "name": "migration_v652_staff_email_prompt_p1", "md5": "7f3a772767263fa880a8b93bc579071d"},
+    {"version": "20261125095900", "name": "migration_v652_staff_email_prompt_p2", "md5": "25d515db2e697b023868d40ab3a486ab"},
+    {"version": "20261125101915", "name": "migration_v652_staff_email_prompt_p3", "md5": "e54d857f44ae448c720c32bd2fd39739"}
+  ],
+  "md5_ledger_equals_file": true,
+  "postcheck_utc": "2026-11-25T10:19:38Z",
+  "setting_account_email_prompt": {"audience": "off"},
+  "functions": ["public.aka_agent_email_prompt(text,jsonb)", "public.aka_agent_control_email_prompt(bigint,bigint,text,jsonb)", "public.aka_agent_email_prompt_worker(text,jsonb)", "private.aka_agent_email_prompt_core(bigint,text,jsonb)", "private.aka_staff_email_usable(text,text)", "private.aka_staff_email_typo_fix(text)", "private.track_email_list()"],
+  "grants": {"aka_agent_desktop_email_prompt": true, "anon_email_prompt": false, "service_role_control": true, "aka_agent_desktop_control": false},
+  "triggers_trg_email_list_track": ["org_staff", "org_organization", "aka_customer"],
+  "email_list_filled": {"org_staff": 137, "org_organization": 336, "aka_customer": 1288},
+  "prompt_rows": 0,
+  "edge_logs": {"errors_5xx": 0, "errors_503": 0, "slow_over_1s_minute_p1": 98, "slow_over_1s_minute_p2": 787, "slow_over_1s_minute_p3": 1}
+}

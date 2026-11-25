@@ -1,5 +1,5 @@
-import { Info, Package, PackagePlus, Phone, User, X } from 'lucide-react'
-import { useMemo } from 'react'
+import { Info, Mail, Package, PackagePlus, Phone, User, X } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuthStore } from '../../stores/authStore'
 import { useRenewalReminderStore } from '../../stores/renewalReminderStore'
 import { renewalProductGroup, renewalReminderTexts, type RenewalReminder } from '../../../../shared/renewalReminder'
@@ -10,6 +10,8 @@ import {
   UPGRADE_PORTAL_PRODUCT_BUTTON_LABEL
 } from '../../../../shared/upgradePortal'
 import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
+import { useEmailPromptStore } from '../../stores/emailPromptStore'
+import '../EmailPrompt/emailPrompt.css'
 
 interface AccountProfileModalProps {
   onClose: () => void
@@ -40,8 +42,30 @@ function isReminderProduct(reminder: RenewalReminder | null, product: AuthAccoun
   return reminder.product.group === renewalProductGroup(product.productId) && reminder.product.expirationDate === product.expirationDate
 }
 
+/**
+ * Dòng Email (V652): đọc `profile` một lượt khi mở hộp thoại và sau mỗi lần lưu email. Tính năng tắt, DB chưa có hàm
+ * hoặc đọc lỗi thì ẩn dòng.
+ */
+function useAccountEmail(): { visible: boolean; email: string | null } {
+  const savedSeq = useEmailPromptStore(store => store.savedSeq)
+  const [profile, setProfile] = useState<{ visible: boolean; email: string | null }>({ visible: false, email: null })
+  useEffect(() => {
+    const api = window.electronAPI?.emailPromptCall
+    if (!api) return
+    let active = true
+    void api('profile').then(result => {
+      if (!active) return
+      setProfile(result.ok && result.data.enabled ? { visible: true, email: result.data.email } : { visible: false, email: null })
+    }).catch(() => { if (active) setProfile({ visible: false, email: null }) })
+    return () => { active = false }
+  }, [savedSeq])
+  return profile
+}
+
 export default function AccountProfileModal({ onClose }: AccountProfileModalProps) {
   const user = useAuthStore(state => state.user)
+  const accountEmail = useAccountEmail()
+  const openEmailChange = useEmailPromptStore(store => store.openChange)
   const reminderState = useRenewalReminderStore(state => state.state)
   const openRenewalWindow = useRenewalReminderStore(state => state.openWindow)
   // Form "Nâng cấp và mua gói": có id dòng sản phẩm thì cổng chọn sẵn đúng sản phẩm đó, không có thì mở chế độ mua hàng.
@@ -89,6 +113,20 @@ export default function AccountProfileModal({ onClose }: AccountProfileModalProp
                 <strong>{user?.phone || 'Chưa có dữ liệu'}</strong>
               </span>
             </div>
+            {accountEmail.visible && (
+              <div className="account-profile-info account-profile-email">
+                <span className="account-profile-info-icon">
+                  <Mail size={16} />
+                </span>
+                <span className="account-profile-info-copy">
+                  <span>Email</span>
+                  <strong>{accountEmail.email || 'Chưa có email'}</strong>
+                </span>
+                <button type="button" className="account-profile-email-change" onClick={() => openEmailChange(accountEmail.email)}>
+                  {accountEmail.email ? 'Đổi' : 'Thêm'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="account-profile-products">
