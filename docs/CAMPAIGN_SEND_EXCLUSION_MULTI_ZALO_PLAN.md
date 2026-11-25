@@ -2,7 +2,7 @@
 
 **Tình trạng 25/11/2026:** anh bảo "Đồng ý hãy thực thi phương án này" (các đề xuất ở mục 9 coi như đã chốt). Đã code xong
 DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
-**chưa merge, V653 chưa apply, chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V653 đặt `off`**.
+**chưa merge, V654 chưa apply, chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V654 đặt `off`**.
 Chi tiết ở mục 10.
 Thiết kế: https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB (anh duyệt 25/11, dạng 2 tầng xếp chồng).
 Anh đồng ý các đề xuất ở vòng thiết kế 2 và yêu cầu thêm hai loại loại trừ: theo Nhóm data, theo chiến dịch đã gửi.
@@ -202,14 +202,14 @@ Chốt: (1) thẻ chiến dịch; (2) chỉ data đã gửi tin thành công; (3
 
 ## 10. Đã làm (25/11/2026, nhánh `claude/festive-rubin-5zi6qe`)
 
-**DB (akaAgent, chưa apply):** [p1](../migrations/migration_v653_send_exclusion_multi_zalo_p1.sql) (bảng khối
+**DB (akaAgent, chưa apply):** [p1](../migrations/migration_v654_send_exclusion_multi_zalo_p1.sql) (bảng khối
 `auto_campaign_send_exclusion_group_accounts`, cột `groups.version`, `rules.group_account_id` điền 1 khối cho mọi nhóm cũ,
-trigger điền khối chính khi bản app cũ ghi luật, công tắc `off`) → [chỉ mục](../migrations/migration_v653_send_exclusion_multi_zalo_index.sql)
-`idx_zalo_users_account_global_id` (CONCURRENTLY, chạy riêng) → [p2](../migrations/migration_v653_send_exclusion_multi_zalo_p2.sql)
+trigger điền khối chính khi bản app cũ ghi luật, công tắc `off`) → [chỉ mục](../migrations/migration_v654_send_exclusion_multi_zalo_index.sql)
+`idx_zalo_users_account_global_id` (CONCURRENTLY, chạy riêng) → [p2](../migrations/migration_v654_send_exclusion_multi_zalo_p2.sql)
 (khoá md5 6 thân hàm production đọc 25/11; hàm cũ giữ hình dạng cũ, hàm mới `aka_agent_send_exclusion_v2` page / options / lists / save,
 bộ chạy lấy phần `remote` khi gửi `clientVersion: 2`, op `remote` tra danh sách / Nhóm data / chiến dịch đã gửi / dữ kiện khối Zalo khác
-trong một lượt) và [gỡ](../migrations/rollback_v653_send_exclusion_multi_zalo.sql) (thân production nguyên văn, kiểm md5).
-Kiểm `PG_MODULE_DIR=<thư mục có module pg> node scripts/send-exclusion-v653-smoke.cjs` (PG16, 18 nhóm, có gỡ).
+trong một lượt) và [gỡ](../migrations/rollback_v654_send_exclusion_multi_zalo.sql) (thân production nguyên văn, kiểm md5).
+Kiểm `PG_MODULE_DIR=<thư mục có module pg> node scripts/send-exclusion-v654-smoke.cjs` (PG16, 18 nhóm, có gỡ).
 
 **Bộ chạy:** luật dùng chung `evaluateSendExclusionWithRemote` (`src/shared/campaignSendExclusion.ts`, lõi engine chép nguyên văn;
 `node scripts/send-exclusion-multi-zalo-smoke.cjs`). Bộ cũ Desktop / App Server và engine v2 Desktop đã đọc phần mới. Bản app cũ

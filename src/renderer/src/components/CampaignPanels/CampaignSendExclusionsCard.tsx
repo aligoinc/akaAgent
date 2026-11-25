@@ -1,5 +1,5 @@
 /**
- * Thẻ "Không gửi cho" (V653, thiết kế https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB): một danh sách dòng loại trừ đọc như câu —
+ * Thẻ "Không gửi cho" (V654, thiết kế https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB): một danh sách dòng loại trừ đọc như câu —
  * chiến dịch đã gửi, Nhóm data, nhóm điều kiện theo nhiều Zalo, danh sách bạn bè/Zalo ID của mọi Zalo. Khách thuộc 1 dòng bất kỳ
  * thì không gửi. Mặc định một lựa chọn dùng cho mọi Zalo gửi của chiến dịch; "Đặt riêng cho từng Zalo gửi" mở chế độ cũ.
  * Chỉ hiện khi công tắc campaign.send_exclusion_multi_zalo bật cho tài khoản; tắt thì form dùng CampaignSendExclusions (cũ).

@@ -1,4 +1,4 @@
-// Thẻ "Không gửi cho" (V653) trên Chromium của Playwright với IPC giả: thêm chiến dịch đã gửi, Nhóm data, danh sách của Zalo khác,
+// Thẻ "Không gửi cho" (V654) trên Chromium của Playwright với IPC giả: thêm chiến dịch đã gửi, Nhóm data, danh sách của Zalo khác,
 // tạo nhóm điều kiện 2 Zalo, dùng chung cho mọi Zalo gửi rồi đặt riêng, Zalo gửi mới nhận cùng lựa chọn.
 //   node scripts/run-send-exclusion-card-ui-smoke.cjs        (SX_UI_SHOTS=<thư mục> để chụp màn hình)
 const assert = require('node:assert/strict')

@@ -1,6 +1,6 @@
--- V653 p1: nhóm loại trừ gửi theo nhiều Zalo (bảng khối theo Zalo, cột phiên bản, điền sẵn khối cho nhóm cũ).
+-- V654 p1: nhóm loại trừ gửi theo nhiều Zalo (bảng khối theo Zalo, cột phiên bản, điền sẵn khối cho nhóm cũ).
 -- Phương án: docs/CAMPAIGN_SEND_EXCLUSION_MULTI_ZALO_PLAN.md. Chạy trước p2 (hàm). Chỉ mục zalo_users dựng riêng:
--- migration_v653_send_exclusion_multi_zalo_index.sql (CREATE INDEX CONCURRENTLY, một lệnh).
+-- migration_v654_send_exclusion_multi_zalo_index.sql (CREATE INDEX CONCURRENTLY, một lệnh).
 --
 -- Đổi:
 --   * Bảng mới auto_campaign_send_exclusion_group_accounts: mỗi dòng là một khối điều kiện của một Zalo trong nhóm
@@ -13,27 +13,27 @@
 --   * Trigger điền group_account_id khi ghi điều kiện không kèm khối (đường lưu cũ): khối của group.account_id.
 --   * Dòng cài đặt campaign.send_exclusion_multi_zalo = {"audience":"off"} (form chỉ hiện phần mới khi bật).
 -- ALTER TABLE trên hai bảng nhỏ (102 nhóm, 187 điều kiện lúc viết 25/11/2026): khoá ngắn, nhưng làm PostgREST nạp lại schema,
--- apply ngoài giờ cao điểm. Gỡ: rollback_v653_send_exclusion_multi_zalo.sql (sau khi gỡ p2).
+-- apply ngoài giờ cao điểm. Gỡ: rollback_v654_send_exclusion_multi_zalo.sql (sau khi gỡ p2).
 
 BEGIN;
 SET LOCAL lock_timeout = '3s';
 DO $ledger$
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v653_%p1%') THEN
-      RAISE EXCEPTION 'V653 p1: sổ migration đã có bản p1, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v654_%p1%') THEN
+      RAISE EXCEPTION 'V654 p1: sổ migration đã có bản p1, không chạy lại';
     END IF;
   END IF;
   IF to_regclass('public.auto_campaign_send_exclusion_group_accounts') IS NOT NULL THEN
-    RAISE EXCEPTION 'V653 p1: bảng auto_campaign_send_exclusion_group_accounts đã có';
+    RAISE EXCEPTION 'V654 p1: bảng auto_campaign_send_exclusion_group_accounts đã có';
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
       AND table_name IN ('auto_campaign_send_exclusion_rules', 'auto_campaign_send_exclusion_groups')
       AND column_name IN ('group_account_id', 'version')) THEN
-    RAISE EXCEPTION 'V653 p1: cột group_account_id/version đã có';
+    RAISE EXCEPTION 'V654 p1: cột group_account_id/version đã có';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'auto_campaign_send_exclusion_rules_group_id_field_id_key') THEN
-    RAISE EXCEPTION 'V653 p1: thiếu ràng buộc auto_campaign_send_exclusion_rules_group_id_field_id_key';
+    RAISE EXCEPTION 'V654 p1: thiếu ràng buộc auto_campaign_send_exclusion_rules_group_id_field_id_key';
   END IF;
 END $ledger$;
 
@@ -98,7 +98,7 @@ CREATE INDEX auto_send_exclusion_rules_group ON public.auto_campaign_send_exclus
 
 INSERT INTO public.auto_system_settings (key, value, description, is_secret, is_active)
 SELECT 'campaign.send_exclusion_multi_zalo', '{"audience":"off"}',
-  'V653: hiện phần loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi trong form (off | admin_akabiz | all). Chỉ ẩn/hiện form; cấu hình đã lưu vẫn chạy.',
+  'V654: hiện phần loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi trong form (off | admin_akabiz | all). Chỉ ẩn/hiện form; cấu hình đã lưu vẫn chạy.',
   false, true
 WHERE NOT EXISTS (SELECT 1 FROM public.auto_system_settings WHERE key = 'campaign.send_exclusion_multi_zalo');
 
@@ -109,7 +109,7 @@ BEGIN
   SELECT count(*) INTO v_blocks FROM public.auto_campaign_send_exclusion_group_accounts;
   SELECT count(*) INTO v_rules_missing FROM public.auto_campaign_send_exclusion_rules WHERE group_account_id IS NULL;
   IF v_groups <> v_blocks OR v_rules_missing <> 0 THEN
-    RAISE EXCEPTION 'V653 p1 postflight: % nhóm, % khối, % điều kiện chưa gắn khối', v_groups, v_blocks, v_rules_missing;
+    RAISE EXCEPTION 'V654 p1 postflight: % nhóm, % khối, % điều kiện chưa gắn khối', v_groups, v_blocks, v_rules_missing;
   END IF;
 END $post$;
 COMMIT;

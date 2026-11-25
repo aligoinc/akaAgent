@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Kiểm V653 (loại trừ gửi theo nhiều Zalo, Nhóm data, chiến dịch đã gửi) trên PostgreSQL cục bộ dùng một lần.
+// Kiểm V654 (loại trừ gửi theo nhiều Zalo, Nhóm data, chiến dịch đã gửi) trên PostgreSQL cục bộ dùng một lần.
 // Dựng đúng trạng thái production đọc 25/11/2026: bảng V330 (fixture schema + migration v330), thân hàm production lấy từ
-// bản gỡ V653 (bài kiểm so md5 prosrc với giá trị đọc trên production), V573. Không chạm DB thật.
-// Chạy: node scripts/send-exclusion-v653-smoke.cjs
+// bản gỡ V654 (bài kiểm so md5 prosrc với giá trị đọc trên production), V573. Không chạm DB thật.
+// Chạy: node scripts/send-exclusion-v654-smoke.cjs
 //   PG_BIN=<thư mục initdb/pg_ctl> (mặc định /usr/lib/postgresql/16/bin, rồi /opt/homebrew/opt/postgresql@17/bin)
 //   PG_MODULE_DIR=<thư mục có node_modules/pg> nếu repo chưa cài pg.
 'use strict'
@@ -34,7 +34,7 @@ let passed = 0
 const ok = name => { passed += 1; console.log(`  ✓ ${name}`) }
 
 function startCluster(port) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-v653-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-v654-'))
   const run = (cmd, args) => {
     const r = spawnSync(path.join(BIN, cmd), args, { encoding: 'utf8', env: { ...process.env, LC_ALL: 'C' } })
     if (r.status !== 0) throw new Error(`${cmd}: ${r.stderr || r.stdout}`)
@@ -135,8 +135,8 @@ async function main() {
         SELECT jsonb_build_object('role',CASE WHEN g.staff_id=p_staff_id THEN 'owner' ELSE 'shared' END) FROM public.auto_account_contact_groups g
         WHERE p_kind='data' AND g.id=p_group_id AND g.purpose='data_group' AND NOT g.is_delete AND g.organization_id=p_organization_id
           AND (g.staff_id=p_staff_id OR g.sharing_scope='organization' OR (g.sharing_scope='selected' AND EXISTS(SELECT 1 FROM public.auto_data_group_recipients r WHERE r.group_id=g.id AND r.staff_id=p_staff_id))) $f$;`)
-    // Thân hàm production: 6 hàm V653 thay lấy từ bản gỡ (khớp md5 production), validate_rules từ V573.
-    const rollback = read('migrations/rollback_v653_send_exclusion_multi_zalo.sql')
+    // Thân hàm production: 6 hàm V654 thay lấy từ bản gỡ (khớp md5 production), validate_rules từ V573.
+    const rollback = read('migrations/rollback_v654_send_exclusion_multi_zalo.sql')
     for (const block of functionBlocks(rollback)) await db.query(block)
     for (const block of functionBlocks(read('migrations/migration_v573_send_exclusion_deleted_zalo_tags.sql'))) await db.query(block)
     for (const [sig, md5] of Object.entries(EXPECTED)) {
@@ -164,7 +164,7 @@ async function main() {
     const op = Object.fromEntries((await q('SELECT code,id FROM auto_filter_operators')).map(r => [r.code, Number(r.id)]))
     const rule = (code, operator, value, isEnabled = true, sortOrder = 0) => ({ fieldId: ids[code], operatorId: op[operator], value, isEnabled, sortOrder })
     const oldCall = async (operation, payload, account = 100) => (await one('SELECT aka_agent_send_exclusion_groups(1,10,$1,$2,$3,NULL,NULL) d', [account, operation, JSON.stringify(payload)])).d
-    // Nhóm cũ (trước V653): một Zalo.
+    // Nhóm cũ (trước V654): một Zalo.
     const oldGroup = await oldCall('save', { requestId: crypto.randomUUID(), name: 'Khách VIP', matchMode: 'and', revision: 0,
       rules: [rule('zalo_tag', 'contains', ['T1'], true, 10), rule('zalo_friend_status', 'equals', 'friend', false, 20)] })
     const listBefore = await oldCall('list', {})
@@ -176,16 +176,16 @@ async function main() {
     const snapBefore = await snapCall(700, 100)
     ok('nhóm và chiến dịch cũ tạo bằng hàm production')
 
-    console.log('Apply V653')
-    await db.query(read('migrations/migration_v653_send_exclusion_multi_zalo_p1.sql'))
-    await db.query(read('migrations/migration_v653_send_exclusion_multi_zalo_index.sql'))
-    await db.query(read('migrations/migration_v653_send_exclusion_multi_zalo_p2.sql'))
+    console.log('Apply V654')
+    await db.query(read('migrations/migration_v654_send_exclusion_multi_zalo_p1.sql'))
+    await db.query(read('migrations/migration_v654_send_exclusion_multi_zalo_index.sql'))
+    await db.query(read('migrations/migration_v654_send_exclusion_multi_zalo_p2.sql'))
     await db.query(`SET request.jwt.claims='{"role":"service_role"}'`)
     assert.equal((await one(`SELECT value FROM auto_system_settings WHERE key='campaign.send_exclusion_multi_zalo'`)).value, '{"audience":"off"}')
     ok('p1 + chỉ mục + p2 chạy được, công tắc mặc định off')
-    await assert.rejects(db.query(read('migrations/migration_v653_send_exclusion_multi_zalo_p1.sql')), /đã có/)
+    await assert.rejects(db.query(read('migrations/migration_v654_send_exclusion_multi_zalo_p1.sql')), /đã có/)
     await db.query('ROLLBACK').catch(() => {})
-    await assert.rejects(db.query(read('migrations/migration_v653_send_exclusion_multi_zalo_p2.sql')), /đã có/)
+    await assert.rejects(db.query(read('migrations/migration_v654_send_exclusion_multi_zalo_p2.sql')), /đã có/)
     await db.query('ROLLBACK').catch(() => {})
     await db.query(`SET request.jwt.claims='{"role":"service_role"}'`)
     ok('chạy lại p1/p2 bị từ chối')

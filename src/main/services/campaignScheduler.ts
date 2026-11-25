@@ -8969,7 +8969,7 @@ export class CampaignScheduler {
     if (!snapshot) return false
     const uid = String(target?.uid || detail.uid || '').trim()
     let stopReads = false
-    // V653: danh sách / Nhóm data / chiến dịch đã gửi / khối Zalo khác tra một lần trong DB; khối Zalo đang gửi đọc như cũ.
+    // V654: danh sách / Nhóm data / chiến dịch đã gửi / khối Zalo khác tra một lần trong DB; khối Zalo đang gửi đọc như cũ.
     const readRemote = () => this.sendExclusionRpc<SendExclusionRemoteFacts>(account, campaign, 'remote', {
       inputId: detail.id, uid, globalId: String(target?.globalId || '').trim() || undefined,
       phone: String(target?.phone || detail.phone || '').trim() || undefined

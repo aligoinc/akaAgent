@@ -36,13 +36,13 @@ export class SendExclusionRpcError extends Error {
 export interface ZaloSendExclusionPort {
   /**
    * V504 'snapshot': danh mục điều kiện, nhóm điều kiện của tài khoản, danh sách Zalo ID loại trừ. Ném SendExclusionRpcError.
-   * Nơi chạy có sendExclusionRemote thì gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} (V653) để nhận thêm phần 'remote';
+   * Nơi chạy có sendExclusionRemote thì gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} (V654) để nhận thêm phần 'remote';
    * không gửi thì DB từ chối cấu hình theo nhiều Zalo / Nhóm data / chiến dịch đã gửi (config_invalid, không gửi sai).
    */
   sendExclusionSnapshot(ctx: StepContext): Promise<SendExclusionSnapshot>
   /** V504 'facts': tag akaBiz (tags) / số ngày từ lần gửi gần nhất (days) của người nhận. Ném SendExclusionRpcError. */
   sendExclusionFacts(ctx: StepContext, payload: { uid: string; tags?: boolean; days?: number }): Promise<ExclusionFacts>
-  /** V653 'remote': danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác (một lần mỗi data). */
+  /** V654 'remote': danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác (một lần mỗi data). */
   sendExclusionRemote?(ctx: StepContext, payload: { uid: string; globalId?: string | undefined; phone?: string | undefined }): Promise<SendExclusionRemoteFacts>
   /**
    * Tag Zalo của người nhận ({ ids, availableValues }) từ một lần đọc tag của tài khoản, dùng chung cho cả data (cả lô khi chia sẻ)
@@ -109,7 +109,7 @@ export interface SendExclusionInput {
   campaign: ExclusionCampaign
   /** Zalo ID của người nhận (UID tìm được, hoặc UID của data). */
   uid: string
-  /** Zalo ID chung / SĐT của người nhận (V653: nhận ra khách ở Zalo khác, Nhóm data, chiến dịch đã gửi). */
+  /** Zalo ID chung / SĐT của người nhận (V654: nhận ra khách ở Zalo khác, Nhóm data, chiến dịch đã gửi). */
   globalId?: string | undefined
   phone?: string | undefined
   /** Mục tiêu đã có hồ sơ (tra số / getUserProfile thành công); null thì đọc hồ sơ khi điều kiện cần, như Desktop. */

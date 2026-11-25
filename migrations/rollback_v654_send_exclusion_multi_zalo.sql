@@ -1,4 +1,4 @@
--- Gỡ V653 (p2 rồi p1) về đúng thân hàm production đọc 25/11/2026 (md5 prosrc kiểm ở cuối).
+-- Gỡ V654 (p2 rồi p1) về đúng thân hàm production đọc 25/11/2026 (md5 prosrc kiểm ở cuối).
 -- Mất dữ liệu: khối của Zalo khác trong nhóm nhiều Zalo bị xoá (nhóm còn lại khối của Zalo chính); khoá dataGroupIds /
 -- sentCampaignIds trong cấu hình chiến dịch giữ nguyên nhưng không còn tác dụng; chiến dịch chọn nhóm/danh sách của Zalo khác
 -- sẽ bị trigger cũ từ chối khi lưu lại và bộ chạy cũ báo cấu hình loại trừ lỗi. Chỉ mục zalo_users gỡ riêng:
@@ -361,7 +361,7 @@ BEGIN
   FOR v_key IN SELECT jsonb_object_keys(v_expected) LOOP
     SELECT md5(p.prosrc) INTO v_md5 FROM pg_proc p WHERE p.oid = to_regprocedure(v_key);
     IF v_md5 IS DISTINCT FROM v_expected->>v_key THEN
-      RAISE EXCEPTION 'V653 rollback postflight: thân % là %, cần %', v_key, v_md5, v_expected->>v_key;
+      RAISE EXCEPTION 'V654 rollback postflight: thân % là %, cần %', v_key, v_md5, v_expected->>v_key;
     END IF;
   END LOOP;
 END $post$;

@@ -25,7 +25,7 @@ async function call<T>(accountId: number, operation: string, payload: unknown, s
 export const listSendExclusionGroups = (accountId: number, signal?: AbortSignal) => call<SendExclusionPage>(accountId, 'list', {}, signal)
 export const saveSendExclusionGroup = (group: SaveSendExclusionGroup) => call<SendExclusionGroup>(group.accountId, 'save', group)
 
-/** V653 aka_agent_send_exclusion_v2: nhóm nhiều Zalo, Nhóm data, chiến dịch đã gửi (theo nhân viên, không theo một tài khoản). */
+/** V654 aka_agent_send_exclusion_v2: nhóm nhiều Zalo, Nhóm data, chiến dịch đã gửi (theo nhân viên, không theo một tài khoản). */
 async function callV2<T>(operation: 'page' | 'options' | 'lists' | 'save', payload: unknown, signal?: AbortSignal): Promise<T> {
   const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
   const {data, error} = await getSupabaseClient().rpc('aka_agent_send_exclusion_v2', {
@@ -42,7 +42,7 @@ export const getSendExclusionV2Options = (accountId: number) => callV2<SendExclu
 export const getSendExclusionV2Lists = (query: SendExclusionListsQuery) => callV2<SendExclusionLists>('lists', query)
 export const saveSendExclusionGroupV2 = (group: SaveSendExclusionGroupV2) => callV2<SendExclusionGroupV2>('save', group)
 
-/** Câu cho khách theo mã lỗi của DB (V330/V653); mã khác giữ câu chung. */
+/** Câu cho khách theo mã lỗi của DB (V330/V654); mã khác giữ câu chung. */
 const RUNTIME_ERROR_MESSAGES: Array<[string, string]> = [
   ['send_exclusion_group_not_found', 'Nhóm điều kiện loại trừ đã bị xoá.'],
   ['send_exclusion_blocklist_not_found', 'Danh sách Zalo ID loại trừ đã bị xoá.'],

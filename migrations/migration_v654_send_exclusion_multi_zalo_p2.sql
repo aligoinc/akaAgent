@@ -1,5 +1,5 @@
--- V653 p2: hàm DB cho loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi. Chạy sau p1 (và nên sau chỉ mục
--- idx_zalo_users_account_global_id của migration_v653_send_exclusion_multi_zalo_index.sql: thiếu chỉ mục thì tra Zalo ID chung
+-- V654 p2: hàm DB cho loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi. Chạy sau p1 (và nên sau chỉ mục
+-- idx_zalo_users_account_global_id của migration_v654_send_exclusion_multi_zalo_index.sql: thiếu chỉ mục thì tra Zalo ID chung
 -- quét mọi người dùng Zalo của tài khoản).
 -- Phương án: docs/CAMPAIGN_SEND_EXCLUSION_MULTI_ZALO_PLAN.md.
 --
@@ -20,7 +20,7 @@
 --     trong DB của khối các Zalo khác. 'facts', 'pause', 'friend_blocklist' giữ nguyên.
 --   * aka_agent_internal_send_exclusion_group: chỉ trả điều kiện của khối Zalo chính (giữ hình dạng cũ).
 --   * aka_agent_internal_validate_send_exclusion_selection + trigger auto_validate_campaign_send_exclusion: kiểm khoá mới.
--- CREATE OR REPLACE FUNCTION làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm. Gỡ: rollback_v653_send_exclusion_multi_zalo.sql.
+-- CREATE OR REPLACE FUNCTION làm PostgREST nạp lại schema: apply buổi tối, ngoài giờ cao điểm. Gỡ: rollback_v654_send_exclusion_multi_zalo.sql.
 
 BEGIN;
 SET LOCAL lock_timeout = '3s';
@@ -35,23 +35,23 @@ DECLARE v_expected jsonb := '{
 }'::jsonb; v_key text; v_md5 text;
 BEGIN
   IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL THEN
-    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v653_%p2%') THEN
-      RAISE EXCEPTION 'V653 p2: sổ migration đã có bản p2, không chạy lại';
+    IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration_v654_%p2%') THEN
+      RAISE EXCEPTION 'V654 p2: sổ migration đã có bản p2, không chạy lại';
     END IF;
   END IF;
   IF to_regclass('public.auto_campaign_send_exclusion_group_accounts') IS NULL THEN
-    RAISE EXCEPTION 'V653 p2: chưa apply p1';
+    RAISE EXCEPTION 'V654 p2: chưa apply p1';
   END IF;
   IF to_regprocedure('public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)') IS NOT NULL THEN
-    RAISE EXCEPTION 'V653 p2: hàm aka_agent_send_exclusion_v2 đã có';
+    RAISE EXCEPTION 'V654 p2: hàm aka_agent_send_exclusion_v2 đã có';
   END IF;
   IF to_regprocedure('private.group_access(text,bigint,bigint,bigint)') IS NULL THEN
-    RAISE EXCEPTION 'V653 p2: thiếu private.group_access';
+    RAISE EXCEPTION 'V654 p2: thiếu private.group_access';
   END IF;
   FOR v_key IN SELECT jsonb_object_keys(v_expected) LOOP
     SELECT md5(p.prosrc) INTO v_md5 FROM pg_proc p WHERE p.oid = to_regprocedure(v_key);
     IF v_md5 IS DISTINCT FROM v_expected->>v_key THEN
-      RAISE EXCEPTION 'V653 p2 preflight: thân % là %, cần %', v_key, v_md5, v_expected->>v_key;
+      RAISE EXCEPTION 'V654 p2 preflight: thân % là %, cần %', v_key, v_md5, v_expected->>v_key;
     END IF;
   END LOOP;
 END $guard$;
@@ -63,7 +63,7 @@ CREATE OR REPLACE FUNCTION public.aka_agent_internal_send_exclusion_group(p_id b
  STABLE SECURITY DEFINER
  SET search_path TO 'pg_catalog', 'public'
 AS $function$
- -- V653: hình dạng cũ (một khối) cho app/hàm cũ: điều kiện của khối Zalo chính của nhóm.
+ -- V654: hình dạng cũ (một khối) cho app/hàm cũ: điều kiện của khối Zalo chính của nhóm.
  SELECT jsonb_build_object('id',g.id,'requestId',g.create_request_id,'accountId',g.account_id,'name',g.name,'matchMode',g.match_mode,'revision',g.revision,
  'rules',COALESCE((SELECT jsonb_agg(jsonb_build_object('fieldId',r.field_id,'operatorId',r.operator_id,'value',r.value,'isEnabled',r.is_enabled,'sortOrder',r.sort_order) ORDER BY r.sort_order,r.id)
    FROM public.auto_campaign_send_exclusion_rules r JOIN public.auto_campaign_send_exclusion_group_accounts ga ON ga.id=r.group_account_id AND ga.account_id=g.account_id
@@ -131,7 +131,7 @@ BEGIN
   IF NOT EXISTS(SELECT 1 FROM public.auto_accounts WHERE id=aid AND staff_id=p_staff AND organization_id=p_org AND flatform_type='zalo' AND NOT is_delete) THEN RAISE EXCEPTION 'send_exclusion_account_not_found'; END IF;
   gid:=(entry.value->>'groupId')::bigint;
   IF gid IS NOT NULL THEN
-   -- V653: nhóm của nhân viên (mọi Zalo của nhân viên); kiểm điều kiện của từng khối theo Zalo của khối.
+   -- V654: nhóm của nhân viên (mọi Zalo của nhân viên); kiểm điều kiện của từng khối theo Zalo của khối.
    -- Khối của Zalo đã xoá/không còn thuộc nhân viên không được xét lúc chạy nên không kiểm.
    IF NOT EXISTS(SELECT 1 FROM public.auto_campaign_send_exclusion_groups g WHERE g.id=gid AND g.staff_id=p_staff AND g.organization_id=p_org AND NOT g.is_delete) THEN
     RAISE EXCEPTION 'send_exclusion_group_not_found';
@@ -146,7 +146,7 @@ BEGIN
   IF jsonb_typeof(entry.value->'blocklistIds') IS DISTINCT FROM 'array' THEN RAISE EXCEPTION 'send_exclusion_blocklists_invalid'; END IF;
   IF EXISTS(SELECT 1 FROM jsonb_array_elements(entry.value->'blocklistIds') v WHERE jsonb_typeof(v)<>'number' OR (v#>>'{}')::numeric<=0 OR trunc((v#>>'{}')::numeric)<>(v#>>'{}')::numeric) THEN RAISE EXCEPTION 'send_exclusion_blocklists_invalid'; END IF;
   SELECT ARRAY(SELECT DISTINCT value::bigint FROM jsonb_array_elements_text(entry.value->'blocklistIds')) INTO ids;
-  -- V653: danh sách của mọi Zalo (còn) của nhân viên.
+  -- V654: danh sách của mọi Zalo (còn) của nhân viên.
   IF cardinality(ids)<>(SELECT count(*) FROM public.auto_account_contact_groups g JOIN public.auto_accounts a ON a.id=g.account_id
     AND a.staff_id=p_staff AND a.organization_id=p_org AND a.flatform_type='zalo' AND NOT a.is_delete
     WHERE g.id=ANY(ids) AND g.staff_id=p_staff AND g.organization_id=p_org AND NOT g.is_delete AND g.purpose='zalo_friend_blocklist' AND g.contact_type='person') THEN RAISE EXCEPTION 'send_exclusion_blocklist_not_found'; END IF;
@@ -183,7 +183,7 @@ BEGIN
  IF TG_OP='UPDATE' AND NEW.extra_settings->'zaloSendExclusionsByAccountId' IS NOT DISTINCT FROM OLD.extra_settings->'zaloSendExclusionsByAccountId'
  AND NEW.account_id IS NOT DISTINCT FROM OLD.account_id AND NEW.staff_id IS NOT DISTINCT FROM OLD.staff_id AND NEW.organization_id IS NOT DISTINCT FROM OLD.organization_id THEN RETURN NEW; END IF;
  PERFORM public.aka_agent_internal_validate_send_exclusion_selection(NEW.extra_settings->'zaloSendExclusionsByAccountId',NEW.staff_id,NEW.organization_id,NEW.account_id);
- -- V653: chiến dịch không loại trừ theo chính nó.
+ -- V654: chiến dịch không loại trừ theo chính nó.
  IF NEW.id IS NOT NULL AND jsonb_typeof(NEW.extra_settings->'zaloSendExclusionsByAccountId')='object' THEN
   FOR entry IN SELECT * FROM jsonb_each(NEW.extra_settings->'zaloSendExclusionsByAccountId') LOOP
    IF NEW.id=ANY(private.aka_agent_send_exclusion_ids(entry.value->'sentCampaignIds')) THEN RAISE EXCEPTION 'send_exclusion_campaign_self'; END IF;
@@ -482,7 +482,7 @@ BEGIN
   FOR UPDATE OF campaign;
  IF NOT FOUND THEN RAISE EXCEPTION 'send_exclusion_runtime_claim_lost'; END IF;
  IF p_operation='snapshot' THEN
-  -- V653: {"clientVersion":2} = bộ chạy hiểu nhiều Zalo / danh sách mới; bản cũ gặp cấu hình mới thì send_exclusion_client_outdated.
+  -- V654: {"clientVersion":2} = bộ chạy hiểu nhiều Zalo / danh sách mới; bản cũ gặp cấu hình mới thì send_exclusion_client_outdated.
   RETURN private.aka_agent_send_exclusion_snapshot(c,p_account_id,COALESCE(p_payload->>'clientVersion','') ~ '^[2-9]$');
  END IF;
  IF p_operation='remote' THEN
@@ -570,7 +570,7 @@ BEGIN
       RETURN jsonb_build_object('ok', false, 'reason', 'config_invalid', 'message', 'Chưa cấu hình loại trừ cho tài khoản thực hiện.');
     END IF;
     BEGIN
-      -- V653: cấu hình theo nhiều Zalo / danh sách mới chỉ chạy với lõi gửi {"clientVersion":2}.
+      -- V654: cấu hình theo nhiều Zalo / danh sách mới chỉ chạy với lõi gửi {"clientVersion":2}.
       RETURN jsonb_build_object('ok', true, 'snapshot', private.aka_agent_send_exclusion_snapshot(c, r.account_id,
         coalesce(p_payload->>'clientVersion', '') ~ '^[2-9]$'));
     EXCEPTION WHEN raise_exception THEN
@@ -686,7 +686,7 @@ BEGIN
  PERFORM public.auto_assert_automation_identity(p_staff_id,p_organization_id,p_auth_username,p_auth_password);
  IF NOT EXISTS(SELECT 1 FROM public.auto_accounts WHERE id=p_account_id AND staff_id=p_staff_id AND organization_id=p_organization_id AND flatform_type='zalo' AND NOT is_delete) THEN RAISE EXCEPTION 'send_exclusion_account_not_found'; END IF;
  IF p_operation='list' THEN
-  -- V653: form cũ chỉ thấy nhóm một khối của đúng Zalo này.
+  -- V654: form cũ chỉ thấy nhóm một khối của đúng Zalo này.
   RETURN jsonb_build_object('catalog',public.aka_agent_internal_send_exclusion_catalog(),
    'options',public.aka_agent_internal_send_exclusion_options(p_staff_id,p_organization_id,p_account_id),
    'groups',COALESCE((SELECT jsonb_agg(public.aka_agent_internal_send_exclusion_group(id) ORDER BY name,id) FROM public.auto_campaign_send_exclusion_groups WHERE staff_id=p_staff_id AND organization_id=p_organization_id AND account_id=p_account_id AND version=1 AND NOT is_delete),'[]'),
@@ -711,7 +711,7 @@ BEGIN
   END IF;
   INSERT INTO public.auto_campaign_send_exclusion_group_accounts(group_id,account_id,match_mode,sort_order) VALUES(gid,p_account_id,p_payload->>'matchMode',0);
  ELSE
-  -- V653: nhóm nhiều khối chỉ sửa được bằng form mới (form cũ sẽ làm mất khối của Zalo khác).
+  -- V654: nhóm nhiều khối chỉ sửa được bằng form mới (form cũ sẽ làm mất khối của Zalo khác).
   IF EXISTS(SELECT 1 FROM public.auto_campaign_send_exclusion_groups g WHERE g.id=gid AND g.staff_id=p_staff_id AND g.organization_id=p_organization_id AND NOT g.is_delete AND g.version>1) THEN
    RAISE EXCEPTION 'send_exclusion_group_requires_update';
   END IF;
@@ -888,9 +888,9 @@ BEGIN
   -- Mọi nhóm hiện có vẫn đọc ra đúng hình dạng cũ.
   SELECT count(*) INTO v_bad FROM public.auto_campaign_send_exclusion_groups g
    WHERE NOT g.is_delete AND public.aka_agent_internal_send_exclusion_group(g.id) IS NULL;
-  IF v_bad<>0 THEN RAISE EXCEPTION 'V653 p2 postflight: % nhóm không đọc được', v_bad; END IF;
+  IF v_bad<>0 THEN RAISE EXCEPTION 'V654 p2 postflight: % nhóm không đọc được', v_bad; END IF;
   IF NOT has_function_privilege('service_role','public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)','EXECUTE') THEN
-    RAISE EXCEPTION 'V653 p2 postflight: service_role chưa có quyền aka_agent_send_exclusion_v2';
+    RAISE EXCEPTION 'V654 p2 postflight: service_role chưa có quyền aka_agent_send_exclusion_v2';
   END IF;
 END $post$;
 COMMIT;

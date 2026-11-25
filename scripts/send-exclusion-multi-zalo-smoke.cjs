@@ -1,11 +1,11 @@
-// V653: luật đánh giá loại trừ gửi theo nhiều Zalo (evaluateSendExclusionWithRemote, src/shared/campaignSendExclusion.ts) và
+// V654: luật đánh giá loại trừ gửi theo nhiều Zalo (evaluateSendExclusionWithRemote, src/shared/campaignSendExclusion.ts) và
 // bản chép trong lõi engine giống từng byte. Không DB, không Zalo. Chạy: node scripts/send-exclusion-multi-zalo-smoke.cjs
 const assert = require('node:assert/strict')
 const {readFileSync, mkdtempSync, rmSync} = require('node:fs')
 const {tmpdir} = require('node:os')
 const {join, resolve} = require('node:path')
 const {buildSync} = require('esbuild')
-const dir = mkdtempSync(join(tmpdir(), 'send-exclusion-v653-'))
+const dir = mkdtempSync(join(tmpdir(), 'send-exclusion-v654-'))
 async function main() {
   buildSync({entryPoints: [resolve(__dirname, '../src/shared/campaignSendExclusion.ts')], outfile: join(dir, 'core.cjs'), bundle: true, platform: 'node', format: 'cjs'})
   const core = require(join(dir, 'core.cjs'))
@@ -80,6 +80,6 @@ async function main() {
   assert.equal(core.hasSendExclusions({zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [], dataGroupIds: [], sentCampaignIds: []}}}, 100), false)
   assert.throws(() => core.exclusionSelection({zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [], dataGroupIds: [0]}}}, 100), /không hợp lệ/)
   assert.throws(() => core.exclusionSelection({zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [], sentCampaignIds: Array.from({length: 21}, (_, i) => i + 1)}}}, 100), /không hợp lệ/)
-  console.log('PASS V653 luật: danh sách Zalo đang gửi trước, một lần tra DB, khối Zalo khác HOẶC khối Zalo đang gửi, chưa đồng bộ bỏ qua, chưa đủ dữ liệu chỉ khi không khối nào khớp, không remote thì như cũ.')
+  console.log('PASS V654 luật: danh sách Zalo đang gửi trước, một lần tra DB, khối Zalo khác HOẶC khối Zalo đang gửi, chưa đồng bộ bỏ qua, chưa đủ dữ liệu chỉ khi không khối nào khớp, không remote thì như cũ.')
 }
 main().finally(() => rmSync(dir, {recursive: true, force: true})).catch(error => { console.error(error); process.exit(1) })

@@ -59,7 +59,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY)),
       // Giới thiệu nhận hoa hồng: cùng câu đọc, thiếu dòng/sai JSON = ẩn mục menu (docs/AFF_PARTNER_DESKTOP.md).
       affPartnerAudience: parseAffPartnerAudience(values.get(AFF_PARTNER_SETTING_KEY)),
-      // Form loại trừ gửi nhiều Zalo (V653): cùng câu đọc, thiếu dòng = off = form cũ.
+      // Form loại trừ gửi nhiều Zalo (V654): cùng câu đọc, thiếu dòng = off = form cũ.
       sendExclusionMultiAudience: parseSendExclusionMultiAudience(values.get(SEND_EXCLUSION_MULTI_SETTING_KEY)),
       // Chặn lưu nội dung sai cú pháp: cùng câu đọc, thiếu dòng = chặn. Tiến trình chính dùng mức này ở đường lưu.
       contentSyntaxGuard: setContentSyntaxGuardMode(values.get(CONTENT_SYNTAX_SETTING_KEY))

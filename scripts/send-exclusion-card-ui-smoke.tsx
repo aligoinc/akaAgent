@@ -1,4 +1,4 @@
-// Fixture cho run-send-exclusion-card-ui-smoke.cjs: thẻ "Không gửi cho" (V653) với IPC giả.
+// Fixture cho run-send-exclusion-card-ui-smoke.cjs: thẻ "Không gửi cho" (V654) với IPC giả.
 import '../src/renderer/src/styles/global.css'
 import {createRoot} from 'react-dom/client'
 import {useState} from 'react'

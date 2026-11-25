@@ -18,7 +18,7 @@ export function registerSendExclusionHandlers(window: BrowserWindow): void {
   }
   ipcMain.handle(SEND_EXCLUSION_IPC.page, (event, id: number) => { check(event, id); return listSendExclusionGroups(id) })
   ipcMain.handle(SEND_EXCLUSION_IPC.save, (event, group: SaveSendExclusionGroup) => { check(event, group?.accountId); return saveSendExclusionGroup(group) })
-  // V653: form mới (nhiều Zalo, Nhóm data, chiến dịch đã gửi). Nhân viên lấy từ phiên ở tiến trình chính; DB kiểm lại quyền.
+  // V654: form mới (nhiều Zalo, Nhóm data, chiến dịch đã gửi). Nhân viên lấy từ phiên ở tiến trình chính; DB kiểm lại quyền.
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.page, event => { sender(event); return getSendExclusionV2Page() })
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.options, (event, id: number) => { check(event, id); return getSendExclusionV2Options(id) })
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.lists, (event, query: SendExclusionListsQuery) => {

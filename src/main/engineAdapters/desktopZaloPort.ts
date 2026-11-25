@@ -301,7 +301,7 @@ export function createDesktopZaloPort(host: DesktopZaloPortHost): DesktopZaloPor
     // dùng chung với gắn tag), trạng thái kết bạn như getFriendRequestStatus của bộ cũ. Lỗi Zalo là lỗi đọc (chưa gửi gì).
     sendExclusionSnapshot: ctx => engineSendExclusion(ctx.targetRunId, ctx.leaseToken, 'snapshot', { clientVersion: SEND_EXCLUSION_CLIENT_VERSION },
       { signal: ctx.signal, timeoutMs: host.callTimeoutMs }),
-    // V653: danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, khối Zalo khác (một lần mỗi data, xác thực bằng lease).
+    // V654: danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, khối Zalo khác (một lần mỗi data, xác thực bằng lease).
     sendExclusionRemote: (ctx, payload) => engineSendExclusion(ctx.targetRunId, ctx.leaseToken, 'remote', { ...payload },
       { signal: ctx.signal, timeoutMs: host.callTimeoutMs }),
     sendExclusionFacts: (ctx, payload) => engineSendExclusion(ctx.targetRunId, ctx.leaseToken, 'facts', { ...payload },

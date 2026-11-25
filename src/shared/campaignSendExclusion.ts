@@ -16,10 +16,10 @@ export interface SendExclusionGroup {
   id: number; requestId?: string; accountId: number; name: string; matchMode: 'and' | 'or'; revision: number; rules: ExclusionRule[]
 }
 export interface SaveSendExclusionGroup extends Omit<SendExclusionGroup, 'id'> { id?: number }
-/** dataGroupIds / sentCampaignIds (V653): Nhóm data và chiến dịch đã gửi; khách có trong một danh sách bất kỳ thì không gửi. */
+/** dataGroupIds / sentCampaignIds (V654): Nhóm data và chiến dịch đã gửi; khách có trong một danh sách bất kỳ thì không gửi. */
 export interface SendExclusionSelection { groupId: number | null; blocklistIds: number[]; dataGroupIds?: number[]; sentCampaignIds?: number[] }
 export type SendExclusionsByAccount = Record<string, SendExclusionSelection>
-/** Bộ chạy gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} khi lấy 'snapshot' thì nhận thêm phần cần tra trong DB (V653). */
+/** Bộ chạy gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} khi lấy 'snapshot' thì nhận thêm phần cần tra trong DB (V654). */
 export const SEND_EXCLUSION_CLIENT_VERSION = 2
 /** Khối điều kiện của một Zalo khác Zalo đang gửi: dữ kiện đọc trong DB qua thao tác 'remote'. */
 export interface SendExclusionRemoteBlock { accountId: number; accountName?: string | null; matchMode: 'and' | 'or'; rules: ExclusionRule[] }
@@ -184,7 +184,7 @@ export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid
   return group.matchMode === 'and' ? {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”${scope}.`} : {decision: 'allowed', note: ''}
 }
 /**
- * V653: thứ tự rẻ trước: danh sách Zalo ID của Zalo đang gửi (đã có trong snapshot), một lần tra DB ('remote': danh sách của Zalo
+ * V654: thứ tự rẻ trước: danh sách Zalo ID của Zalo đang gửi (đã có trong snapshot), một lần tra DB ('remote': danh sách của Zalo
  * khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác), cuối cùng khối của Zalo đang gửi (đọc Zalo). Giữa các khối là
  * HOẶC: một khối khớp là không gửi; khối chưa đủ dữ liệu chỉ làm kết luận "chưa đủ dữ liệu" khi không khối nào khớp.
  * Zalo chưa đồng bộ lần nào ('not_synced') thì bỏ qua khối đó. Lỗi đọc DB của readRemote ném ra cho bên gọi xử lý như lỗi 'facts'.
