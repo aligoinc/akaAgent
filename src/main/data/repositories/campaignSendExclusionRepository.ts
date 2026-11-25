@@ -1,7 +1,7 @@
 import type { SaveSendExclusionGroup, SendExclusionGroup, SendExclusionPage } from '../../../shared/campaignSendExclusion'
 import {
   sendExclusionV2ErrorMessage, type SaveSendExclusionGroupV2, type SendExclusionAccountOptions, type SendExclusionGroupV2,
-  type SendExclusionLists, type SendExclusionListsQuery, type SendExclusionV2Page
+  type SendExclusionLists, type SendExclusionListsQuery, type SendExclusionPreview, type SendExclusionPreviewQuery, type SendExclusionV2Page
 } from '../../../shared/campaignSendExclusionMulti'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
@@ -26,7 +26,7 @@ export const listSendExclusionGroups = (accountId: number, signal?: AbortSignal)
 export const saveSendExclusionGroup = (group: SaveSendExclusionGroup) => call<SendExclusionGroup>(group.accountId, 'save', group)
 
 /** V654 aka_agent_send_exclusion_v2: nhóm nhiều Zalo, Nhóm data, chiến dịch đã gửi (theo nhân viên, không theo một tài khoản). */
-async function callV2<T>(operation: 'page' | 'options' | 'lists' | 'save', payload: unknown, signal?: AbortSignal): Promise<T> {
+async function callV2<T>(operation: 'page' | 'options' | 'lists' | 'save' | 'preview', payload: unknown, signal?: AbortSignal): Promise<T> {
   const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
   const {data, error} = await getSupabaseClient().rpc('aka_agent_send_exclusion_v2', {
     p_staff_id: user.staffId, p_organization_id: user.organizationId, p_operation: operation, p_payload: payload,
@@ -38,6 +38,8 @@ async function callV2<T>(operation: 'page' | 'options' | 'lists' | 'save', paylo
   return data as T
 }
 export const getSendExclusionV2Page = () => callV2<SendExclusionV2Page>('page', {})
+/** V657: xem trước ở bước lưu (chỉ đọc). */
+export const getSendExclusionV2Preview = (query: SendExclusionPreviewQuery, signal?: AbortSignal) => callV2<SendExclusionPreview>('preview', query, signal)
 export const getSendExclusionV2Options = (accountId: number) => callV2<SendExclusionAccountOptions>('options', {accountId})
 export const getSendExclusionV2Lists = (query: SendExclusionListsQuery) => callV2<SendExclusionLists>('lists', query)
 export const saveSendExclusionGroupV2 = (group: SaveSendExclusionGroupV2) => callV2<SendExclusionGroupV2>('save', group)

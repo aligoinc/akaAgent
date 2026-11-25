@@ -66,3 +66,6 @@
 .sx-or { margin: 6px 0 !important; text-align: center; color: var(--ex-warning); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
 .sx-warning { padding: 7px 10px; border-radius: 8px; background: var(--ex-warning-bg); color: var(--ex-warning); font-size: 12px; }
 .sx-summary { display: flex; flex-direction: column; gap: 3px; padding: 10px 12px; border: 1px solid var(--ex-chip-border); border-radius: 10px; background: var(--ex-tint); font-size: 12.5px; }
+/* V657: dòng xem trước số data sẽ không được gửi. */
+.sx-preview { margin: 6px 0 2px; font-size: 12px; line-height: 1.5; color: var(--ex-text, inherit); overflow-wrap: anywhere; }
+.sx-preview .exclusion-error-inline { color: var(--ex-danger); }

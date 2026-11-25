@@ -14,7 +14,8 @@ import {
   validateExclusionGroup, type ExclusionRule, type FilterField, type FilterOption, type SendExclusionSelection, type SendExclusionsByAccount
 } from '../../../../shared/campaignSendExclusion'
 import {
-  FRIEND_STATUS_CHOICES, SEND_EXCLUSION_MULTI_LIMITS, applySelection, describeBlock, normalizeSelection, selectionOf, selectionsShared,
+  FRIEND_STATUS_CHOICES, SEND_EXCLUSION_MULTI_LIMITS, SEND_EXCLUSION_PREVIEW_MAX_TARGETS, applySelection, describeBlock, describeSendExclusionPreview,
+  mergeSendExclusionPreview, normalizeSelection, selectionOf, selectionsShared, type SendExclusionPreview,
   type SaveSendExclusionGroupV2, type SendExclusionCampaignInfo, type SendExclusionDataGroupInfo, type SendExclusionGroupV2, type SendExclusionV2Page
 } from '../../../../shared/campaignSendExclusionMulti'
 import './CampaignSendExclusions.css'
@@ -27,6 +28,8 @@ type Props = {
   onChange: (value: SendExclusionsByAccount) => void
   onEditing: (editing: boolean) => void
   campaignId?: number | null
+  /** V657: data chưa lưu của form (SĐT / UID) để xem trước khi chiến dịch chưa có id. */
+  previewTargets?: Array<{ phone?: string | null; uid?: string | null }>
   refreshKey?: number
   onManage?: () => void
   pendingBlocklistAccountId?: number | null
@@ -315,7 +318,45 @@ function GroupEditor({ page, draft: initial, loadOptions, options, onSaved, onCl
   </Modal>
 }
 
-export default function CampaignSendExclusionsCard({ accounts, value, onChange, onEditing, campaignId, refreshKey, onManage, pendingBlocklistAccountId, onResolvePendingBlocklist, ai, agentDraft, onAgentAsk, onAgentDraftClosed }: Props) {
+/** V657: xem trước số data sẽ không được gửi theo danh sách / Nhóm data / chiến dịch (cùng hàm so khớp của bộ chạy, chỉ đọc). */
+function SendExclusionPreviewLine({ accountId, selection, campaignId, targets }: {
+  accountId: number; selection: SendExclusionSelection; campaignId?: number | null; targets?: Array<{ phone?: string | null; uid?: string | null }>
+}) {
+  const lists = selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length
+  const limited = useMemo(() => (targets ?? []).slice(0, SEND_EXCLUSION_PREVIEW_MAX_TARGETS)
+    .map(t => ({ phone: t.phone ? String(t.phone).slice(0, 40) : null, uid: t.uid ? String(t.uid).slice(0, 64) : null }))
+    .filter(t => t.phone || t.uid), [targets])
+  const usable = lists && (!!campaignId || limited.length > 0)
+  const key = JSON.stringify([accountId, normalizeSelection(selection), campaignId ?? null, campaignId ? null : limited])
+  const [state, setState] = useState<{ preview: SendExclusionPreview | null; busy: boolean; error: string }>({ preview: null, busy: false, error: '' })
+  const keyRef = useRef(key)
+  const run = (afterId: number | null, base: SendExclusionPreview | null) => {
+    const runKey = keyRef.current
+    setState(s => ({ ...s, busy: true, error: '' }))
+    window.electronAPI.getSendExclusionV2Preview({ accountId, selection: normalizeSelection(selection), campaignId: campaignId ?? null,
+      targets: campaignId ? undefined : limited, afterId, limit: 200 })
+      .then(page => { if (keyRef.current === runKey) setState({ preview: mergeSendExclusionPreview(base, page), busy: false, error: '' }) })
+      .catch(e => { if (keyRef.current === runKey) setState(s => ({ ...s, busy: false, error: message(e) })) })
+  }
+  useEffect(() => {
+    keyRef.current = key
+    setState({ preview: null, busy: false, error: '' })
+    if (!usable) return
+    const timer = setTimeout(() => run(null, null), 600)
+    return () => clearTimeout(timer)
+  }, [key, usable])
+  if (!usable) return null
+  const { preview, busy, error } = state
+  const partial = !!preview?.nextAfterId || (!campaignId && (targets?.length ?? 0) > limited.length)
+  return <div className="sx-preview" aria-live="polite">
+    <span className="sx-muted">Xem trước:</span>{' '}
+    {error ? <span className="exclusion-error-inline">{error}</span> : preview ? describeSendExclusionPreview(preview, partial) : busy ? 'Đang đếm…' : ''}
+    {preview?.nextAfterId && !busy && <> <button type="button" className="exclusion-link" onClick={() => run(preview.nextAfterId, preview)}>Đếm tiếp</button></>}
+    {error && <> <button type="button" className="exclusion-link" onClick={() => run(null, null)}>Thử lại</button></>}
+  </div>
+}
+
+export default function CampaignSendExclusionsCard({ accounts, value, onChange, onEditing, campaignId, previewTargets, refreshKey, onManage, pendingBlocklistAccountId, onResolvePendingBlocklist, ai, agentDraft, onAgentAsk, onAgentDraftClosed }: Props) {
   const accountIds = accounts.map(a => a.id)
   const [separate, setSeparate] = useState(() => accountIds.length > 1 && !selectionsShared(value, accountIds))
   const [editingAccount, setEditingAccount] = useState(accountIds[0])
@@ -454,6 +495,7 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
         return chip(id, b?.name ?? `Danh sách #${id}`, b ? `${b.accountName} · ${vn(b.count)}` : undefined) })}</span>
     </Row>}
     {current === pendingBlocklistAccountId && <div className="exclusion-error" role="alert">{PENDING_BLOCKLIST_MESSAGE} <button type="button" className="exclusion-link" onClick={onResolvePendingBlocklist}>Bỏ yêu cầu loại trừ danh sách</button></div>}
+    {current ? <SendExclusionPreviewLine accountId={current} selection={selection} campaignId={campaignId} targets={previewTargets} /> : null}
     <div className="sx-add-wrap" ref={menuRef}>
       <button type="button" className="sx-add" aria-haspopup="menu" aria-expanded={menu} disabled={!page || !current} onClick={() => setMenu(v => !v)}><Plus size={15} />Thêm loại trừ</button>
       {menu && <div className="sx-menu sx-menu-wide" role="menu">{menuItems.map(item => <button type="button" role="menuitem" key={item.key} disabled={item.disabled}

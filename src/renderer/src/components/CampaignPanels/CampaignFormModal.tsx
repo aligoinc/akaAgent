@@ -4091,6 +4091,8 @@ export default function CampaignFormModal({
     status: 'chờ xử lý'
   }))
   const [details, setDetails] = useCampaignDraftField<Partial<CampaignInputData>[]>(draftPayload, draftValuesRef, 'details', () => normalizeInitialDetails(initialDetails))
+  // V657: data chưa lưu để xem trước loại trừ gửi (thẻ "Không gửi cho"); chiến dịch đã lưu thì xem trước trên data trong DB.
+  const sendExclusionPreviewTargets = useMemo(() => details.slice(0, 500).map(d => ({ phone: d.phone ?? null, uid: d.uid ?? null })), [details])
   // Chia đều data cho các tài khoản (src/shared/campaignDataSplit.ts): chưa tự chọn thì theo mặc định của loại
   // chiến dịch; loại data gắn với từng tài khoản thì ẩn ô và không chia.
   const canSplitDataAcrossAccounts = campaignDataSplitAvailable(formData.actionId)
@@ -17606,6 +17608,7 @@ export default function CampaignFormModal({
             {canUseSendExclusions && sendExclusionMultiFeatureVisible && <CampaignSendExclusionsCard
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
               value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id ?? null}
+              previewTargets={sendExclusionPreviewTargets}
               pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
               onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
               ai={{

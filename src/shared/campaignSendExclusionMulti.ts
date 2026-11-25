@@ -55,8 +55,43 @@ export interface SendExclusionListsQuery {
 export interface SendExclusionLists { dataGroups: SendExclusionDataGroupInfo[] | null; campaigns: SendExclusionCampaignInfo[] | null }
 
 export const SEND_EXCLUSION_V2_IPC = {
-  page: 'send-exclusions-v2:page', options: 'send-exclusions-v2:options', lists: 'send-exclusions-v2:lists', save: 'send-exclusions-v2:save'
+  page: 'send-exclusions-v2:page', options: 'send-exclusions-v2:options', lists: 'send-exclusions-v2:lists', save: 'send-exclusions-v2:save',
+  preview: 'send-exclusions-v2:preview'
 } as const
+
+/**
+ * V657: xem trước ở bước lưu (thao tác preview, chỉ đọc): đếm data sẽ không được gửi theo danh sách / Nhóm data / chiến dịch, bằng đúng hàm
+ * so khớp của bộ chạy (SĐT hoặc Global ID). campaignId: data "chờ xử lý" của chiến dịch đã lưu; targets: data chưa lưu (≤ 500).
+ * pending: chưa xác định được (Global ID chỉ có sau khi tra số), kiểm lúc chạy. Điều kiện của từng Zalo không tính ở đây.
+ */
+export const SEND_EXCLUSION_PREVIEW_MAX_TARGETS = 500
+export interface SendExclusionPreviewQuery {
+  accountId: number; selection: SendExclusionSelection; campaignId?: number | null
+  targets?: Array<{ phone?: string | null; uid?: string | null }>; afterId?: number | null; limit?: number
+}
+export interface SendExclusionPreviewSource { kind: 'blocklist' | 'data_group' | 'campaign'; id: number; name: string; count: number }
+export interface SendExclusionPreview { checked: number; excluded: number; pending: number; sources: SendExclusionPreviewSource[]; nextAfterId: number | null }
+/** Gộp các trang xem trước (cùng một cấu hình). */
+export function mergeSendExclusionPreview(a: SendExclusionPreview | null, b: SendExclusionPreview): SendExclusionPreview {
+  if (!a) return b
+  const sources = new Map<string, SendExclusionPreviewSource>()
+  for (const s of [...a.sources, ...b.sources]) {
+    const key = `${s.kind}:${s.id}`
+    const prev = sources.get(key)
+    sources.set(key, prev ? { ...prev, count: prev.count + s.count } : { ...s })
+  }
+  return { checked: a.checked + b.checked, excluded: a.excluded + b.excluded, pending: a.pending + b.pending,
+    sources: Array.from(sources.values()).sort((x, y) => y.count - x.count || x.name.localeCompare(y.name)), nextAfterId: b.nextAfterId }
+}
+const PREVIEW_KIND: Record<SendExclusionPreviewSource['kind'], string> = { blocklist: 'danh sách Zalo ID', data_group: 'Nhóm data', campaign: 'chiến dịch' }
+/** Câu xem trước cho khách. partial: chưa đếm hết data. */
+export function describeSendExclusionPreview(p: SendExclusionPreview, partial = false): string {
+  if (!p.checked) return 'Chưa có data để xem trước.'
+  const head = `${partial ? 'Trong ' + p.checked + ' data đầu tiên' : 'Trong ' + p.checked + ' data'}: ${p.excluded} data sẽ không được gửi`
+  const by = p.sources.length ? ' (' + p.sources.map(s => `${s.count} do ${PREVIEW_KIND[s.kind]} “${s.name}”`).join(', ') + ')' : ''
+  const pend = p.pending ? `. ${p.pending} data chưa xác định được, sẽ kiểm khi chạy.` : '.'
+  return head + by + pend
+}
 
 /** Mã lỗi DB → câu cho khách (lưu/tải trong form). */
 export function sendExclusionV2ErrorMessage(message: string | undefined): string {

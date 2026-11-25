@@ -1,8 +1,8 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup } from '../../../shared/campaignSendExclusion'
-import { SEND_EXCLUSION_V2_IPC, type SaveSendExclusionGroupV2, type SendExclusionListsQuery } from '../../../shared/campaignSendExclusionMulti'
+import { SEND_EXCLUSION_PREVIEW_MAX_TARGETS, SEND_EXCLUSION_V2_IPC, type SaveSendExclusionGroupV2, type SendExclusionListsQuery, type SendExclusionPreviewQuery } from '../../../shared/campaignSendExclusionMulti'
 import {
-  getSendExclusionV2Lists, getSendExclusionV2Options, getSendExclusionV2Page, listSendExclusionGroups, saveSendExclusionGroup, saveSendExclusionGroupV2
+  getSendExclusionV2Lists, getSendExclusionV2Options, getSendExclusionV2Page, getSendExclusionV2Preview, listSendExclusionGroups, saveSendExclusionGroup, saveSendExclusionGroupV2
 } from '../../data/repositories/campaignSendExclusionRepository'
 
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
@@ -27,6 +27,19 @@ export function registerSendExclusionHandlers(window: BrowserWindow): void {
     if (q.kind !== undefined && !['all', 'dataGroups', 'campaigns'].includes(q.kind) || q.query !== undefined && (typeof q.query !== 'string' || q.query.length > 100)
       || q.excludeCampaignId != null && !positive(q.excludeCampaignId) || !ids(q.dataGroupIds, 20) || !ids(q.sentCampaignIds, 20)) throw new Error('Yêu cầu không hợp lệ.')
     return getSendExclusionV2Lists({ kind: q.kind, query: q.query, excludeCampaignId: q.excludeCampaignId ?? undefined, dataGroupIds: q.dataGroupIds, sentCampaignIds: q.sentCampaignIds })
+  })
+  // V657: xem trước ở bước lưu (chỉ đọc). DB kiểm lại quyền với danh sách / Nhóm data / chiến dịch đã chọn.
+  ipcMain.handle(SEND_EXCLUSION_V2_IPC.preview, (event, query: SendExclusionPreviewQuery) => {
+    sender(event)
+    const q = query && typeof query === 'object' ? query : ({} as SendExclusionPreviewQuery)
+    const sel = q.selection
+    const text = (v: unknown) => v === undefined || v === null || typeof v === 'string' && v.length <= 64
+    if (!positive(q.accountId) || !sel || typeof sel !== 'object' || !(sel.groupId === null || positive(sel.groupId)) || !ids(sel.blocklistIds, 20) || sel.blocklistIds === undefined
+      || !ids(sel.dataGroupIds, 20) || !ids(sel.sentCampaignIds, 20) || q.campaignId != null && !positive(q.campaignId) || q.afterId != null && !positive(q.afterId)
+      || q.limit !== undefined && !(positive(q.limit) && q.limit <= SEND_EXCLUSION_PREVIEW_MAX_TARGETS)
+      || q.targets !== undefined && !(Array.isArray(q.targets) && q.targets.length <= SEND_EXCLUSION_PREVIEW_MAX_TARGETS && q.targets.every(t => t && typeof t === 'object' && text(t.phone) && text(t.uid))))
+      throw new Error('Yêu cầu không hợp lệ.')
+    return getSendExclusionV2Preview({ accountId: q.accountId, selection: sel, campaignId: q.campaignId ?? null, targets: q.targets, afterId: q.afterId ?? null, limit: q.limit })
   })
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.save, (event, group: SaveSendExclusionGroupV2) => {
     sender(event)

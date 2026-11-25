@@ -45,6 +45,14 @@ Object.assign(window, {electronAPI: {
       campaigns: query.kind === 'dataGroups' ? null : campaigns.filter(c => match(c.name) || query.sentCampaignIds?.includes(c.id))
     }
   },
+  // V657: xem trước (giả): mỗi chiến dịch đã chọn loại 120 data, mỗi Nhóm data 30; 7 data chưa xác định.
+  getSendExclusionV2Preview: async (query: {accountId: number; selection: {sentCampaignIds?: number[]; dataGroupIds?: number[]}; campaignId?: number | null}) => {
+    state.calls.push(['preview', query])
+    const sources = [
+      ...(query.selection.sentCampaignIds ?? []).map(id => ({kind: 'campaign', id, name: campaigns.find(c => c.id === id)?.name ?? String(id), count: 120})),
+      ...(query.selection.dataGroupIds ?? []).map(id => ({kind: 'data_group', id, name: dataGroups.find(g => g.id === id)?.name ?? String(id), count: 30}))]
+    return {checked: 500, excluded: sources.reduce((n, s) => n + s.count, 0), pending: 7, sources, nextAfterId: null}
+  },
   saveSendExclusionGroupV2: async (group: SaveSendExclusionGroupV2) => {
     state.saves.push(structuredClone(group)); await new Promise(r => setTimeout(r, state.delay))
     const saved: SendExclusionGroupV2 = {id: group.id ?? 60, accountId: group.blocks[0].accountId, name: group.name, matchMode: group.blocks[0].matchMode,

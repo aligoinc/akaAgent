@@ -48,6 +48,9 @@ async function main() {
     let v = await value()
     assert.deepEqual(v['100'], {groupId: null, blocklistIds: [], sentCampaignIds: [801, 802]})
     assert.deepEqual(v['101'], v['100'])
+    // V657: dòng xem trước dùng đúng lựa chọn đang có (đếm theo nguồn, chưa xác định tính riêng).
+    await card.locator('.sx-preview').getByText(/240 data sẽ không được gửi/).waitFor({timeout: 5000})
+    assert.match(await card.locator('.sx-preview').innerText(), /Xem trước: Trong 500 data: 240 data sẽ không được gửi \(120 do chiến dịch “Khuyến mãi tháng 10”, 120 do chiến dịch “Chăm sóc khách VIP”\)\. 7 data chưa xác định được, sẽ kiểm khi chạy\./)
     assert.match(await card.textContent(), /Khuyến mãi tháng 10 · 3\.200 khách/)
     ok('chiến dịch đã gửi: chọn nhiều, lọc theo trạng thái, áp cho mọi Zalo gửi')
 
