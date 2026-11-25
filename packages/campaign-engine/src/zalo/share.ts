@@ -318,6 +318,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
       // (ngữ cảnh tag giữ ở data đầu lô). Bị loại trừ / chưa đủ dữ liệu: báo riêng, data tạm dừng, không vào lô.
       if (exclusionOn) {
         const exclusion = await checkZaloSendExclusion(port, item.ctx, { campaign, uid: target.uid,
+          globalId: target.globalId || undefined, phone: target.phone || undefined,
           profileTarget: exclusionProfileTarget(target, true), labelContextRunId: api.items[0]!.targetRunId, readTimeoutMs: opts.readTimeoutMs ?? 60_000 })
         if (exclusion.kind === 'blocked') {
           reported.add(item.targetRunId)

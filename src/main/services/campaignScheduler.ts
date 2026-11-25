@@ -22,7 +22,7 @@ import { inspectPendingCampaign } from './campaignPendingReasonService'
 import type { CampaignPendingReasonResult } from '../../shared/campaignPendingReason'
 import { makeEngagementSource } from '../../shared/zaloCampaignEngagement'
 import { beginZaloMessageStatusSend, type ZaloMessageStatusSend } from './zaloMessageStatusSync'
-import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
+import { CampaignLabelContext, evaluateSendExclusionWithRemote, SEND_EXCLUSION_CLIENT_VERSION, type SendExclusionRemoteFacts, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
@@ -4180,8 +4180,9 @@ export class CampaignScheduler {
 
       try {
         if (supportsSendExclusion(campaign.actionId, campaign.extraSettings) && hasSendExclusions(campaign.extraSettings ?? {}, account.id)) {
-          const snapshot = await this.sendExclusionRpc<SendExclusionSnapshot>(account, campaign, 'snapshot')
+          const snapshot = await this.sendExclusionRpc<SendExclusionSnapshot>(account, campaign, 'snapshot', {clientVersion: SEND_EXCLUSION_CLIENT_VERSION})
           if (snapshot.group) validateExclusionGroup(snapshot.catalog, snapshot.group)
+          for (const block of snapshot.remote?.blocks ?? []) validateExclusionGroup(snapshot.catalog, {name: snapshot.remote?.groupName || 'Loại trừ', matchMode: block.matchMode, rules: block.rules})
           this.sendExclusionRuns.set(campaign.id, snapshot)
         }
       } catch (error) {
@@ -8946,7 +8947,7 @@ export class CampaignScheduler {
     ).catch(() => {})
   }
 
-  private sendExclusionRpc<T>(account: AutoAccount, campaign: Campaign, operation: 'snapshot' | 'facts' | 'pause', payload: Record<string, unknown> = {}): Promise<T> {
+  private sendExclusionRpc<T>(account: AutoAccount, campaign: Campaign, operation: 'snapshot' | 'facts' | 'remote' | 'pause', payload: Record<string, unknown> = {}): Promise<T> {
     const token = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
     if (!token) throw new Error('Lượt chạy loại trừ không còn hợp lệ.')
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -8968,7 +8969,12 @@ export class CampaignScheduler {
     if (!snapshot) return false
     const uid = String(target?.uid || detail.uid || '').trim()
     let stopReads = false
-    let decision = await evaluateSendExclusion(snapshot, uid, async source => {
+    // V653: danh sách / Nhóm data / chiến dịch đã gửi / khối Zalo khác tra một lần trong DB; khối Zalo đang gửi đọc như cũ.
+    const readRemote = () => this.sendExclusionRpc<SendExclusionRemoteFacts>(account, campaign, 'remote', {
+      inputId: detail.id, uid, globalId: String(target?.globalId || '').trim() || undefined,
+      phone: String(target?.phone || detail.phone || '').trim() || undefined
+    })
+    let decision = await evaluateSendExclusionWithRemote(snapshot, uid, async source => {
       if (stopReads) return null
       if (source === 'zalo_labels') return uid ? this.getSendExclusionLabels(account, campaign).ids(uid) : null
       if (source === 'zalo_friendship') {
@@ -8992,7 +8998,7 @@ export class CampaignScheduler {
         return data[source]
       }
       return null
-    }, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
+    }, readRemote, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
       if (!source.startsWith('zalo_')) return
       const policy = await this.getZaloPolicyByErrorCode(this.getZaloErrorCode(error))
       const note = `Không thể kiểm tra loại trừ: ${this.getZaloErrorMessage(error)}`

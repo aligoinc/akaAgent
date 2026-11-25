@@ -50,13 +50,13 @@ export const desktopEngineData: EngineDataPort = {
  * Loại trừ gửi (V504, aka_agent_engine_send_exclusion_v1): cấu hình ('snapshot') hoặc dữ kiện trong DB ('facts') của người nhận, xác
  * thực bằng lease engine. DB từ chối ({ ok: false, reason }) thì ném SendExclusionRpcError để lõi phân biệt cấu hình hỏng.
  */
-export async function engineSendExclusion<T>(targetRunId: number, leaseToken: string, operation: 'snapshot' | 'facts' | 'friend_blocklist',
+export async function engineSendExclusion<T>(targetRunId: number, leaseToken: string, operation: 'snapshot' | 'facts' | 'friend_blocklist' | 'remote',
   payload: Record<string, unknown>, opts: CallOptions): Promise<T> {
-  const result = await call<{ ok?: boolean; reason?: string; message?: string; snapshot?: unknown; facts?: unknown; blocklist?: unknown }>(
+  const result = await call<{ ok?: boolean; reason?: string; message?: string; snapshot?: unknown; facts?: unknown; blocklist?: unknown; remote?: unknown }>(
     'aka_agent_engine_send_exclusion_v1',
     { p_target_run_id: targetRunId, p_lease_token: leaseToken, p_operation: operation, p_payload: payload }, opts)
   if (result.ok !== true) throw new SendExclusionRpcError(result.reason || 'invalid_response', result.message || undefined)
-  return (operation === 'snapshot' ? result.snapshot : operation === 'facts' ? result.facts : result.blocklist) as T
+  return (operation === 'snapshot' ? result.snapshot : operation === 'facts' ? result.facts : operation === 'remote' ? result.remote : result.blocklist) as T
 }
 
 /**
