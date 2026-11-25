@@ -13,6 +13,21 @@ Trạng thái (25/11/2026, anh: "Đồng ý thực thi phương án"): **đã co
   **Đã apply akachat 25/11/2026 theo yêu cầu ("áp luôn")**: p1 16:48:12, p2 16:59:00, p3 17:19:15 VN (sổ `20261125094812` /
   `20261125095900` / `20261125101915`, md5 sổ = file, không apply lại); 0 lỗi 5xx/503, phút apply p2 có 787 request
   quá 1 giây (PostgREST nạp lại schema); p3 điền email_list 137 / 336 / 1.288 dòng; [biên nhận](../migrations/snapshots/staff-email-prompt-v652/apply-receipt.json).
+- Kiểm thử ngẫu nhiên 25/11/2026 (anh: "Kiểm thử và cải tiến… cho đến khi ít nhất 3 vòng không còn vấn đề"):
+  `python3 scripts/staff-email-prompt/fuzz/fuzz.py --seed N --ops 6000 --synth 800 --real <file ngoài repo> --extra
+  migrations/migration_v654_staff_email_prompt_fixes.sql --dump <file>` (PG16 cục bộ; 2.299 tài khoản thật đã che email
+  + tổ chức / tài khoản mẫu + email cố tình sai; mô hình viết độc lập so từng kết quả và dữ liệu sau; so bộ kiểm email
+  phía giao diện với DB trên 4.000 chuỗi; mọi kết quả RPC qua hàm đọc của app), WebApp
+  `apps/api/src/modules/email-prompt/emailPrompt.fuzz.test.ts` (thư, link ký, bộ gửi). Tìm ra 4 lỗi của V652, sửa ở
+  **[V654](../migrations/migration_v654_staff_email_prompt_fixes.sql) (chưa apply production, chờ anh duyệt)**, sinh bằng
+  `python3 scripts/staff-email-prompt/build-v654-sql.py` (khoá md5 thân hàm production):
+  1. công tắc `{"audience":"orgs"}` thiếu `organizationIds` bật form cho MỌI tài khoản (`v_enabled` NULL);
+  2. bộ gửi thư lỗi khi `limit` không phải số;
+  3. "Không phải tôi" trả lại `email_list[2]` dù trước lần lưu email đang trống (trả lại một email cũ đã xoá) -> nay lưu
+     `prev_*_email` lúc lưu và trả đúng giá trị đó (trước đó trống hoặc chính email bị gỡ thì để trống);
+  4. nhiều lượt lưu cùng lúc vượt hạn 5 lần / giờ -> khoá dòng `org_staff` khi lưu.
+  Sau V654: vòng 4–8, 11–13, 21–23 sạch (mỗi vòng 4.000–6.000 thao tác); bỏ V654 thì cùng hạt giống ra lỗi lại.
+  `test_v652.sh` nay chạy cả V654 + gỡ V654 + `assertions_v654.sql` (99 khẳng định). Số 653 đã có nhánh khác giữ.
 - Hợp đồng: WebApp `packages/control-api/src/emailPrompt.ts` = akaAgent `src/shared/emailPrompt.ts` (md5 `efb4547b…`).
 - Desktop (nhánh `claude/relaxed-albattani-c1volz`, `b83a5aa5`): kênh `email-prompt:call`, hộp thoại 3 màn, nhãn
   "Thêm email", dòng Email trong Thông tin tài khoản; kiểm `node scripts/staff-email-prompt/desktop-email-prompt-smoke.cjs`
