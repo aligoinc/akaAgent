@@ -296,6 +296,19 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 
 ### 5.2 Desktop (akaAgent)
 
+**Đã code 25/11/2026 (nhánh `claude/relaxed-albattani-c1volz`, chưa merge, chưa build Desktop, chưa chạy Electron thật):**
+main `src/main/data/repositories/emailPromptRepository.ts` + `src/main/ipc/handlers/emailPromptHandlers.ts` (kênh
+`email-prompt:call`), phần riêng Desktop `src/shared/emailPromptDesktop.ts`, renderer `stores/emailPromptStore.ts` +
+`components/EmailPrompt/`. Công tắc không đọc riêng: lệnh `state` tự trả `enabled:false` khi tắt. Lượt gọi DB: 1 `state`
+~1,5 giây sau khi vào giao diện chính, thêm 1 `state` khi sang ngày VN mới (kiểm lúc focus / hiện lại cửa sổ hoặc khi bộ
+nhắc gia hạn đổi ngày) nếu chưa có email; 1 `dismiss` khi bấm ×; 1 `save` mỗi lần lưu; 1 `profile` khi mở Thông tin tài
+khoản (và sau khi lưu). Không chồng hộp thoại: chờ bộ nhắc gia hạn nhận trạng thái (tối đa 8 giây), hộp nhắc / cửa sổ
+Gia hạn gói, form Nâng cấp và mua gói đóng, và không còn `.modal-overlay` / `[aria-modal="true"]` nào khác (hộp cập nhật,
+form chiến dịch...), kiểm DOM 0,8 giây/lần (không gọi DB), hai lần liền trống mới hiện. Kiểm:
+`node scripts/staff-email-prompt/desktop-email-prompt-smoke.cjs` (12 nhóm),
+`node scripts/staff-email-prompt/run-email-prompt-ui-smoke.cjs` (15 ca, Chromium của Playwright với IPC giả).
+
+
 - Công tắc đọc chung câu `getDesktopPollingSettings` lúc đăng nhập (không thêm request).
 - Một IPC `email-prompt:call` → RPC `aka_agent_email_prompt`; trả `{ok,data}|{ok:false,code,message}`; DB chưa có hàm thì
   im lặng không hiện form.
