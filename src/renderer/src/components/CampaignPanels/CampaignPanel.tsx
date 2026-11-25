@@ -4320,6 +4320,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
           'Chi tiết': detail.log || '',
           'Link bài viết': detail.postUrl || '',
           ...(selectedCampaignAccount?.flatformType === 'zalo' ? {
+            'Đã nhận lúc': detail.zaloEngagement?.delivered_at || '',
             'Đã xem lúc': detail.zaloEngagement?.seen_at || '',
           'Đã phản hồi lúc': detail.zaloEngagement?.responded_at || '',
             'Đã thả cảm xúc lúc': detail.zaloEngagement?.reacted_at || '',
@@ -6952,7 +6953,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                       {selectedCampaignAccount?.flatformType === 'zalo' && <label className="report-dropdown-field detail-filter-dropdown-field" style={{ width: 180 }}>
                         <span>Tương tác Zalo</span>
                         <select className="report-filter-button detail-filter-button" aria-label="Tương tác Zalo" value={actionDetailFilters.engagementFilter || 'all'} onChange={event => setActionDetailFilters(prev => ({ ...prev, engagementFilter: event.target.value as EngagementFilter }))}>
-                          <option value="all">Tất cả</option><option value="seen">Đã xem</option><option value="responded">Đã phản hồi</option><option value="reacted">Đã thả cảm xúc</option><option value="friended">Đã kết bạn</option><option value="none">Chưa ghi nhận</option>
+                          <option value="all">Tất cả</option><option value="received">Đã nhận</option><option value="seen">Đã xem</option><option value="responded">Đã phản hồi</option><option value="reacted">Đã thả cảm xúc</option><option value="friended">Đã kết bạn</option><option value="none">Chưa ghi nhận</option>
                         </select>
                       </label>}
                       <label className="campaign-input-data-search">

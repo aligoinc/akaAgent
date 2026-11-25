@@ -89,6 +89,10 @@ export interface CampaignRunReportRpcEngagement {
   responded: number
   reacted: number
   seen: number
+  /** Đã nhận mà chưa xem / thả cảm xúc / phản hồi (V653; 0 khi DB chưa có). */
+  received: number
+  /** Lượt gửi tin có theo dõi "đã nhận" (đồng bộ trạng thái tin nhắn Zalo, V653). */
+  deliveryTracked: number
   friendRequested: number
   friendTracked: number
   friended: number
@@ -175,7 +179,8 @@ export function parseCampaignRunReportRpc(data: unknown): CampaignRunReportRpcRe
     engagement: {
       messageSent: count(engagement.messageSent ?? 0, 'messageSent'), messageTracked: count(engagement.messageTracked ?? 0, 'messageTracked'),
       responded: count(engagement.responded ?? 0, 'responded'), reacted: count(engagement.reacted ?? 0, 'reacted'),
-      seen: count(engagement.seen ?? 0, 'seen'), friendRequested: count(engagement.friendRequested ?? 0, 'friendRequested'),
+      seen: count(engagement.seen ?? 0, 'seen'), received: count(engagement.received ?? 0, 'received'),
+      deliveryTracked: count(engagement.deliveryTracked ?? 0, 'deliveryTracked'), friendRequested: count(engagement.friendRequested ?? 0, 'friendRequested'),
       friendTracked: count(engagement.friendTracked ?? 0, 'friendTracked'), friended: count(engagement.friended ?? 0, 'friended')
     },
     statuses: list(data.statuses ?? [], 'statuses').map(row => {
@@ -520,8 +525,12 @@ export function buildCampaignRunReport(input: BuildCampaignRunReportInput): Camp
 
   const engagementSource = rpc.engagement
   const engagement = engagementSource.messageSent + engagementSource.friendRequested > 0 ? {
-    message: messageFunnel({ ...emptyEffectivenessCounts(), success: engagementSource.messageSent, tracked: engagementSource.messageTracked,
-      responded: engagementSource.responded, reacted: engagementSource.reacted, seen: engagementSource.seen }),
+    message: {
+      ...messageFunnel({ ...emptyEffectivenessCounts(), success: engagementSource.messageSent, tracked: engagementSource.messageTracked,
+        responded: engagementSource.responded, reacted: engagementSource.reacted, seen: engagementSource.seen, received: engagementSource.received }),
+      // "Đã nhận" chỉ đủ khi mọi lượt được theo dõi đều có nguồn biên nhận; còn lại là số tối thiểu (đã xem thì chắc đã nhận).
+      receivedIsMinimum: engagementSource.deliveryTracked < engagementSource.messageTracked
+    },
     friend: friendFunnel({ ...emptyEffectivenessCounts(), success: engagementSource.friendRequested, tracked: engagementSource.friendTracked,
       friended: engagementSource.friended })
   } : null
