@@ -230,3 +230,37 @@ IPC giả; `SX_UI_SHOTS=<thư mục>` để chụp). Chưa chạy trong Electron
 → deploy API/Web, phát hành iOS → bật công tắc cho admin akaBiz, thử thật → mọi khách. Bật công tắc trước khi ChatApi có bản mới thì
 chiến dịch Fly dùng cấu hình mới bị dừng ngay ở bước loại trừ.
 
+
+## 11. Kiểm thử ngẫu nhiên và V655 (25/11/2026)
+
+Anh yêu cầu "Kiểm thử và cải tiến … cho đến khi ít nhất 3 vòng không còn vấn đề". Bộ kiểm
+[`scripts/send-exclusion-v654-fuzz.cjs`](../scripts/send-exclusion-v654-fuzz.cjs) (`PG_MODULE_DIR=… node scripts/send-exclusion-v654-fuzz.cjs
+--seed N [--cases 500] [--v655] [--real <file xuất>] [--webapp <checkout WebApp>] [--plant status|member|order]`; DB dựng bằng
+`scripts/send-exclusion-v654-fixture.cjs`):
+
+- **Dữ liệu thật** (`--real`, xuất ẩn danh 102 nhóm / 187 điều kiện / 170 cấu hình chiến dịch / 87 Zalo / tag / danh sách, để ngoài
+  repo): ghi kết quả hàm cũ trước V654, apply, so lại: 816 phép kiểm mỗi vòng, luôn giống hệt; bộ chạy mới thấy cùng điều kiện,
+  không có phần tra DB; trang v2 thấy mỗi nhóm đúng một khối.
+- **Thế giới sinh ngẫu nhiên**: nhiều nhân viên / tổ chức, Zalo đã xoá / không phải Zalo, khách có mặt ở nhiều Zalo (Zalo ID chung,
+  có dòng trùng / trống), SĐT 6 cách viết, Nhóm data SĐT / UID / Facebook với chia sẻ / đã xoá / thành viên đã gỡ, danh sách Zalo
+  ID, chiến dịch đã gửi với đủ trạng thái kết quả; dữ liệu cố tình sai (kiểu sai, số thực, âm, quá lớn, chuỗi, của người khác, trùng,
+  quá 20, chính nó) và dữ liệu đổi sau khi lưu (xoá danh sách / Nhóm data / chiến dịch / Zalo của khối / thành viên). So với bộ dự
+  đoán viết độc lập: lưu nhóm, kiểm cấu hình, snapshot cũ / mới, 'remote', quyết định cuối của bộ chạy thật
+  (`evaluateSendExclusionWithRemote`), engine v2 khớp bộ chạy cũ, API Web nhận / từ chối khớp DB, SĐT mọi cách viết chuẩn hoá như nhau.
+- **Kiểm chính bộ kiểm**: `--plant` cài lỗi giả vào hàm remote (bỏ trạng thái "đã xem", bỏ điều kiện thành viên đã gỡ, đảo thứ tự
+  người dùng Zalo trùng): cả ba đều bị bắt. Lúc đầu bộ sinh không tạo ca khớp Nhóm data / danh sách nào (dòng "Phủ" in số ca theo
+  từng loại khớp), đã sửa.
+
+Lỗi tìm ra và sửa bằng **[V655](../migrations/migration_v655_send_exclusion_input_guards.sql)** (sinh bằng `node scripts/build-v655-sql.cjs`,
+kiểm `scripts/send-exclusion-v655-smoke.cjs`; **đã apply akachat 18:25:36 VN 25/11**, sổ `20261125112536`, không apply lại,
+[biên nhận](../migrations/snapshots/send-exclusion-input-guards-v655/apply-receipt.json)):
+- `accountId` / `requestId` / `id` / `revision` / `excludeCampaignId` / `sortOrder` / `fieldId` sai kiểu làm hàm ném lỗi ép kiểu của
+  Postgres (API Web trả 500, Desktop hiện câu kỹ thuật) thay vì mã `send_exclusion_*`; API Web đã tự chặn trước, Desktop gọi thẳng
+  hàm nên DB phải tự chặn. Hàm phụ `private.aka_agent_send_exclusion_int(jsonb)`.
+- Kiểm cấu hình chiến dịch: khoá Zalo không phải số, `groupId` / id danh sách là số thực hoặc quá 18 chữ số.
+- Số "đã gửi" trong danh sách chiến dịch nay tính cả kết quả `operationState = committed` như bước loại trừ.
+
+Hành vi giữ nguyên, cần biết: xoá một Zalo mà danh sách Zalo ID của nó đang được chọn trong chiến dịch của Zalo khác thì lượt chạy
+dừng với "Danh sách Zalo ID loại trừ đã bị xoá" (như xoá chính danh sách: không gửi nhầm khách cần loại trừ), còn khối điều kiện của
+Zalo đã xoá thì bị bỏ qua. Liên hệ đã xoá mềm vẫn được tính nếu còn là thành viên Nhóm data (như hàm đối chiếu V519; production
+0 / 151.006 dòng như vậy).
