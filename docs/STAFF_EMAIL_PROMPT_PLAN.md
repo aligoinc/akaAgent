@@ -25,6 +25,22 @@ Trạng thái: chưa code, chưa có migration, chưa đổi gì trên productio
 9. Làm **Desktop + Web trước**, iPhone ở bản phát hành sau.
 10. Form **thêm một dòng** nói rõ báo cáo chiến dịch mỗi sáng sẽ gửi qua email (tắt được).
 
+### "3 chỗ" là 3 chỗ nào
+
+Với tài khoản đang đăng nhập (một dòng `org_staff`):
+
+| # | Chỗ | Cột | Lấy dòng nào |
+| --- | --- | --- | --- |
+| 1 | Tài khoản đăng nhập | `org_staff.email` | Chính dòng `org_staff` của tài khoản đó |
+| 2 | Tổ chức | `org_organization.email` | Tổ chức của tài khoản: `org_organization.id = org_staff.organization_id` |
+| 3 | Khách hàng trong CRM | `aka_customer.email` | Khách của tổ chức: `aka_customer.id = org_organization.customer_id` |
+
+- "Có email" = cột đó không trống, đúng định dạng email và không phải tên miền gõ nhầm (`gmail.con`, `gmial.com`…). Email
+  sai thì coi như chưa có.
+- Chỉ xét cột `email`, không xét `email_list` (danh sách email cũ).
+- Có ở ít nhất 1 trong 3 chỗ là không hiện form, dù là admin hay nhân viên.
+- Cùng một tổ chức thì chỗ 2 và 3 giống nhau cho mọi tài khoản; chỉ chỗ 1 là riêng từng tài khoản.
+
 "CRM" trong tài liệu này là bảng `aka_customer` (hồ sơ khách trong trang quản lý crm.akabiz.net), nối qua
 `org_organization.customer_id`.
 
