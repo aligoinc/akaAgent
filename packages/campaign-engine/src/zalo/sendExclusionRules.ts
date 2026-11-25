@@ -32,6 +32,8 @@ export interface SendExclusionSnapshot { catalog: ExclusionCatalog; group: SendE
 export interface SendExclusionRemoteFacts {
   match: { kind: 'blocklist' | 'data_group' | 'campaign'; id: number; name: string; note: string } | null
   blocks: Array<{ accountId: number; state: 'ok' | 'unknown' | 'not_synced' | 'empty'; facts?: Record<string, unknown> }>
+  /** V657: còn nguồn cần Global ID mà không xác định được Global ID của người nhận (không gửi). */
+  unknown?: string | null
 }
 export interface SendExclusionPage { catalog: ExclusionCatalog; groups: SendExclusionGroup[]; options: FilterOption[]; blocklists: Array<{id: number; name: string; count: number}> }
 export interface ExclusionFacts { akabiz_contact: { ids: string[] } | null; campaign_delivery: { daysSince: number } | null }
@@ -54,6 +56,16 @@ export function exclusionSelection(extra: {zaloSendExclusionsByAccountId?: unkno
 export function hasSendExclusions(extra: {zaloSendExclusionsByAccountId?: unknown}, accountId: number | string): boolean {
   const selection = exclusionSelection(extra, accountId)
   return !!selection && (!!selection.groupId || selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length)
+}
+/** V657: có danh sách / Nhóm data / chiến dịch để lọc ở bước đầu tiên (trước kiểm từ chối nhận tin / tra số). Cấu hình sai thì false. */
+export function hasSendExclusionPrecheck(actionId: string, extra: {zaloSendExclusionsByAccountId?: unknown; enableMessage?: unknown}, accountId: number | string): boolean {
+  if (!supportsSendExclusion(actionId, extra)) return false
+  try {
+    const selection = exclusionSelection(extra, accountId)
+    return !!selection && (selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length)
+  } catch {
+    return false
+  }
 }
 export const FILTER_SOURCES = new Set(['zalo_profile', 'zalo_friendship', 'zalo_labels', 'akabiz_contact', 'campaign_delivery'])
 export const FILTER_EVALUATORS = new Set(['equals', 'not_equals', 'contains_any', 'contains_none', 'text_contains', 'text_not_contains', 'text_starts_with', 'text_not_starts_with', 'lt', 'lte', 'gt', 'gte'])
@@ -201,6 +213,7 @@ export async function evaluateSendExclusionWithRemote(snapshot: SendExclusionSna
     const remote = await readRemote()
     checkActive()
     if (remote.match) return {decision: 'excluded', note: remote.match.note}
+    if (remote.unknown) unknownNote ||= String(remote.unknown)
     const groupName = plan.groupName || 'Loại trừ'
     for (const block of plan.blocks) {
       const state = remote.blocks.find(item => Number(item.accountId) === Number(block.accountId))

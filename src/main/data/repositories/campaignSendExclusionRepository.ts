@@ -58,11 +58,11 @@ export function sendExclusionRuntimeErrorMessage(message: string | undefined): s
 }
 
 /** Uses the existing HTTP client and the scheduler's lease; never renderer credentials. */
-export async function callSendExclusionRuntime<T>(campaignId: number, accountId: number, staffId: number, claimToken: string, operation: 'snapshot' | 'facts' | 'remote' | 'pause', payload: Record<string, unknown> = {}): Promise<T> {
+export async function callSendExclusionRuntime<T>(campaignId: number, accountId: number, staffId: number, claimToken: string, operation: 'snapshot' | 'facts' | 'remote' | 'pause' | 'precheck', payload: Record<string, unknown> = {}): Promise<T> {
   const {data, error} = await getSupabaseClient().rpc('aka_agent_campaign_send_exclusion_runtime', {
     p_campaign_id: campaignId, p_account_id: accountId, p_staff_id: staffId,
     p_claim_token: claimToken, p_operation: operation, p_payload: payload
   }).abortSignal(AbortSignal.timeout(20_000))
-  if (error) throw new Error(sendExclusionRuntimeErrorMessage(error.message))
+  if (error) throw Object.assign(new Error(sendExclusionRuntimeErrorMessage(error.message)), { rpcMessage: error.message })
   return data as T
 }

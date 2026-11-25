@@ -72,6 +72,16 @@ async function main() {
     assert.deepEqual(b, a)
     assert.ok(!calls.includes('remote'))
   }
+  // V657: remote báo chưa xác định được Global ID → "chưa đủ dữ liệu" (không gửi), trừ khi một khối khác khớp.
+  const unknownRemote = {match: null, blocks: [], unknown: 'Chưa xác định được khách để kiểm tra loại trừ.'}
+  assert.deepEqual(await run(snapshot(null, plan()), {}, unknownRemote), {decision: 'unknown', note: 'Chưa xác định được khách để kiểm tra loại trừ.'})
+  assert.equal((await run(snapshot(own([friend]), plan()), {zalo_friendship: {status: 'friend'}}, unknownRemote)).decision, 'excluded')
+  // V657: bước lọc đầu tiên chỉ khi có danh sách / Nhóm data / chiến dịch và loại chiến dịch hỗ trợ; cấu hình sai thì không lọc.
+  assert.equal(core.hasSendExclusionPrecheck('zalo_message_friend', {zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [3]}}}, 100), true)
+  assert.equal(core.hasSendExclusionPrecheck('zalo_message_phone', {zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [3]}}}, 100), false)
+  assert.equal(core.hasSendExclusionPrecheck('zalo_message_phone', {enableMessage: true, zaloSendExclusionsByAccountId: {100: {groupId: 4, blocklistIds: []}}}, 100), false)
+  assert.equal(core.hasSendExclusionPrecheck('zalo_message_phone', {enableMessage: true, zaloSendExclusionsByAccountId: {100: {groupId: null, blocklistIds: [], sentCampaignIds: [9]}}}, 100), true)
+  assert.equal(core.hasSendExclusionPrecheck('zalo_message_phone', {enableMessage: true, zaloSendExclusionsByAccountId: {100: 'x'}}, 100), false)
   // Lỗi tra DB ném ra cho bên gọi.
   await assert.rejects(run(snapshot(own([friend]), plan()), {}, new Error('db down')), /db down/)
   // Cấu hình: khoá mới hợp lệ, có nghĩa là "có loại trừ".
