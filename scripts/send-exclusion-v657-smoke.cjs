@@ -57,6 +57,7 @@ async function main() {
         extra_settings: { enableMessage: true, ...(selection ? { zaloSendExclusionsByAccountId: { [account]: { groupId: null, blocklistIds: [], ...selection } } } : {}), ...extra } })
       return cid
     }
+    const camp0 = () => campaign(B, 'zalo_message_phone', null)
     const row = async (campaignId, fields) => { const rid = id(); await ins('auto_campaign_input_data', { id: rid, campaign_id: campaignId, status: 'chờ xử lý', is_delete: false, ...fields }); return rid }
     const status = async rid => one(`SELECT status, note FROM public.auto_campaign_input_data WHERE id=$1`, [rid])
     const asDesktop = async (staffId, fn) => {
@@ -263,6 +264,33 @@ async function main() {
       assert.deepEqual(await call(r1), { excluded: true, note: 'Có trong Nhóm data “Cũ”.', changed: true })
       assert.deepEqual(await call(r2), { excluded: false })
       assert.equal((await status(r2)).status, 'chờ xử lý')
+    })
+
+    await check('Nhóm data: người ở cả Nhóm SĐT lẫn Nhóm Zalo UID → ghi chú theo tên nhóm (xếp chung), không theo loại nhóm', async () => {
+      const ph = await contact(null, 'phone', P1, { flatform_type: null })
+      const gPhone = await group({ purpose: 'data_group', data_type_category_item_id: catPhone, name: 'zz SĐT' })
+      await member(gPhone, ph)
+      const pc = await contact(B, 'person', 'uB-1')
+      const gPerson = await group({ purpose: 'data_group', data_type_category_item_id: catPerson, name: 'aa UID' })
+      await member(gPerson, pc)
+      const A = id(); await acc(A)
+      const c = await campaign(A, 'zalo_message_phone', { dataGroupIds: [gPhone, gPerson] })
+      const m = await match(c, A, P1, null, null, false)
+      assert.equal(m.match.name, 'aa UID')
+      const m2 = await match(c, A, '0999888777', null, null, false)
+      assert.equal(m2.match, null); assert.equal(m2.needGlobalId, true)
+    })
+
+    await check('bảng đối chiếu: dòng Tìm SĐT commit muộn (id nhỏ hơn mốc đã nạp) vẫn được nạp ở lượt sau', async () => {
+      await one(`SELECT private.aka_agent_zalo_phone_identity_ingest(5000, 1000) r`)
+      const last = Number((await one(`SELECT last_detail_id l FROM private.auto_zalo_phone_identity_state`)).l)
+      const late = await camp0()
+      const lateId = Number((await one(`SELECT g FROM generate_series($1::bigint-200,$1::bigint-1) g WHERE NOT EXISTS (SELECT 1 FROM public.auto_campaign_details d WHERE d.id=g) ORDER BY g DESC LIMIT 1`, [last])).g)
+      await ins('auto_campaign_details', { id: lateId, campaign_id: late, account_id: B, action_code: 'zalo_find_phone_user', action_name: 'x', staff_id: STAFF, organization_id: ORG,
+        status: 'thành công', is_delete: false, created_at: new Date().toISOString(), data: { target: { phone: '0977 555 444', globalId: 'GLATE' } } })
+      await one(`SELECT private.aka_agent_zalo_phone_identity_ingest(5000, 1000) r`)
+      assert.equal((await one(`SELECT global_id FROM private.auto_zalo_phone_identity WHERE phone='0977555444'`))?.global_id, 'GLATE')
+      assert.equal(Number((await one(`SELECT last_detail_id l FROM private.auto_zalo_phone_identity_state`)).l) >= last, true)
     })
 
     await check('gỡ V657 trả đúng md5 production; apply lại được', async () => {

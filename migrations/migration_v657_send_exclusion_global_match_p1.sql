@@ -52,8 +52,8 @@ CREATE FUNCTION private.aka_agent_zalo_phone_identity_ingest(p_budget_ms integer
  SET search_path TO 'pg_catalog', 'public'
 AS $function$
 -- V657: nạp kết quả Tìm SĐT thành công (theo id auto_campaign_details, từ mốc ở _state) vào bảng đối chiếu. Một SĐT lấy lần tra mới nhất;
--- Global ID đổi thì cập nhật và đếm changes. Ngân sách: send_exclusion.identity.budgetMs (mặc định 20 giây), chunk id mỗi phần (10.000).
-DECLARE v_cfg jsonb; v_budget integer; v_chunk integer; v_deadline timestamptz; v_from bigint; v_to bigint; v_max bigint; v_rows bigint:=0; v_ch bigint:=0;
+-- Global ID đổi thì cập nhật và đếm changes. Ngân sách: send_exclusion.identity.budgetMs (dòng cài đặt V657 đặt 8 giây; thiếu thì 20 giây), chunk id mỗi phần (10.000).
+DECLARE v_cfg jsonb; v_budget integer; v_chunk integer; v_deadline timestamptz; v_from bigint; v_to bigint; v_max bigint; v_rows bigint:=0; v_ch bigint:=0; v_overlap integer;
  v_n bigint; v_c bigint;
 BEGIN
  BEGIN
@@ -64,10 +64,14 @@ BEGIN
  IF p_budget_ms IS NULL AND v_cfg->'ingest'='false'::jsonb THEN RETURN jsonb_build_object('skipped','disabled'); END IF;
  v_budget:=COALESCE(p_budget_ms, CASE WHEN v_cfg->>'budgetMs' ~ '^[0-9]{1,6}$' THEN (v_cfg->>'budgetMs')::integer END, 20000);
  v_chunk:=least(greatest(COALESCE(p_chunk, CASE WHEN v_cfg->>'chunk' ~ '^[0-9]{1,7}$' THEN (v_cfg->>'chunk')::integer END, 10000),100),200000);
+ v_overlap:=COALESCE(CASE WHEN v_cfg->>'overlap' ~ '^[0-9]{1,7}$' THEN (v_cfg->>'overlap')::integer END, 5000);
  v_deadline:=clock_timestamp()+make_interval(secs=>v_budget/1000.0);
  IF NOT pg_try_advisory_xact_lock(hashtext('aka_agent_zalo_phone_identity_ingest')) THEN RETURN jsonb_build_object('skipped','busy'); END IF;
  SELECT max(id) INTO v_max FROM public.auto_campaign_details;
  SELECT last_detail_id INTO v_from FROM private.auto_zalo_phone_identity_state WHERE id FOR UPDATE;
+ -- Đọc lại một đoạn id đã qua: dòng có id nhỏ hơn mốc nhưng commit muộn (giao dịch đang mở lúc lượt trước chạy) không bị bỏ sót.
+ -- Ghi lại an toàn: chỉ cập nhật khi detail_id mới lớn hơn.
+ v_from:=greatest(v_from-v_overlap,0);
  LOOP
   EXIT WHEN v_from>=COALESCE(v_max,0) OR clock_timestamp()>=v_deadline;
   v_to:=least(v_from+v_chunk,v_max);
@@ -87,7 +91,7 @@ BEGIN
   SELECT count(*), count(*) FILTER (WHERE updated AND changes>0) INTO v_n, v_c FROM up;
   v_rows:=v_rows+v_n; v_ch:=v_ch+v_c; v_from:=v_to;
  END LOOP;
- UPDATE private.auto_zalo_phone_identity_state SET last_detail_id=v_from, rows_upserted=rows_upserted+v_rows, updated_at=now() WHERE id;
+ UPDATE private.auto_zalo_phone_identity_state SET last_detail_id=greatest(last_detail_id,v_from), rows_upserted=rows_upserted+v_rows, updated_at=now() WHERE id;
  RETURN jsonb_build_object('lastDetailId',v_from,'maxDetailId',v_max,'rows',v_rows);
 END;
 $function$;
@@ -103,8 +107,8 @@ BEGIN
 END $rv2$;
 
 INSERT INTO public.auto_system_settings(key, value, description, is_active)
-VALUES ('send_exclusion.identity', '{"ingest":true,"budgetMs":20000,"chunk":10000}',
- 'V657: nạp bảng đối chiếu SĐT ↔ Global ID (private.auto_zalo_phone_identity) từ kết quả Tìm SĐT thành công. ingest=false: ngừng nạp; budgetMs: thời gian mỗi lượt job (mỗi phút); chunk: số id auto_campaign_details mỗi phần.', true);
+VALUES ('send_exclusion.identity', '{"ingest":true,"budgetMs":8000,"chunk":10000}',
+ 'V657: nạp bảng đối chiếu SĐT ↔ Global ID (private.auto_zalo_phone_identity) từ kết quả Tìm SĐT thành công. ingest=false: ngừng nạp; budgetMs: thời gian mỗi lượt job (mỗi phút); chunk: số id auto_campaign_details mỗi phần; overlap: số id đã qua đọc lại mỗi lượt để không sót dòng commit muộn (mặc định 5000).', true);
 
 DO $cron$
 BEGIN

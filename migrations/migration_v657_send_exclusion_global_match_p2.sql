@@ -62,6 +62,7 @@ AS $function$
 -- p_final = true (sau khi tra số / đọc hồ sơ) thì trả unknown: không gửi.
 DECLARE v_phone text; v_gid text; v_gid_from text; v_phones text[]; v_accounts bigint[]; v_zalo_accounts bigint[]; v_match jsonb;
  v_need boolean:=false; v_lists bigint[]; v_groups bigint[]; v_has_person boolean; v_has_phone_group boolean; sc record; v_at timestamptz; v_at2 timestamptz;
+ v_gid_uids text[];
 BEGIN
  v_phone:=NULLIF(public.aka_agent_internal_normalize_phone(COALESCE(p_phone,'')),'');
  v_gid:=NULLIF(btrim(COALESCE(p_global_id,'')),'');
@@ -79,8 +80,12 @@ BEGIN
   SELECT COALESCE(array_agg(i.phone ORDER BY i.phone),'{}') INTO v_phones FROM private.auto_zalo_phone_identity i WHERE i.global_id=v_gid;
  ELSE v_phones:='{}';
  END IF;
- SELECT COALESCE(array_agg(a.id ORDER BY a.id),'{}'), COALESCE(array_agg(a.id ORDER BY a.id) FILTER (WHERE a.flatform_type='zalo'),'{}')
-  INTO v_accounts, v_zalo_accounts FROM public.auto_accounts a WHERE a.organization_id=p_campaign.organization_id;
+ -- Tài khoản của tổ chức (đi qua nhân viên: auto_accounts không có chỉ mục theo tổ chức). Chỉ khi có Nhóm data / chiến dịch đã gửi.
+ IF cardinality(private.aka_agent_send_exclusion_ids(p_selection->'dataGroupIds'))>0 OR cardinality(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds'))>0 THEN
+  SELECT COALESCE(array_agg(a.id ORDER BY a.id),'{}'), COALESCE(array_agg(a.id ORDER BY a.id) FILTER (WHERE a.flatform_type='zalo'),'{}')
+   INTO v_accounts, v_zalo_accounts FROM public.org_staff s JOIN public.auto_accounts a ON a.staff_id=s.id
+   WHERE s.organization_id=p_campaign.organization_id AND a.organization_id=p_campaign.organization_id;
+ END IF;
 
  -- 1. Danh sách Zalo ID loại trừ (mọi Zalo, kể cả Zalo đang gửi): thành viên → Global ID qua zalo_users của tài khoản của danh sách.
  SELECT COALESCE(array_agg(bl.id),'{}') INTO v_lists FROM public.auto_account_contact_groups bl
@@ -108,58 +113,60 @@ BEGIN
    WHERE g.id=ANY(private.aka_agent_send_exclusion_ids(p_selection->'dataGroupIds')) AND g.purpose='data_group' AND NOT g.is_delete
      AND g.organization_id=p_campaign.organization_id;
   IF cardinality(v_groups)>0 THEN
-   IF cardinality(v_phones)>0 THEN
-    SELECT jsonb_build_object('kind','data_group','id',g.id,'name',g.name,'note',format('Có trong Nhóm data “%s”.',g.name)) INTO v_match
-     FROM (SELECT ct.id FROM unnest(v_phones) p(ph) CROSS JOIN LATERAL (
-             SELECT ct.id FROM public.auto_account_contacts ct WHERE ct.account_id IS NULL AND ct.contact_type='phone' AND ct.uid=p.ph
-               AND ct.organization_id=p_campaign.organization_id AND NOT ct.is_delete
-             UNION ALL
-             SELECT k.id FROM unnest(v_accounts) a(id) CROSS JOIN LATERAL (
-               SELECT ct.id FROM public.auto_account_contacts ct WHERE ct.account_id=a.id AND ct.contact_type='phone' AND ct.uid=p.ph AND NOT ct.is_delete OFFSET 0) k
-           ) ct) cand
+   -- Nhóm khớp theo SĐT và theo Global ID xếp chung theo tên, id (một người có thể ở cả Nhóm SĐT lẫn Nhóm Zalo UID).
+   SELECT jsonb_build_object('kind','data_group','id',g.id,'name',g.name,'note',format('Có trong Nhóm data “%s”.',g.name)) INTO v_match
+    FROM (
+     SELECT m.group_id FROM unnest(v_phones) p(ph) CROSS JOIN LATERAL (
+       SELECT ct.id FROM public.auto_account_contacts ct WHERE ct.account_id IS NULL AND ct.contact_type='phone' AND ct.uid=p.ph
+         AND ct.organization_id=p_campaign.organization_id AND NOT ct.is_delete
+       UNION ALL
+       SELECT k.id FROM unnest(v_accounts) a(id) CROSS JOIN LATERAL (
+         SELECT ct.id FROM public.auto_account_contacts ct WHERE ct.account_id=a.id AND ct.contact_type='phone' AND ct.uid=p.ph AND NOT ct.is_delete OFFSET 0) k
+     ) cand
      JOIN public.auto_account_contact_group_members m ON m.contact_id=cand.id AND m.group_id=ANY(v_groups) AND NOT m.is_delete
-     JOIN public.auto_account_contact_groups g ON g.id=m.group_id
-     ORDER BY g.name, g.id LIMIT 1;
-   END IF;
-   IF v_match IS NULL AND v_has_person THEN
-    IF v_gid IS NULL THEN v_need:=true;
-    ELSE
-     SELECT jsonb_build_object('kind','data_group','id',g.id,'name',g.name,'note',format('Có trong Nhóm data “%s”.',g.name)) INTO v_match
-      FROM unnest(v_zalo_accounts) a(id)
-      CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
+     UNION ALL
+     SELECT m.group_id FROM unnest(v_zalo_accounts) a(id)
+      CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE v_has_person AND zu.account_id=a.id AND zu.global_id=v_gid
+        AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
       JOIN public.auto_account_contacts ct ON ct.account_id=a.id AND ct.contact_type='person' AND ct.uid=zu.zalo_uid AND NOT ct.is_delete
       JOIN public.auto_account_contact_group_members m ON m.contact_id=ct.id AND m.group_id=ANY(v_groups) AND NOT m.is_delete
-      JOIN public.auto_account_contact_groups g ON g.id=m.group_id
-      ORDER BY g.name, g.id LIMIT 1;
-    END IF;
-   END IF;
+    ) h JOIN public.auto_account_contact_groups g ON g.id=h.group_id
+    ORDER BY g.name, g.id LIMIT 1;
+   IF v_match IS NULL AND v_has_person AND v_gid IS NULL THEN v_need:=true; END IF;
    IF v_match IS NULL AND v_has_phone_group AND v_phone IS NULL AND v_gid IS NULL THEN v_need:=true; END IF;
   END IF;
  END IF;
 
  -- 3. Chiến dịch đã gửi: data của chiến dịch đó có cùng SĐT, hoặc có Zalo ID riêng thuộc cùng Global ID, và đã nhận tin nhắn
  -- (bạn bè / người lạ) thành công. Tra qua idx_campaign_input_cooldown_phone / _uid rồi idx_campaign_details_input_data_id.
+ IF v_match IS NULL AND v_gid IS NOT NULL AND cardinality(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds'))>0 THEN
+  -- Mọi Zalo ID riêng của Global ID ở các tài khoản Zalo của tổ chức (tính một lần cho mọi chiến dịch).
+  SELECT COALESCE(array_agg(DISTINCT lower(btrim(zu.zalo_uid))),'{}') INTO v_gid_uids FROM unnest(v_zalo_accounts) a(id)
+   CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
+   WHERE btrim(zu.zalo_uid)<>'';
+ END IF;
  IF v_match IS NULL THEN
   FOR sc IN SELECT c.id, c.name FROM public.auto_campaigns c
     WHERE c.id=ANY(private.aka_agent_send_exclusion_ids(p_selection->'sentCampaignIds')) AND c.staff_id=p_campaign.staff_id
       AND c.organization_id=p_campaign.organization_id AND c.id IS DISTINCT FROM p_campaign.id ORDER BY c.id LOOP
    v_at:=NULL; v_at2:=NULL;
    IF cardinality(v_phones)>0 THEN
-    SELECT max(d.created_at) INTO v_at FROM unnest(v_phones) p(ph)
+    -- campaign_id+0: buộc tra theo chỉ mục SĐT / Zalo ID rồi lọc chiến dịch (đo 25/11: theo chỉ mục chiến dịch planner đọc mọi data của
+    -- chiến dịch, ~3.100 dòng mỗi chiến dịch, và mọi kết quả gửi của chiến dịch; cách này 10 chiến dịch 2,4 ms).
+    SELECT max(dd.created_at) INTO v_at FROM unnest(v_phones) p(ph)
      CROSS JOIN LATERAL (SELECT i.id FROM public.auto_campaign_input_data i WHERE md5(public.normalize_phone(i.phone))=md5(p.ph)
-       AND i.phone IS NOT NULL AND btrim(i.phone)<>'' AND i.campaign_id=sc.id OFFSET 0) i
-     JOIN public.auto_campaign_details d ON d.input_data_id=i.id
-     WHERE d.campaign_id=sc.id AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
-      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click')));
+       AND i.phone IS NOT NULL AND btrim(i.phone)<>'' AND i.campaign_id+0=sc.id OFFSET 0) i
+     CROSS JOIN LATERAL (SELECT d.created_at FROM public.auto_campaign_details d WHERE d.input_data_id=i.id AND d.campaign_id+0=sc.id
+       AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
+      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click'))) OFFSET 0) dd;
    END IF;
    IF v_gid IS NOT NULL THEN
-    SELECT max(d.created_at) INTO v_at2 FROM unnest(v_zalo_accounts) a(id)
-     CROSS JOIN LATERAL (SELECT zu.zalo_uid FROM public.zalo_users zu WHERE zu.account_id=a.id AND zu.global_id=v_gid AND zu.global_id IS NOT NULL AND zu.global_id<>'' OFFSET 0) zu
-     CROSS JOIN LATERAL (SELECT i.id FROM public.auto_campaign_input_data i WHERE md5(lower(btrim(i.uid)))=md5(lower(btrim(zu.zalo_uid)))
-       AND i.uid IS NOT NULL AND btrim(i.uid)<>'' AND i.campaign_id=sc.id OFFSET 0) i
-     JOIN public.auto_campaign_details d ON d.input_data_id=i.id
-     WHERE d.campaign_id=sc.id AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
-      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click')));
+    SELECT max(dd.created_at) INTO v_at2 FROM unnest(v_gid_uids) u(uid)
+     CROSS JOIN LATERAL (SELECT i.id FROM public.auto_campaign_input_data i WHERE md5(lower(btrim(i.uid)))=md5(u.uid)
+       AND i.uid IS NOT NULL AND btrim(i.uid)<>'' AND i.campaign_id+0=sc.id OFFSET 0) i
+     CROSS JOIN LATERAL (SELECT d.created_at FROM public.auto_campaign_details d WHERE d.input_data_id=i.id AND d.campaign_id+0=sc.id
+       AND d.action_code IN ('zalo_message_friend','zalo_message_stranger') AND NOT d.is_delete
+      AND (d.policy_snapshot->>'operationState'='committed' OR (d.policy_snapshot->>'operationState' IS NULL AND d.status IN ('thành công','đã gửi','đã nhận','đã xem','đã click'))) OFFSET 0) dd;
    ELSE
     v_need:=true;
    END IF;
