@@ -20,7 +20,8 @@ Trạng thái: chưa code, chưa có migration, chưa đổi gì trên productio
 5. Tắt form bằng × thì **mỗi ngày hỏi lại một lần**, kèm nhãn "Thêm email" trên thanh trên cùng.
 6. **Lưu ngay + gửi thư xác nhận**, thư không chứa mật khẩu.
 7. Admin đã có email ở tổ chức / CRM mà tài khoản trống: **tự chép, không hỏi** (mục 3.3).
-8. Tài khoản nhân viên (không phải admin) chưa có email riêng: **vẫn hỏi**, dù tổ chức / CRM đã có email.
+8. **Áp cho mọi người, cả nhân viên không phải admin**: có email ở 1 trong 3 chỗ là không hỏi (anh nhắc lại 25/11, thay lựa
+   chọn "vẫn hỏi nhân viên" trước đó). Với nhân viên, email tổ chức / CRM không được chép vào tài khoản của họ.
 9. Làm **Desktop + Web trước**, iPhone ở bản phát hành sau.
 10. Form **thêm một dòng** nói rõ báo cáo chiến dịch mỗi sáng sẽ gửi qua email (tắt được).
 
@@ -35,7 +36,8 @@ có mở Desktop (presence) hoặc Web/iOS (`auto_control_sessions`) trong 30 ng
 | Theo luật đã chốt | Số người |
 | --- | --- |
 | Admin không có email ở cả 3 chỗ → **thấy form** | **127** |
-| Tài khoản nhân viên (không phải admin) chưa có email riêng → thấy form (xem Q9) | 35 |
+| Tài khoản nhân viên (không phải admin) không có email ở cả 3 chỗ → thấy form | 0 |
+| Tài khoản nhân viên chưa có email riêng nhưng tổ chức / CRM có → không hỏi | 35 |
 | Admin có email ở tổ chức / CRM nhưng `org_staff.email` trống → không hỏi | 788 |
 | … trong đó chỉ có email ở CRM (hiện **không tự lấy lại tài khoản được**, xem Q10) | 603 |
 | Admin có email ở cả tổ chức lẫn CRM mà hai email khác nhau | 0 |
@@ -66,9 +68,8 @@ Tính năng này là việc xin email cho tài khoản, thay quyết định "kh
 
 1. Nhân viên đang hoạt động (`is_active`, chưa xoá), được dùng akaAgent (`aka_agent_app_access_staff_allowed`).
 2. Tổ chức có gói còn hạn (gồm cả dùng thử, Q6). Đã hết gói thì app đang ở màn Gia hạn, không hiện form.
-3. **Không có email dùng được:**
-   - admin (`org_staff.is_admin`): không có ở cả `org_staff.email`, `org_organization.email`, `aka_customer.email`;
-   - tài khoản khác: `org_staff.email` trống (Q9).
+3. **Không có email dùng được ở cả 3 chỗ**: `org_staff.email` của chính tài khoản, `org_organization.email` và
+   `aka_customer.email` của tổ chức (áp cho mọi người, admin hay không). Hiện chỉ 127 admin, 0 nhân viên.
    "Dùng được" = đúng định dạng và không thuộc danh sách tên miền gõ nhầm của `aka_agent_notification_email_candidates`.
 4. Chưa tắt form trong hôm nay (tắt thì hôm sau hỏi lại).
 5. Công tắc `account.email_prompt` cho phép (`audience` off / admin_akabiz / orgs / all).
@@ -316,7 +317,7 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 
 Đã chốt và bỏ khỏi bảng: Q1 (có 1 trong 3 thì không hỏi), Q2 (mỗi ngày hỏi lại một lần), Q3 (lưu ngay + thư xác nhận),
 Q4 / Q4b (admin ghi cả ba, ghi đè, có danh sách email), Q5 (Desktop + Web trước), Q7 (thêm dòng báo cáo mỗi sáng),
-Q8 / Q9 (nhân viên vẫn được hỏi email riêng), Q10 (788 admin: tự chép, không hỏi).
+Q8 / Q9 (có email ở 1 trong 3 chỗ là không hỏi, kể cả nhân viên), Q10 (788 admin: tự chép, không hỏi).
 
 Trigger danh sách email (phần 2 của 5.1) đã chạy thử trên PostgreSQL 16 trong máy 25/11: nhập mới, đổi, gõ lại email cũ
 (khác hoa / thường), xoá trống rồi nhập lại, dòng cũ có email mà danh sách trống: đều cho danh sách đúng.
