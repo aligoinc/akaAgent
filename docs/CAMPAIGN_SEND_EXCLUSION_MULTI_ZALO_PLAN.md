@@ -154,11 +154,13 @@ Thêm hàm `_v2` thay vì đổi chữ ký cũ, để app cũ vẫn gọi đư�
 - **Bộ chạy cũ Desktop/App Server:** `gateSendExclusion` gửi khoá mới, dựng câu ghi chú mới.
 - **Lõi engine v2:** cập nhật `sendExclusion.ts`, cổng Desktop `desktopZaloPort.ts` / `desktopEngineData.ts`. Chép lõi sang ChatApi (`scripts/sync-campaign-engine.cjs`) rồi deploy `worker`.
 - **Bộ cũ ChatApi:** cập nhật bản chép luật và lời gọi RPC.
-- **Form Desktop** (cả form thường lẫn form Agent):
-  - Đổi "Từ Zalo nào" thành "Zalo gửi tin", thêm ô dùng chung.
-  - Danh sách nhóm theo nhân viên, phần tóm tắt theo khối.
-  - Thêm ba ô chọn danh sách.
-  - Editor 2 tầng: khối thu gọn/mở; tag và tag akaBiz theo từng Zalo; nút Đồng bộ theo Zalo; "Chép điều kiện từ Zalo khác"; khoá Lưu khi có khối không có điều kiện.
+- **Form Desktop** (cả form thường lẫn form Agent; bản gọn 25/11 theo yêu cầu "tối ưu UI/UX", [thiết kế](https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB)):
+  - Thẻ đổi tên thành "Không gửi cho", một danh sách dòng: "Khách đã từ chối nhận tin" (luôn áp dụng), rồi mỗi loại đã thêm là một dòng đọc như câu, có Sửa / bỏ. Khách thuộc 1 dòng bất kỳ là không gửi.
+  - Nút "Thêm loại trừ" mở menu 4 loại, mỗi loại có ví dụ: đã được gửi tin ở chiến dịch (chọn 1 hoặc nhiều chiến dịch), có trong Nhóm data, theo điều kiện ở Zalo (nhóm điều kiện), trong danh sách bạn bè/Zalo ID. Mỗi loại một dòng.
+  - Bỏ thanh chọn Zalo gửi và ô dùng chung: mặc định dùng chung cho mọi Zalo của chiến dịch; "Đặt riêng cho từng Zalo gửi" là liên kết nhỏ dưới thẻ (chiến dịch cũ có cấu hình riêng từng Zalo thì mở sẵn chế độ này).
+  - Hộp chọn chiến dịch / Nhóm data: tìm theo tên, lọc trạng thái (chiến dịch), mỗi dòng có số khách đã gửi / số data, chân hộp "Đã chọn N · M khách".
+  - Nhóm điều kiện: bước 1 tích các Zalo cần xét (lưới ô tích, có giờ đồng bộ); bước 2 mỗi Zalo một thẻ chỉ có điều kiện đã thêm, viết thành câu ("Khách là bạn bè", "Khách có tag Zalo …", "Khách đã được Zalo này gửi tin trong N ngày"), "Thêm điều kiện" mở menu loại còn lại; "Khách thỏa tất cả / 1 điều kiện bất kỳ" chỉ hiện khi Zalo có từ 2 điều kiện; giữa các Zalo ghi "hoặc"; cuối form là câu tóm tắt "Sẽ không gửi cho khách: …". Trạng thái bạn bè chỉ còn 3 lựa chọn: là bạn bè, không phải bạn bè, đã được gửi lời mời kết bạn (bỏ "Nhận kết bạn").
+  - Ghi chú data / tiến trình dùng đúng câu của dòng trên thẻ.
 - **Web:** cùng giao diện. **iOS:** đề xuất đợt đầu chỉ hiện tóm tắt nhóm nhiều Zalo và chọn được nhóm có sẵn; sửa nhóm nhiều khối làm sau.
 - **AI tạo nhóm (config 7):** giữ tạo 1 khối cho Zalo đang cấu hình; AI tạo nhiều khối để đợt sau.
 - **Quy trình (journey):** chép cấu hình như cũ, kiểm lại phần mô tả bước.
