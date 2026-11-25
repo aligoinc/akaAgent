@@ -2,9 +2,9 @@
  * Loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi (V653, docs/CAMPAIGN_SEND_EXCLUSION_MULTI_ZALO_PLAN.md):
  * hợp đồng của RPC aka_agent_send_exclusion_v2 và câu hiển thị dùng chung cho form Desktop và Web.
  * Chép nguyên văn sang akaAgentWebApp packages/control-api/src/campaignSendExclusionMulti.ts (sửa ở một nơi rồi chép lại).
- * Không import gì ngoài kiểu của campaignSendExclusion để chép được giữa hai repo.
+ * Không import gì ngoài kiểu của campaignSendExclusion (đuôi .js cho control-api) để chép được giữa hai repo.
  */
-import type { ExclusionCatalog, ExclusionRule, FilterOption, SendExclusionSelection, SendExclusionsByAccount } from './campaignSendExclusion'
+import type { ExclusionCatalog, ExclusionRule, FilterOption, SendExclusionSelection, SendExclusionsByAccount } from './campaignSendExclusion.js'
 
 export const SEND_EXCLUSION_MULTI_SETTING_KEY = 'campaign.send_exclusion_multi_zalo'
 export type SendExclusionMultiAudience = 'off' | 'admin_akabiz' | 'all'

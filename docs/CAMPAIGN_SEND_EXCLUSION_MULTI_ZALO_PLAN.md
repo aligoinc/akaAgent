@@ -1,6 +1,9 @@
 # Loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi — phương án
 
-**Tình trạng 25/11/2026:** phương án, chưa code, chưa migration, chưa đổi gì trên production.
+**Tình trạng 25/11/2026:** anh bảo "Đồng ý hãy thực thi phương án này" (các đề xuất ở mục 9 coi như đã chốt). Đã code xong
+DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
+**chưa merge, V653 chưa apply, chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V653 đặt `off`**.
+Chi tiết ở mục 10.
 Thiết kế: https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB (anh duyệt 25/11, dạng 2 tầng xếp chồng).
 Anh đồng ý các đề xuất ở vòng thiết kế 2 và yêu cầu thêm hai loại loại trừ: theo Nhóm data, theo chiến dịch đã gửi.
 
@@ -188,9 +191,42 @@ Thêm hàm `_v2` thay vì đổi chữ ký cũ, để app cũ vẫn gọi đư�
 
 Trước bước 6: Desktop bản cũ mở chiến dịch có cấu hình mới thì bị tạm dừng với câu báo cập nhật (mục 5), không gửi sai.
 
-## 9. Còn cần anh chốt
+## 9. Đã chốt (25/11, theo đề xuất khi anh bảo thực thi)
 
 1. Nhóm data và chiến dịch đã gửi đặt ở thẻ chiến dịch, cạnh danh sách bạn bè (đề xuất, như thiết kế), hay đặt trong nhóm loại trừ để dùng lại ở nhiều chiến dịch?
 2. "Đã nhận tin ở chiến dịch": chỉ data đã gửi tin thành công (đề xuất), hay cả data chiến dịch đó chưa gửi hoặc gửi lỗi?
 3. Lời mời kết bạn có tính là "đã gửi" không? Đề xuất: chỉ tính tin nhắn.
 4. iOS đợt đầu chỉ xem và chọn nhóm có sẵn (đề xuất), hay làm đủ editor 2 tầng như Desktop và Web?
+
+Chốt: (1) thẻ chiến dịch; (2) chỉ data đã gửi tin thành công; (3) chỉ tin nhắn (`zalo_message_friend`, `zalo_message_stranger`), không tính lời mời kết bạn; (4) iOS đợt đầu chỉ xem, giữ nguyên cấu hình mới, kiểm lúc lưu bằng trang v2.
+
+## 10. Đã làm (25/11/2026, nhánh `claude/festive-rubin-5zi6qe`)
+
+**DB (akaAgent, chưa apply):** [p1](../migrations/migration_v653_send_exclusion_multi_zalo_p1.sql) (bảng khối
+`auto_campaign_send_exclusion_group_accounts`, cột `groups.version`, `rules.group_account_id` điền 1 khối cho mọi nhóm cũ,
+trigger điền khối chính khi bản app cũ ghi luật, công tắc `off`) → [chỉ mục](../migrations/migration_v653_send_exclusion_multi_zalo_index.sql)
+`idx_zalo_users_account_global_id` (CONCURRENTLY, chạy riêng) → [p2](../migrations/migration_v653_send_exclusion_multi_zalo_p2.sql)
+(khoá md5 6 thân hàm production đọc 25/11; hàm cũ giữ hình dạng cũ, hàm mới `aka_agent_send_exclusion_v2` page / options / lists / save,
+bộ chạy lấy phần `remote` khi gửi `clientVersion: 2`, op `remote` tra danh sách / Nhóm data / chiến dịch đã gửi / dữ kiện khối Zalo khác
+trong một lượt) và [gỡ](../migrations/rollback_v653_send_exclusion_multi_zalo.sql) (thân production nguyên văn, kiểm md5).
+Kiểm `PG_MODULE_DIR=<thư mục có module pg> node scripts/send-exclusion-v653-smoke.cjs` (PG16, 18 nhóm, có gỡ).
+
+**Bộ chạy:** luật dùng chung `evaluateSendExclusionWithRemote` (`src/shared/campaignSendExclusion.ts`, lõi engine chép nguyên văn;
+`node scripts/send-exclusion-multi-zalo-smoke.cjs`). Bộ cũ Desktop / App Server và engine v2 Desktop đã đọc phần mới. Bản app cũ
+và ChatApi (bộ cũ + cổng engine trên Fly, **chưa sửa**, repo không gắn vào phiên này) gặp cấu hình mới thì DB trả
+`send_exclusion_client_outdated`: bộ cũ tạm dừng chiến dịch, engine báo cấu hình lỗi; không gửi sai. Bản chép luật ở ChatApi
+`packages/runtime-protocol` đang cũ: phải chép lại trước khi deploy `worker`.
+
+**Desktop:** thẻ [CampaignSendExclusionsCard](../src/renderer/src/components/CampaignPanels/CampaignSendExclusionsCard.tsx) (form thường
+và form Agent, chỉ khi công tắc bật; tắt thì thẻ cũ), IPC `send-exclusions-v2:*`, hợp đồng `src/shared/campaignSendExclusionMulti.ts`
+(chép nguyên văn sang WebApp `packages/control-api`). Kiểm `node scripts/run-send-exclusion-card-ui-smoke.cjs` (9 nhóm, Chromium,
+IPC giả; `SX_UI_SHOTS=<thư mục>` để chụp). Chưa chạy trong Electron thật, chưa gọi RPC thật.
+
+**WebApp:** API `/data/send-exclusions-v2` (page, `/options`, `/lists`, POST lưu), thẻ Web `apps/web/src/features/CampaignSendExclusionsCard.tsx`
+(chép từ Desktop), công tắc trong `web-polling-settings`; `projectSendExclusions` giữ `dataGroupIds` / `sentCampaignIds`
+(trước đó Web bỏ hai khoá này khi lưu); iOS hiện câu và giữ nguyên, kiểm lúc lưu bằng `verifySendExclusionsV2`.
+
+**Thứ tự đưa lên (mục 8):** apply p1 → chỉ mục → p2 (tối) → chép luật + sửa ChatApi rồi deploy `worker` → phát hành Desktop / App Server
+→ deploy API/Web, phát hành iOS → bật công tắc cho admin akaBiz, thử thật → mọi khách. Bật công tắc trước khi ChatApi có bản mới thì
+chiến dịch Fly dùng cấu hình mới bị dừng ngay ở bước loại trừ.
+
