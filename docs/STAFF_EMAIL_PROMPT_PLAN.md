@@ -90,15 +90,30 @@ Tính năng này là việc xin email cho tài khoản, thay quyết định "kh
 
 ## 3. Lưu email ở đâu
 
-Khuyên (Q4):
+**Anh chốt Q4 (25/11/2026):** người lưu là **admin tổ chức** thì lưu vào cả `org_staff`, `org_organization` và
+`aka_customer`; không phải admin thì chỉ lưu `org_staff`.
 
-1. **`org_staff.email`** của chính tài khoản đang đăng nhập: luôn ghi. Đây là chỗ cổng "Lấy lại tài khoản" đọc (khớp cùng
-   SĐT của tài khoản) và là nguồn `profile` của thông báo. Không có index unique trên cột này; trigger UPDATE của
-   `org_staff` không xét cột email (đã đọc 25/11), nên ghi rẻ.
-2. **`org_organization.email`**: chỉ ghi khi đang trống **và** tài khoản là chủ của tổ chức chỉ có 1 tài khoản. Ghi cột này
-   chạy trigger đồng bộ đơn hàng CRM (`trg_sync_organization_orders` → `aka_order`), chấp nhận được vì mỗi khách một lần.
-3. **`aka_customer.email`** (CRM): chỉ ghi khi đang trống, cùng điều kiện "tổ chức 1 tài khoản". Hệ quả: khách bắt đầu nhận
-   email CSKH tự động của CRM (có link từ chối). Cần anh chốt.
+| Người lưu | `org_staff.email` | `org_organization.email` | `aka_customer.email` |
+| --- | --- | --- | --- |
+| Admin tổ chức (`org_staff.is_admin = true`) | ghi | ghi | ghi |
+| Tài khoản khác | ghi | không | không |
+
+Chi tiết đã kiểm trên dữ liệu thật 25/11 (916 admin đang dùng gói chưa có email tài khoản):
+
+- **"Admin"** = cờ `org_staff.is_admin`. Lệch với `org_organization.staff_admin_id` ở 4 người, 1 tổ chức có 2 admin cùng
+  chưa có email (ai lưu sau thì email tổ chức / CRM là của người đó).
+- **Khách CRM nào**: lấy `org_organization.customer_id` (luôn có). 229 admin có `org_staff.akacustomer_id` trống, số còn lại
+  trùng với khách của tổ chức. Không có index unique theo email trên `aka_customer`.
+- **Đã có email sẵn**: CRM đã có email ở **785 / 916** admin, tổ chức đã có email ở **183 / 916**. Ghi đè hay chỉ điền khi
+  trống: chờ anh chốt (Q4b). Dù chọn cách nào, email cũ được lưu lại trong bảng trạng thái (mục 5.1) để tra cứu và trả lại.
+- Ghi `org_organization.email` chạy trigger đồng bộ đơn hàng CRM (`trg_sync_organization_orders` → `aka_order`). Ghi
+  `aka_customer.email` chạy các trigger BEFORE UPDATE có sẵn (`trigger_customer_updated_at`, `trg_auto_pipeline_stage`,
+  `trg_auto_map_staff_id`…), giống khi sale sửa khách. Mỗi khách chỉ ghi một lần nên chấp nhận được.
+- Cờ "Từ chối nhận email CSKH" (`aka_customer.is_email_unsubscribed`) giữ nguyên khi đổi email.
+- Hệ quả của việc ghi CRM: email CSKH tự động của CRM (nhắc gia hạn, timeline) gửi tới email mới.
+- `org_staff.email` là chỗ cổng "Lấy lại tài khoản" đọc (khớp cùng SĐT của tài khoản) và là nguồn `profile` của thông báo;
+  không có index unique, trigger UPDATE của `org_staff` không xét cột email.
+- Ba lệnh ghi nằm trong cùng một giao dịch: lỗi ở bước nào thì không ghi bước nào.
 
 Hệ quả có sẵn, cần biết: trong vòng 1 giờ sau khi lưu, lượt gieo thông báo tự bật email "Chào ngày mới" 07:00 cho tài khoản
 này (nếu tài khoản chưa từng được tự điền và chưa từ chối). Form nói "thông báo của phần mềm" nên khớp; muốn rõ hơn có thể
@@ -137,6 +152,10 @@ CREATE TABLE private.aka_staff_email_prompt (
   saved_email       text,
   saved_source      text CHECK (saved_source IN ('typed', 'suggestion')),
   saved_client      text CHECK (saved_client IN ('desktop', 'web', 'ios')),
+  saved_as_admin    boolean,
+  org_email_before  text,   -- email tổ chức trước khi ghi (chỉ khi người lưu là admin)
+  crm_email_before  text,   -- email CRM trước khi ghi (chỉ khi người lưu là admin)
+  crm_customer_id   bigint, -- khách CRM đã ghi (org_organization.customer_id)
   verify_sent_at    timestamptz,
   verified_at       timestamptz,
   updated_at        timestamptz NOT NULL DEFAULT now()
@@ -147,7 +166,7 @@ REVOKE ALL ON private.aka_staff_email_prompt FROM PUBLIC, anon, authenticated, a
 -- Công tắc: mặc định tắt.
 INSERT INTO public.auto_system_settings (key, value, is_active)
 VALUES ('account.email_prompt',
-        '{"audience":"off","repromptHours":24,"verify":"link","fillOrganization":true,"fillCrm":false}', true)
+        '{"audience":"off","repromptHours":24,"verify":"link","adminWrite":"overwrite"}', true)
 ON CONFLICT (key) DO NOTHING;
 ```
 
@@ -156,7 +175,9 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 - `public.aka_agent_email_prompt(p_action, p_payload)`: chỉ `aka_agent_desktop`, nhân viên lấy từ phiên Desktop.
 - `public.aka_agent_control_email_prompt(p_staff_id, p_org_id, p_action, p_payload)`: chỉ `service_role` (API Web cho Web/iOS).
 - Lệnh `state` → `{show, username, suggestion: {masked, source} | null}`; `save` `{email | useSuggestion, client}` → kiểm
-  định dạng + tên miền nhầm, ghi `org_staff.email` (và tổ chức / CRM theo mục 3), ghi `saved_*`; `dismiss` `{client}` →
+  định dạng + tên miền nhầm, ghi `org_staff.email`; người lưu là admin (`is_admin`) thì ghi thêm `org_organization.email` và
+  `aka_customer.email` của `org_organization.customer_id` (theo `adminWrite`: `overwrite` hoặc `fill_empty`, Q4b), lưu email
+  cũ vào `*_before`; cả ba trong một giao dịch, ghi `saved_*`; `dismiss` `{client}` →
   tăng `dismiss_count`. `save` tối đa 5 lần / giờ / tài khoản. Email thật của gợi ý không bao giờ trả ra.
 
 Gửi thư chào + xác nhận: dùng bộ gửi email của trung tâm thông báo (worker 30 giây của API Web trên Fly, tài khoản gửi có cờ
@@ -194,7 +215,8 @@ không lưu mã.
 | Q1 | Thế nào là "đã có email" | A. Chỉ email của tài khoản đăng nhập: **952** người thấy form · B. Có email ở bất cứ đâu (tài khoản, tổ chức, CRM): **278** người | A, kèm biến thể một chạm cho ~670 người đã có email trong hồ sơ |
 | Q2 | Bấm × rồi khi nào hiện lại | Mỗi lần đăng nhập · Mỗi ngày một lần · Giãn dần (1, 3, 7 ngày) | Mỗi ngày một lần, không giới hạn số ngày, kèm nhãn "Thêm email" |
 | Q3 | Xác minh email | A. Lưu ngay + thư xác nhận · B. Mã 6 số trong form · C. Không xác minh | A, thư không chứa mật khẩu |
-| Q4 | Ghi thêm vào hồ sơ tổ chức / CRM | Chỉ tài khoản · Thêm tổ chức · Thêm cả CRM | Tài khoản + tổ chức (khi trống, tổ chức 1 tài khoản); CRM để anh quyết |
+| Q4 | Ghi thêm vào hồ sơ tổ chức / CRM | **Đã chốt 25/11**: admin tổ chức ghi cả `org_staff`, `org_organization`, `aka_customer`; người khác chỉ `org_staff` | |
+| Q4b | Tổ chức / CRM đã có email khác (CRM 785, tổ chức 183 trong 916 admin) | Ghi đè bằng email khách vừa nhập · Chỉ điền khi đang trống | Ghi đè (khách tự nhập là mới nhất), lưu email cũ để trả lại |
 | Q5 | Nền tảng | Desktop + Web trước · Cả iOS cùng lúc | Desktop + Web trước |
 | Q6 | Khách đang dùng thử có thấy không | Có · Không | Có (45 người) |
 | Q7 | Nói rõ email báo cáo mỗi sáng sẽ tự bật | Thêm một dòng trong form · Không nói thêm | Thêm một dòng |
