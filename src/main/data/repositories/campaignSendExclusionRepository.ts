@@ -1,4 +1,8 @@
 import type { SaveSendExclusionGroup, SendExclusionGroup, SendExclusionPage } from '../../../shared/campaignSendExclusion'
+import {
+  sendExclusionV2ErrorMessage, type SaveSendExclusionGroupV2, type SendExclusionAccountOptions, type SendExclusionGroupV2,
+  type SendExclusionLists, type SendExclusionListsQuery, type SendExclusionV2Page
+} from '../../../shared/campaignSendExclusionMulti'
 import { getCurrentUser, getCurrentUserCredentials, requireCurrentUser, requireCurrentUserCredentials } from '../currentUser'
 import { getSupabaseClient } from '../supabaseClient'
 
@@ -20,6 +24,23 @@ async function call<T>(accountId: number, operation: string, payload: unknown, s
 }
 export const listSendExclusionGroups = (accountId: number, signal?: AbortSignal) => call<SendExclusionPage>(accountId, 'list', {}, signal)
 export const saveSendExclusionGroup = (group: SaveSendExclusionGroup) => call<SendExclusionGroup>(group.accountId, 'save', group)
+
+/** V653 aka_agent_send_exclusion_v2: nhóm nhiều Zalo, Nhóm data, chiến dịch đã gửi (theo nhân viên, không theo một tài khoản). */
+async function callV2<T>(operation: 'page' | 'options' | 'lists' | 'save', payload: unknown, signal?: AbortSignal): Promise<T> {
+  const user = requireCurrentUser(), credentials = requireCurrentUserCredentials()
+  const {data, error} = await getSupabaseClient().rpc('aka_agent_send_exclusion_v2', {
+    p_staff_id: user.staffId, p_organization_id: user.organizationId, p_operation: operation, p_payload: payload,
+    p_auth_username: credentials.username, p_auth_password: credentials.password
+  }).abortSignal(signal ? AbortSignal.any([signal, AbortSignal.timeout(20_000)]) : AbortSignal.timeout(20_000))
+  const current = getCurrentUser()
+  if (current?.staffId !== user.staffId || current.organizationId !== user.organizationId || getCurrentUserCredentials() !== credentials) throw new Error('Phiên đăng nhập đã thay đổi.')
+  if (error) throw new Error(sendExclusionV2ErrorMessage(`${error.code ?? ''} ${error.message}`))
+  return data as T
+}
+export const getSendExclusionV2Page = () => callV2<SendExclusionV2Page>('page', {})
+export const getSendExclusionV2Options = (accountId: number) => callV2<SendExclusionAccountOptions>('options', {accountId})
+export const getSendExclusionV2Lists = (query: SendExclusionListsQuery) => callV2<SendExclusionLists>('lists', query)
+export const saveSendExclusionGroupV2 = (group: SaveSendExclusionGroupV2) => callV2<SendExclusionGroupV2>('save', group)
 
 /** Câu cho khách theo mã lỗi của DB (V330/V653); mã khác giữ câu chung. */
 const RUNTIME_ERROR_MESSAGES: Array<[string, string]> = [

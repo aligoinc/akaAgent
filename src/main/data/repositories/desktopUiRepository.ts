@@ -18,6 +18,7 @@ import { ZALO_SHARE_REPEAT_SETTING_KEY, parseZaloShareRepeatSetting } from '../.
 import { RENEWAL_REMINDER_SETTING_KEY, parseRenewalReminderSettings } from '../../../shared/renewalReminder'
 import { serverAccountsUseChatApi } from '../../../shared/zaloServerOnFly'
 import { AFF_PARTNER_SETTING_KEY, parseAffPartnerAudience } from '../../../shared/affPartner'
+import { SEND_EXCLUSION_MULTI_SETTING_KEY, parseSendExclusionMultiAudience } from '../../../shared/campaignSendExclusionMulti'
 
 async function scope() {
   const user = requireCurrentUser()
@@ -38,7 +39,7 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
   requireCurrentUser()
   try {
     const { data, error } = await getSupabaseClient().from('auto_system_settings')
-      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY, FACEBOOK_MAX_COMMENTS_KEY, CONTENT_SYNTAX_SETTING_KEY])
+      .select('key,value').in('key', [...Object.values(DESKTOP_POLL_KEYS), ...Object.values(DESKTOP_UI_TUNING_KEYS), ZALO_SHARE_REPEAT_SETTING_KEY, CAMPAIGN_REPEAT_SETTING_KEY, RENEWAL_REMINDER_SETTING_KEY, AFF_PARTNER_SETTING_KEY, FACEBOOK_MAX_COMMENTS_KEY, CONTENT_SYNTAX_SETTING_KEY, SEND_EXCLUSION_MULTI_SETTING_KEY])
       .eq('is_active', true).eq('is_secret', false).abortSignal(AbortSignal.timeout(5_000))
     if (error) return { ...DEFAULT_DESKTOP_POLLING }
     const values = new Map((data || []).map(row => [row.key, row.value]))
@@ -58,6 +59,8 @@ export async function getDesktopPollingSettings(): Promise<DesktopPollingSetting
       renewalReminder: parseRenewalReminderSettings(values.get(RENEWAL_REMINDER_SETTING_KEY)),
       // Giới thiệu nhận hoa hồng: cùng câu đọc, thiếu dòng/sai JSON = ẩn mục menu (docs/AFF_PARTNER_DESKTOP.md).
       affPartnerAudience: parseAffPartnerAudience(values.get(AFF_PARTNER_SETTING_KEY)),
+      // Form loại trừ gửi nhiều Zalo (V653): cùng câu đọc, thiếu dòng = off = form cũ.
+      sendExclusionMultiAudience: parseSendExclusionMultiAudience(values.get(SEND_EXCLUSION_MULTI_SETTING_KEY)),
       // Chặn lưu nội dung sai cú pháp: cùng câu đọc, thiếu dòng = chặn. Tiến trình chính dùng mức này ở đường lưu.
       contentSyntaxGuard: setContentSyntaxGuardMode(values.get(CONTENT_SYNTAX_SETTING_KEY))
     }

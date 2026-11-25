@@ -17,6 +17,8 @@ import { formAiAvailable, FORM_AI_SECTIONS } from '../../../../shared/campaignFo
 import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignSendExclusions'
+import CampaignSendExclusionsCard, { verifySendExclusionsBeforeSave } from './CampaignSendExclusionsCard'
+import { sendExclusionMultiVisible } from '../../../../shared/campaignSendExclusionMulti'
 import { PENDING_BLOCKLIST_MESSAGE, restorePendingBlocklistAccount } from '../../../../shared/campaignSendExclusionDraft'
 import CampaignScheduleAi from './CampaignScheduleAi'
 import CampaignLimitsAi from './CampaignLimitsAi'
@@ -1809,6 +1811,8 @@ export default function CampaignFormModal({
   // Công tắc "Lặp lại sau khi chạy xong" (campaign.repeat_after_completion, cùng công tắc với Web, đọc một lần khi đăng nhập).
   const campaignRepeatAudience = useDesktopPollingStore(state => state.settings.campaignRepeatAudience)
   const campaignRepeatFeatureVisible = campaignRepeatVisible(campaignRepeatAudience, authUser?.isAdminAkabiz === true)
+  const sendExclusionMultiAudience = useDesktopPollingStore(state => state.settings.sendExclusionMultiAudience)
+  const sendExclusionMultiFeatureVisible = sendExclusionMultiVisible(sendExclusionMultiAudience, authUser?.isAdminAkabiz === true)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -7027,7 +7031,8 @@ export default function CampaignFormModal({
         return
       }
       try {
-        for (const id of zaloTagAccountIds) {
+        if (sendExclusionMultiFeatureVisible) await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId)
+        else for (const id of zaloTagAccountIds) {
           const selection = zaloSendExclusionsByAccountId[String(id)]
           if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
           const page = await window.electronAPI.listSendExclusionGroups(id)
@@ -17598,7 +17603,21 @@ export default function CampaignFormModal({
               </div>
             )}
 
-            {canUseSendExclusions && <CampaignSendExclusions
+            {canUseSendExclusions && sendExclusionMultiFeatureVisible && <CampaignSendExclusionsCard
+              accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
+              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id ?? null}
+              pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
+              onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
+              ai={{
+                available: formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.exclusions, formData.actionId),
+                actionId: formData.actionId, enableMessage: formData.enableMessage === true,
+                authScope: `${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`,
+                disabled: saveBusy || facebookAiBusy || scheduleAiBusy || limitsAiBusy || contentAiBusy || loadingDetails || generalSettingsOpen,
+                zIndex: Math.max(3100, (modalZIndex || 3000) + 100), onBusyChange: setExclusionAiBusy
+              }}
+              onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
+            />}
+            {canUseSendExclusions && !sendExclusionMultiFeatureVisible && <CampaignSendExclusions
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
               value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId}
               pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}

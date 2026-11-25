@@ -42,6 +42,10 @@ import { FACEBOOK_RANDOM_RUN_IPC, type FacebookRandomConfig, type FacebookRandom
 import { WEB_ENRICHMENT_IPC, WEB_ENRICHMENT_STATE, type WebEnrichmentSettings, type WebEnrichmentState } from '../shared/facebookWebEnrichment'
 import type { BrowserPreview } from '../shared/browserPreview'
 import { SEND_EXCLUSION_IPC, type SaveSendExclusionGroup, type SendExclusionGroup, type SendExclusionPage } from '../shared/campaignSendExclusion'
+import {
+  SEND_EXCLUSION_V2_IPC, type SaveSendExclusionGroupV2, type SendExclusionAccountOptions, type SendExclusionGroupV2,
+  type SendExclusionLists, type SendExclusionListsQuery, type SendExclusionV2Page
+} from '../shared/campaignSendExclusionMulti'
 import { DESKTOP_UI_IPC, type DesktopPollingSettings, type DesktopCampaignPageQuery, type DesktopCampaignPage, type DesktopCampaignPageReadOptions, type DesktopCampaignSelectionQuery, type DesktopCampaignSelection, type DesktopAccountSnapshot, type DesktopUiAttention } from '../shared/desktopUiReads'
 import type { AuthRenewalRecheckResult, AuthRenewalRequired, ChatWebState, CrmWebDescriptor, LoginScreenContent, RenewalWebDescriptor, RenewalWebState } from '../shared/types'
 import { FACEBOOK_LOGIN_IPC, type FacebookImportInput, type FacebookImportState, type FacebookLoginMetadata, type FacebookCredentialUpdate } from '../shared/facebookLogin'
@@ -93,6 +97,10 @@ const electronAPI = {
   saveBrowserRunLimits: (settings: BrowserRunLimits): Promise<SaveBrowserRunLimitsResult> => ipcRenderer.invoke(BROWSER_RUN_LIMITS_IPC.save, settings),
   listSendExclusionGroups: (accountId: number): Promise<SendExclusionPage> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.page, accountId),
   saveSendExclusionGroup: (group: SaveSendExclusionGroup): Promise<SendExclusionGroup> => ipcRenderer.invoke(SEND_EXCLUSION_IPC.save, group),
+  getSendExclusionV2Page: (): Promise<SendExclusionV2Page> => ipcRenderer.invoke(SEND_EXCLUSION_V2_IPC.page),
+  getSendExclusionV2Options: (accountId: number): Promise<SendExclusionAccountOptions> => ipcRenderer.invoke(SEND_EXCLUSION_V2_IPC.options, accountId),
+  getSendExclusionV2Lists: (query: SendExclusionListsQuery): Promise<SendExclusionLists> => ipcRenderer.invoke(SEND_EXCLUSION_V2_IPC.lists, query),
+  saveSendExclusionGroupV2: (group: SaveSendExclusionGroupV2): Promise<SendExclusionGroupV2> => ipcRenderer.invoke(SEND_EXCLUSION_V2_IPC.save, group),
   facebookLogin: {
     preview: (input: FacebookImportInput): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.preview, input),
     start: (id: string): Promise<FacebookImportState> => ipcRenderer.invoke(FACEBOOK_LOGIN_IPC.start, id),
