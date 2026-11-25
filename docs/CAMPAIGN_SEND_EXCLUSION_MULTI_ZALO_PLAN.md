@@ -3,6 +3,7 @@
 **Tình trạng 25/11/2026:** anh bảo "Đồng ý hãy thực thi phương án này" (các đề xuất ở mục 9 coi như đã chốt). Đã code xong
 DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
 **chưa merge, V654 đã apply akachat 17:54–17:59 VN 25/11 ([biên nhận](../migrations/snapshots/send-exclusion-multi-zalo-v654/apply-receipt.json), không apply lại), chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V654 đặt `off`**.
+**V657 (mục 12) đã apply akachat 04:18 VN 26/11** (p1 sổ `20261125211803`, p2 `20261125211830`, không apply lại; [biên nhận](../migrations/snapshots/send-exclusion-global-match-v657/apply-receipt.json)).
 Chi tiết ở mục 10.
 Thiết kế: https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB (anh duyệt 25/11, dạng 2 tầng xếp chồng).
 Anh đồng ý các đề xuất ở vòng thiết kế 2 và yêu cầu thêm hai loại loại trừ: theo Nhóm data, theo chiến dịch đã gửi.
