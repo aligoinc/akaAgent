@@ -19,6 +19,10 @@ Trạng thái: chưa code, chưa có migration, chưa đổi gì trên productio
    cũng vào danh sách.
 5. Tắt form bằng × thì **mỗi ngày hỏi lại một lần**, kèm nhãn "Thêm email" trên thanh trên cùng.
 6. **Lưu ngay + gửi thư xác nhận**, thư không chứa mật khẩu.
+7. Admin đã có email ở tổ chức / CRM mà tài khoản trống: **tự chép, không hỏi** (mục 3.3).
+8. Tài khoản nhân viên (không phải admin) chưa có email riêng: **vẫn hỏi**, dù tổ chức / CRM đã có email.
+9. Làm **Desktop + Web trước**, iPhone ở bản phát hành sau.
+10. Form **thêm một dòng** nói rõ báo cáo chiến dịch mỗi sáng sẽ gửi qua email (tắt được).
 
 "CRM" trong tài liệu này là bảng `aka_customer` (hồ sơ khách trong trang quản lý crm.akabiz.net), nối qua
 `org_organization.customer_id`.
@@ -91,8 +95,9 @@ Tính năng này là việc xin email cho tài khoản, thay quyết định "kh
 
 - Nhãn nhỏ "BẢO VỆ TÀI KHOẢN", tiêu đề **"Giữ tài khoản luôn trong tầm tay"**, dòng phụ "Tài khoản **<tên đăng nhập>** chưa
   có email. Thêm ngay, chỉ mất 10 giây."
-- Ba lợi ích, đúng ba mục đích anh nêu: *Quên mật khẩu, lấy lại trong 1 phút* · *Nhận bản cài và link đăng nhập* ·
-  *Lưu sẵn thông tin tài khoản*.
+- Bốn lợi ích: ba mục đích anh nêu (*Quên mật khẩu, lấy lại trong 1 phút* · *Nhận bản cài và link đăng nhập* ·
+  *Lưu sẵn thông tin tài khoản*) và *Báo cáo chiến dịch mỗi sáng* ("Gửi lúc 07:00, tắt được bất cứ lúc nào trong Cài đặt
+  chung") vì có email là hệ thống tự bật báo cáo này.
 - Ô "Email của bạn"; gõ phần trước `@` thì hiện nút chọn nhanh `@gmail.com` `@yahoo.com` `@outlook.com` `@icloud.com`.
 - Gõ nhầm tên miền (`gmial.com`, `gmail.con`, `gmail.vn`…) thì hiện "Có phải bạn muốn nhập …@gmail.com?" với **Sửa giúp** /
   **Giữ nguyên**; nút Lưu chờ khách chọn.
@@ -114,7 +119,7 @@ khối "Trong thư có" (tên đăng nhập + gói + hạn, link tải bản cà
 
 Mặc định **không hỏi** (chốt 1). Màn xác nhận để sẵn cho các trường hợp sau, mỗi trường hợp chỉ bật khi anh đồng ý:
 
-- Q10: 788 admin có email ở tổ chức / CRM mà tài khoản trống (xem mục 3.3).
+- 788 admin có email ở tổ chức / CRM mà tài khoản trống: **không dùng màn này**, anh chốt tự chép (mục 3.3).
 - Sau này: thư gửi tới email bị trả về, hoặc email chưa từng được khách xác nhận quá lâu.
 
 ## 3. Lưu email ở đâu
@@ -153,8 +158,18 @@ Mặc định **không hỏi** (chốt 1). Màn xác nhận để sẵn cho các
 ### 3.3 Admin có email ở tổ chức / CRM nhưng tài khoản trống (788 người)
 
 Theo chốt 1, nhóm này **không bị hỏi**. Nhưng 603 người trong đó chỉ có email ở CRM, mà trang "Lấy lại tài khoản" không đọc
-CRM, nên họ vẫn **không tự lấy lại tài khoản được**. Ở những người có cả hai, email tổ chức và email CRM luôn trùng nhau.
-Cách xử lý chờ anh chốt (Q10).
+CRM, nên hiện họ **không tự lấy lại tài khoản được**. Ở những người có cả hai, email tổ chức và email CRM luôn trùng nhau.
+
+**Anh chốt: tự chép, không hỏi.** Cách làm:
+
+- Lệnh `state` (gọi lúc admin vào app) thấy admin có email ở 1 trong 3 chỗ mà chỗ khác trống thì chép email đó vào **những chỗ
+  đang trống** trong ba chỗ, rồi trả `show: 'none'`. Khách không thấy gì.
+- Chỉ điền chỗ trống, không ghi đè: đây không phải khách vừa nhập email mới. Trigger tự đưa email vào `email_list`.
+- Ưu tiên nguồn khi có hơn một: `org_staff` → `org_organization` → `aka_customer` (đo 25/11: chưa có ca nào hai nguồn khác
+  nhau). Email chép phải "dùng được" (đúng định dạng, không thuộc tên miền gõ nhầm); không dùng được thì coi như không có.
+- Rải theo lượt đăng nhập nên không ghi hàng loạt; admin không mở app thì chưa được chép. Muốn chép hết ngay thì chạy một lần
+  cùng luật cho 788 admin (chia lô, buổi tối), cần anh đồng ý riêng.
+- Ghi vào bảng trạng thái `saved_mode = 'synced'` để phân biệt với khách tự nhập.
 
 ### 3.4 Khác
 
@@ -228,7 +243,7 @@ CREATE TABLE private.aka_staff_email_prompt (
   last_dismissed_at timestamptz,
   saved_at          timestamptz,
   saved_email       text,
-  saved_mode        text CHECK (saved_mode IN ('typed', 'confirmed')),
+  saved_mode        text CHECK (saved_mode IN ('typed', 'confirmed', 'synced')),
   saved_client      text CHECK (saved_client IN ('desktop', 'web', 'ios')),
   saved_as_admin    boolean,
   crm_customer_id   bigint,
@@ -256,7 +271,8 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 - `public.aka_agent_control_email_prompt(p_staff_id, p_org_id, p_action, p_payload)`: chỉ `service_role` (API Web cho Web/iOS).
 - Lệnh:
   - `state` → `{show: 'none' | 'enter' | 'confirm', username, email}` (`email` chỉ có ở `confirm`, là email của chính
-    tài khoản / tổ chức đang đăng nhập);
+    tài khoản / tổ chức đang đăng nhập); admin có email ở 1 trong 3 chỗ thì tự chép vào chỗ trống trước khi trả `none`
+    (mục 3.3);
   - `save` `{email | confirm: true, client}` → kiểm định dạng + tên miền nhầm, ghi theo bảng 3.1 trong một giao dịch
     (trigger tự cập nhật `email_list`), ghi `saved_*`, xếp thư xác nhận; tối đa 5 lần / giờ / tài khoản;
   - `dismiss` `{client}` → tăng `dismiss_count`, đặt `last_dismissed_at`.
@@ -275,7 +291,7 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 
 - `/me` trả thêm `emailPrompt` (đỡ một request); `POST /api/aka-agent/control/v1/me/email-prompt` cho `save` / `dismiss`.
 - Web: cùng hộp thoại như Desktop. iOS: tấm trượt từ dưới lên (màn iPhone trong bản thiết kế), vùng bấm nút × 40 px.
-- Khuyên làm Desktop + Web trước (phủ gần hết người dùng; chỉ 29 người có dùng iPhone, 1 người chỉ dùng iPhone), iOS ở bản
+- Anh chốt làm Desktop + Web trước (phủ gần hết người dùng; chỉ 29 người có dùng iPhone, 1 người chỉ dùng iPhone), iOS ở bản
   phát hành sau.
 
 ### 5.4 CRM (SqlServerDashboard)
@@ -293,16 +309,14 @@ Ba hàm, chung một lõi `private.aka_agent_email_prompt_core(staff, org, actio
 
 ## 7. Câu hỏi còn mở
 
-| # | Câu hỏi | Lựa chọn | Khuyên |
-| --- | --- | --- | --- |
-| Q5 | Nền tảng | Desktop + Web trước · Cả iOS cùng lúc | Desktop + Web trước |
-| Q6 | Khách đang dùng thử có thấy không | Có · Không | Có |
-| Q7 | Nói rõ email báo cáo mỗi sáng sẽ tự bật | Thêm một dòng trong form · Không nói thêm | Thêm một dòng |
-| Q9 | Tài khoản nhân viên (không phải admin) mà tổ chức / CRM đã có email | Vẫn hỏi email riêng (35 người) · Không hỏi (0 người) | Vẫn hỏi: email tổ chức / CRM là hộp thư của admin, nhân viên chỉ lấy lại được tài khoản của mình bằng email riêng |
-| Q10 | 788 admin có email ở tổ chức / CRM nhưng tài khoản trống (603 người hiện không tự lấy lại tài khoản được) | A. Tự chép email đó vào tài khoản (và tổ chức nếu trống) khi admin đăng nhập, không hỏi · B. Hỏi xác nhận một lần bằng màn xác nhận, khách bấm "Đúng" · C. Không chép; sửa trang Lấy lại tài khoản đọc thêm CRM | A: đúng luật "có 1 trong 3 thì không hỏi", lấy lại tài khoản dùng được ngay, rải theo lượt đăng nhập nên không ghi hàng loạt |
+| # | Câu hỏi | Mặc định nếu anh không nói gì |
+| --- | --- | --- |
+| Q6 | Khách đang dùng thử có thấy form không | Có |
+| Q11 | Chép ngay một lần cho 788 admin (chia lô, buổi tối) hay chỉ chép dần khi họ đăng nhập | Chép dần khi đăng nhập |
 
 Đã chốt và bỏ khỏi bảng: Q1 (có 1 trong 3 thì không hỏi), Q2 (mỗi ngày hỏi lại một lần), Q3 (lưu ngay + thư xác nhận),
-Q4 / Q4b (admin ghi cả ba, ghi đè, có danh sách email). Q8 (tổ chức nhiều tài khoản) gộp vào Q9.
+Q4 / Q4b (admin ghi cả ba, ghi đè, có danh sách email), Q5 (Desktop + Web trước), Q7 (thêm dòng báo cáo mỗi sáng),
+Q8 / Q9 (nhân viên vẫn được hỏi email riêng), Q10 (788 admin: tự chép, không hỏi).
 
 Trigger danh sách email (phần 2 của 5.1) đã chạy thử trên PostgreSQL 16 trong máy 25/11: nhập mới, đổi, gõ lại email cũ
 (khác hoa / thường), xoá trống rồi nhập lại, dòng cũ có email mà danh sách trống: đều cho danh sách đúng.
