@@ -24,7 +24,7 @@ import { FACEBOOK_WITHOUT_INPUT_DATA } from './campaignRunReportService'
  * riêng, không chặn báo cáo khác); không cache kết quả, không hẹn giờ. Renderer chỉ gọi khi người dùng thao tác.
  */
 const flights = new ReportReadFlights(3)
-const ENGAGEMENT_FILTERS = new Set(['all', 'seen', 'responded', 'reacted', 'friended', 'none'])
+const ENGAGEMENT_FILTERS = new Set(['all', 'received', 'seen', 'responded', 'reacted', 'friended', 'none'])
 type Row = Record<string, unknown>
 
 const positiveId = (value: unknown): number | null => {

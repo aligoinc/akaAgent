@@ -78,6 +78,7 @@ import { registerBrowserRunLimitsHandlers } from './handlers/browserRunLimitsHan
 import { registerCampaignTypeVisibilityHandlers } from './handlers/campaignTypeVisibilityHandlers'
 import { registerNotificationCenterHandlers } from './handlers/notificationCenterHandlers'
 import { registerAffPartnerHandlers } from './handlers/affPartnerHandlers'
+import { registerEmailPromptHandlers } from './handlers/emailPromptHandlers'
 import { registerEngineErrorReviewHandlers } from './handlers/engineErrorReviewHandlers'
 import { registerAiChatHandlers } from './handlers/aiChatHandlers'
 import { registerCampaignResultGroupsHandlers } from './handlers/campaignResultGroupsHandlers'
@@ -200,6 +201,7 @@ export function registerIpcHandlers(
   registerAiChatHandlers(mainWindow)
   registerCampaignResultGroupsHandlers(mainWindow)
   registerAffPartnerHandlers(mainWindow)
+  registerEmailPromptHandlers(mainWindow)
   registerEngineErrorReviewHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()

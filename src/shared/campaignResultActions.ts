@@ -1,10 +1,11 @@
 // Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy: hợp đồng hàm DB V539 và luật hiển thị/Excel.
 // Chép nguyên văn từ akaAgentWebApp packages/control-api/src/campaignResultActions.ts (Desktop không import được
 // package WebApp); chỉ khác phần import, loại nền tảng (Desktop có thêm Facebook và Email) và kiểu tương tác Zalo
-// (Desktop chưa đọc bảng đồng bộ trạng thái tin nhắn nên không có "Đã nhận"). Sửa ở WebApp trước rồi chép lại.
+// (Desktop đọc mốc "Đã nhận" từ khoá zaloMessageStatus mà hàm DB trả từ V653). Sửa ở WebApp trước rồi chép lại.
 import { ENGAGEMENT_STAGE_LABELS, finalEngagementStage, type EngagementStage } from './campaignEffectiveness'
 import { CAMPAIGN_REPORT_AUXILIARY_ACTION_CODES } from './campaignRunReport'
 import type { ZaloEngagement } from './zaloCampaignEngagement'
+import { mergeZaloMessageStatus } from './zaloMessageStatusMarks'
 
 /** Nền tảng của tài khoản chạy chiến dịch (`flatform_type`: zalo, sms, facebook, email…). */
 type CampaignPlatform = string
@@ -118,7 +119,7 @@ export interface CampaignResultRecipientQuery {
   status?: string
   dateFrom?: string
   dateTo?: string
-  engagementFilter?: 'all' | 'seen' | 'responded' | 'reacted' | 'friended' | 'none'
+  engagementFilter?: 'all' | 'received' | 'seen' | 'responded' | 'reacted' | 'friended' | 'none'
   sort?: CampaignResultRecipientSort
 }
 
@@ -180,7 +181,8 @@ function parseResult(row: unknown): CampaignResultRecipientResult {
     createdAt: optionalText(row.createdAt),
     statusPresentation: presentation(row.statusPresentation),
     subStatusPresentation: presentation(row.subStatusPresentation),
-    zaloEngagement: isRow(row.zaloEngagement) ? row.zaloEngagement as unknown as ZaloEngagementWithStatus : null
+    // V653: mốc của đồng bộ trạng thái tin nhắn Zalo đi riêng (`zaloMessageStatus`); ghép để có "Đã nhận".
+    zaloEngagement: mergeZaloMessageStatus(row.zaloEngagement, row.zaloMessageStatus) as ZaloEngagementWithStatus | null
   }
 }
 

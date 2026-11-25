@@ -2,7 +2,7 @@
 export type EngagementKind = 'message' | 'reaction' | 'friend' | 'friend_rejected' | 'seen'
 /** Kết bạn: đồng ý (`friend`) hoặc người nhận từ chối lời mời (`friend_rejected`, V615); cả hai chỉ khớp lượt gửi lời mời. */
 export const isFriendEngagementKind = (kind: EngagementKind): boolean => kind === 'friend' || kind === 'friend_rejected'
-export type EngagementFilter = 'all' | 'responded' | 'reacted' | 'friended' | 'seen' | 'none'
+export type EngagementFilter = 'all' | 'received' | 'responded' | 'reacted' | 'friended' | 'seen' | 'none'
 export interface ZaloEngagementSource {
   version: 1
   operationId?: string
@@ -22,6 +22,8 @@ export interface ZaloEngagement {
   friended_at: string | null
   /** Người nhận từ chối lời mời kết bạn (V615). DB chưa có V615 thì không có trường này. */
   rejected_at?: string | null
+  /** Biên nhận "đã nhận" của đồng bộ trạng thái tin nhắn Zalo (V525, đọc qua V653); chỉ có khi lượt gửi được tính năng đó theo dõi. */
+  delivered_at?: string | null
 }
 export interface EngagementEvent {
   accountId: string
@@ -213,8 +215,9 @@ export function makeEngagementSource(ownUid: string | undefined | null, targetUi
 }
 export function engagementDisplay(value: ZaloEngagement | null | undefined, applicable: boolean): string {
   if (!applicable || !value) return ''
-  const marks = [[value.seen_at, 'Đã xem'], [value.responded_at, 'Đã phản hồi'], [value.reacted_at, 'Đã thả cảm xúc'], [value.friended_at, 'Đã kết bạn'], [value.rejected_at, 'Đã từ chối kết bạn']]
-    .filter(([at]) => at).map(([at, label]) => `${label}: ${new Date(at!).toLocaleString('vi-VN')}`)
+  const marks = [[value.delivered_at, 'Đã nhận'], [value.seen_at, 'Đã xem'], [value.responded_at, 'Đã phản hồi'], [value.reacted_at, 'Đã thả cảm xúc'], [value.friended_at, 'Đã kết bạn'], [value.rejected_at, 'Đã từ chối kết bạn']]
+    // Giờ không đọc được (dữ liệu hỏng) thì bỏ, không hiện "Invalid Date".
+    .filter(([at]) => at && Number.isFinite(Date.parse(at))).map(([at, label]) => `${label}: ${new Date(at!).toLocaleString('vi-VN')}`)
   return marks.join('\n')
 }
 export const engagementApplicable = (actionCode?: string | null): boolean => ['zalo_message_friend', 'zalo_message_stranger', 'zalo_add_friend'].includes(actionCode || '')

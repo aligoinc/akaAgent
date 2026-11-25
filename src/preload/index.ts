@@ -66,6 +66,7 @@ import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../
 import type { AiChatImageUpload } from '../shared/aiChat'
 import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
 import type { AffPartnerResponse } from '../shared/affPartner'
+import { EMAIL_PROMPT_IPC, type EmailPromptAction, type EmailPromptIpcResult, type EmailPromptSaveRequest } from '../shared/emailPromptDesktop'
 import {
   ENGINE_ERROR_REVIEW_IPC,
   type EngineErrorCaseResponse, type EngineErrorDecision, type EngineErrorList, type EngineErrorListQuery, type EngineErrorReviewIpcResult
@@ -293,6 +294,10 @@ const electronAPI = {
     ipcRenderer.invoke(AFF_PARTNER_IPC.summary),
   affPartnerOpenPortal: (): Promise<AffPartnerIpcResult<AffPartnerOpenPortalResult>> =>
     ipcRenderer.invoke(AFF_PARTNER_IPC.openPortal),
+
+  // Form xin email sau khi đăng nhập (V652): một kênh, tiến trình chính gắn `client: 'desktop'` rồi gọi RPC.
+  emailPromptCall: <A extends EmailPromptAction>(action: A, payload?: A extends 'save' ? EmailPromptSaveRequest : undefined): Promise<EmailPromptIpcResult<A>> =>
+    ipcRenderer.invoke(EMAIL_PROMPT_IPC, { action, payload }),
 
   // Tab "Lỗi không xác định" (V588, admin akaBiz): đọc / duyệt ca lỗi của bộ kiểm lỗi chiến dịch Facebook. Chỉ gọi khi admin mở tab hoặc bấm nút.
   engineErrorReviewList: (query?: EngineErrorListQuery): Promise<EngineErrorReviewIpcResult<EngineErrorList>> =>
