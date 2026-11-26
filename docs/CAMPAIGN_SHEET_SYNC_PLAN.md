@@ -304,3 +304,7 @@ trong data chiến dịch qua đường nào của app, và nếu có thì bộ 
 
 Giới hạn còn lại: so trùng theo đúng cách chuẩn hoá của cửa sổ Upload (cùng group viết `m.facebook.com` với `www.facebook.com`,
 có / không tham số theo dõi vẫn là hai giá trị, như Upload hôm nay).
+
+**Kết quả các vòng:** vòng 1–3 tìm ra lỗi 1–6; vòng 4, 5 sạch; vòng 6 tìm ra lỗi 7 (đếm lại); **vòng 7, 8, 9 sạch liền**
+(mỗi vòng 600 Sheet, ~750 lượt đồng bộ ở tầng JS; ~300 kịch bản, ~600 lượt, ~5.500 dòng thêm, ~120 lượt nhận việc song song và
+~130 lượt `finish` song song ở tầng DB).
