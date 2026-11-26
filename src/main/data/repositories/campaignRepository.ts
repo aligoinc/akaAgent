@@ -1,4 +1,5 @@
 import { validateContentGroupSelection } from './groupSharingRepository'
+import { sendExclusionSaveErrorMessage } from '../../../shared/campaignSendExclusionMulti'
 import { resolveCampaignGroupMetadata } from '../../../shared/facebookGroupExport'
 import { randomRunRpc } from './facebookRandomRunRepository'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
@@ -2208,7 +2209,7 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     .select(CAMPAIGN_SELECT)
     .single()
 
-  if (error) throw new Error(`Failed to create campaign: ${error.message}`)
+  if (error) throw new Error(sendExclusionSaveErrorMessage(error.message) ?? `Failed to create campaign: ${error.message}`)
   return mapCampaignFromDB(data)
 }
 
@@ -2510,7 +2511,7 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
   if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
   const { data, error } = await write.select(CAMPAIGN_SELECT).maybeSingle()
 
-  if (error) throw new Error(`Failed to update campaign: ${error.message}`)
+  if (error) throw new Error(sendExclusionSaveErrorMessage(error.message) ?? `Failed to update campaign: ${error.message}`)
   if (!data) throw new Error('Chiến dịch đã thay đổi hoặc không còn sẵn sàng sửa. Vui lòng thử lưu lại; nếu vẫn lỗi, mở lại form sửa để tải cấu hình mới nhất.')
   const updatedCampaign = mapCampaignFromDB(data)
   if (

@@ -8,6 +8,8 @@ export interface FacebookIdentityMarker {
   campaignId: number
   workflowId: number
   originalIdentityName: string
+  /** V663: danh tính ban đầu là Page hay trang cá nhân; null khi không biết (code block trước V663, dấu ghi bởi bản app cũ). */
+  originalIdentityIsPage?: boolean | null
 }
 
 const written = new Map<number, string>()
@@ -35,7 +37,8 @@ export function readFacebookIdentityMarker(accountId: number): FacebookIdentityM
     const campaignId = Number(raw.campaignId), workflowId = Number(raw.workflowId)
     const originalIdentityName = String(raw.originalIdentityName ?? '').trim()
     if (!Number.isSafeInteger(campaignId) || !Number.isSafeInteger(workflowId) || !originalIdentityName) return null
-    return { campaignId, workflowId, originalIdentityName }
+    const originalIdentityIsPage = typeof raw.originalIdentityIsPage === 'boolean' ? raw.originalIdentityIsPage : null
+    return { campaignId, workflowId, originalIdentityName, originalIdentityIsPage }
   } catch {
     return null
   }

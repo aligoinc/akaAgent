@@ -2,7 +2,7 @@
  * Thẻ "Không gửi cho" (V654, thiết kế https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB): một danh sách dòng loại trừ đọc như câu —
  * chiến dịch đã gửi, Nhóm data, nhóm điều kiện theo nhiều Zalo, danh sách bạn bè/Zalo ID của mọi Zalo. Khách thuộc 1 dòng bất kỳ
  * thì không gửi. Mặc định một lựa chọn dùng cho mọi Zalo gửi của chiến dịch; "Đặt riêng cho từng Zalo gửi" mở chế độ cũ.
- * Chỉ hiện khi công tắc campaign.send_exclusion_multi_zalo bật cho tài khoản; tắt thì form dùng CampaignSendExclusions (cũ).
+ * Chỉ hiện khi công tắc campaign.send_exclusion_multi_zalo_v2 (V666; khoá cũ không có _v2 do bản 10.7.0 đọc) bật cho tài khoản; tắt thì form dùng CampaignSendExclusions (cũ).
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
@@ -14,8 +14,8 @@ import {
   validateExclusionGroup, type ExclusionRule, type FilterField, type FilterOption, type SendExclusionSelection, type SendExclusionsByAccount
 } from '../../../../shared/campaignSendExclusion'
 import {
-  FRIEND_STATUS_CHOICES, SEND_EXCLUSION_MULTI_LIMITS, SEND_EXCLUSION_PREVIEW_MAX_TARGETS, applySelection, describeBlock, describeSendExclusionPreview,
-  mergeSendExclusionPreview, normalizeSelection, selectionOf, selectionsShared, type SendExclusionPreview,
+  FRIEND_STATUS_CHOICES, SEND_EXCLUSION_MULTI_LIMITS, SEND_EXCLUSION_PREVIEW_MAX_TARGETS, SEND_EXCLUSION_SENT_COUNT_CAP, applySelection, describeBlock, describeSendExclusionPreview,
+  describeSentCountChip, describeSentCountPicker, mergeSendExclusionPreview, normalizeSelection, selectionHasExclusions, selectionOf, selectionsShared, sharedSelectionSource, type SendExclusionPreview,
   type SaveSendExclusionGroupV2, type SendExclusionCampaignInfo, type SendExclusionDataGroupInfo, type SendExclusionGroupV2, type SendExclusionV2Page
 } from '../../../../shared/campaignSendExclusionMulti'
 import './CampaignSendExclusions.css'
@@ -58,8 +58,10 @@ export async function verifySendExclusionsBeforeSave(accountIds: number[], value
     if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
   }
 }
-const message = (error: unknown) => error instanceof Error ? error.message : 'Không thể tải dữ liệu. Vui lòng thử lại.'
+const message = (error: unknown) => error instanceof Error ? error.message.replace(/^Error invoking remote method '[^']+':\s*/i, '').replace(/^Error:\s*/i, '') : 'Không thể tải dữ liệu. Vui lòng thử lại.'
 const vn = (n: number) => n.toLocaleString('vi-VN')
+/** Câu của sendExclusionV2ErrorMessage cho mã revision_conflict. */
+const SEND_EXCLUSION_CONFLICT_MESSAGE = 'Nhóm đã được thay đổi ở nơi khác. Hãy tải lại trước khi sửa.'
 
 function Modal({ title, subtitle, onClose, children, footer, busy, wide }: {
   title: string; subtitle?: string; onClose: () => void; children: ReactNode; footer: ReactNode; busy?: boolean; wide?: boolean
@@ -104,8 +106,9 @@ function Row({ icon, title, children, onEdit, onRemove, removeLabel }: { icon: R
 /** Chọn nhiều mục từ danh sách có tìm kiếm (chiến dịch / Nhóm data). */
 function ListPicker<T extends { id: number; name: string }>({ title, subtitle, initial, max, load, describe, right, filters, onDone, onClose, emptyText }: {
   title: string; subtitle: string; initial: number[]; max: number
-  load: (query: string) => Promise<T[]>; describe: (item: T) => string; right: (item: T) => string
-  filters?: Array<{ label: string; test: (item: T) => boolean }>
+  /** filterKey: lọc ở DB (V666; trước lọc trên các dòng đã tải). */
+  load: (query: string, filterKey: string | null) => Promise<T[]>; describe: (item: T) => string; right: (item: T) => string
+  filters?: Array<{ label: string; test: (item: T) => boolean; key?: string | null }>
   onDone: (ids: number[], items: T[]) => void; onClose: () => void; emptyText: string
 }) {
   const [query, setQuery] = useState(''), [items, setItems] = useState<T[]>([]), [loading, setLoading] = useState(true), [error, setError] = useState('')
@@ -115,17 +118,27 @@ function ListPicker<T extends { id: number; name: string }>({ title, subtitle, i
     const id = ++request.current
     const timer = setTimeout(() => {
       setLoading(true); setError('')
-      load(query.trim()).then(rows => {
+      load(query.trim(), filters?.[filter]?.key ?? null).then(rows => {
         if (id !== request.current) return
         setItems(rows); setKnown(old => { const next = new Map(old); rows.forEach(row => next.set(row.id, row)); return next })
       }).catch(e => { if (id === request.current) setError(message(e)) }).finally(() => { if (id === request.current) setLoading(false) })
     }, query ? 300 : 0)
     return () => clearTimeout(timer)
-  }, [query])
+  }, [query, filter])
   const visible = items.filter(item => !filters || filters[filter].test(item))
-  const total = picked.reduce((sum, id) => sum + Number((known.get(id) as { count?: number; sentCount?: number } | undefined)?.sentCount ?? (known.get(id) as { count?: number } | undefined)?.count ?? 0), 0)
+  // V666: "đã gửi" DB chỉ đếm tới SEND_EXCLUSION_SENT_COUNT_CAP + 1 (null = chưa đếm kịp): tổng có dấu + khi có số chưa đủ.
+  let partialTotal = false
+  const total = picked.reduce((sum, id) => {
+    const item = known.get(id) as { count?: number; sentCount?: number | null } | undefined
+    if (item && 'sentCount' in item) {
+      if (item.sentCount === null || item.sentCount === undefined) { partialTotal = true; return sum }
+      if (item.sentCount > SEND_EXCLUSION_SENT_COUNT_CAP) { partialTotal = true; return sum + SEND_EXCLUSION_SENT_COUNT_CAP }
+      return sum + item.sentCount
+    }
+    return sum + Number(item?.count ?? 0)
+  }, 0)
   return <Modal title={title} subtitle={subtitle} onClose={onClose} wide footer={<>
-    <span className="exclusion-footnote"><b>Đã chọn {picked.length}</b>{picked.length > 0 && ` · ${vn(total)}`}{picked.length >= max && ` (tối đa ${max})`}</span>
+    <span className="exclusion-footnote"><b>Đã chọn {picked.length}</b>{picked.length > 0 && ` · ${vn(total)}${partialTotal ? '+' : ''}`}{picked.length >= max && ` (tối đa ${max})`}</span>
     <button type="button" onClick={onClose}>Hủy</button>
     <button type="button" className="exclusion-primary" onClick={() => onDone(picked, picked.map(id => known.get(id)).filter((item): item is T => !!item))}>Xong</button>
   </>}>
@@ -157,10 +170,12 @@ function newRule(catalog: SendExclusionV2Page['catalog'], field: FilterField): E
 }
 
 /** Nhóm điều kiện theo Zalo: bước 1 chọn Zalo, bước 2 điều kiện của từng Zalo viết thành câu. */
-function GroupEditor({ page, draft: initial, loadOptions, options, onSaved, onClose, onSynced }: {
+function GroupEditor({ page, draft: initial, loadOptions, options, onSaved, onClose, onSynced, onConflict }: {
   page: SendExclusionV2Page; draft: SaveSendExclusionGroupV2; options: Record<number, FilterOption[] | undefined>
   loadOptions: (accountId: number, force?: boolean) => Promise<void>; onSynced: (accountId: number) => Promise<void>
   onSaved: (group: SendExclusionGroupV2) => void; onClose: () => void
+  /** V666: nhóm đã đổi ở nơi khác (hoặc lần tạo trước đã lưu mà mất câu trả lời): thẻ tải lại danh sách nhóm rồi đóng trình sửa. */
+  onConflict: (message: string) => void
 }) {
   const [draft, setDraft] = useState(initial), [saving, setSaving] = useState(false), [error, setError] = useState(''), [tagPicker, setTagPicker] = useState('')
   const [addMenu, setAddMenu] = useState<number | null>(null)
@@ -200,7 +215,10 @@ function GroupEditor({ page, draft: initial, loadOptions, options, onSaved, onCl
     try {
       const saved = await window.electronAPI.saveSendExclusionGroupV2({ ...draft, name: draft.name.trim(), blocks: blocks.map(b => ({ accountId: b.accountId, matchMode: b.matchMode, rules: b.rules })) })
       onSaved(saved)
-    } catch (e) { setError(message(e)) } finally { setSaving(false) }
+    } catch (e) {
+      if (message(e) === SEND_EXCLUSION_CONFLICT_MESSAGE) { onConflict(draft.id ? 'Chưa lưu được vì nhóm vừa được sửa ở nơi khác. Đã tải lại nhóm, hãy mở lại để sửa.' : 'Nhóm có thể đã được tạo ở lần lưu trước nên đã tải lại danh sách nhóm. Hãy kiểm tra trước khi tạo lại.'); return }
+      setError(message(e))
+    } finally { setSaving(false) }
   }
   const copyFrom = (target: number, source: number) => {
     const from = blocks.find(b => b.accountId === source)
@@ -366,21 +384,34 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
   const [options, setOptions] = useState<Record<number, FilterOption[] | undefined>>({})
   const [dataGroups, setDataGroups] = useState<Map<number, SendExclusionDataGroupInfo>>(new Map())
   const [campaigns, setCampaigns] = useState<Map<number, SendExclusionCampaignInfo>>(new Map())
-  const [dialog, setDialog] = useState<Dialog>(null), [menu, setMenu] = useState(false)
+  const [dialog, setDialog] = useState<Dialog>(null), [menu, setMenu] = useState(false), [notice, setNotice] = useState('')
   const optionsLoading = useRef(new Set<number>())
   const menuRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     let alive = true
     setLoading(true); setError('')
     window.electronAPI.getSendExclusionV2Page().then(data => { if (alive) setPage(data) })
-      .catch(e => { if (alive) setError(message(e)) }).finally(() => { if (alive) setLoading(false) })
+      .catch(e => { if (alive) { setError(message(e)); setNotice('') } }).finally(() => { if (alive) setLoading(false) })
     return () => { alive = false }
   }, [reload, refreshKey])
+  // Câu 409 chỉ hiện tới khi khách mở lại một hộp thoại (sửa / chọn lại nhóm).
+  useEffect(() => { if (dialog) setNotice('') }, [dialog])
   useEffect(() => { onEditing(!!dialog); return () => onEditing(false) }, [!!dialog])
-  // Chế độ dùng chung: Zalo gửi mới thêm vào chiến dịch nhận cùng lựa chọn.
+  // Chế độ dùng chung: Zalo gửi mới thêm / đổi sang nhận cùng lựa chọn. V666: nguồn là Zalo đang có loại trừ (Zalo mới thêm vào đầu danh
+  // sách chưa có lựa chọn), không có thì lựa chọn chung đã nhớ (đổi hẳn sang Zalo khác); trước đây chép từ Zalo đứng đầu nên xoá sạch.
+  const sharedRemembered = useRef<SendExclusionSelection | null>(null)
   useEffect(() => {
-    if (!separate && accountIds.length > 1 && !selectionsShared(value, accountIds)) onChange(applySelection(value, accountIds, selectionOf(value, accountIds[0])))
+    if (separate || !accountIds.length) return
+    const source = sharedSelectionSource(value, accountIds, sharedRemembered.current)
+    if (!source) return
+    const want = JSON.stringify(normalizeSelection(source))
+    if (accountIds.some(id => JSON.stringify(normalizeSelection(selectionOf(value, id))) !== want)) onChange(applySelection(value, accountIds, source))
   }, [accountIds.join(), separate])
+  useEffect(() => {
+    // Chế độ riêng từng Zalo thì quên: lúc bấm "Dùng chung" form đã chép lựa chọn của Zalo đang sửa sang mọi Zalo.
+    if (separate) sharedRemembered.current = null
+    else if (accountIds.length && selectionsShared(value, accountIds)) sharedRemembered.current = normalizeSelection(selectionOf(value, accountIds[0]))
+  }, [value, accountIds.join(), separate])
   useEffect(() => {
     if (!menu) return
     const outside = (event: PointerEvent) => { if (!menuRef.current?.contains(event.target as Node)) setMenu(false) }
@@ -394,7 +425,7 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
     if (!missingGroups.length && !missingCampaigns.length) return
     let alive = true
     window.electronAPI.getSendExclusionV2Lists({ kind: missingGroups.length && missingCampaigns.length ? 'all' : missingGroups.length ? 'dataGroups' : 'campaigns',
-      dataGroupIds: missingGroups, sentCampaignIds: missingCampaigns, excludeCampaignId: campaignId ?? undefined }).then(lists => {
+      dataGroupIds: missingGroups, sentCampaignIds: missingCampaigns, excludeCampaignId: campaignId || undefined }).then(lists => {
       if (!alive) return
       if (lists.dataGroups) setDataGroups(old => { const next = new Map(old); lists.dataGroups!.forEach(g => next.set(g.id, g)); return next })
       if (lists.campaigns) setCampaigns(old => { const next = new Map(old); lists.campaigns!.forEach(c => next.set(c.id, c)); return next })
@@ -412,7 +443,8 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
   const update = (patch: Partial<SendExclusionSelection>) => {
     const next = normalizeSelection({ ...selection, ...patch })
     onChange(separate ? { ...value, [String(current)]: next } : applySelection(value, accountIds, next))
-    if (patch.blocklistIds?.length && pendingBlocklistAccountId !== undefined && pendingBlocklistAccountId !== null) onResolvePendingBlocklist?.()
+    // V666: chỉ gỡ yêu cầu "chờ chọn danh sách" của đúng Zalo vừa được chọn danh sách (chế độ dùng chung: mọi Zalo của chiến dịch).
+    if (patch.blocklistIds?.length && pendingBlocklistAccountId != null && (separate ? current === pendingBlocklistAccountId : accountIds.includes(pendingBlocklistAccountId))) onResolvePendingBlocklist?.()
   }
   const accountName = (id: number) => page?.accounts.find(a => a.id === id)?.name ?? accounts.find(a => a.id === id)?.name ?? `Zalo #${id}`
   const openEditor = (existing?: SendExclusionGroupV2 | null) => {
@@ -437,7 +469,7 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
     } catch (e) { setError(message(e)); onAgentDraftClosed?.() }
   }, [agentDraft, page, options])
   const blocklists = page?.blocklists ?? []
-  const hasAny = !!selection.groupId || selection.blocklistIds.length > 0 || dataGroupIds.length > 0 || sentCampaignIds.length > 0
+  const hasAny = selectionHasExclusions(selection)
   const menuItems: Array<{ key: string; title: string; hint: string; disabled: boolean; onClick: () => void }> = [
     { key: 'campaigns', title: 'Khách đã được gửi tin ở chiến dịch', hint: 'Chọn 1 hoặc nhiều chiến dịch. Ví dụ: không gửi lại cho khách đã nhận tin khuyến mãi tháng trước.', disabled: sentCampaignIds.length > 0, onClick: () => setDialog({ kind: 'campaigns' }) },
     { key: 'dataGroups', title: 'Khách có trong Nhóm data', hint: 'Ví dụ: nhóm khách đã mua, nhóm khách nội bộ.', disabled: dataGroupIds.length > 0, onClick: () => setDialog({ kind: 'dataGroups' }) },
@@ -472,10 +504,11 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
     <div className="sx-row sx-row-locked"><span className="sx-row-icon" aria-hidden="true"><LockKeyhole size={14} /></span>
       <div className="sx-row-body"><span>Khách đã từ chối nhận tin</span></div><small>Luôn áp dụng</small></div>
     {error && <div className="exclusion-error" role="alert">{error} <button type="button" className="exclusion-link" onClick={() => setReload(n => n + 1)}>Thử lại</button></div>}
+    {notice && !error && <div className="exclusion-helper" role="status">{notice}</div>}
     {sentCampaignIds.length > 0 && <Row icon={<Send size={14} />} title="Đã được gửi tin ở chiến dịch" removeLabel="Bỏ loại trừ theo chiến dịch"
       onEdit={() => setDialog({ kind: 'campaigns' })} onRemove={() => update({ sentCampaignIds: [] })}>
       <span className="sx-chips-line">{sentCampaignIds.map(id => { const c = campaigns.get(id)
-        return chip(id, c?.name ?? `Chiến dịch #${id}`, c ? `${vn(c.sentCount)} khách${c.deleted ? ' · đã xoá' : ''}` : undefined) })}</span>
+        return chip(id, c?.name ?? `Chiến dịch #${id}`, c ? `${describeSentCountChip(c.sentCount)}${c.deleted ? ' · đã xoá' : ''}` : undefined) })}</span>
     </Row>}
     {dataGroupIds.length > 0 && <Row icon={<Users size={14} />} title="Có trong Nhóm data" removeLabel="Bỏ loại trừ theo Nhóm data"
       onEdit={() => setDialog({ kind: 'dataGroups' })} onRemove={() => update({ dataGroupIds: [] })}>
@@ -494,7 +527,7 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
       <span className="sx-chips-line">{selection.blocklistIds.map(id => { const b = blocklists.find(l => l.id === id)
         return chip(id, b?.name ?? `Danh sách #${id}`, b ? `${b.accountName} · ${vn(b.count)}` : undefined) })}</span>
     </Row>}
-    {current === pendingBlocklistAccountId && <div className="exclusion-error" role="alert">{PENDING_BLOCKLIST_MESSAGE} <button type="button" className="exclusion-link" onClick={onResolvePendingBlocklist}>Bỏ yêu cầu loại trừ danh sách</button></div>}
+    {pendingBlocklistAccountId != null && (separate ? current === pendingBlocklistAccountId : accountIds.includes(pendingBlocklistAccountId)) && <div className="exclusion-error" role="alert">{PENDING_BLOCKLIST_MESSAGE} <button type="button" className="exclusion-link" onClick={onResolvePendingBlocklist}>Bỏ yêu cầu loại trừ danh sách</button></div>}
     {current ? <SendExclusionPreviewLine accountId={current} selection={selection} campaignId={campaignId} targets={previewTargets} /> : null}
     <div className="sx-add-wrap" ref={menuRef}>
       <button type="button" className="sx-add" aria-haspopup="menu" aria-expanded={menu} disabled={!page || !current} onClick={() => setMenu(v => !v)}><Plus size={15} />Thêm loại trừ</button>
@@ -513,10 +546,10 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
     {dialog?.kind === 'campaigns' && <ListPicker<SendExclusionCampaignInfo> title="Không gửi cho khách đã được gửi ở chiến dịch"
       subtitle="Chọn 1 hoặc nhiều chiến dịch. Khách đã nhận tin ở chiến dịch nào trong số này sẽ không được gửi lại."
       initial={sentCampaignIds} max={SEND_EXCLUSION_MULTI_LIMITS.campaigns} emptyText="Không có chiến dịch nhắn tin Zalo nào."
-      load={async query => (await window.electronAPI.getSendExclusionV2Lists({ kind: 'campaigns', query, sentCampaignIds, excludeCampaignId: campaignId ?? undefined })).campaigns ?? []}
+      load={async (query, status) => (await window.electronAPI.getSendExclusionV2Lists({ kind: 'campaigns', query, sentCampaignIds, excludeCampaignId: campaignId || undefined, status })).campaigns ?? []}
       describe={c => [c.status, c.accountName, c.deleted ? 'đã xoá' : ''].filter(Boolean).join(' · ')}
-      right={c => `Đã gửi ${vn(c.sentCount)} khách`}
-      filters={[{ label: 'Tất cả', test: () => true }, { label: 'Đang chạy', test: c => c.status === 'đang chạy' }, { label: 'Hoàn thành', test: c => c.status === 'hoàn thành' }, { label: 'Tạm dừng', test: c => c.status === 'tạm dừng' }]}
+      right={c => describeSentCountPicker(c.sentCount)}
+      filters={[{ label: 'Tất cả', test: () => true, key: null }, { label: 'Đang chạy', test: c => c.status === 'đang chạy', key: 'đang chạy' }, { label: 'Hoàn thành', test: c => c.status === 'hoàn thành', key: 'hoàn thành' }, { label: 'Tạm dừng', test: c => c.status === 'tạm dừng', key: 'tạm dừng' }]}
       onClose={closeDialog} onDone={(ids, items) => { setCampaigns(old => { const next = new Map(old); items.forEach(i => next.set(i.id, i)); return next }); update({ sentCampaignIds: ids }); setDialog(null) }} />}
     {dialog?.kind === 'dataGroups' && <ListPicker<SendExclusionDataGroupInfo> title="Không gửi cho khách có trong Nhóm data"
       subtitle="Chọn 1 hoặc nhiều Nhóm data số điện thoại hoặc Zalo UID."
@@ -531,6 +564,7 @@ export default function CampaignSendExclusionsCard({ accounts, value, onChange, 
     {dialog?.kind === 'groups' && page && <GroupPicker page={page} options={options} loadOptions={loadOptions} selectedId={selection.groupId}
       onClose={closeDialog} onPick={id => { update({ groupId: id }); setDialog(null) }} onCreate={() => openEditor()} />}
     {dialog?.kind === 'editor' && page && <GroupEditor page={page} draft={dialog.draft} options={options} loadOptions={loadOptions}
+      onConflict={text => { closeDialog(); setReload(n => n + 1); setNotice(text) }}
       onSynced={async accountId => { await window.electronAPI.syncZaloLabels(accountId); await loadOptions(accountId, true) }}
       onClose={closeDialog} onSaved={saved => {
         setPage(p => p ? { ...p, groups: [...p.groups.filter(g => g.id !== saved.id), saved].sort((a, b) => a.name.localeCompare(b.name)) } : p)
@@ -560,7 +594,12 @@ function GroupPicker({ page, options, loadOptions, selectedId, onPick, onCreate,
   page: SendExclusionV2Page; options: Record<number, FilterOption[] | undefined>; loadOptions: (id: number) => Promise<void>
   selectedId: number | null; onPick: (id: number) => void; onCreate: () => void; onClose: () => void
 }) {
-  useEffect(() => { for (const g of page.groups) for (const b of g.blocks) void loadOptions(b.accountId) }, [])
+  // V666: một lượt cho mỗi Zalo, lần lượt (trước: mọi khối của mọi nhóm cùng lúc, tới 50 lượt song song).
+  useEffect(() => {
+    let alive = true
+    void (async () => { for (const id of Array.from(new Set(page.groups.flatMap(g => g.blocks.map(b => b.accountId))))) { if (!alive) return; await loadOptions(id) } })()
+    return () => { alive = false }
+  }, [])
   return <Modal title="Chọn nhóm điều kiện" subtitle="Nhóm điều kiện xét khách ở một hoặc nhiều Zalo của bạn." onClose={onClose} wide footer={<>
     <span className="exclusion-footnote" /><button type="button" onClick={onClose}>Hủy</button>
     <button type="button" className="exclusion-primary" onClick={onCreate}><Plus size={14} />Tạo nhóm mới</button>

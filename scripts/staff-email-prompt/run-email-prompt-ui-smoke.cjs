@@ -31,7 +31,13 @@ async function main() {
     page.on('pageerror', error => pageErrors.push(String(error.message)))
     await page.goto(`file://${join(directory, 'index.html')}`)
     await page.waitForFunction(() => window.emailSmoke && window.emailSmoke.start)
-    const start = (scenario, options) => page.evaluate(args => window.emailSmoke.start(...args), [scenario, options || {}])
+    // Đổi scope thì EmailPromptHost gỡ form đang mở (vài trăm ms sau) rồi mới hiện form của lượt mới (~1,5 giây). Chờ form cũ gỡ xong,
+    // không thì dialog.waitFor() khớp ngay form cũ và các bước sau điền vào form sắp bị gỡ (bước 7 hỏng ổn định trên Mac, 26/11/2026).
+    const start = async (scenario, options) => {
+      await page.evaluate(() => document.querySelectorAll('[role=dialog]').forEach(node => node.setAttribute('data-smoke-previous', '1')))
+      await page.evaluate(args => window.emailSmoke.start(...args), [scenario, options || {}])
+      await page.locator('[data-smoke-previous]').first().waitFor({ state: 'detached' })
+    }
     const calls = () => page.evaluate(() => JSON.parse(JSON.stringify(window.emailSmoke.calls)))
     const actions = async () => (await calls()).map(call => call.action)
     const shot = async name => { if (shots) await page.screenshot({ path: join(shots, `email-${name}.png`) }) }

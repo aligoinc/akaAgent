@@ -147,6 +147,8 @@ export interface ClaimContext {
   leaseToken?: string | null
   /** V564 (chế độ workflow): false khi lượt chưa nhận được data nào, để DB trả shuffle.count cả khi lease đã cấp ở lần gọi trước. */
   unitStarted?: boolean
+  /** V666: lõi chạy được cấu hình loại trừ gửi mới (Nhóm data, chiến dịch đã gửi, nhiều Zalo); thiếu = lõi cũ, DB tạm dừng chiến dịch có cấu hình mới. */
+  sendExclusionRunner?: number
   /**
    * Thao tác của loại chiến dịch theo thứ tự; required=false thì bị chặn vẫn nhận data (bước đó bị bỏ qua).
    * skippableGates giới hạn loại cổng được bỏ qua (ví dụ chỉ 'quota'); cổng khác vẫn chặn như bắt buộc.

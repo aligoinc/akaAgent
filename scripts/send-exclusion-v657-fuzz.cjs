@@ -98,7 +98,8 @@ function makeOracle(M) {
   const success = d => ['zalo_message_friend', 'zalo_message_stranger'].includes(d.action) && !d.deleted &&
     (d.opState === 'committed' || (d.opState == null && SUCCESS_STATUS.includes(d.status)))
 
-  function rule({ account, selection, phone, gid: gidIn, uid, final, campaignId }) {
+  // noIdentity (V666): xem trước data tự nhập không dùng bảng đối chiếu SĐT ↔ Global ID.
+  function rule({ account, selection, phone, gid: gidIn, uid, final, campaignId, noIdentity = false }) {
     const P = mobile(phone ?? '') || null
     const U = btrim(uid ?? '') || null
     let G = btrim(gidIn ?? '') || null
@@ -109,11 +110,11 @@ function makeOracle(M) {
       const g = btrim(z?.gid ?? '') || null
       if (g && gidOk(account, g)) { G = g; from = 'uid' } else if (g) bump('uid_gid:rejected')
     }
-    if (!G && P && identity.has(P)) {
+    if (!G && P && !noIdentity && identity.has(P)) {
       const g = identity.get(P).gid
       if (!ownGids(account).includes(g)) { G = g; from = 'phone_history' }
     }
-    const phones = P ? [P] : G ? [...identity.entries()].filter(([, v]) => v.gid === G).map(([k]) => k).sort() : []
+    const phones = P ? [P] : G && !noIdentity ? [...identity.entries()].filter(([, v]) => v.gid === G).map(([k]) => k).sort() : []
     const nick = U ? sameNick(account) : []
     let need = false
     let match = null
@@ -567,7 +568,8 @@ async function main() {
       const previewExp = (rows, trunc) => {
         const e = { checked: rows.length, excluded: 0, pending: 0, sources: {} }
         for (const r of rows) {
-          const x = O.rule({ account: A.id, selection: validSel, phone: trunc ? r.phone?.slice(0, 40) : r.phone, gid: null, uid: trunc ? r.uid?.slice(0, 64) : r.uid, final: false, campaignId: main.c.id })
+          const x = O.rule({ account: A.id, selection: validSel, phone: trunc ? r.phone?.slice(0, 40) : r.phone, gid: null, uid: trunc ? r.uid?.slice(0, 64) : r.uid, final: false, campaignId: main.c.id,
+            noIdentity: trunc && process.env.SX_WITH_V666 === '1' })
           if (x.match) { e.excluded++; const k = x.match.kind + ':' + x.match.id; e.sources[k] = (e.sources[k] ?? 0) + 1 } else if (x.needGlobalId) e.pending++
         }
         return e
@@ -598,7 +600,7 @@ async function main() {
       const claimedOrder = [], paused = new Map()
       for (let k = 0; k < ROWS * 2 + 20; k++) {
         const res = await asDesktop(async () => (await one('SELECT public.aka_agent_engine_claim_target_v1($1) r',
-          [{ staffId: M.staff, accountId: A.id, campaignId: eng.c.id, runnerId: 'desktop:fuzz', runtimeTarget: 'desktop', actions: [{ code: 'zalo_find_phone_user' }, { code: 'zalo_message_stranger' }] }])).r)
+          [{ staffId: M.staff, accountId: A.id, campaignId: eng.c.id, runnerId: 'desktop:fuzz', runtimeTarget: 'desktop', sendExclusionRunner: 1, actions: [{ code: 'zalo_find_phone_user' }, { code: 'zalo_message_stranger' }] }])).r)
         info.claims++
         for (const p of res.cooldownPaused ?? []) paused.set(Number(p.inputDataId), p.note)
         if (res.status === 'claimed') {

@@ -28,7 +28,7 @@ import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkip
 import { isZaloTagAutoAddInput, ZALO_TAG_NOT_FRIEND_NOTE } from '../../shared/zaloTagAutoAdd'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
-import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
+import { FacebookCampaignPageIdentity, PAGE_IDENTITY_NODE_PREFIX } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
 import { getWorkflow, getWorkflowByName } from '../data/repositories/workflowV2Repository'
 import { WebEnrichmentService } from './webEnrichmentService'
@@ -226,12 +226,29 @@ interface ZaloMessageOptOutRuntimeContext {
   warnings: string[]
   linkId: string | null
   sendExclusionError?: ZaloSendExclusionError
+  /** V666: kiểm loại trừ lỗi tạm thời sau khi tìm SĐT: data về hàng đợi, dừng lượt (câu cho khách). */
+  sendExclusionRetry?: string
 }
 
 class ZaloSendExclusionError extends Error {
   constructor(message: string) {
     super(message)
     this.name = 'ZaloSendExclusionError'
+  }
+}
+
+/** V666 (anh duyệt câu 26/11): ghi chú chiến dịch / dòng tiến trình khi kiểm loại trừ gửi lỗi tạm thời. */
+const SEND_EXCLUSION_RETRY_NOTE = 'Không thể kiểm tra loại trừ gửi; chiến dịch sẽ tự thử lại.'
+
+/**
+ * V666: thao tác 'remote' / 'facts' của loại trừ gửi lỗi tạm thời (mạng, DB chậm). Như engine v2 (gate_unavailable) và bước kiểm gửi lặp:
+ * data chưa gửi giữ ở hàng đợi, dừng lượt, lượt sau tự thử lại. Không tạm dừng data (trước đây data bị "tạm dừng" mãi, DB chậm cả lượt
+ * thì cả danh sách đứng) và không dừng chiến dịch.
+ */
+class SendExclusionCheckUnavailableError extends Error {
+  constructor(cause: unknown) {
+    super(getErrorMessage(cause) || 'Lỗi không xác định')
+    this.name = 'SendExclusionCheckUnavailableError'
   }
 }
 
@@ -4785,7 +4802,15 @@ export class CampaignScheduler {
       }
 
       if (detail && ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId)) {
-        zaloOptOutContext = await this.preflightZaloMessageOptOut(account, campaign, detail)
+        try {
+          zaloOptOutContext = await this.preflightZaloMessageOptOut(account, campaign, detail)
+        } catch (err) {
+          if (!(err instanceof SendExclusionCheckUnavailableError)) throw err
+          // Data chưa nhận (chờ xử lý): giữ nguyên, nhả lượt như bước kiểm gửi lặp; lượt sau thử lại.
+          await this.releaseClaimedCampaignPreflight(account, campaign, SEND_EXCLUSION_RETRY_NOTE)
+          await this.logCampaignProgress(campaign, `⚠️ ${SEND_EXCLUSION_RETRY_NOTE}`).catch(() => {})
+          return
+        }
         if (zaloOptOutContext.blocked) continue
       }
 
@@ -6346,6 +6371,7 @@ export class CampaignScheduler {
     if (!campaign || !workflow) { clearFacebookIdentityMarker(account.id); return }
     const identity = new FacebookCampaignPageIdentity(campaign, workflow)
     identity.originalIdentityName = marker.originalIdentityName
+    identity.originalIdentityIsPage = marker.originalIdentityIsPage ?? null
     identity.switchAttempted = true
     identity.page = (await this.getAutomationPage(account, campaign.id)).page
     await identity.restore((wf, variables, page, context) => this.engineV2.run(wf, variables, page, context), {
@@ -6772,7 +6798,7 @@ export class CampaignScheduler {
             if (identity) {
               identity.observe(step)
               if (identity.switchAttempted) writeFacebookIdentityMarker(account.id, { campaignId: campaign.id, workflowId: identity.workflow.id,
-                originalIdentityName: identity.originalIdentityName })
+                originalIdentityName: identity.originalIdentityName, originalIdentityIsPage: identity.originalIdentityIsPage })
             }
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch { /* đóng */ }
           },
@@ -6790,7 +6816,11 @@ export class CampaignScheduler {
 
       // Không chuyển được sang Page: bộ cũ tạm dừng chiến dịch trước khi chạy data (pauseBeforePageIdentityTarget); engine báo FB06.
       if (identity && !identity.targetStarted && state.reportCount === 0) {
-        const failure = result.steps.find(step => step.status === 'error')
+        // Bước danh tính hỏng đầu tiên: bước ném lỗi (đọc tên, block "ready"), hoặc bước chuyển Page trả ok:false (block chuyển Page không ném;
+        // block "ready" ném lại đúng câu đó ở bước sau). Lấy bước hỏng thật: câu, ảnh và trang lúc hỏng (câu 605: ảnh của bước chuyển cho thấy menu
+        // đang tải, ảnh bước "ready" một giây sau đã đủ nút), và còn câu thật khi lượt bị dừng trước bước "ready" (câu 603, lượt 332906).
+        const failure = result.steps.find(step => step.status === 'error'
+          || (step.status === 'success' && step.nodeId.startsWith(PAGE_IDENTITY_NODE_PREFIX) && step.output?.ok === false))
         // Lượt bị ngắt từ ngoài (thoát / cập nhật app, đăng xuất) đúng lúc đang chuyển sang Page, chưa chạy data: không phải lỗi chuyển
         // Page. Báo "đã dừng" (RUN01): data về hàng đợi, không tạm dừng chiến dịch. Bước chuyển Page lỗi thật trước khi bị ngắt vẫn là FB06.
         const failureEntry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
@@ -6798,14 +6828,28 @@ export class CampaignScheduler {
           await report('__stopped', firstAction, { ok: false, ...interruptedOutcome('before_send') })
           return state.stopped ?? { done: true }
         }
-        const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 603 / 611 / 3297 của bộ kiểm lỗi (anh chốt 26/11/2026): workflow dừng ở ranh giới block (hook trước block trả 'stop' vì
+        // api.shouldStop(): yêu cầu tạm dừng chiến dịch, app thôi nhận việc / máy sắp ngủ, lệnh dừng sau data) mà không bước danh tính nào hỏng.
+        // Tín hiệu huỷ không bật nên nhánh trên không bắt. Không phải lỗi chuyển Page: RUN01 như lượt bị dừng không chạy bằng Page. Danh tính
+        // đã chuyển (nếu có) vẫn được chuyển về lúc đóng lượt như cũ.
+        if (!failure && result.stopped === true) {
+          await report('__stopped', firstAction, { ok: false, ...interruptedOutcome('before_send') })
+          return state.stopped ?? { done: true }
+        }
+        const failureMessage = failure?.error || (typeof failure?.output?.message === 'string' ? failure.output.message : '')
+        const message = failureMessage || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 631 (anh chốt 26/11/2026): bước danh tính hỏng khi Facebook đang ở trang xác minh / đăng nhập là trạng thái đăng nhập (FB04 /
+        // FB43) như mọi bước khác (câu 533 / 639), không phải lỗi chuyển Page.
+        const pageState = failureEntry?.pageState ?? null
         // Câu 6282 / 633 / 3484 của bộ kiểm lỗi (anh chốt 26/11/2026): bước đọc / chuyển danh tính hỏng ngay lúc mở trang (lỗi mạng / proxy
         // của trình duyệt, chưa tới phần tìm nút) báo như bước mở trang, không gắn sẵn mã, để DB phân loại theo luật mạng / proxy (NET01 /
         // NET02, V659) như mọi bước mở trang. Lỗi trên trang (không thấy nút menu, không đọc được tên, chọn Page hết giờ) vẫn FB06.
-        const navigation = parseNavigationError(message)
-        await report('__identity', firstAction, { ok: false, phase: 'before_send',
-          signal: navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
-            : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+        const navigation = pageState ? null : parseNavigationError(message)
+        const signal: Signal = pageState ?? (navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
+          : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message })
+        // Mã ảnh lỗi của bước hỏng (anh chốt 26/11/2026) như mọi bước lỗi khác, để hộp thư lỗi tự xin ảnh + DOM.
+        const screenshotId = failureEntry?.screenshotId ?? null
+        await report('__identity', firstAction, { ok: false, phase: 'before_send', signal: screenshotId ? { ...signal, screenshotId } : signal })
         return state.stopped ?? { done: true }
       }
       if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {
@@ -7742,6 +7786,13 @@ export class CampaignScheduler {
             continue
           }
 
+          // V666: bước lọc đầu tiên (danh sách / Nhóm data / chiến dịch đã gửi) như đường gửi từng data: data bị loại không đọc hồ sơ Zalo.
+          if (hasSendExclusionPrecheck(campaign.actionId, campaign.extraSettings ?? {}, account.id) &&
+            await this.precheckSendExclusion(account, campaign, detail)) {
+            if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+            continue
+          }
+
           if (this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
             if (this.isServerZaloCampaign(account, campaign) && !this.running) return
             await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
@@ -7762,10 +7813,18 @@ export class CampaignScheduler {
         this.sendExclusionLabels.delete(campaign.id)
         const optOutContexts = new Map<number, ZaloMessageOptOutRuntimeContext>()
         const optOutAllowedCandidates: CampaignInputData[] = []
-        for (const candidate of batchCandidates) {
-          const context = await this.preflightZaloMessageOptOut(account, campaign, candidate, true)
-          optOutContexts.set(candidate.id, context)
-          if (!context.blocked) optOutAllowedCandidates.push(candidate)
+        try {
+          for (const candidate of batchCandidates) {
+            const context = await this.preflightZaloMessageOptOut(account, campaign, candidate, true)
+            optOutContexts.set(candidate.id, context)
+            if (!context.blocked) optOutAllowedCandidates.push(candidate)
+          }
+        } catch (err) {
+          if (!(err instanceof SendExclusionCheckUnavailableError)) throw err
+          // Lô chưa nhận data nào: giữ nguyên, nhả lượt như bước kiểm gửi lặp; lượt sau thử lại.
+          await this.releaseClaimedCampaignPreflight(account, campaign, SEND_EXCLUSION_RETRY_NOTE)
+          await this.logCampaignProgress(campaign, `⚠️ ${SEND_EXCLUSION_RETRY_NOTE}`).catch(() => {})
+          return
         }
 
         let allowedBatchCandidateIds = new Set(optOutAllowedCandidates.map(detail => detail.id))
@@ -9039,10 +9098,22 @@ export class CampaignScheduler {
     const uid = String(target?.uid || detail.uid || '').trim()
     let stopReads = false
     // V654: danh sách / Nhóm data / chiến dịch đã gửi / khối Zalo khác tra một lần trong DB; khối Zalo đang gửi đọc như cũ.
-    const readRemote = () => this.sendExclusionRpc<SendExclusionRemoteFacts>(account, campaign, 'remote', {
-      inputId: detail.id, uid, globalId: String(target?.globalId || '').trim() || undefined,
-      phone: String(target?.phone || detail.phone || '').trim() || undefined
-    })
+    const readRemote = async (): Promise<SendExclusionRemoteFacts> => {
+      try {
+        return await this.sendExclusionRpc<SendExclusionRemoteFacts>(account, campaign, 'remote', {
+          inputId: detail.id, uid, globalId: String(target?.globalId || '').trim() || undefined,
+          phone: String(target?.phone || detail.phone || '').trim() || undefined
+        })
+      } catch (error) {
+        // V666: lỗi tạm thời của 'remote' (mạng, DB chậm): data chưa gửi về hàng đợi, dừng lượt, lượt sau thử lại
+        // (SendExclusionCheckUnavailableError). Trước đây chiến dịch theo SĐT chuyển tạm dừng, loại khác hỏng cả lượt.
+        // Đang dừng bộ chạy / mất lượt thì ném như cũ.
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        if (!this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken) throw error
+        console.warn('[SendExclusion] remote failed', campaign.id, detail.id, error instanceof Error ? error.message : error)
+        throw new SendExclusionCheckUnavailableError(error)
+      }
+    }
     let decision = await evaluateSendExclusionWithRemote(snapshot, uid, async source => {
       if (stopReads) return null
       if (source === 'zalo_labels') return uid ? this.getSendExclusionLabels(account, campaign).ids(uid) : null
@@ -9062,13 +9133,21 @@ export class CampaignScheduler {
       if (source === 'akabiz_contact' || source === 'campaign_delivery') {
         const data = await this.sendExclusionRpc<ExclusionFacts>(account, campaign, 'facts', {
           inputId: detail.id, uid,
-          ...(source === 'akabiz_contact' ? {tags: true} : {days: Math.max(1, ...snapshot.group!.rules.filter(r => r.isEnabled && ruleDefinition(snapshot.catalog, r).field.sourceKey === source).map(r => Number(r.value)))})
+          // V666: kèm Global ID để "đã gửi trong N ngày" tính cả các Zalo ID cũ của cùng người (V657 nhận, trước đây không gửi).
+          ...(source === 'akabiz_contact' ? {tags: true} : {days: Math.max(1, ...snapshot.group!.rules.filter(r => r.isEnabled && ruleDefinition(snapshot.catalog, r).field.sourceKey === source).map(r => Number(r.value))),
+            globalId: String(target?.globalId || '').trim() || undefined})
         })
         return data[source]
       }
       return null
     }, readRemote, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
-      if (!source.startsWith('zalo_')) return
+      if (!source.startsWith('zalo_')) {
+        // V666: dữ kiện trong DB ('facts': tag akaBiz, lần gửi gần nhất) lỗi tạm thời: như 'remote' (về hàng đợi, lượt sau thử lại).
+        this.throwIfZaloRuntimeStopping(campaign.id)
+        if (!this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken) throw error
+        console.warn('[SendExclusion] facts failed', campaign.id, detail.id, source, error instanceof Error ? error.message : error)
+        throw new SendExclusionCheckUnavailableError(error)
+      }
       const policy = await this.getZaloPolicyByErrorCode(this.getZaloErrorCode(error))
       const note = `Không thể kiểm tra loại trừ: ${this.getZaloErrorMessage(error)}`
       const result = await this.applyZaloPolicySideEffects(account, campaign, policy, {runningProcess: note, campaign: note})
@@ -9223,6 +9302,11 @@ export class CampaignScheduler {
     } catch (error) {
       this.throwIfZaloRuntimeStopping(campaign.id)
       context.blocked = true
+      if (error instanceof SendExclusionCheckUnavailableError) {
+        // Đã tìm SĐT (lượt tra đã tính), chưa gửi: data về hàng đợi, dừng lượt; lượt sau tra lại rồi kiểm lại.
+        context.sendExclusionRetry = SEND_EXCLUSION_RETRY_NOTE
+        return context
+      }
       context.sendExclusionError = new ZaloSendExclusionError(
         `Không thể hoàn tất loại trừ gửi sau khi tìm SĐT: ${this.getZaloErrorMessage(error)}`
       )
@@ -17629,6 +17713,13 @@ export class CampaignScheduler {
           await this.gateResolvedPhoneMessageTarget(account, campaign, options.inputData as unknown as CampaignInputData, target, context)
           this.throwIfZaloRuntimeStopping(campaign.id)
           if (context.blocked) {
+            if (context.sendExclusionRetry) {
+              return {
+                ok: true,
+                zaloTarget: null,
+                detail: { ...successDetail, resetInputToPending: true, pendingNote: context.sendExclusionRetry, stopAfterTarget: true }
+              }
+            }
             return {
               ok: true,
               zaloTarget: null,

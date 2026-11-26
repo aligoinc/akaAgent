@@ -21,6 +21,13 @@ export interface SendExclusionSelection { groupId: number | null; blocklistIds: 
 export type SendExclusionsByAccount = Record<string, SendExclusionSelection>
 /** Bộ chạy gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} khi lấy 'snapshot' thì nhận thêm phần cần tra trong DB (V654). */
 export const SEND_EXCLUSION_CLIENT_VERSION = 2
+/**
+ * V666: bộ chạy báo lúc nhận lượt là đã chạy được cấu hình loại trừ mới (Nhóm data, chiến dịch đã gửi, nhóm nhiều Zalo, danh sách của Zalo
+ * khác): bộ cũ Desktop / App Server gửi header này với mọi lời gọi PostgREST, engine gửi ctx.sendExclusionRunner. Không báo (bản <= 10.7.0)
+ * mà chiến dịch có cấu hình mới cho tài khoản thì DB chuyển chiến dịch tạm dừng (private.aka_agent_send_exclusion_claim_check).
+ */
+export const SEND_EXCLUSION_RUNNER_HEADER = 'x-aka-send-exclusion-runner'
+export const SEND_EXCLUSION_RUNNER_VERSION = 1
 /** Khối điều kiện của một Zalo khác Zalo đang gửi: dữ kiện đọc trong DB qua thao tác 'remote'. */
 export interface SendExclusionRemoteBlock { accountId: number; accountName?: string | null; matchMode: 'and' | 'or'; rules: ExclusionRule[] }
 export interface SendExclusionRemotePlan {

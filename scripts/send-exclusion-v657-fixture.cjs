@@ -124,8 +124,24 @@ async function buildDb({ port = 55700 + Math.floor(Math.random() * 200), label =
   const applyV657 = async () => {
     await db.query(read('migrations/migration_v657_send_exclusion_global_match_p1.sql'))
     await db.query(read('migrations/migration_v657_send_exclusion_global_match_p2.sql'))
+    // SX_WITH_V666=1: chạy bộ kiểm V657 trên V666 (cổng lưu cấu hình mới mở sẵn: công tắc all, phần mềm chạy coi như đủ bản).
+    if (process.env.SX_WITH_V666 === '1') {
+      await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements) VALUES ('20261125211830','migration_v657_send_exclusion_global_match_p2','{}') ON CONFLICT DO NOTHING`)
+      await db.query(`CREATE TABLE IF NOT EXISTS public.auto_staff_device_presence (id bigserial PRIMARY KEY, staff_id bigint, app_version text, last_seen_at timestamptz)`)
+      await db.query(`ALTER TABLE public.org_staff ADD COLUMN IF NOT EXISTS is_admin_akabiz boolean`)
+      // V666 thay cả hai hàm nhận lượt: nạp đúng thân production 26/11 trước (preflight kiểm md5).
+      const V666 = require('./build-v666-sql.cjs')
+      await db.query('SET check_function_bodies = off')
+      await db.query(V666.OLD.claim); await db.query(V666.OLD.engineClaim)
+      await db.query('SET check_function_bodies = on')
+      await db.query(read('migrations/migration_v666_send_exclusion_review_fixes.sql'))
+      await db.query(`CREATE OR REPLACE FUNCTION private.aka_agent_send_exclusion_runtime_ready(p_staff bigint, p_server boolean) RETURNS boolean LANGUAGE sql STABLE AS $f$ SELECT true $f$`)
+      await db.query(`CREATE OR REPLACE FUNCTION private.aka_agent_send_exclusion_multi_on(p_staff bigint) RETURNS boolean LANGUAGE sql STABLE AS $f$ SELECT true $f$`)
+      await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements) VALUES ('20261126999999','migration_v666_send_exclusion_review_fixes','{}') ON CONFLICT DO NOTHING`)
+    }
   }
   const rollbackV657 = async () => {
+    if (process.env.SX_WITH_V666 === '1') await db.query(read('migrations/rollback_v666_send_exclusion_review_fixes.sql'))
     await db.query(read('migrations/rollback_v657_send_exclusion_global_match_p2.sql'))
     await db.query(read('migrations/rollback_v657_send_exclusion_global_match_p1.sql'))
   }
