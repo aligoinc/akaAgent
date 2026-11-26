@@ -981,6 +981,84 @@ return { commented: true, position: 1, text: 'Bình luận 1' }`
       })
     })
 
+    // Câu 639 / 3300 / 6279 của bộ kiểm lỗi (26/11/2026): comment seeding mở nhóm mà Facebook chuyển sang trang xác minh / đăng nhập; trang vẫn có
+    // vùng chính nên không bước nào lỗi, bước chuẩn bị bài quét 0 bài, vòng comment 0 lần, workflow "xong" mà không có kết quả nào. Trước bản sửa
+    // mục 6a của bộ lập lịch báo FB45 (data hoàn thành, tài khoản không đổi) nên tài khoản đang bị xác minh nhận hết data này tới data khác. Q6:
+    // trang xác minh → FB04, trang đăng nhập → FB43 (data về hàng đợi, đổi trạng thái đăng nhập); trang thường vẫn FB45 như bộ cũ.
+    const SEEDING_PREP_ID = 9658
+    const seedingPrepBlock = code => ({ id: SEEDING_PREP_ID, name: 'fb_prepare_seeding_iterations', code, configSchema: [], defaultConfig: {}, isBuiltin: false })
+    const seedingLikeWorkflow = () => ({
+      id: WORKFLOW_ID, name: '[engine] Đăng nhóm', defaultVariables: {}, edges: [
+        { id: 's1', source: 'prepare_iters', target: 'loop_comment' }, { id: 's2', source: 'loop_comment', target: 'comment', sourceHandle: 'body' }
+      ],
+      nodes: [
+        { id: 'prepare_iters', blockId: SEEDING_PREP_ID, blockName: 'fb_prepare_seeding_iterations', config: {} },
+        { id: 'loop_comment', blockId: 0, blockName: 'loop', systemType: 'loop',
+          config: { loopType: 'forEach', itemsExpr: '(input && Array.isArray(input.commentIterations)) ? input.commentIterations : []' } },
+        { id: 'comment', blockId: 34, blockName: 'fb_comment_at_position', config: {} }
+      ]
+    })
+    // Như block 2859 production (V641): trang không có bài thì trả 0 bài, không lỗi, không mã.
+    const PREP_NO_POSTS = `return { commentIterations: [], totalCount: 0, matchedCount: 0, scannedCount: 0, stopReason: 'no_new_posts' }`
+    // Như block 2859 bản V658: trang xác minh thì trả mã FB04 chưa gửi kèm 0 bài.
+    const PREP_V658_CHECKPOINT = `return { commentIterations: [], scannedCount: 0, matchedCount: 0, stopReason: 'checkpoint', actionResult: { actionCode: 'fb_comment',
+      statusCode: 'campaign_detail_error', errorCode: 'err_fb_checkpoint', inputDataId: vars.inputDataId ?? null, operationState: 'not_committed',
+      message: 'Facebook yêu cầu xác minh tài khoản (checkpoint)', data: { reason: 'checkpoint', url: '', source: 'fb_prepare_seeding_iterations' } } }`
+    const withSeedingWorkflow = async (code, fn) => {
+      const blocks = globalThis.__fbTest.blocks
+      const workflows = globalThis.__fbTest.workflows
+      const originalWorkflow = workflows.get(WORKFLOW_ID)
+      blocks.set(SEEDING_PREP_ID, seedingPrepBlock(code))
+      workflows.set(WORKFLOW_ID, seedingLikeWorkflow())
+      try { await fn() } finally { blocks.delete(SEEDING_PREP_ID); workflows.set(WORKFLOW_ID, originalWorkflow) }
+    }
+
+    await check('câu 6279: seeding xong không có kết quả trên trang xác minh (mục 6a): FB04, data về hàng đợi, tài khoản checkpoint, không FB45', async () => {
+      await withSeedingWorkflow(PREP_NO_POSTS, async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: CHECKPOINT_PAGE })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.phase, o.error_code, o.signal.code]), [['before_send', 'err_fb_checkpoint', 'fb_checkpoint']], JSON.stringify(out))
+        assert.deepEqual(await details(entry.campaign.id), [], 'FB04 không ghi dòng lịch sử')
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý', 'data chưa gửi về hàng đợi')
+        assert.equal(await loginStatus(entry.account.id), 'checkpoint')
+      })
+    })
+
+    await check('câu 6279: seeding xong không có kết quả trên trang đăng nhập (mục 6a): FB43, data về hàng đợi, tài khoản chưa đăng nhập', async () => {
+      await withSeedingWorkflow(PREP_NO_POSTS, async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: LOGIN_PAGE })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.phase, o.error_code, o.signal.code]), [['before_send', 'err_engine_fb_logged_out', 'fb_logged_out']], JSON.stringify(out))
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+        assert.equal(await loginStatus(entry.account.id), 'chưa đăng nhập')
+      })
+    })
+
+    await check('câu 6279: seeding xong không có kết quả trên trang nhóm: FB45 như bộ cũ (data hoàn thành, tài khoản không đổi)', async () => {
+      await withSeedingWorkflow(PREP_NO_POSTS, async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry)
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.phase, o.error_code]), [['before_send', 'err_engine_fb_no_history']], JSON.stringify(out))
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'hoàn thành')
+        assert.equal(await loginStatus(entry.account.id), 'đã đăng nhập')
+      })
+    })
+
+    await check('câu 6279: bước chuẩn bị bài bản V658 trả thẳng FB04 (bước không nằm trong danh mục): FB04 qua đường mã block, cả trên bộ lập lịch cũ', async () => {
+      await withSeedingWorkflow(PREP_V658_CHECKPOINT, async () => {
+        const entry = await makeCampaign({ extra: { commentType: 'all', commentCount: 1 } })
+        await run(entry, { url: CHECKPOINT_PAGE })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.phase, o.error_code]), [['before_send', 'err_fb_checkpoint']], JSON.stringify(out))
+        assert.deepEqual(await details(entry.campaign.id), [])
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+        assert.equal(await loginStatus(entry.account.id), 'checkpoint')
+      })
+    })
+
     await check('block treo: quá ngưỡng không thao tác thì đóng cửa sổ ẩn, mốc không rõ kết quả (SYS04), lượt kết thúc', async () => {
       globalThis.__fbTest.runtimeSettings = { blockHangMinutes: 0.02 }
       try {
