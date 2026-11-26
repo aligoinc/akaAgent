@@ -69,6 +69,8 @@ CREATE TABLE public.chat_zalo_account_organization (id bigserial PRIMARY KEY, ch
 -- Bảng của bộ chạy chiến dịch: bot không được đụng (bài kiểm độc lập).
 CREATE TABLE public.auto_account_action_status (id bigserial PRIMARY KEY, account_id bigint, action_code text, count_action_in_day integer DEFAULT 0);
 CREATE TABLE public.auto_campaign_details (id bigserial PRIMARY KEY, account_id bigint, campaign_id bigint, status text);
+CREATE TABLE public.auto_staff_device_presence (instance_id uuid PRIMARY KEY DEFAULT gen_random_uuid(), staff_id bigint, organization_id bigint,
+  app_version text, started_at timestamptz DEFAULT now(), last_seen_at timestamptz DEFAULT now(), ended_at timestamptz, runtime_state jsonb);
 CREATE TABLE public.auto_engine_leases (account_id bigint, lane text DEFAULT 'main', PRIMARY KEY (account_id, lane));
 -- Hàm production thay bằng bản giả đọc bảng test.
 CREATE TABLE public.test_org_flags (organization_id bigint PRIMARY KEY, chat_runtime boolean NOT NULL DEFAULT false, fly_route boolean NOT NULL DEFAULT false);

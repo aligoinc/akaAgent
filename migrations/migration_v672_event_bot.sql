@@ -37,7 +37,7 @@ BEGIN
     'public.auto_account_contact_group_dynamic_filters', 'public.auto_zalo_tag_member_events', 'public.auto_zalo_tag_members',
     'public.auto_zalo_tag_sync_campaigns', 'public.auto_zalo_tag_sync_resets', 'public.auto_campaigns',
     'public.auto_system_settings', 'public.org_staff', 'public.zalo_accounts', 'public.chat_zalo_account_organization',
-    'public.category_item']) AS t WHERE to_regclass(t) IS NULL;
+    'public.category_item', 'public.auto_staff_device_presence']) AS t WHERE to_regclass(t) IS NULL;
   IF v_missing IS NOT NULL THEN
     RAISE EXCEPTION 'v672 needs tables: %', v_missing;
   END IF;
@@ -1282,6 +1282,14 @@ BEGIN
             WHERE g0.staff_id = p_staff_id AND g0.organization_id = p_organization_id AND NOT g0.is_delete
               AND g0.purpose = 'data_group' AND (g0.bound_zalo_account_id IS NULL OR g0.bound_zalo_account_id = p_account_id)
             ORDER BY g0.updated_at DESC, g0.id DESC LIMIT 300) g), '[]'::jsonb),
+    -- Máy Desktop gần nhất của nhân viên (dải trạng thái phân biệt "app đang tắt" với "app cần cập nhật").
+    'desktop', (SELECT jsonb_build_object(
+        'online', pr.ended_at IS NULL AND pr.last_seen_at > v_now - interval '2 minutes',
+        'lastSeenAt', pr.last_seen_at, 'appVersion', pr.app_version,
+        'supportsEventBot', CASE WHEN pr.runtime_state IS NULL THEN NULL ELSE pr.runtime_state ? 'eventBot' END)
+      FROM public.auto_staff_device_presence pr
+      WHERE pr.staff_id = p_staff_id AND pr.organization_id = p_organization_id
+      ORDER BY pr.last_seen_at DESC NULLS LAST LIMIT 1),
     'conflicts', jsonb_build_object(
       'birthdayCampaigns', COALESCE((SELECT jsonb_agg(jsonb_build_object('id', c.id, 'name', c.name) ORDER BY c.id)
         FROM public.auto_campaigns c WHERE c.account_id = p_account_id AND c.action_id = 'zalo_message_birthday'

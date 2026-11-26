@@ -2,7 +2,7 @@
 
 Phần DB của [hợp đồng](EVENT_BOT_TECH.md) (mục 7a ghi các chi tiết thêm so với bản hợp đồng đầu). **Chưa apply production.**
 
-- Migration: [migration_v672_event_bot.sql](../migrations/migration_v672_event_bot.sql) (~101 KB, md5 file `f905a5fd02a11109abea5e38deb5a779`), gỡ: [rollback_v672_event_bot.sql](../migrations/rollback_v672_event_bot.sql).
+- Migration: [migration_v672_event_bot.sql](../migrations/migration_v672_event_bot.sql) (~101 KB, md5 file `d8277aba0a1d229ce8a0ef7fff01c094`), gỡ: [rollback_v672_event_bot.sql](../migrations/rollback_v672_event_bot.sql).
 - Kiểm: `bash scripts/event-bot/db/v672-smoke.sh` (PG16/17 cục bộ; fixture `v672-fixture.sql` theo cột production đọc chỉ
   đọc 26/11/2026, chạy V660 thật rồi V672).
 

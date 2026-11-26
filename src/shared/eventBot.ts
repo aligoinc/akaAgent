@@ -332,3 +332,102 @@ export type EventBotSyncResult = {
   pollSeconds: number;
   accounts: EventBotSyncAccount[];
 };
+
+// ── Trang Web / API (mục 7 của EVENT_BOT_TECH.md) ─────────────────────────────────────────────────────────────
+
+/** Thao tác của `aka_agent_control_event_bot` mà API Web nhận ở `POST /event-bot` (thân `{ action, ...payload }`). */
+export const EVENT_BOT_CONTROL_ACTIONS = [
+  'access', 'accounts', 'get', 'save', 'stop', 'exclusion_add', 'exclusion_remove', 'log', 'log_detail', 'report',
+] as const;
+export type EventBotControlAction = (typeof EVENT_BOT_CONTROL_ACTIONS)[number];
+
+export type EventBotAccess = { enabled: boolean; audience: string };
+
+/** `accountId`: tài khoản của danh sách (DB so theo UID Zalo nên danh sách của tài khoản khác hầu như không khớp). */
+export type EventBotBlocklist = { id: number; name: string; count: number; updatedAt: string | null; accountId?: number | null };
+export type EventBotTagOption = { id: string; name: string };
+export type EventBotDataGroupOption = { id: number; name: string; hasDynamicFilter: boolean; memberCount: number };
+export type EventBotGroupStats = { inGroup: number; entered24h: number; left24h: number; sent7d: number };
+
+/**
+ * App Desktop của nhân viên (đọc từ `auto_staff_device_presence`), để dải trạng thái phân biệt "app đang tắt" với
+ * "app cần cập nhật". Trường tuỳ chọn: thiếu thì trang chỉ dựa vào lần hỏi việc gần nhất (`lastClaimAt`).
+ */
+export type EventBotDesktopPresence = {
+  online: boolean;
+  lastSeenAt: string | null;
+  appVersion: string | null;
+  /** Ảnh chụp bộ chạy có khối `eventBot` (app đã có Bot sự kiện). null = không biết. */
+  supportsEventBot: boolean | null;
+};
+
+export type EventBotDetail = {
+  account: EventBotAccountRow;
+  settings: EventBotSettings;
+  rules: EventBotRule[];
+  exclusions: EventBotExclusion[];
+  blocklists: EventBotBlocklist[];
+  tags: EventBotTagOption[];
+  dataGroups: EventBotDataGroupOption[];
+  conflicts: {
+    birthdayCampaigns: Array<{ id: number; name: string }>;
+    tagAutoAddCampaigns: Array<{ id: number; name: string; tagIds: string[] }>;
+  };
+  /** Khoá là id quy tắc nhóm điều kiện (chuỗi). */
+  stats: Record<string, EventBotGroupStats>;
+  desktop?: EventBotDesktopPresence | null;
+  /** Chỉ có trong kết quả `save` / `stop`: số việc đang chờ vừa bị đóng (bot_off / rule_off / rule_changed). */
+  closedJobs?: number;
+};
+
+export type EventBotSaveRequest = {
+  accountId: number;
+  revision: number;
+  enabled: boolean;
+  blocklistIds: number[];
+  rules: EventBotRule[];
+};
+
+export type EventBotLogPage = { items: EventBotJobRow[]; nextBefore: number | null };
+
+export type EventBotJobDetail = EventBotJobRow & {
+  ruleId: number | null;
+  tagId: string | null;
+  contactId: number | null;
+  messageTemplate: string | null;
+  errorMessage: string | null;
+  expiresAt: string | null;
+  claimedBy: string | null;
+  zaloMsgId: string | null;
+};
+
+// Câu cho khách theo mã lỗi của RPC / API (RPC đã có câu riêng thì dùng câu của RPC).
+export const EVENT_BOT_ERROR_MESSAGES: Record<string, string> = {
+  event_bot_not_ready: 'Tính năng Bot sự kiện đang được cập nhật. Vui lòng thử lại sau.',
+  event_bot_disabled: 'Bot sự kiện chưa mở cho tài khoản của bạn.',
+  not_enabled: 'Bot sự kiện chưa mở cho tài khoản của bạn.',
+  invalid_request: 'Yêu cầu không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+  unknown_action: 'Yêu cầu không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+  rule_invalid: 'Có quy tắc chưa hợp lệ. Vui lòng kiểm tra lại.',
+  rule_not_found: 'Quy tắc đã bị xoá ở nơi khác. Tải lại để xem bản mới nhất.',
+  data_group_not_found: 'Không tìm thấy Nhóm khách hàng của quy tắc, hoặc nhóm không thuộc tài khoản này.',
+  data_group_no_filter: 'Nhóm khách hàng này chưa có Bộ lọc động nên không dùng được cho bot.',
+  duplicate_group: 'Mỗi Nhóm khách hàng chỉ dùng cho một quy tắc của tài khoản.',
+  blocklist_not_found: 'Danh sách không gửi đã bị xoá. Bỏ chọn danh sách đó rồi lưu lại.',
+  exclusion_invalid: 'SĐT hoặc Zalo UID không hợp lệ.',
+  event_bot_invalid: 'Yêu cầu không hợp lệ. Vui lòng tải lại trang rồi thử lại.',
+  event_bot_rules_invalid: 'Có quy tắc chưa hợp lệ. Vui lòng kiểm tra lại.',
+  account_not_found: 'Không tìm thấy tài khoản Zalo này hoặc tài khoản không thuộc bạn.',
+  revision_conflict: 'Cài đặt bot đã được sửa ở nơi khác. Tải lại để xem bản mới nhất rồi sửa tiếp.',
+  account_on_akachat: 'Tài khoản này cài bot ở akaChat. Sửa cài đặt ở trang Chatbot sự kiện của akaChat.',
+  runtime_not_supported: 'Tài khoản này chạy trên máy chủ mới, bot sự kiện chưa hỗ trợ.',
+  exclusion_limit: `Mỗi tài khoản tối đa ${EVENT_BOT_LIMITS.exclusionsPerAccount} người trong danh sách loại trừ.`,
+  job_not_found: 'Không tìm thấy dòng nhật ký này.',
+  event_bot_busy: 'Hệ thống đang bận. Vui lòng thử lại sau ít giây.',
+  event_bot_timeout: 'Xử lý quá thời gian. Vui lòng thử lại.',
+  event_bot_failed: 'Không xử lý được yêu cầu Bot sự kiện. Vui lòng thử lại sau.',
+};
+
+export function eventBotErrorMessage(code: string | null | undefined): string {
+  return (code && EVENT_BOT_ERROR_MESSAGES[code]) || EVENT_BOT_ERROR_MESSAGES.event_bot_failed;
+}

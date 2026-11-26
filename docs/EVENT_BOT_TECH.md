@@ -187,7 +187,7 @@ Mọi `accountId` phải là tài khoản Zalo chưa xoá của chính nhân vi�
   chỉ tính khi thay đổi do job Bộ lọc động ghi (giao dịch đang giữ khoá `data-group-dynamic-filter:<staff>`); `leave` theo
   nguồn bộ lọc thôi `is_current`, kể cả khi người đó còn trong nhóm do nguồn khác.
 - **Trang Web cần thêm ở `get` (đề xuất của phần WebApp, 26/11; trường tuỳ chọn, thiếu thì trang vẫn chạy):**
-  `desktop: {online, lastSeenAt, appVersion, supportsEventBot} | null` cho tài khoản `runsOn = 'desktop'`, đọc phiên
+  (V672 đã trả) `desktop: {online, lastSeenAt, appVersion, supportsEventBot} | null` cho tài khoản `runsOn = 'desktop'`, đọc phiên
   `auto_staff_device_presence` mới nhất của nhân viên (`online` = heartbeat trong 120 giây và `ended_at IS NULL`,
   `supportsEventBot` = `runtime_state ? 'eventBot'`, null nếu không có `runtime_state`). Dải trạng thái dùng nó để phân
   biệt "app Desktop đang tắt" với "app cần cập nhật"; thiếu thì chỉ dựa vào `lastClaimAt` (dưới 5 phút = đang chạy).

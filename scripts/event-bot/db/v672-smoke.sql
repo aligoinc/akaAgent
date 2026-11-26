@@ -99,6 +99,11 @@ SELECT pg_temp.t((SELECT jsonb_object_agg(x->>'accountId', x->>'kind') FROM json
 SELECT pg_temp.t(pg_temp.ctl(100, 10, 'get', '{"accountId":1101}')->>'code' = 'account_not_found', 'get tài khoản của người khác → account_not_found');
 SELECT pg_temp.t(pg_temp.ctl(100, 10, 'nope', '{"accountId":1001}')->>'code' = 'unknown_action', 'thao tác lạ → unknown_action');
 SELECT pg_temp.t((pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'settings'->>'revision')::int = 0, 'get lần đầu: revision 0');
+SELECT pg_temp.t(pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'desktop' = 'null'::jsonb, 'get: chưa có máy Desktop → desktop null');
+INSERT INTO auto_staff_device_presence (staff_id, organization_id, app_version, last_seen_at, runtime_state)
+  VALUES (100, 10, '10.8.0', now() - interval '1 hour', '{"scheduler":{}}'), (100, 10, '10.9.0', now(), '{"eventBot":{"state":"idle"}}');
+SELECT pg_temp.t((SELECT d->>'appVersion' = '10.9.0' AND (d->>'online')::boolean AND (d->>'supportsEventBot')::boolean
+  FROM (SELECT pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'desktop' AS d) x), 'get: máy Desktop mới nhất, đang mở, có Bot sự kiện');
 SELECT pg_temp.t(jsonb_array_length(pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'conflicts'->'birthdayCampaigns') = 1, 'get: cảnh báo chiến dịch sinh nhật');
 SELECT pg_temp.t(pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'tags' = '[{"id":"7","name":"Khách cũ"},{"id":"3","name":"Khách mới"}]', 'get: danh sách tag');
 SELECT pg_temp.t((SELECT count(*) FROM jsonb_array_elements(pg_temp.ctl(100, 10, 'get', '{"accountId":1001}')->'data'->'blocklists')) = 1, 'get: chỉ danh sách không gửi của nhân viên');
