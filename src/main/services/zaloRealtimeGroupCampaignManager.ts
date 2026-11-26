@@ -5,6 +5,8 @@ import { Campaign, IPC_EVENTS, type CampaignSummaryRefreshSignal } from '../../s
 import type { CampaignRuntimeTarget } from '../data/repositories/campaignRepository'
 import { SupabaseService } from './supabase'
 import { ZaloRuntimeService, type ZaloListenerStatusEvent } from './zaloRuntimeService'
+import { createZaloTagSync } from './zaloTagSync'
+import type { ZaloTagSyncRuntime } from './zaloTagSyncRuntime'
 
 const ACTION_ID = 'zalo_message_group_realtime'
 const REFRESH_INTERVAL_MS = 30_000
@@ -49,18 +51,23 @@ export class ZaloRealtimeGroupCampaignManager {
   private activeOperations = new Set<Promise<unknown>>()
   private generation = 0
   private zaloRuntimeClaimsAbandoned = false
+  /** Sổ tag Zalo (V660) chạy cùng vòng đời với bộ quản lý này (cùng runtime Zalo, cùng lúc bật / tắt). */
+  private readonly tagSync: ZaloTagSyncRuntime
 
   constructor(
     private readonly supabase: SupabaseService,
     private readonly zaloRuntime: ZaloRuntimeService,
     private readonly mainWindow: BrowserWindow,
     private readonly runtimeTarget: CampaignRuntimeTarget = 'desktop'
-  ) {}
+  ) {
+    this.tagSync = createZaloTagSync(zaloRuntime, runtimeTarget === 'server' ? 'server' : 'desktop')
+  }
 
   start(): void {
     if (this.running) return
     this.running = true
     this.generation += 1
+    this.tagSync.start()
     void this.refresh('start')
     this.refreshTimer = setInterval(() => {
       void this.refresh('interval')
@@ -70,6 +77,7 @@ export class ZaloRealtimeGroupCampaignManager {
   stop(): void {
     this.running = false
     this.generation += 1
+    this.tagSync.stop()
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer)
       this.refreshTimer = null
@@ -93,6 +101,7 @@ export class ZaloRealtimeGroupCampaignManager {
 
   refreshSoon(reason = 'manual'): void {
     if (!this.running) return
+    this.tagSync.refreshSoon()
     void this.refresh(reason)
   }
 

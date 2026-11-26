@@ -930,6 +930,9 @@ const electronAPI = {
   getCampaignAccountActionSnapshot: (scopes: CampaignAccountActionScope[]): Promise<CampaignAccountActionSnapshot> =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_CAMPAIGN_ACTION_SNAPSHOT, scopes),
 
+  setCampaignZaloTagAutoAdd: (campaignId: number, enabled: boolean) =>
+    ipcRenderer.invoke('campaign:zalo-tag-auto-add:set', campaignId, enabled),
+
   enableAccountActionNow: (accountId: number, actionCode: string) =>
     ipcRenderer.invoke(IPC_EVENTS.ACCOUNT_ACTION_ENABLE_NOW, accountId, actionCode),
 
