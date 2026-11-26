@@ -13,7 +13,7 @@ export const OPT_OUT_ERROR_CODE = 'err_engine_recipient_opted_out'
  * (logZaloMessageOptOutBlocked) thay cho dòng của thao tác.
  */
 const SKIP_GATE_ERROR_CODES = new Set([OPT_OUT_ERROR_CODE, 'err_engine_send_excluded', 'err_engine_send_exclusion_unknown',
-  'err_engine_friend_blocklisted'])
+  'err_engine_friend_blocklisted', 'err_engine_zalo_tag_not_friend'])
 /** Dừng chủ động: không phải kết quả với khách, Desktop không in dòng nào. */
 export const CANCELLED_ERROR_CODE = 'err_engine_cancelled'
 /** Facebook (V559 FB45): bước chạy xong mà bộ dựng lịch sử của bộ cũ không ghi dòng nào; bộ cũ không in gì, engine cũng không in. */

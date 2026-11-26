@@ -348,6 +348,7 @@ export function mapCampaignInputDataFromDB(row: Record<string, unknown>): Campai
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string,
     canonicalTargetKey: (row.canonical_target_key as string | null | undefined) ?? null,
+    controlAppendIdempotencyKey: (row.control_append_idempotency_key as string | null | undefined) ?? null,
     dataTypeCategoryItemId: (row.data_type_category_item_id as number | null | undefined) ?? null,
     dataTypeCode: (
       row.data_type_category_code

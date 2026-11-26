@@ -602,6 +602,24 @@ export class ZaloRuntimeService {
     return this.apiCache.get(accountId)?.api.getOwnId() || undefined
   }
 
+  /** Tài khoản Zalo QR / Server đang có phiên trong tiến trình này (không đăng nhập thêm). */
+  cachedAccountIds(): number[] {
+    return Array.from(this.apiCache.keys())
+  }
+
+  /**
+   * Sổ tag Zalo (V660): đọc danh sách tag bằng phiên đang có, không đọc DB và không đăng nhập lại. Không có phiên thì trả null.
+   */
+  async peekLabels(accountId: number): Promise<{ version: string; labels: Array<{ id: unknown; text?: unknown; conversations?: unknown }> } | null> {
+    const cached = this.apiCache.get(accountId)
+    if (!cached) return null
+    const response = await cached.api.getLabels()
+    return {
+      version: String(response?.version ?? ''),
+      labels: Array.isArray(response?.labelData) ? response.labelData : []
+    }
+  }
+
   async ensureApi(accountId: number): Promise<API> {
     // Mọi lỗi ở đây xảy ra trước khi gọi Zalo cho thao tác của nơi gọi (đọc DB, kiểm gói, đăng nhập lại bằng phiên):
     // gắn dấu để cổng engine v2 xếp "chưa gửi" thay vì "không rõ đã tới". Câu, mã, lớp lỗi giữ nguyên cho bộ chạy cũ.
