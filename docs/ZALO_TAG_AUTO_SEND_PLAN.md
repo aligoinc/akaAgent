@@ -1,7 +1,8 @@
 # Tự gửi tin khi một người được gắn tag Zalo — phương án
 
-Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8), chưa apply V660, chưa deploy, chưa build,
-chưa merge, chưa đổi gì trên production.**
+Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8). V660 đã apply 12:30 VN 26/11, công tắc
+bật. Chiều 26/11 anh chốt "Cách A": gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè (mục 10; V669 chưa apply). Chưa
+deploy, chưa build, chưa merge.**
 
 Tính năng: chiến dịch "Nhắn tin bạn bè" ở chế độ "Gửi cho bạn bè thuộc danh sách tag" có thêm ô chọn. Bật ô này thì mỗi khi
 một người được gắn một trong các tag đã chọn trên Zalo, hệ thống tự thêm người đó vào chiến dịch và gửi tin. Chiến dịch đang
@@ -11,7 +12,7 @@ một người được gắn một trong các tag đã chọn trên Zalo, hệ 
 
 | Điểm | Chốt |
 |---|---|
-| Người nhận | Đợt này chỉ gửi cho người đã là bạn bè. "Chỉ người lạ" / "Tất cả" để đợt sau. |
+| Người nhận | ~~Đợt này chỉ gửi cho người đã là bạn bè.~~ Đổi chiều 26/11 ("Cách A", mục 10): gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè. |
 | Gỡ tag | Sổ tag ghi cả gắn lẫn gỡ. Tính năng gửi tin chỉ phản ứng với gắn tag. |
 | Mất kết nối rồi nối lại | Bỏ: những người được gắn tag trong lúc mất kết nối không được gửi. |
 | Zalo trình duyệt | Chưa làm. |
@@ -138,7 +139,7 @@ Chiến dịch chưa lấy danh sách lần đầu thì không cần thêm: lư�
 
 Nhóm (hội thoại nhóm cũng gắn tag được) bị bỏ ở bước này; sổ tag vẫn ghi.
 
-### 4.3 Chỉ gửi cho bạn bè
+### 4.3 Chỉ gửi cho bạn bè (đã bỏ chiều 26/11, xem mục 10)
 
 Danh sách tag của Zalo không cho biết ai là bạn bè. Kiểm ngay trước khi gửi, chỉ với dòng có khoá `zalotag:`:
 
@@ -334,3 +335,41 @@ Chạy đồng thời ở mọi vòng: 0 trùng, 0 khoá chéo, 0 lần chờ kh
 - Zalo thật (bước 0 ở mục 5): phiên bản tag có đổi mỗi lần gắn / gỡ không. zca-js `updateLabels` gửi kèm phiên bản nên nhiều khả năng có, nhưng chưa thử trên Zalo thật.
 - Electron thật, runtime Fly thật.
 - Hàm chọn chính sách của engine trên DB thật với EXC05. Dòng chính sách viết giống EXC04 / lớp `target_temporary` sẵn có.
+
+## 10. Gửi cả người chưa là bạn bè ("Cách A", chiều 26/11/2026)
+
+Anh yêu cầu: "không phân biệt bạn bè hay không, chỉ cần gắn tag là gửi", chọn Cách A (bỏ hẳn bước kiểm, mọi người gửi như bạn bè).
+
+Số đo trước khi đổi (chỉ đọc, 54 tài khoản đang chạy chiến dịch gửi theo tag trong 60 ngày): trong các tag của họ có 86.185 người
+(không tính 2.251 nhóm): 51% đã là bạn bè, 6% có trong danh bạ đã đồng bộ nhưng chưa là bạn bè, 43% không có trong danh bạ đã đồng
+bộ (nhiều khả năng cũng chưa là bạn bè). Với luật cũ khoảng một nửa số người được gắn tag sẽ bị "Bỏ qua".
+
+Đã làm:
+
+- Lõi engine (`packages/campaign-engine`, gửi thường lẫn dạng chia sẻ) và bộ chạy cũ (`campaignScheduler.ts`) bỏ bước kiểm bạn bè
+  cho dòng `zalotag:`. Mã EXC04 / EXC05 của V660 còn trong DB nhưng không còn chỗ phát. Lõi đã chép sang ChatApi.
+- Tên người nhận: data chỉ có UID (người không có trong danh bạ) vẫn được gửi bằng tên hồ sơ Zalo, vì cả hai bộ chạy đọc hồ sơ theo
+  UID trước khi gửi (`getUserProfile`). Bài kiểm Desktop có ca này.
+- Zalo hạn chế nhắn người lạ (120 / 802) khi nhắn tin bạn bè, [V669](../migrations/migration_v669_zalo_friend_stranger_restricted.sql)
+  (chỉ dữ liệu; chạy thử trên DB thật trong giao dịch tự huỷ 26/11 đạt):
+  - engine v2: hẹn riêng data đó chạy lại sau 24 giờ (120) / 48 giờ (802), không tính lượt, không cộng chuỗi, không dừng chiến dịch,
+    lượt chạy tiếp người khác; vẫn khoá "Nhắn tin người lạ" của tài khoản như cũ. Trước V669: data về hàng đợi ngay, 3 data liền
+    thì tạm dừng chiến dịch.
+  - bộ chạy cũ (không có hẹn giờ theo data): dòng `auto_error` mới `err_zalo_message_friend_stranger_restricted`, data "thất bại",
+    không tính lượt, không cộng chuỗi. Trước V669 rơi vào lỗi chung (tính lượt, cộng chuỗi, 4 data liền thì tạm dừng).
+  - Bạn bè thật không gặp 120 / 802 (3 ngày tới 26/11: 0 lần trên ~22.000 lượt nhắn bạn bè của engine v2).
+- Câu trên form (Desktop, Web, iOS): "Tự động gửi cho người được gắn tag này về sau (kể cả người chưa là bạn bè)", bỏ câu "người chưa
+  là bạn bè sẽ bị bỏ qua", thêm câu nhắc nhắn nhiều người chưa là bạn bè dễ bị Zalo hạn chế. Câu cho khách chưa được anh duyệt.
+
+Giữ nguyên:
+
+- Danh sách lần đầu (lấy người đang có trong tag lúc bật chiến dịch) vẫn chỉ lấy bạn bè: chỉ người được gắn tag sau mới được gửi
+  dù chưa là bạn bè.
+- Tin gửi người chưa là bạn bè tính vào hạn mức "Nhắn tin bạn bè" của chiến dịch, không theo hạn mức "Nhắn tin người lạ".
+- Gửi nhanh cho nhiều người chưa là bạn bè liền nhau có thể gặp Z127 (Zalo chặn vì gửi nhanh): chính sách hiện tại của nhắn tin bạn
+  bè khoá nhắn bạn bè 30 phút và 3 data liền thì tạm dừng chiến dịch. Chưa đổi.
+
+Kiểm: `CHAT_REPO=<akaAgentChatApi> node scripts/campaign-engine-desktop-smoke.cjs` (12 nhóm; ca "người được gắn tag chưa là bạn bè
+vẫn được gửi" hỏng trên code trước khi sửa), typecheck ba tsconfig, ChatApi `npm run verify`, WebApp bài kiểm iOS `Options.test.tsx`.
+`fuzz-round.sh` thay bước "Lõi engine: kiểm bạn bè" bằng bài kiểm Desktop. Thứ tự đưa lên: apply V669 trước hoặc cùng lúc bản chạy
+mới (V669 chỉ đổi cách xử lý 120 / 802 của nhắn tin bạn bè, chạy được với bản cũ).
