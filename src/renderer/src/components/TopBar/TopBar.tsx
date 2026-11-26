@@ -44,6 +44,9 @@ import { AFF_PARTNER_MENU_LABEL } from '../../../../shared/affPartner'
 import { UPGRADE_PORTAL_MENU_CAPTION, UPGRADE_PORTAL_MENU_LABEL } from '../../../../shared/upgradePortal'
 import { useUpgradePortalStore } from '../../stores/upgradePortalStore'
 import { ENGINE_ERROR_REVIEW_MENU_LABEL } from '../../../../shared/engineErrorReview'
+import { facebookUnreadMenuLabel, formatFacebookUnreadBadge } from '../../../../shared/facebookMessages'
+import { useFacebookMessagesUnreadStore } from '../../stores/facebookMessagesUnreadStore'
+import FacebookMessagesNavTooltip from '../FacebookMessages/FacebookMessagesNavTooltip'
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
@@ -76,6 +79,11 @@ interface SidebarNavItem {
   icon: ReactNode
   active?: boolean
   onClick: () => void
+  /** Số đỏ: góc biểu tượng khi menu thu gọn, cuối dòng khi menu mở rộng. */
+  badge?: string
+  ariaLabel?: string
+  /** Ô hiện khi rê chuột (thay cho title của trình duyệt). */
+  tooltip?: ReactNode
 }
 
 function UpdateBadgeIcon() {
@@ -116,6 +124,7 @@ export default function TopBar({
   const canOpenCrm = user?.organizationId === 1
   const canOpenAdmin = canAccessAdmin(user)
   const canOpenFacebookMessages = canUsePlatform('facebook', user?.entitlements)
+  const facebookUnread = useFacebookMessagesUnreadStore(state => state.summary)
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
     : availableUpdateVersion
@@ -163,7 +172,13 @@ export default function TopBar({
         label: 'Tin nhắn Facebook',
         icon: <MessageCircle size={18} />,
         active: activePage === 'fb-messages',
-        onClick: () => onPageChange('fb-messages')
+        onClick: () => onPageChange('fb-messages'),
+        badge: facebookUnread && facebookUnread.total > 0 ? formatFacebookUnreadBadge(facebookUnread.total) : undefined,
+        ariaLabel: facebookUnreadMenuLabel(facebookUnread?.total ?? 0),
+        // Đang ở trang Tin nhắn Facebook thì cột trái của trang đã có số từng tài khoản: không hiện ô.
+        tooltip: facebookUnread && facebookUnread.accounts.length > 0 && activePage !== 'fb-messages'
+          ? <FacebookMessagesNavTooltip id="app-sidebar-fb-messages-tooltip" summary={facebookUnread} />
+          : undefined
       }] : []),
       {
         key: 'data-scan',
@@ -246,6 +261,7 @@ export default function TopBar({
     activePage,
     canOpenAdmin,
     canOpenFacebookMessages,
+    facebookUnread,
     canOpenWorkflowEditor,
     canOpenChat,
     canOpenCrm,
@@ -338,19 +354,34 @@ export default function TopBar({
       />
 
       <nav className="app-sidebar-nav" aria-label="Điều hướng chính">
-        {navItems.map(item => (
-          <button
-            key={item.key}
-            type="button"
-            className={`app-sidebar-nav-item ${item.active ? 'active' : ''}`}
-            onClick={item.onClick}
-            title={item.label}
-            aria-current={item.active ? 'page' : undefined}
-          >
-            <span className="app-sidebar-item-icon">{item.icon}</span>
-            <span className="app-sidebar-label">{item.label}</span>
-          </button>
-        ))}
+        {navItems.map(item => {
+          const button = (
+            <button
+              key={item.key}
+              type="button"
+              className={`app-sidebar-nav-item ${item.active ? 'active' : ''}`}
+              onClick={item.onClick}
+              title={item.tooltip ? undefined : item.label}
+              aria-label={item.ariaLabel}
+              aria-describedby={item.tooltip ? `app-sidebar-${item.key}-tooltip` : undefined}
+              aria-current={item.active ? 'page' : undefined}
+            >
+              <span className="app-sidebar-item-icon">
+                {item.icon}
+                {item.badge && <span className="app-sidebar-icon-badge" aria-hidden="true">{item.badge}</span>}
+              </span>
+              <span className="app-sidebar-label">{item.label}</span>
+              {item.badge && <span className="app-sidebar-item-badge" aria-hidden="true">{item.badge}</span>}
+            </button>
+          )
+          if (!item.tooltip) return button
+          return (
+            <div key={item.key} className="app-sidebar-nav-entry">
+              {button}
+              {item.tooltip}
+            </div>
+          )
+        })}
       </nav>
 
       <div className="app-sidebar-footer" ref={accountMenuRef}>
