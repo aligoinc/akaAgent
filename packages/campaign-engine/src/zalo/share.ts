@@ -40,7 +40,6 @@ import {
 import {
   checkZaloSendExclusion, exclusionProfileTarget, sendExclusionActive, validateSendExclusionConfig, type ZaloSendExclusionPort
 } from './sendExclusion.js'
-import { checkZaloTagAutoAddFriend } from './tagAutoAdd.js'
 import { checkZaloFriendBlocklist, friendBlocklistActive, validateFriendBlocklistConfig, type ZaloFriendBlocklistPort } from './friendBlocklist.js'
 
 type JsonObject = Record<string, unknown>
@@ -283,17 +282,6 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
         if ('stop' in res) return res
         if (res.outcomes.some(decision => decision.errorCode === 'err_engine_friend_blocklisted')) blocklisted++
         else showSingle(res, item)
-        continue
-      }
-    }
-    // Người vừa được gắn tag (V660): chỉ gửi khi đã là bạn bè; không vào lô.
-    if (!isGroup) {
-      const friend = await checkZaloTagAutoAddFriend(port, item.ctx, item.target, opts.readTimeoutMs ?? 60_000)
-      if (friend.kind === 'blocked') {
-        reported.add(item.targetRunId)
-        const res = await api.reportOne(item, step, friend.outcome)
-        if ('stop' in res) return res
-        showSingle(res, item)
         continue
       }
     }

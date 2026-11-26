@@ -11,7 +11,7 @@ step() { echo "== $1"; shift; "$@" || status=1; }
 step "DB V660 + đồng thời" node "$DIR/fuzz-loop.cjs" --seed "$SEED" --scenarios 80 --steps 140 ${POOL:+--real "$POOL"}
 step "Fly: cờ liền mạch" node "$DIR/fly-tag-sync-fuzz.cjs" --seed "$SEED" --runs 3000
 step "Desktop / App Server: bộ hỏi tag" node "$DIR/runtime-fuzz.cjs" --seed "$SEED" --runs 400
-step "Lõi engine: kiểm bạn bè" env SEED="$SEED" node "$DIR/engine-friend-check-smoke.cjs"
+step "Bộ chạy mới Desktop: gửi cho người được gắn tag (kể cả người lạ)" node "$DIR/../campaign-engine-desktop-smoke.cjs"
 step "Bài kiểm V660 + gỡ / apply lại" bash "$DIR/v660-smoke.sh"
 step "Desktop / App Server: smoke" node "$DIR/runtime-smoke.cjs"
 echo "== VÒNG seed $SEED: $([ $status = 0 ] && echo SẠCH || echo CÒN LỖI)"
