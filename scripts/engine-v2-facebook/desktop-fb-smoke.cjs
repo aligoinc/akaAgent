@@ -176,7 +176,8 @@ class FakePage {
   async navigate(url) {
     if (this.destroyed) throw new Error('Browser page is not connected')
     if (this.scenario.navigateError) throw new Error(`${this.scenario.navigateError} loading '${url}'`)
-    this.url = url
+    // Câu 631: mở trang chủ mà Facebook chuyển sang trang xác minh / đăng nhập.
+    this.url = this.scenario.redirectTo ?? url
   }
   async captureJpeg() { return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]) }
   async press(key) { this.clicks.push('press:' + key) }
@@ -193,6 +194,9 @@ class FakePage {
     if (code === 'typeError') return this.scenario.typeError ?? null
     // V659: câu lỗi của bước đọc tên danh tính Page (lỗi trên trang, sau khi mở trang chủ được).
     if (code === 'identityError') return this.scenario.identityError ?? null
+    // Câu 605: câu block chuyển Page trả khi không chuyển được (ok:false, không ném).
+    if (code === 'switchError') return this.scenario.switchError ?? null
+    if (code === 'identityIsPage') return this.scenario.identityIsPage ?? false
     if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
     if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
@@ -1957,9 +1961,18 @@ COMMIT;`)
 await page.navigate('https://www.facebook.com/')
 if (fail) throw new Error(fail)
 vars.originalIdentityName = 'Tài khoản gốc'
-return { ok: true, identityName: 'Tài khoản gốc' }` },
-      { id: 9722, name: 'fb_switch_identity_by_name', code: `return { ok: true, identityName: input.useOriginalIdentity === true ? vars.originalIdentityName : vars.runAsPageName }` },
-      { id: 9723, name: 'fb_campaign_page_identity_state', code: `return { ok: true, operation: input.pageIdentityStateOperation }` }
+// V663: block đọc tên trả danh tính ban đầu là Page hay trang cá nhân (cookie i_user).
+const isPage = (await page.evaluate('identityIsPage')) === true
+vars.originalIdentityIsPage = isPage
+return { ok: true, identityName: 'Tài khoản gốc', isPage }` },
+      // Như block 2880 production: không chuyển được thì trả ok:false kèm câu (không ném); block 2915 "ready" ném lại câu đó.
+      { id: 9722, name: 'fb_switch_identity_by_name', code: `const identityName = input.useOriginalIdentity === true ? vars.originalIdentityName : vars.runAsPageName
+const fail = input.useOriginalIdentity === true ? null : await page.evaluate('switchError')
+if (fail) return { ok: false, identityName, message: fail }
+return { ok: true, identityName }` },
+      { id: 9723, name: 'fb_campaign_page_identity_state', code: `const mode = input.pageIdentityStateOperation
+if ((mode === 'ready' || mode === 'restored') && input.ok === false) throw new Error(String(input.message || 'Không chuyển được sang Page đã chọn'))
+return { ok: true, operation: mode }` }
     ]
     for (const b of IDENTITY_BLOCKS) globalThis.__fbTest.blocks.set(b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false })
     const withPageIdentity = (wf, root, leaf) => {
@@ -1984,18 +1997,24 @@ return { ok: true, identityName: 'Tài khoản gốc' }` },
       return { ...wf, nodes: [...Object.entries(nodes).map(([name, node]) => ({ id: id(name), ...node })), ...wf.nodes],
         edges: [...edges, { id: 'pi-enter', source: id('enter'), target: root }, { id: 'pi-leaf', source: leaf, target: id('capture_result') }, ...wf.edges] }
     }
-    const identityRun = async identityError => {
+    const identityRun = async (identityError, scenario = {}) => {
       const workflows = globalThis.__fbTest.workflows
       const original = workflows.get(UID_WORKFLOW_ID)
       workflows.set(UID_WORKFLOW_ID, withPageIdentity(uidWorkflow(), 'send', 'send'))
       try {
         const entry = await makeCampaign({ actionId: 'facebook_message_uid', extra: { runAsPage: true, runAsPageUid: '900', runAsPageName: 'Page thử' } })
-        await run(entry, { identityError, navigateError: identityError.startsWith('ERR_') ? identityError.replace(/ loading .*$/, '') : undefined })
-        return { entry, out: await outcomes(entry.campaign.id), camp: await campaignRow(entry.campaign.id), data: await inputs(entry.campaign.id) }
+        const { page: fake } = await run(entry, { identityError, navigateError: identityError?.startsWith('ERR_') ? identityError.replace(/ loading .*$/, '') : undefined,
+          ...scenario })
+        return { entry, fake, out: await outcomes(entry.campaign.id), camp: await campaignRow(entry.campaign.id), data: await inputs(entry.campaign.id) }
       } finally {
         workflows.set(UID_WORKFLOW_ID, original)
       }
     }
+    // App thôi nhận việc giữa lượt (bộ giữ khi máy ngủ / startWorkGate, như lúc bấm tạm dừng chiến dịch): hook trước block thấy shouldStop() và trả
+    // 'stop' mà tín hiệu huỷ không bật (câu 603 / 611 / 3297). Bật lại sau lượt.
+    let gateOpen = true
+    const stopAcceptingAt = code => scenarioCode => { if (scenarioCode === code) gateOpen = false }
+    scheduler.startWorkGate = () => gateOpen
 
     await check('V659: bước đọc tên danh tính Page hỏng lúc mở trang chủ vì proxy → NET02 (không còn FB06 "kiểm tra Page"), data về hàng đợi, chiến dịch không dừng ở lần đầu', async () => {
       const { entry, out, camp, data } = await identityRun("ERR_PROXY_CONNECTION_FAILED (-130) loading 'https://www.facebook.com/'")
@@ -2013,6 +2032,89 @@ return { ok: true, identityName: 'Tài khoản gốc' }` },
       assert.equal(out[0].signal.errorCode, 'err_fb_identity_switch_failed')
       assert.equal(camp.status, 'tạm dừng')
       assert.match(String(camp.note), /FB06/)
+    })
+
+    // Câu 603 / 611 / 3297 của bộ kiểm lỗi (anh chốt 26/11/2026): lượt bị dừng ở ranh giới block trong đoạn chuyển Page, không bước nào lỗi → RUN01.
+    await check('FB06 câu 3297: app thôi nhận việc khi vừa đọc xong tên danh tính (chưa chuyển Page) → RUN01, data về hàng đợi, chiến dịch không tạm dừng', async () => {
+      try {
+        const { out, camp, data } = await identityRun(null, { onEvaluate: stopAcceptingAt('identityError') })
+        assert.deepEqual(out.map(o => [o.result_key.split(':').at(-1), o.phase, o.error_code]), [['__stopped', 'before_send', 'err_engine_cancelled']], JSON.stringify(out))
+        assert.notEqual(camp.status, 'tạm dừng', JSON.stringify(camp))
+        assert.doesNotMatch(String(camp.note ?? ''), /FB06/)
+        assert.equal(data[0].status, 'chờ xử lý')
+      } finally { gateOpen = true }
+    })
+
+    await check('FB06 câu 611: app thôi nhận việc khi bước chuyển Page vừa xong (chưa vào data) → RUN01, chiến dịch không tạm dừng', async () => {
+      try {
+        const before = globalThis.__fbTest.runSteps.length
+        const { out, camp, data } = await identityRun(null, { onEvaluate: stopAcceptingAt('switchError') })
+        assert.deepEqual(out.map(o => o.error_code), ['err_engine_cancelled'], JSON.stringify(out))
+        assert.notEqual(camp.status, 'tạm dừng', JSON.stringify(camp))
+        assert.equal(data[0].status, 'chờ xử lý')
+        // Đã chuyển sang Page rồi mới bị dừng: lúc đóng lượt vẫn chạy nhánh chuyển về danh tính ban đầu (như lượt thường).
+        const steps = globalThis.__fbTest.runSteps.slice(before)
+        assert.ok(steps.some(s => s.nodeId === 'page_identity_restored' && s.status === 'success'), JSON.stringify(steps.map(s => [s.nodeId, s.status])))
+      } finally { gateOpen = true }
+    })
+
+    await check('FB06 câu 603 (lượt 332906): bước chuyển Page đã trả lỗi rồi lượt mới bị dừng → vẫn FB06 nhưng mang câu thật của block, không phải câu mặc định', async () => {
+      try {
+        const { out, camp } = await identityRun(null, { switchError: 'Không tìm thấy nút xem tất cả profile/page', onEvaluate: stopAcceptingAt('switchError') })
+        assert.deepEqual(out.map(o => o.error_code), ['err_fb_identity_switch_failed'], JSON.stringify(out))
+        assert.equal(out[0].signal.message, 'Không tìm thấy nút xem tất cả profile/page')
+        assert.equal(camp.status, 'tạm dừng')
+      } finally { gateOpen = true }
+    })
+
+    await check('FB06 câu 605: bước chuyển Page không thấy nút (lượt không bị dừng) → FB06 mang câu của block, kèm mã ảnh của bước chuyển', async () => {
+      const { out, camp } = await identityRun(null, { switchError: 'Không tìm thấy nút xem tất cả profile/page' })
+      assert.deepEqual(out.map(o => o.error_code), ['err_fb_identity_switch_failed'], JSON.stringify(out))
+      assert.equal(out[0].signal.message, 'Không tìm thấy nút xem tất cả profile/page')
+      assert.match(String(out[0].signal.screenshotId), /^[0-9a-f-]{36}$/, 'có mã ảnh lỗi để hộp thư xin ảnh')
+      const day = fs.readdirSync(path.join(userData, 'local-data', 'engine-screenshots')).sort().at(-1)
+      const meta = JSON.parse(fs.readFileSync(path.join(userData, 'local-data', 'engine-screenshots', day, `${out[0].signal.screenshotId}.json`), 'utf8'))
+      assert.equal(meta.stepKey, 'page_identity_switch', 'ảnh lúc bước chuyển hỏng (menu đang hiện gì), không phải ảnh của bước ném lại câu')
+      assert.equal(camp.status, 'tạm dừng')
+    })
+
+    await check('FB06 câu 632: bước đọc tên danh tính lỗi trên trang → FB06 kèm mã ảnh', async () => {
+      const { out } = await identityRun('Không lấy được tên Facebook identity hiện tại')
+      assert.deepEqual(out.map(o => o.error_code), ['err_fb_identity_switch_failed'], JSON.stringify(out))
+      assert.match(String(out[0].signal.screenshotId), /^[0-9a-f-]{36}$/)
+    })
+
+    await check('FB06 câu 631: bước đọc tên danh tính lỗi khi Facebook chuyển sang trang xác minh → FB04 (trạng thái đăng nhập), không phải FB06', async () => {
+      const { out, camp, data } = await identityRun('Không tìm thấy nút mở menu profile/page hiện tại',
+        { redirectTo: 'https://www.facebook.com/checkpoint/1501092823525282/?next=https%3A%2F%2Fwww.facebook.com%2F' })
+      assert.deepEqual(out.map(o => [o.phase, o.error_code]), [['before_send', 'err_fb_checkpoint']], JSON.stringify(out))
+      assert.doesNotMatch(String(camp.note ?? ''), /FB06/)
+      assert.equal(data[0].status, 'chờ xử lý')
+    })
+
+    // V663 (thử thật 26/11 trên tài khoản có trang cá nhân và Page cùng tên): block chuyển về cần biết danh tính ban đầu là Page hay trang cá
+    // nhân; Facebook tự xoá localStorage nên bộ lập lịch truyền originalIdentityIsPage (kết quả bước đọc tên) vào lượt chuyển về và dấu khôi phục.
+    for (const isPage of [false, true]) {
+      await check(`FB06 V663: danh tính ban đầu là ${isPage ? 'Page' : 'trang cá nhân'} → lượt chuyển về chạy riêng và dấu khôi phục mang originalIdentityIsPage = ${isPage}`, async () => {
+        const before = globalThis.__fbTest.runs.length
+        const markers = []
+        const markerDir = path.join(userData, 'local-data', 'engine-facebook-identity')
+        const { out } = await identityRun(null, { identityIsPage: isPage, onEvaluate: code => {
+          if (code !== 'switchError' || !fs.existsSync(markerDir)) return
+          for (const f of fs.readdirSync(markerDir)) markers.push(JSON.parse(fs.readFileSync(path.join(markerDir, f), 'utf8')))
+        } })
+        assert.deepEqual(out.map(o => o.error_code), [null], JSON.stringify(out))
+        const restoreRuns = globalThis.__fbTest.runs.slice(before).filter(r => r.variables?.pageIdentityRestoreOnly === true)
+        assert.equal(restoreRuns.length, 1, 'đóng lượt có đúng một lượt chuyển về')
+        assert.equal(restoreRuns[0].variables.originalIdentityIsPage, isPage)
+        assert.equal(restoreRuns[0].variables.originalIdentityName, 'Tài khoản gốc')
+        assert.ok(markers.length >= 1 && markers.every(m => m.originalIdentityIsPage === isPage), JSON.stringify(markers))
+      })
+    }
+
+    await check('FB06 câu 631: trang đăng nhập lúc đọc tên danh tính → FB43', async () => {
+      const { out } = await identityRun('Không tìm thấy nút mở menu profile/page hiện tại', { redirectTo: 'https://www.facebook.com/login/?next=%2F' })
+      assert.deepEqual(out.map(o => o.error_code), ['err_engine_fb_logged_out'], JSON.stringify(out))
     })
   } finally {
     await db.end().catch(() => {})

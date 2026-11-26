@@ -5,7 +5,8 @@
  */
 
 export type Phase = 'before_send' | 'in_flight' | 'after_send'
-export type RuntimeTarget = 'desktop' | 'fly'
+/** Nơi chạy: Desktop (máy khách), Fly (ChatApi), server (App Server trên VPS, tài khoản Zalo Server; V667). */
+export type RuntimeTarget = 'desktop' | 'fly' | 'server'
 export type DeliveryState = 'none' | 'delivered' | 'partial' | 'unknown' | 'not_delivered'
 export type NextDirective = 'next_step' | 'next_target' | 'end_unit' | 'stop_account' | 'stop_campaign' | 'ownership_lost'
 export type PaceMode = 'full' | 'short' | 'none'
@@ -146,6 +147,8 @@ export interface ClaimContext {
   leaseToken?: string | null
   /** V564 (chế độ workflow): false khi lượt chưa nhận được data nào, để DB trả shuffle.count cả khi lease đã cấp ở lần gọi trước. */
   unitStarted?: boolean
+  /** V666: lõi chạy được cấu hình loại trừ gửi mới (Nhóm data, chiến dịch đã gửi, nhiều Zalo); thiếu = lõi cũ, DB tạm dừng chiến dịch có cấu hình mới. */
+  sendExclusionRunner?: number
   /**
    * Thao tác của loại chiến dịch theo thứ tự; required=false thì bị chặn vẫn nhận data (bước đó bị bỏ qua).
    * skippableGates giới hạn loại cổng được bỏ qua (ví dụ chỉ 'quota'); cổng khác vẫn chặn như bắt buộc.
@@ -232,6 +235,11 @@ export type ClaimResponse =
   | { status: 'entitlement_denied' }
   /** Đã đủ số tài khoản Zalo (trình duyệt) chạy đồng thời của nhân viên. */
   | { status: 'concurrency_limit'; max?: number }
+  /**
+   * V670 "Chạy cùng lúc": làn khác của tài khoản đang chạy chiến dịch cùng loại (same_type) hoặc dùng chung thao tác (same_action).
+   * Không giữ lease, không ghi gì; nơi chạy bỏ qua như busy, lượt quét sau hỏi lại.
+   */
+  | { status: 'parallel_wait'; campaignId: number; campaignName?: string | null; reason: 'same_type' | 'same_action'; actionCodes?: string[] }
   | { status: 'app_access_denied'; reason: string }
 
 /** Một data của lô nhận cùng lúc (gửi dạng chia sẻ, aka_agent_engine_claim_batch_v1). */

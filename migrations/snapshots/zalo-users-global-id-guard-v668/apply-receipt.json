@@ -1,0 +1,35 @@
+{
+  "migration": "migrations/migration_v668_zalo_users_global_id_guard_p1.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh: \"ủa sửa hết luôn đi chứ, nếu cần chạy thật thì cứ chạy thật\" (26/11/2026)",
+  "merged": "chưa (nhánh claude/zalo-users-global-id-426088)",
+  "method": "node scripts/make-migration-ledger-apply.cjs → supabase db query --linked --workdir /Users/lequangnhut/repos/akaAgent -f (dòng sổ chèn trước COMMIT, cùng giao dịch)",
+  "applied_at_utc": "2026-11-26T11:34:03Z – 2026-11-26T11:34:05Z",
+  "applied_at_vn": "26/11/2026 18:34:03",
+  "ledger": {
+    "version": "20261126113403",
+    "name": "migration_v668_zalo_users_global_id_guard_p1",
+    "md5_statements_1": "f99f1c9f83a843b1ae9e80d99f7761df",
+    "md5_file": "f99f1c9f83a843b1ae9e80d99f7761df"
+  },
+  "preflight": {
+    "ledger_v668_before": null,
+    "last_ledger_before": "20261126104354 migration_v666_send_exclusion_review_fixes",
+    "number_668_other_branches": "không có (git fetch --all, mọi nhánh remote akaAgent); V667 thuộc claude/engine-v2-vps-server (chưa apply)",
+    "own_global_ids_md5": "cb133ccad54abf402e92c44ac853f707",
+    "default_transaction_read_only": "off",
+    "zalo_users_triggers_before": null
+  },
+  "postflight": {
+    "triggers": { "trg_zalo_users_guard_global_id_ins": "O (bật)", "trg_zalo_users_guard_global_id_upd": "O (bật)" },
+    "functions": {
+      "private.aka_agent_zalo_own_uids": { "md5": "ad198c3325c87d37f63ff04b2c9bb9e4", "acl": "{postgres=X/postgres}" },
+      "private.aka_agent_zalo_user_gid_trusted": { "md5": "5cb04d481f679bcd5bf24de8a202b011", "acl": "{postgres=X/postgres}" },
+      "private.aka_agent_zalo_users_guard_global_id": { "md5": "932110b3b758e7cdb932eccfb64688ea", "acl": "{postgres=X/postgres}" }
+    },
+    "zalo_users_writes_after_apply": "n_tup_ins 4.891.626 → 4.891.639 trong 11 giây sau apply; 18 dòng updated_at ≥ 11:34:05Z",
+    "edge_logs_11_31_to_11_34_utc": { "requests_per_min": [20173, 20388, 20546, "14576 (phút đang chạy)"], "5xx": 0, "zalo_users_requests_per_min": [96, 90, 98, 61], "zalo_users_4xx_5xx": 0 },
+    "postgres_logs_errors_11_33_30_to_11_38_30_utc": 0
+  },
+  "rollback": "migrations/rollback_v668_zalo_users_global_id_guard_p1.sql (gỡ p2 trước nếu đã apply)"
+}

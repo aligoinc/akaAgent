@@ -69,7 +69,7 @@ async function main() {
       } catch (e) { await db.query('ROLLBACK'); throw e }
     }
     const claim = (account, campaignId, actions) => asDesktop(STAFF, async () => (await one('SELECT public.aka_agent_engine_claim_target_v1($1) r',
-      [{ staffId: STAFF, accountId: account, campaignId, runnerId: 'desktop:v657', runtimeTarget: 'desktop', actions: actions.map(code => ({ code })) }])).r)
+      [{ staffId: STAFF, accountId: account, campaignId, runnerId: 'desktop:v657', runtimeTarget: 'desktop', sendExclusionRunner: 1, actions: actions.map(code => ({ code })) }])).r)
     const PHONE_ACTIONS = ['zalo_find_phone_user', 'zalo_message_stranger']
     const match = async (campaignId, account, phone, gid, uid, final = true) => (await one(
       `SELECT private.aka_agent_send_exclusion_match(c, $2::bigint, c.extra_settings->'zaloSendExclusionsByAccountId'->($2::bigint::text), $3::text, $4::text, $5::text, $6::boolean) m FROM public.auto_campaigns c WHERE c.id=$1`,
@@ -246,8 +246,14 @@ async function main() {
       const res = await one(`SELECT public.aka_agent_send_exclusion_v2($1, $2, 'preview', $3, 's1', 'pw') r`, [STAFF, ORG,
         { accountId: A, selection: sel, targets: [{ phone: '0944000111' }, { phone: P1 }, { phone: '0955000999' }, { uid: 'not-known' }] }]).catch(e => ({ error: e.message }))
       if (res.error) throw new Error(res.error)
-      assert.equal(res.r.checked, 4); assert.equal(res.r.excluded, 2); assert.equal(res.r.pending, 2)
-      assert.deepEqual(res.r.sources.map(s => [s.kind, s.count]).sort(), [['blocklist', 1], ['data_group', 1]])
+      if (process.env.SX_WITH_V666 === '1') {
+        // V666: data tự nhập không dùng bảng đối chiếu SĐT ↔ Global ID ⇒ P1 (chỉ nhận ra qua bảng đối chiếu) thành "chưa xác định".
+        assert.equal(res.r.checked, 4); assert.equal(res.r.excluded, 1); assert.equal(res.r.pending, 3)
+        assert.deepEqual(res.r.sources.map(s => [s.kind, s.count]).sort(), [['data_group', 1]])
+      } else {
+        assert.equal(res.r.checked, 4); assert.equal(res.r.excluded, 2); assert.equal(res.r.pending, 2)
+        assert.deepEqual(res.r.sources.map(s => [s.kind, s.count]).sort(), [['blocklist', 1], ['data_group', 1]])
+      }
     })
 
     await check('bộ chạy cũ: thao tác precheck tạm dừng data khớp, trả lý do; data không khớp giữ nguyên', async () => {

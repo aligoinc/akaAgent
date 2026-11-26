@@ -18,6 +18,8 @@ import {
 import { isRecentDeliveryCooldownEnabled } from '../../../../shared/campaignDeliveryCooldown'
 import { campaignRepeatIntervalLabel, readCampaignRepeat } from '../../../../shared/campaignRepeat'
 import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
+import { CAMPAIGN_PARALLEL_RUN_SHORT_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
+import { useAuthStore } from '../../stores/authStore'
 
 interface CampaignInfoViewProps {
   campaign: CampaignConfig
@@ -388,6 +390,9 @@ const renderSection = (title: string, rows: InfoRow[]) => {
 }
 
 export default function CampaignInfoView({ campaign, account, action, campaigns, linkedSourceCampaignIds, accounts }: CampaignInfoViewProps) {
+  // "Chạy cùng lúc" (V670): cùng điều kiện hiện ô ở form.
+  const campaignEngineV2 = useAuthStore(state => state.user?.campaignEngineV2)
+  const showParallelRun = canShowCampaignParallelRun({ allowParallelRun: action?.allowParallelRun, engineV2: campaignEngineV2 })
   const [dataGroupDisplay, setDataGroupDisplay] = useState<{ name: string; sourceStatus: string } | null>(null)
   const [dataGroupStats, setDataGroupStats] = useState<DataGroupLatestIngestStats | null>(null)
   const secondaryAccountName = campaign.secondaryAccountName
@@ -862,7 +867,8 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           },
           { label: 'Chạy lại sau mỗi', value: extra.findDataRerunEnabled ? `${extra.findDataRerunAfterHours || 1} giờ` : 'Tắt', hidden: !supportsRerunAfterCompletion && !extra.findDataRerunEnabled },
           { label: 'Lặp cùng giờ ngày mới', value: onOff(campaign.continueNextDay), hidden: scheduleType !== 'daily' },
-          { label: 'Reset data chu kỳ mới', value: onOff(campaign.refreshData), hidden: scheduleType === 'daily' }
+          { label: 'Reset data chu kỳ mới', value: onOff(campaign.refreshData), hidden: scheduleType === 'daily' },
+          { label: CAMPAIGN_PARALLEL_RUN_SHORT_LABEL, value: campaign.parallelRunEnabled === true ? 'Có' : 'Không', hidden: !showParallelRun }
         ])}
       </div>
 

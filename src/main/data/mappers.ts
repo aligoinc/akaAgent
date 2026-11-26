@@ -133,6 +133,7 @@ export function mapCampaignActionFromDB(row: Record<string, unknown>): CampaignA
     allowSecondaryAccount: typeof row.allow_secondary_account === 'boolean' ? row.allow_secondary_account : false,
     showStaffDeliveryCooldown: row.show_staff_delivery_cooldown === true,
     limitCheckActionCodes: Array.isArray(row.limit_check_action_codes) ? row.limit_check_action_codes as string[] : [],
+    allowParallelRun: row.allow_parallel_run === true,
     isDelete: row.is_delete as boolean,
     createdAt: row.created_at as string
   }
@@ -223,6 +224,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     scheduleWeekDays: row.schedule_week_days as string | undefined,
     continueNextDay: (row.continue_next_day as boolean) ?? false,
     refreshData: (row.refresh_data as boolean) ?? false,
+    parallelRunEnabled: row.parallel_run_enabled === true,
     content: (row.content as string) || '',
     extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
     images: (row.images as Campaign['images']) || [],

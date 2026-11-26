@@ -223,6 +223,18 @@ export function zaloCampaignType(actionId: string): ZaloCampaignType | null {
 }
 
 /**
+ * Mã thao tác lõi khai khi nhận lượt của chiến dịch (đúng các mã claim gửi lên DB). "Chạy cùng lúc" (V670): DB xét chung thao tác theo các mã
+ * này, nên nút "Lý do đang chờ" gửi chúng cho aka_agent_engine_parallel_wait_v1 để giải thích đúng lần chờ (ví dụ "Thêm thành viên" khai thêm
+ * Tìm SĐT). Loại chưa tách sang lõi: rỗng.
+ */
+export function zaloClaimActionCodes(campaign: ZaloCampaign): string[] {
+  const type = zaloCampaignType(campaign.actionId)
+  if (!type) return []
+  const codes = (type.claimPlan(campaign).actions ?? []).map(action => String(action.code ?? '').trim()).filter(Boolean)
+  return [...new Set(codes)]
+}
+
+/**
  * Chiến dịch có chạy bằng bộ mới không: loại chưa tách hoặc dùng tính năng chưa tách thì không.
  * Chặn chung cho mọi loại (đặc tả lịch chạy mục 8.3): nhóm theo thời gian thực. Gửi dạng chia sẻ (bạn bè / group) chạy theo lô với
  * điều kiện riêng (zaloShareV2Support; gửi lặp lại sau x phút do finish_campaign_v2 của V501 xử lý); loại khác không có dạng này.

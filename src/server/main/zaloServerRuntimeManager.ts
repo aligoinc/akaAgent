@@ -28,6 +28,7 @@ import {
 } from '../../main/data/repositories/zaloRuntimeModeRepository'
 import { WebviewRegistry } from '../../main/playwright/webviewController'
 import { CampaignScheduler } from '../../main/services/campaignScheduler'
+import { serverEngineGate } from '../../main/engineAdapters/serverEngineGate'
 import { ContactLoader } from '../../main/services/contactLoader'
 import {
   DailyMaintenanceCoordinator,
@@ -1049,6 +1050,10 @@ export class ZaloServerRuntimeManager {
         this.options.ownershipStore.claim(user.staffId, liveModeAfterWarmup.revision)
         this.assertRuntimeMayStart(runtime)
         realtimeManager.start()
+        // Engine v2 trên VPS (V667): đọc công tắc engine.zalo_server_vps trước lượt quét đầu (dùng chung cả tiến trình, đọc lại 60 giây một
+        // lần), để lượt đầu đã biết chiến dịch nào chạy bộ mới. Không ném lỗi: đọc lỗi thì bộ lập lịch tự chờ / chạy bộ cũ.
+        await serverEngineGate().ensureLoaded()
+        this.assertRuntimeMayStart(runtime)
         // Spread database discovery/claim bursts when many staff runtimes are
         // created together after a VPS restart. This is only an initial delay;
         // it does not cap staff, accounts or concurrent workers.

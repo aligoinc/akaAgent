@@ -6,7 +6,11 @@
  */
 import type { ExclusionCatalog, ExclusionRule, FilterOption, SendExclusionSelection, SendExclusionsByAccount } from './campaignSendExclusion.js'
 
-export const SEND_EXCLUSION_MULTI_SETTING_KEY = 'campaign.send_exclusion_multi_zalo'
+/**
+ * V666: khoá mới (_v2). Khoá cũ campaign.send_exclusion_multi_zalo do Desktop 10.7.0 / Web v144 đọc (bỏ mảng rỗng khi lưu, không có câu cho
+ * mã lỗi mới) giữ tắt mãi, để bản đó không hiện thẻ mới. API Web trả trường sendExclusionMultiV2Audience (trường cũ không trả nữa).
+ */
+export const SEND_EXCLUSION_MULTI_SETTING_KEY = 'campaign.send_exclusion_multi_zalo_v2'
 export type SendExclusionMultiAudience = 'off' | 'admin_akabiz' | 'all'
 /** Thiếu dòng / sai JSON = off (form cũ). */
 export function parseSendExclusionMultiAudience(value: unknown): SendExclusionMultiAudience {
@@ -47,10 +51,30 @@ export interface SendExclusionAccountOptions { accountId: number; options: Filte
 export interface SendExclusionDataGroupInfo { id: number; name: string; dataType: 'phone' | 'zalo_person'; count: number; shared: boolean; deleted: boolean }
 export interface SendExclusionCampaignInfo {
   id: number; name: string; actionId: string; status: string; accountId: number | null; accountName: string | null
-  deleted: boolean; completedAt: string | null; sentCount: number
+  /** V666: số khách đã nhận tin, đếm tới SEND_EXCLUSION_SENT_COUNT_CAP + 1; null = chưa đếm kịp (quá thời gian của lượt đọc). */
+  deleted: boolean; completedAt: string | null; sentCount: number | null
 }
 export interface SendExclusionListsQuery {
   kind?: 'all' | 'dataGroups' | 'campaigns'; query?: string; excludeCampaignId?: number | null; dataGroupIds?: number[]; sentCampaignIds?: number[]
+  /** V666: lọc chiến dịch theo trạng thái ở DB (trước: lọc trên 40 dòng đã tải). */
+  status?: string | null
+}
+/** V666: DB đếm "đã gửi" (trên chỉ mục) tới mức này rồi dừng; quá 4 giây cho cả danh sách thì null. */
+export const SEND_EXCLUSION_SENT_COUNT_CAP = 100000
+/** Số khách đã gửi ("100.000+" khi đếm chạm trần); null khi DB chưa đếm được. */
+export function describeSentCount(count: number | null | undefined): string | null {
+  if (count === null || count === undefined) return null
+  return count > SEND_EXCLUSION_SENT_COUNT_CAP ? `${SEND_EXCLUSION_SENT_COUNT_CAP.toLocaleString('vi-VN')}+` : count.toLocaleString('vi-VN')
+}
+/** Hộp chọn chiến dịch đã gửi (anh duyệt 26/11). */
+export function describeSentCountPicker(count: number | null | undefined): string {
+  const n = describeSentCount(count)
+  return n === null ? 'Chưa đếm được số khách đã gửi' : `Đã gửi ${n} khách`
+}
+/** Dòng chiến dịch đã chọn trên thẻ (anh duyệt 26/11). */
+export function describeSentCountChip(count: number | null | undefined): string {
+  const n = describeSentCount(count)
+  return n === null ? 'chưa đếm được số khách' : `${n} khách`
 }
 export interface SendExclusionLists { dataGroups: SendExclusionDataGroupInfo[] | null; campaigns: SendExclusionCampaignInfo[] | null }
 
@@ -93,6 +117,12 @@ export function describeSendExclusionPreview(p: SendExclusionPreview, partial = 
   return head + by + pend
 }
 
+/** V666: trigger lưu chiến dịch từ chối cấu hình mới khi máy chạy chiến dịch chưa đủ bản mới (bản cũ bỏ qua cấu hình này khi gửi). */
+export const SEND_EXCLUSION_RUNTIME_OUTDATED_MESSAGE = 'Máy tính đang đăng nhập tài khoản của bạn còn dùng akaAgent bản cũ nên chưa lưu được loại trừ này. Hãy cập nhật akaAgent trên máy đó rồi lưu lại.'
+/** V666: câu cho khách khi lưu chiến dịch bị trigger loại trừ gửi từ chối; null = không phải lỗi loại trừ gửi. */
+export function sendExclusionSaveErrorMessage(message: string | undefined): string | null {
+  return message && /send_exclusion_[a-z_]+/.test(message) ? sendExclusionV2ErrorMessage(message) : null
+}
 /** Mã lỗi DB → câu cho khách (lưu/tải trong form). */
 export function sendExclusionV2ErrorMessage(message: string | undefined): string {
   const map: Array<[string, string]> = [
@@ -105,7 +135,13 @@ export function sendExclusionV2ErrorMessage(message: string | undefined): string
     ['send_exclusion_data_group_not_found', 'Nhóm data đã chọn không còn dùng được. Hãy chọn lại.'],
     ['send_exclusion_campaign_not_found', 'Chiến dịch đã chọn không còn dùng được. Hãy chọn lại.'],
     ['send_exclusion_campaign_self', 'Không chọn chính chiến dịch này để loại trừ.'],
+    ['send_exclusion_group_not_found', 'Nhóm điều kiện loại trừ đã bị xoá.'],
+    ['send_exclusion_blocklist_not_found', 'Danh sách Zalo ID loại trừ đã bị xoá.'],
+    ['send_exclusion_account_configuration_missing', 'Chưa cấu hình loại trừ cho tài khoản thực hiện.'],
     ['send_exclusion_group_requires_update', 'Nhóm này dùng nhiều Zalo, hãy cập nhật akaAgent để sửa.'],
+    ['send_exclusion_multi_zalo_off', 'Tài khoản của bạn chưa dùng được loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo.'],
+    ['send_exclusion_runtime_outdated', SEND_EXCLUSION_RUNTIME_OUTDATED_MESSAGE],
+    ['send_exclusion_server_not_ready', 'Loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo chưa dùng được với tài khoản Zalo Server.'],
     ['PGRST202', 'Tính năng đang được cập nhật. Vui lòng thử lại sau.']
   ]
   return map.find(([code]) => message?.includes(code))?.[1] ?? 'Không thể tải hoặc lưu loại trừ. Kiểm tra dữ liệu và thử lại.'
@@ -115,14 +151,28 @@ const EMPTY_SELECTION: SendExclusionSelection = { groupId: null, blocklistIds: [
 export function selectionOf(value: SendExclusionsByAccount, accountId: number): SendExclusionSelection {
   return value[String(accountId)] ?? EMPTY_SELECTION
 }
-/** Bỏ khoá rỗng để cấu hình chỉ chọn nhóm vẫn chạy được với bản app cũ. */
+/**
+ * V666: luôn ghi đủ dataGroupIds / sentCampaignIds (kể cả mảng rỗng). Trigger lưu chiến dịch coi lựa chọn THIẾU hai khoá này là của client
+ * cũ (iOS / tab Web trước khi deploy, chỉ biết groupId + blocklistIds) và giữ lại giá trị đang lưu; mảng rỗng = khách đã bỏ chọn.
+ */
 export function normalizeSelection(selection: SendExclusionSelection): SendExclusionSelection {
   const unique = (ids: number[] | undefined) => Array.from(new Set((ids ?? []).filter(id => Number.isSafeInteger(id) && id > 0)))
-  const next: SendExclusionSelection = { groupId: selection.groupId ?? null, blocklistIds: unique(selection.blocklistIds) }
-  const dataGroupIds = unique(selection.dataGroupIds), sentCampaignIds = unique(selection.sentCampaignIds)
-  if (dataGroupIds.length) next.dataGroupIds = dataGroupIds
-  if (sentCampaignIds.length) next.sentCampaignIds = sentCampaignIds
-  return next
+  return { groupId: selection.groupId ?? null, blocklistIds: unique(selection.blocklistIds),
+    dataGroupIds: unique(selection.dataGroupIds), sentCampaignIds: unique(selection.sentCampaignIds) }
+}
+/** Lựa chọn có loại trừ nào không (ngoài khách đã từ chối nhận tin). */
+export function selectionHasExclusions(selection: SendExclusionSelection | null | undefined): boolean {
+  return !!selection && (!!selection.groupId || selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length)
+}
+/**
+ * V666: lựa chọn chung khi đổi / thêm Zalo gửi ở chế độ dùng chung: lựa chọn chung đã nhớ ngay trước khi đổi (remembered), chưa có thì
+ * lựa chọn có loại trừ đầu tiên của các Zalo đang chọn. Trước đây chép từ Zalo đứng đầu: Zalo mới thêm vào đầu danh sách chưa có lựa chọn
+ * nên mọi Zalo mất loại trừ.
+ */
+export function sharedSelectionSource(value: SendExclusionsByAccount, accountIds: number[], remembered: SendExclusionSelection | null): SendExclusionSelection | null {
+  // Chỉ dùng lựa chọn đã nhớ khi cấu hình vẫn còn giữ nó (form giữ khoá của Zalo cũ tới lúc lưu); cấu hình bị thay hẳn thì thôi.
+  const kept = remembered && Object.values(value).some(entry => !!entry && sameSelection(entry, remembered)) ? remembered : null
+  return kept ?? accountIds.map(id => value[String(id)]).find(selectionHasExclusions) ?? null
 }
 const sameSelection = (a: SendExclusionSelection, b: SendExclusionSelection) => JSON.stringify(normalizeSelection(a)) === JSON.stringify(normalizeSelection(b))
 /** Mọi Zalo gửi của chiến dịch dùng cùng một lựa chọn (mặc định của form mới). */

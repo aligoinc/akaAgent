@@ -22,6 +22,7 @@ import {
   recoveredProgress, shuffleProgress, targetDoneProgress, targetSkippedProgress, targetStartProgress, unitStartProgress
 } from './progress.js'
 import type { ConfigIssue } from './validation.js'
+import { SEND_EXCLUSION_RUNNER_VERSION } from './zalo/sendExclusionRules.js'
 
 /** Hạn giờ cho host viết lại câu dừng chiến dịch (Facebook: một lần gọi AI đọc ảnh, như bộ cũ không có hạn riêng). */
 const REVISE_NOTE_TIMEOUT_MS = 60_000
@@ -307,7 +308,7 @@ export type UnitEndReason =
   | 'account_mismatch' | 'account_not_found' | 'invalid_request' | 'app_access_denied' | 'report_rejected' | 'error'
   | 'daily_boundary' | 'runtime_not_owner' | 'staff_time_blocked' | 'account_logged_out' | 'stopped'
   | 'maintenance_required' | 'campaign_not_ready' | 'data_group_hard_end' | 'data_group_waiting' | 'account_paused' | 'entitlement_denied'
-  | 'concurrency_limit'
+  | 'concurrency_limit' | 'parallel_wait'
   | 'gate_unavailable' | 'cooldown_scan'
 
 export interface UnitResult {
@@ -1042,6 +1043,8 @@ export async function runUnit(deps: UnitDeps, cfg: UnitConfig, signal: AbortSign
       const claimCtx: ClaimContext = {
         staffId: cfg.staffId, accountId: cfg.accountId, campaignId: cfg.campaignId, runnerId: cfg.runnerId,
         runtimeTarget: cfg.runtimeTarget, leaseToken, actions: cfg.actions, ...(cfg.requireAny?.length ? { requireAny: cfg.requireAny } : {}),
+        // V666: lõi này chạy được cấu hình loại trừ mới (DB tạm dừng chiến dịch có cấu hình mới khi lõi cũ nhận lượt).
+        sendExclusionRunner: SEND_EXCLUSION_RUNNER_VERSION,
         ...(cfg.workflow?.slotMode ? { mode: 'campaign_slot' as const } : {}),
         // V564: lượt workflow chưa nhận data nào (kể cả sau cooldown_scan đã cấp lease): DB trả shuffle.count cho dòng 🔀.
         ...(cfg.workflow && !started ? { unitStarted: false } : {})

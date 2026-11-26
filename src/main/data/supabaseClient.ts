@@ -6,6 +6,7 @@ import { performance } from 'perf_hooks'
 import WebSocket from 'ws'
 import { DesktopSessionManager } from './desktopSession'
 import { createDesktopSessionTransport } from './desktopSessionTransport'
+import { SEND_EXCLUSION_RUNNER_HEADER, SEND_EXCLUSION_RUNNER_VERSION } from '../../shared/campaignSendExclusion'
 
 dotenv.config({ path: join(process.cwd(), '.env') })
 
@@ -72,9 +73,11 @@ export function configureTrustedServerSupabase(secret: string): void {
 export function isTrustedServerSupabaseConfigured(): boolean { return serverSecret !== null }
 
 function createSupabaseClient(url: string, apiKey: string): SupabaseClient {
+  // V666: hàm nhận lượt bộ cũ đọc header này (bản cũ không gửi gặp chiến dịch có cấu hình loại trừ mới thì DB tạm dừng chiến dịch).
+  const headers = { [SEND_EXCLUSION_RUNNER_HEADER]: String(SEND_EXCLUSION_RUNNER_VERSION) }
   return createClient(url, apiKey, {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
-    global: serverSecret ? undefined : { fetch: desktopFetch },
+    global: serverSecret ? { headers } : { fetch: desktopFetch, headers },
     realtime: {
       transport: realtimeTransport
     }

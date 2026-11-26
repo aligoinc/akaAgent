@@ -104,6 +104,8 @@ import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
+import { CampaignSheetSyncFormNote } from '../CampaignSheetSync/CampaignSheetSyncFormNote'
+import { campaignSheetSyncErrorMessage, type CampaignSheetSyncDraft } from '../../../../shared/campaignSheetSync'
 import { InputDuplicateFormNote } from './InputDuplicateFormNote'
 import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
 import {
@@ -163,6 +165,7 @@ import {
   CAMPAIGN_REPEAT_DEFAULTS, CAMPAIGN_REPEAT_EVERY_LIMITS, CAMPAIGN_REPEAT_MAX_RUNS, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_UNIT_LABELS,
   campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
 } from '../../../../shared/campaignRepeat'
+import { CAMPAIGN_PARALLEL_RUN_HINT, CAMPAIGN_PARALLEL_RUN_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
 import { campaignRepeatFromLegacyRerun } from '../../../../shared/campaignRepeatDesktop'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
@@ -1999,6 +2002,8 @@ export default function CampaignFormModal({
       ? false
       : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
+    // "Chạy cùng lúc" (V670): ô chỉ hiện khi loại được akaBiz bật và tổ chức bật engine v2 (canShowCampaignParallelRun).
+    parallelRunEnabled: campaign?.parallelRunEnabled === true,
     sleepBetweenActions: initialSleepBetweenActions,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
@@ -3008,6 +3013,8 @@ export default function CampaignFormModal({
   const runsAsPage = supportsRunAsPage && formData.runAsPage === true
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false || runsAsPage
   const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true && !runsAsPage
+  // "Chạy cùng lúc" (V670): ô ở phần Lịch chạy; không hiện thì không gửi gì (chiến dịch chạy lần lượt như trước).
+  const showParallelRun = canShowCampaignParallelRun({ allowParallelRun: selectedCampaignAction?.allowParallelRun, engineV2: authUser?.campaignEngineV2 })
   const previousPageAccountIds = useRef(formData.accountIds.join(','))
   useEffect(() => {
     const accountKey = formData.accountIds.join(',')
@@ -6673,6 +6680,7 @@ export default function CampaignFormModal({
             : (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
             ? true
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
+          ...(showParallelRun ? { parallelRunEnabled: formData.parallelRunEnabled === true } : {}),
           content: contentForSave,
           extraSettings: {
             facebookRestBrowse: canUseFacebookRestBrowse ? { ...formData.facebookRestBrowse } : undefined,
@@ -7040,16 +7048,22 @@ export default function CampaignFormModal({
       }
       try {
         if (sendExclusionMultiFeatureVisible) await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId)
-        else for (const id of zaloTagAccountIds) {
-          const selection = zaloSendExclusionsByAccountId[String(id)]
-          if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
-          const page = await window.electronAPI.listSendExclusionGroups(id)
-          if (selection.groupId) {
-            const group = page.groups.find(g => g.id === selection.groupId)
-            if (!group) throw new Error('Nhóm loại trừ không còn tồn tại. Hãy chọn lại.')
-            validateExclusionGroup(page.catalog, group)
+        else try {
+          for (const id of zaloTagAccountIds) {
+            const selection = zaloSendExclusionsByAccountId[String(id)]
+            if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
+            const page = await window.electronAPI.listSendExclusionGroups(id)
+            if (selection.groupId) {
+              const group = page.groups.find(g => g.id === selection.groupId)
+              if (!group) throw new Error('Nhóm loại trừ không còn tồn tại. Hãy chọn lại.')
+              validateExclusionGroup(page.catalog, group)
+            }
+            if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
           }
-          if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
+        } catch (legacyError) {
+          // V666: công tắc tắt mà chiến dịch đã có cấu hình mới (nhóm nhiều Zalo, danh sách của Zalo khác): danh sách bản cũ chỉ có nhóm /
+          // danh sách của đúng Zalo nên báo "không còn tồn tại" sai. Kiểm lại bằng danh sách mới (mọi Zalo của nhân viên) trước khi báo lỗi.
+          try { await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId) } catch { throw legacyError }
         }
       } catch (error) { showAlert(error instanceof Error ? error.message : 'Không thể xác minh loại trừ gửi.', 'error'); return }
     }
@@ -8631,6 +8645,21 @@ export default function CampaignFormModal({
         if (saveSignal.aborted) return
         await saveCompletion.finish(async () => {
           if (saveSignal.aborted) return
+          // Đồng bộ Google Sheet (V662): đăng ký một nguồn cho mọi chiến dịch vừa tạo. Lỗi thì chiến dịch đã lưu, nút
+          // "Thử lại hoàn tất" gửi lại đúng mã yêu cầu (DB trả nguồn cũ, không tạo nguồn thứ hai).
+          if (sheetSyncDraft && !isEditingSavedCampaign && !isDataGroupSource && savedCampaignIds.length > 0) {
+            updateSaveProgress(95, 'Đang bật đồng bộ Google Sheet...')
+            const syncResult = await window.electronAPI.campaignSheetSyncCall({
+              action: 'save', requestId: sheetSyncDraft.requestId, campaignIds: savedCampaignIds, config: sheetSyncDraft.config,
+              everyHours: sheetSyncDraft.everyHours, endDate: sheetSyncDraft.endDate,
+              splitMode: splitDataAcrossAccounts && savedCampaignIds.length > 1 ? 'split' : 'all',
+              sheetValues: sheetSyncDraft.sheetValues
+            })
+            if (!syncResult.ok) {
+              throw new Error(`Chưa bật được đồng bộ Google Sheet: ${syncResult.message || campaignSheetSyncErrorMessage(syncResult.code)}`)
+            }
+            if (saveSignal.aborted) return
+          }
           // Bật đồng bộ vào nhóm TRƯỚC khi bật chiến dịch: lỗi thì chiến dịch giữ tạm dừng, bảng ở chân form cho thử lại.
           if (showResultGroupsSection) {
             await resultGroups.saveForCampaigns(
@@ -8770,12 +8799,14 @@ export default function CampaignFormModal({
   const [isDataUploadModalOpen, setIsDataUploadModalOpen] = useState(false)
   // Lọc trùng với chiến dịch khác của lần tải gần nhất (V491/V493); chỉ trong phiên form, không lưu vào nháp.
   const [importDuplicateNote, setImportDuplicateNote] = useState<ImportDuplicateSummary | null>(null)
+  // "Đồng bộ liên tục từ link Google Sheet này" (V662): chọn ở cửa sổ Upload, đăng ký nguồn lúc lưu chiến dịch mới.
+  const [sheetSyncDraft, setSheetSyncDraft] = useState<CampaignSheetSyncDraft | null>(null)
   const inputDuplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => (
     supportsInputDuplicateCheck(formData.actionId) && formData.accountIds.length > 0
       ? { currentAccounts: formData.accountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}` })) }
       : undefined
   ), [formData.actionId, formData.accountIds.join(','), accounts])
-  useEffect(() => { if (!details.length) setImportDuplicateNote(null) }, [details.length])
+  useEffect(() => { if (!details.length) { setImportDuplicateNote(null); setSheetSyncDraft(null) } }, [details.length])
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
     ? 'zalo'
@@ -8855,7 +8886,7 @@ export default function CampaignFormModal({
     setIsDataUploadModalOpen(true)
   }
 
-  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary) => {
+  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary, sheetSync?: CampaignSheetSyncDraft) => {
     if (rows.length === 0) {
       showAlert('Không có data hợp lệ để chèn.', 'error')
       return
@@ -8872,6 +8903,7 @@ export default function CampaignFormModal({
 
     const addedCount = appendUniqueDetails(rows)
     if (duplicates) setImportDuplicateNote(duplicates)
+    if (sheetSync) setSheetSyncDraft(sheetSync)
     const skipped = duplicates?.skipped ? ` Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.` : ''
     showAlert(
       addedCount > 0 ? `Đã thêm ${addedCount} data.${skipped}` : 'Các data đã có trong danh sách.',
@@ -17377,6 +17409,9 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
+                  {!isEditingSavedCampaign && sheetSyncDraft && details.length > 0 && (
+                    <CampaignSheetSyncFormNote draft={sheetSyncDraft} disabled={saveBusy} onChange={setSheetSyncDraft} />
+                  )}
                   {!isEditingSavedCampaign && importDuplicateNote && details.length > 0 && (
                     <InputDuplicateFormNote
                       note={importDuplicateNote}
@@ -17630,7 +17665,7 @@ export default function CampaignFormModal({
 
             {canUseSendExclusions && sendExclusionMultiFeatureVisible && <CampaignSendExclusionsCard
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
-              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id ?? null}
+              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id || null}
               previewTargets={sendExclusionPreviewTargets}
               pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
               onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
@@ -18002,6 +18037,20 @@ export default function CampaignFormModal({
                         />
                         <span>Dữ liệu sẽ được làm mới lại khi chạy hết data <span className="schedule-hint-inline">(Mặc định là chạy hết sẽ hoàn thành chiến dịch)</span></span>
                       </label>
+                    </div>
+                  )}
+
+                  {showParallelRun && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.parallelRunEnabled === true}
+                          onChange={e => setFormData(p => ({ ...p, parallelRunEnabled: e.target.checked }))}
+                        />
+                        <span>{CAMPAIGN_PARALLEL_RUN_LABEL}</span>
+                      </label>
+                      <p className="schedule-hint">{CAMPAIGN_PARALLEL_RUN_HINT}</p>
                     </div>
                   )}
 
@@ -18485,9 +18534,10 @@ export default function CampaignFormModal({
           accountIds={formData.accountIds}
           showDatasetName={false}
           duplicateCheck={inputDuplicateCheck}
+          sheetSync={!isEditingSavedCampaign && !isFindDataSearchCampaign ? { campaignEndDate: formData.scheduleEndDate || null } : undefined}
           onClose={() => setIsDataUploadModalOpen(false)}
-          onInsert={(rows, meta) => handleImportedDataRows(rows, meta?.duplicates)}
-          onSubmitRows={({ rows, duplicates }) => handleImportedDataRows(rows, duplicates)}
+          onInsert={(rows, meta) => handleImportedDataRows(rows, meta?.duplicates, meta?.sheetSync)}
+          onSubmitRows={({ rows, duplicates, sheetSync }) => handleImportedDataRows(rows, duplicates, sheetSync)}
         />
       )}
 

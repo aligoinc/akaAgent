@@ -388,6 +388,8 @@ export interface CampaignAction {
   showStaffDeliveryCooldown?: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
+  /** "Chạy cùng lúc" (V670): akaBiz bật cho loại này (auto_campaign_actions.allow_parallel_run); khách không sửa. DB chưa có cột thì false. */
+  allowParallelRun?: boolean
   /** Semantic target/source types accepted by this action. */
   dataTypes?: CampaignActionDataType[]
   isDelete: boolean
@@ -808,6 +810,11 @@ export interface Campaign {
   scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
   continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
   refreshData?: boolean          // weekly/monthly: reset data to pending when all done
+  /**
+   * "Chạy cùng lúc" (V670): khách tích (auto_campaigns.parallel_run_enabled). Chỉ có hiệu lực khi loại có allowParallelRun và chiến dịch
+   * chạy bằng engine v2 trên tài khoản Zalo. Đọc theo bản ghi đầy đủ; DB chưa có cột thì false.
+   */
+  parallelRunEnabled?: boolean
   log: string
   note?: string | null
   content?: string
@@ -3136,8 +3143,10 @@ export interface AuthUser {
    */
   zaloServerOnFly?: boolean
   /**
-   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly).
-   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
+   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly), hoặc
+   * V667: cờ tắt mà tổ chức có trong công tắc `engine.zalo_server_vps` (tài khoản Server chạy engine v2 trên App Server).
+   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ. Không dùng để chọn
+   * nơi chạy tài khoản Zalo Server (`zaloServerOnFly` chỉ theo cờ).
    */
   campaignEngineV2?: boolean
   /**

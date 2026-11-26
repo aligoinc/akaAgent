@@ -1,0 +1,14 @@
+{
+  "migration": "migrations/migration_v664_campaign_sheet_sync_key_speed.sql",
+  "requested_by_user": "Appply đi",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-26 18:44:12",
+  "ledger": {"version": "20261126114412", "name": "migration_v664_campaign_sheet_sync_key_speed", "statements_md5": "56abfd2a0aab0f805cfc3733f4e8ac8d", "file_md5": "56abfd2a0aab0f805cfc3733f4e8ac8d"},
+  "method": "MCP execute_sql: một khối DO giải mã nguyên văn file (ký tự ngoài ASCII mã hoá ~~U<hex>~~), kiểm md5 = file, EXECUTE phần giữa BEGIN;/COMMIT; rồi ghi sổ statements = nguyên văn file, cùng giao dịch",
+  "before": {"active_client_backends": 2, "sources": 0, "dry_run_same_day": "khối DO tự huỷ lúc giữa chiều: preflight đạt, khoá chiến dịch 63019 (8.685 dòng) 1.261 -> 110 ms, cùng 8.685 khoá"},
+  "function_md5_after": {"key": "dacc01794d101186369bb1ef12fea228", "unmatched_keys": "4336e12787239109d0a4b7e7c460119e", "finish": "ee0f25155235f13c0f50faa7766c6fd4"},
+  "postgrest": {"reload_message_utc": "2026-11-26T11:44:12.380", "schema_cache_queried_ms": 3180.1, "edge_5xx_minute_of_apply": 0, "edge_503_window_11_37_to_11_44_utc": 0},
+  "checks_after": {"key_phone": "+84 912 345 678 -> 0912345678", "key_email": "'  A@B.com ' -> a@b.com", "key_zalo_link": "zalo.me/g/abc?x=1 -> https://zalo.me/g/abc", "cron_job_66_last_ok_vn": "2026-11-26 18:44:30", "cron_job_66_fail_5min": 0},
+  "rollback": "migrations/rollback_v664_campaign_sheet_sync_key_speed.sql (trả 3 hàm về nguyên văn V662, md5 file 3d5e9e726f8acc4251aa615bca5d4ff6)",
+  "do_not_reapply": true
+}
