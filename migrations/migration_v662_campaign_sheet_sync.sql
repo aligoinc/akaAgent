@@ -230,7 +230,7 @@ RETURNS void LANGUAGE plpgsql IMMUTABLE SET search_path = pg_catalog AS $fn$
 DECLARE v_target text := p_config->>'targetField'; v_key text; v_col text;
 BEGIN
   IF jsonb_typeof(p_config) IS DISTINCT FROM 'object' OR octet_length(p_config::text) > 65536
-    OR COALESCE(p_config->>'url', '') !~ '^https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]{10,200}/edit#gid=[0-9]{1,20}$'
+    OR COALESCE(p_config->>'url', '') !~ '^https://docs\.google\.com/spreadsheets/d/[A-Za-z0-9_-]{10,200}/edit(#gid=[0-9]{1,20})?$'
     OR jsonb_typeof(p_config->'hasHeader') IS DISTINCT FROM 'boolean'
     OR jsonb_typeof(p_config->'mapping') IS DISTINCT FROM 'object'
     OR jsonb_typeof(p_config->'expectedHeaders') IS DISTINCT FROM 'array'
