@@ -1,6 +1,6 @@
 # Đồng bộ định kỳ từ Google Sheet vào data của chiến dịch — phương án
 
-Trạng thái (26/11/2026): **phương án, chưa code, chưa migration, chưa đổi gì trên production.** Các mục cần anh chốt nằm ở mục 9.
+Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); V662 CHƯA apply, Edge CHƯA deploy, chưa đổi gì trên production.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
 
 ## 1. Yêu cầu
 
@@ -247,3 +247,17 @@ Thứ tự: apply migration (worker tắt) → deploy Edge, kiểm 401 / 200 →
   API + Web tương ứng; iOS xem + tắt.
 - **Đợt 2:** SMS / gọi tự động; bật từ "Thêm data" cho chiến dịch đã tạo; thông báo (chuông) khi nguồn lỗi hoặc sắp hết hạn;
   iOS bật / sửa; đối chiếu trùng với chiến dịch khác theo lựa chọn của khách.
+
+## 11. Tình trạng code (26/11/2026)
+
+Câu ở mục 9 dùng đúng cột "Đề xuất" (anh chưa chốt khác). Mọi thứ dưới đây ở nhánh `claude/pensive-sagan-4kz4zp`, chưa merge.
+
+| Phần | Chỗ | Kiểm |
+|---|---|---|
+| DB | [migration_v662_campaign_sheet_sync.sql](../migrations/migration_v662_campaign_sheet_sync.sql) + [gỡ](../migrations/rollback_v662_campaign_sheet_sync.sql): 2 bảng, cài đặt `campaign.sheet_sync` (`audience: off`, `worker: false`), RPC Desktop `aka_agent_campaign_sheet_sync`, RPC Web `aka_agent_control_campaign_sheet_sync`, `_claim` / `_finish` cho Edge, khối thứ tư trong tick nhóm data (khoá md5 thân production `10a2465b…`) | `python3 scripts/campaign-sheet-sync/test_v662.py` (PG16, 75 PASS, có apply lại bị từ chối + gỡ trả đúng thân tick) |
+| Edge | `supabase/functions/aka-agent-campaign-sheet-sync/` (`index.ts` + `core.generated.js` dựng bằng `node scripts/campaign-sheet-sync/build-edge-core.cjs`, `--check` để so) | `node scripts/campaign-sheet-sync/rows-smoke.cjs` (14 PASS: dòng ra khớp cửa sổ Upload, cột đổi, giới hạn, danh sách loại chiến dịch khớp SQL, bản dựng mới nhất) |
+| Hợp đồng | `src/shared/campaignSheetSync.ts` (chép nguyên văn sang WebApp `packages/control-api`), `src/shared/campaignSheetSyncRows.ts` | như trên |
+| Desktop | IPC `campaign-sheet-sync:call` ([repository](../src/main/data/repositories/campaignSheetSyncRepository.ts)); ô trong tab Link sheet; dòng tóm tắt trong form thường + form Agent (chỉ giữ trong phiên mở form, không vào nháp); thẻ đầu tab Data của chiến dịch (Sửa, Tắt, Bật lại, Gia hạn, Kết nối lại khi cột đổi, Lịch sử); biểu tượng cạnh tên + mục "Tắt đồng bộ Google Sheet" trong menu Hành động | `node scripts/run-campaign-sheet-sync-ui-smoke.cjs` (10 PASS, Chromium + IPC giả); hai typecheck sạch |
+| Web / API / iOS | akaAgentWebApp cùng tên nhánh | đang làm |
+
+Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần apply + deploy). Thứ tự đưa lên như mục 8.
