@@ -5,7 +5,8 @@
  */
 
 export type Phase = 'before_send' | 'in_flight' | 'after_send'
-export type RuntimeTarget = 'desktop' | 'fly'
+/** Nơi chạy: Desktop (máy khách), Fly (ChatApi), server (App Server trên VPS, tài khoản Zalo Server; V667). */
+export type RuntimeTarget = 'desktop' | 'fly' | 'server'
 export type DeliveryState = 'none' | 'delivered' | 'partial' | 'unknown' | 'not_delivered'
 export type NextDirective = 'next_step' | 'next_target' | 'end_unit' | 'stop_account' | 'stop_campaign' | 'ownership_lost'
 export type PaceMode = 'full' | 'short' | 'none'

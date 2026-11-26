@@ -103,6 +103,7 @@ import {
 import { getAkaBizIntegrationsForStaff } from '../data/repositories/staffIntegrationRepository'
 import { getCurrentUser } from '../data/currentUser'
 import { DesktopEngineRunner } from '../engineAdapters/desktopEngineRunner'
+import { serverEngineGate } from '../engineAdapters/serverEngineGate'
 import { ENGINE_OBSERVATION_TTL_MS, engineWaitMessage, isEngineWaitingReason, type EngineClaimObservation } from '../engineAdapters/engineWaitReason'
 import { takeEngineContentIndex } from '../engineAdapters/desktopEngineData'
 import type { DesktopFacebookHost, FacebookUnitSession } from '../engineAdapters/facebook/desktopFacebookRunner'
@@ -1117,10 +1118,15 @@ export class CampaignScheduler {
     this.onRuntimeOwnershipLost = options.onRuntimeOwnershipLost
     this.isAccountStartupPending = options.isAccountStartupPending
     this.startWorkGate = options.startWorkGate
-    if (this.runtimeTarget === 'desktop') this.engineRunner = new DesktopEngineRunner({
+    // Engine v2: Desktop (cờ tổ chức của phiên, V513) và App Server (chỉ tài khoản Zalo Server, công tắc engine.zalo_server_vps theo tổ
+    // chức, V667). Cùng bộ chạy, cùng cổng Zalo; nơi chạy truyền xuống claim ('desktop' / 'server').
+    this.engineRunner = new DesktopEngineRunner({
       zaloRuntime: () => this.zaloRuntime,
       staffId: () => getCurrentUser()?.staffId ?? null,
       engineEnabled: () => getCurrentUser()?.campaignEngineV2 === true,
+      ...(this.runtimeTarget === 'server'
+        ? { serverEngineState: (organizationId: number | null) => serverEngineGate().state(organizationId) }
+        : {}),
       zaloRuntimeBlocked: () => this.zaloRuntimeBlockedForRestart || this.zaloRuntimeStopRequested,
       // Máy vừa ngủ dậy chưa có người dùng: dừng sau data hiện tại, kể cả trong lúc nghỉ giữa 2 data (lõi kiểm mỗi 500 ms).
       acceptingWork: () => this.running && !this.zaloRuntimeStopRequested && this.startWorkGate?.() !== false,
@@ -1180,9 +1186,10 @@ export class CampaignScheduler {
         if (result.ok && rewritten) return rewritten
         throw new Error(result.error || 'AI trả về nội dung không hợp lệ.')
       },
-      facebook: this.createFacebookEngineHost(),
-      web: this.createWebEngineHost()
-    })
+      // Facebook / Website chỉ chạy trên Desktop.
+      facebook: this.runtimeTarget === 'desktop' ? this.createFacebookEngineHost() : undefined,
+      web: this.runtimeTarget === 'desktop' ? this.createWebEngineHost() : undefined
+    }, { runtimeTarget: this.runtimeTarget })
     if (this.runtimeTarget === 'desktop' && this.proxyRuntime) this.webEnrichment = new WebEnrichmentService({
       ready: account => this.running && !this.isAccountStartupPending?.(account)
         && !accountOperationRegistry.has(account.id) && !this.externalAccountRuns.has(account.id)

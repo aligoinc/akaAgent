@@ -145,7 +145,8 @@ async function buildDb({ port = 55700 + Math.floor(Math.random() * 200), label =
     await db.query(read('migrations/rollback_v657_send_exclusion_global_match_p2.sql'))
     await db.query(read('migrations/rollback_v657_send_exclusion_global_match_p1.sql'))
   }
-  return { db, q, one, stop, applyV657, rollbackV657, read }
+  // connect: thêm kết nối tới cùng cụm (bài kiểm cần nhiều kết nối như PostgREST, hoặc giữ khoá ở một kết nối khác); bên gọi tự đóng trước stop().
+  return { db, q, one, stop, applyV657, rollbackV657, read, connect: cluster.connect }
 }
 module.exports = { buildDb, functionBlocks, ROOT }
 
