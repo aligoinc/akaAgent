@@ -1,11 +1,13 @@
 // Dựng PostgreSQL cục bộ dùng một lần ở trạng thái production 26/11/2026 cho V667 (engine v2 cho tài khoản Zalo Server trên VPS):
-// fixture của V657 (claim qua V657), V650 (finish), recover_server_zalo_running_state / aka_agent_zalo_server_flag_route bản production
+// fixture của V657, V650 (finish), V666 (loại trừ gửi; claim của V667 dựng trên thân V666), recover_server_zalo_running_state /
+// aka_agent_zalo_server_flag_route bản production
 // (scripts/fixtures/engine-v2-server/live-20261126.json), cùng vài hàm / bảng / cột phụ mà fixture chưa có. applyV667 = true thì apply luôn
 // p1 → p2 → p3. Không chạm DB thật. Cần CHAT_REPO (hoặc PG_MODULE_DIR) có node_modules/pg; LC_ALL=C trên macOS.
 'use strict'
 const assert = require('node:assert/strict')
 const { buildDb } = require('../../send-exclusion-v657-fixture.cjs')
 const V650 = require('../../build-v650-sql.cjs')
+const V666 = require('../../build-v666-sql.cjs')
 const V667 = require('../../build-v667-sql.cjs')
 
 async function buildV667Db({ label = 'aka-v667-', applyV667 = false } = {}) {
@@ -15,7 +17,24 @@ async function buildV667Db({ label = 'aka-v667-', applyV667 = false } = {}) {
   try {
     await T.applyV657()
     await db.query(V650.migration)
-    assert.equal(await md5Of(V667.SIG.claim), V667.LIVE_MD5.claim, 'fixture: claim như production (V657)')
+    // V666 như scripts/send-exclusion-v666-smoke.cjs: thân production của hai hàm nhận lượt (bộ dựng V657 thiếu bản 26/11), các cột / bảng
+    // phụ, dòng sổ V657 p2, rồi chạy migration V666 trong repo.
+    await db.query('SET check_function_bodies = off')
+    await db.query(V666.OLD.claim)
+    await db.query(V666.OLD.engineClaim)
+    await db.query('SET check_function_bodies = on')
+    await db.query(`CREATE TABLE IF NOT EXISTS public.auto_staff_device_presence (id bigserial PRIMARY KEY, staff_id bigint, app_version text, last_seen_at timestamptz)`)
+    await db.query(`ALTER TABLE public.auto_staff_device_presence ADD COLUMN IF NOT EXISTS device_fingerprint_hash text, ADD COLUMN IF NOT EXISTS ended_at timestamptz`)
+    await db.query(`ALTER TABLE public.org_staff ADD COLUMN IF NOT EXISTS is_admin_akabiz boolean, ADD COLUMN IF NOT EXISTS aka_agent_device_fingerprint_hash text`)
+    const settingsKey = await one(`SELECT count(*)::int n FROM pg_constraint WHERE conrelid='public.auto_system_settings'::regclass AND contype IN ('u','p')
+      AND pg_get_constraintdef(oid) ILIKE '%(key)%'`)
+    if (!settingsKey.n) await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS auto_system_settings_key_t ON public.auto_system_settings(key)`)
+    await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements)
+      VALUES ('20261125211830','migration_v657_send_exclusion_global_match_p2','{}') ON CONFLICT DO NOTHING`)
+    await db.query(T.read('migrations/migration_v666_send_exclusion_review_fixes.sql'))
+    await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements)
+      VALUES ('20261126999999', $1, '{}') ON CONFLICT DO NOTHING`, [V667.V666_NAME])
+    assert.equal(await md5Of(V667.SIG.claim), V667.LIVE_MD5.claim, 'fixture: claim như sau V666')
     assert.equal(await md5Of(V667.SIG.finish), V667.LIVE_MD5.finish, 'fixture: finish như production (V650)')
     // Hai hàm phụ production mà fixture chưa có (bản rút gọn, cùng chữ ký / cột): quyền gói Zalo theo tổ chức (gói 16 / 18 còn hạn thì có QR,
     // trình duyệt, Server) và phạm vi nhân viên (khoá dòng nhân viên).

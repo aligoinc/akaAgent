@@ -3,7 +3,8 @@
 // hộp chọn): docs/ENGINE_V2_VPS_ZALO_SERVER_PLAN.md.
 //
 // Thêm nơi chạy thứ ba 'server' cạnh 'desktop' / 'fly'. Tổ chức bật bằng công tắc riêng engine.zalo_server_vps (không dùng cờ
-// use_new_zalo_runtime, cờ đó chuyển tổ chức sang Fly). Ba phần, apply đúng thứ tự, mỗi phần một lần gọi:
+// use_new_zalo_runtime, cờ đó chuyển tổ chức sang Fly). Ba phần, apply đúng thứ tự, mỗi phần một lần gọi, sau V666 (loại trừ gửi; hai bản
+// cùng thay aka_agent_engine_claim_target_v1, claim của V667 dựng trên thân V666):
 //   p1  ba ràng buộc runtime_target nhận 'server' (NOT VALID; DDL ngắn, giao dịch riêng)
 //   p2  hàm + dữ liệu: claim nhận 'server', finish coi 'server' như 'fly', recover_server_zalo_running_state đóng lượt engine 'server'
 //       còn mở trước khi đánh dấu data, bốn hàm mới, một dòng chính sách, dòng công tắc (mode off)
@@ -61,8 +62,21 @@ const NEW_SIG = {
 }
 const live = Object.fromEntries(Object.entries(SIG).map(([k, sig]) => [k, liveFn(sig)]))
 
+// Claim dựng trên bản của V666 (loại trừ gửi, đã vào dev_3 26/11, chưa apply lúc viết): V666 và V667 cùng thay
+// aka_agent_engine_claim_target_v1 từ một bản production (8f574b0a…), nên apply V666 trước rồi V667. p2 kiểm V666 đã có trong sổ và
+// claim đúng thân V666 (md5 thân V666 sinh ra = md5 đo sau khi chạy V666, scripts/fixtures/send-exclusion-v666/new-md5.json); bản gỡ trả
+// claim về thân V666.
+const V666 = require('./build-v666-sql.cjs')
+if (V666.OLD.engineClaim !== live.claim.definition) throw new Error('V666: claim cơ sở khác bản production V667 đã đọc')
+const V666_NAME = 'migration_v666_send_exclusion_review_fixes'
+const CLAIM_BASE = V666.NEW.engineClaim
+{
+  const measured = JSON.parse(fs.readFileSync(V666.NEW_MD5_FILE, 'utf8')).engineClaim
+  if (md5(CLAIM_BASE) !== measured) throw new Error(`V666: thân claim sinh ra khác md5 đo được (${md5(CLAIM_BASE)} / ${measured})`)
+}
+
 // ---------------------------------------------------------------- claim: nhận nơi chạy 'server'
-let claim = live.claim.definition
+let claim = CLAIM_BASE
 claim = patch(claim,
   `OR v_runtime NOT IN ('desktop','fly') THEN`,
   `OR v_runtime NOT IN ('desktop','fly','server') THEN`, 1, 'claim: danh sách nơi chạy')
@@ -221,7 +235,7 @@ $function$
 
 const NEW_MD5 = { claim: md5(claim), finish: md5(finish), recover: md5(recover), orgEnabled: md5(orgEnabled), enabledOrgs: md5(enabledOrgs), closeRuns: md5(closeRuns),
   desktopVps: md5(desktopVps) }
-const LIVE_MD5 = Object.fromEntries(Object.entries(live).map(([k, f]) => [k, f.md5]))
+const LIVE_MD5 = { ...Object.fromEntries(Object.entries(live).map(([k, f]) => [k, f.md5])), claim: md5(CLAIM_BASE) }
 // Quyền của bốn hàm mới: hàm công tắc chỉ dùng bên trong claim và hàm Desktop (cả hai SECURITY DEFINER, chủ postgres); hàm đọc danh
 // sách cho App Server (service_role); hàm đóng lượt được recover_server_zalo_running_state (SECURITY INVOKER) gọi bằng quyền của người
 // gọi: App Server (service_role), Fly (aka_agent_chat_api), Desktop (aka_agent_desktop); hàm Desktop chỉ cho phiên Desktop.
@@ -347,7 +361,7 @@ const SETTING_DESC = `Engine v2 cho tổ chức chưa bật cờ use_new_zalo_ru
   + `use_new_zalo_runtime không bị ảnh hưởng. Phương án: docs/ENGINE_V2_VPS_ZALO_SERVER_PLAN.md.`
 
 const p2 = `-- ${V} p2: engine v2 cho tài khoản Zalo Server chạy trên VPS (App Server). SINH TỪ scripts/build-${VERSION}-sql.cjs, không sửa tay.
--- Cần p1 trước. Thay ba hàm (giữ chữ ký, chủ sở hữu, quyền):
+-- Cần p1 và ${V666_NAME} trước (V666 cũng thay claim, ${V} dựng trên thân của V666). Thay ba hàm (giữ chữ ký, chủ sở hữu, quyền):
 --   aka_agent_engine_claim_target_v1      nhận nơi chạy 'server': chỉ tài khoản Zalo Server; tổ chức đi Fly → runtime_not_owner; tổ chức
 --                                         chưa bật ${SETTING_KEY} → not_enabled
 --   aka_agent_engine_finish_campaign_v2   tài khoản Server bị tạm dừng giữa lượt thì chiến dịch về "chờ xử lý" cho cả 'server' (như 'fly')
@@ -370,6 +384,10 @@ DO $pre$
 DECLARE v_acl text;
 BEGIN
 ${ledgerGuard(NAMES.p2, [NAMES.p1, NAMES.p3])}
+  IF to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
+     AND NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = '${V666_NAME}') THEN
+    RAISE EXCEPTION '${V} p2: cần ${V666_NAME} trước (cùng thay aka_agent_engine_claim_target_v1, ${V} dựng trên bản của V666)';
+  END IF;
 ${checkDefs(NEW_CHECK)}
   IF md5(pg_get_functiondef(to_regprocedure('${SIG.claim}'))) = '${NEW_MD5.claim}' THEN RAISE EXCEPTION '${V} p2 đã chạy (claim)'; END IF;
 ${md5Check(`${V} p2: bản production khác bản đã đọc 26/11, dừng để đối chiếu`, LIVE_MD5)}
@@ -440,7 +458,7 @@ END $post$;
 COMMIT;
 `
 
-const rollbackP2 = `-- Gỡ ${V} p2: trả claim / finish / recover_server_zalo_running_state về bản production 26/11/2026, bỏ bốn hàm mới, chính sách 'server',
+const rollbackP2 = `-- Gỡ ${V} p2: trả claim về bản V666, finish / recover_server_zalo_running_state về bản production 26/11/2026, bỏ bốn hàm mới, chính sách 'server',
 -- dòng công tắc ${SETTING_KEY}. SINH TỪ scripts/build-${VERSION}-sql.cjs. Trước khi gỡ: tắt công tắc, chờ App Server hết lượt engine
 -- 'server' đang mở (hoặc cài lại App Server bản trước). Desktop bản có ${V} gặp hàm Desktop không còn (PGRST202) thì coi như tắt ở lần
 -- đăng nhập sau; phiên đang mở giữ cách chạy đã chọn tới khi đăng nhập lại. Gỡ xong thì gỡ p1 nếu cần.
@@ -462,7 +480,7 @@ ${live.recover.definition};
 
 ${live.finish.definition};
 
-${live.claim.definition};
+${CLAIM_BASE};
 
 DROP FUNCTION ${NEW_SIG.desktopVps};
 DROP FUNCTION ${NEW_SIG.closeRuns};
@@ -499,7 +517,7 @@ END $post$;
 `
 
 module.exports = {
-  VERSION, NAMES, ROLLBACK, SETTING_KEY, RESET_VIA, SIG, NEW_SIG, LIVE_MD5, NEW_MD5, NEW_GRANTS,
+  VERSION, NAMES, ROLLBACK, SETTING_KEY, RESET_VIA, SIG, NEW_SIG, LIVE_MD5, NEW_MD5, NEW_GRANTS, V666_NAME, CLAIM_BASE,
   sql: { p1, p2, p3, rollbackP1, rollbackP2 },
   texts: { live: Object.fromEntries(Object.entries(live).map(([k, f]) => [k, f.definition])), claim, finish, recover, orgEnabled, enabledOrgs, closeRuns,
     desktopVps },

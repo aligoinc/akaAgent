@@ -117,6 +117,17 @@ async function main() {
       FROM pg_proc p WHERE p.oid = to_regprocedure($1)`, [sig]).then(r => r.a)
     const aclBefore = {}
     for (const [k, sig] of Object.entries(V667.SIG)) aclBefore[k] = await aclOf(sig)
+    await check('p2 chưa có V666 trong sổ thì từ chối (hai bản cùng thay claim, V667 dựng trên thân V666)', async () => {
+      const ledger = await one(`SELECT version FROM supabase_migrations.schema_migrations WHERE name = $1`, [V667.V666_NAME])
+      assert.ok(ledger, 'bộ dựng đã ghi V666 vào sổ')
+      await db.query(`DELETE FROM supabase_migrations.schema_migrations WHERE name = $1`, [V667.V666_NAME])
+      try {
+        await rejects(V667.sql.p2, /cần migration_v666_send_exclusion_review_fixes trước/)
+        assert.equal(await md5Of(V667.SIG.claim), V667.LIVE_MD5.claim, 'claim giữ thân V666')
+      } finally {
+        await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements) VALUES ($1, $2, '{}')`, [ledger.version, V667.V666_NAME])
+      }
+    })
     await check('p2: apply rồi ROLLBACK không để lại gì; apply thật đúng md5; quyền giữ nguyên; apply lần hai bị chặn', async () => {
       await db.query(V667.sql.p2.replace(/COMMIT;\s*$/, 'ROLLBACK;'))
       await db.query('ROLLBACK').catch(() => {})

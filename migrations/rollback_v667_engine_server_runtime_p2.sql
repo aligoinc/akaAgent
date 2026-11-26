@@ -1,4 +1,4 @@
--- Gỡ V667 p2: trả claim / finish / recover_server_zalo_running_state về bản production 26/11/2026, bỏ bốn hàm mới, chính sách 'server',
+-- Gỡ V667 p2: trả claim về bản V666, finish / recover_server_zalo_running_state về bản production 26/11/2026, bỏ bốn hàm mới, chính sách 'server',
 -- dòng công tắc engine.zalo_server_vps. SINH TỪ scripts/build-v667-sql.cjs. Trước khi gỡ: tắt công tắc, chờ App Server hết lượt engine
 -- 'server' đang mở (hoặc cài lại App Server bản trước). Desktop bản có V667 gặp hàm Desktop không còn (PGRST202) thì coi như tắt ở lần
 -- đăng nhập sau; phiên đang mở giữ cách chạy đã chọn tới khi đăng nhập lại. Gỡ xong thì gỡ p1 nếu cần.
@@ -9,7 +9,7 @@ SET LOCAL statement_timeout = '60s';
 DO $pre$
 DECLARE v_acl text;
 BEGIN
-  IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)'))) IS DISTINCT FROM 'fd173e5bfebf379ab26b85f1d1d499f7' THEN
+  IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)'))) IS DISTINCT FROM 'df4b8e4284c911dad4b275383f7ddb2b' THEN
     RAISE EXCEPTION 'Gỡ V667 p2: định nghĩa không phải bản V667: định nghĩa claim %', md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)')));
   END IF;
   IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'))) IS DISTINCT FROM 'e998853516d029ca9edf005e389372e0' THEN
@@ -599,6 +599,7 @@ CREATE OR REPLACE FUNCTION public.aka_agent_engine_claim_target_v1(p_ctx jsonb)
  SECURITY DEFINER
  SET search_path TO ''
 AS $function$
+-- V666: bộ chạy chưa báo chạy được loại trừ mới mà chiến dịch có cấu hình mới cho tài khoản: tạm dừng (aka_agent_send_exclusion_claim_check).
 DECLARE
   v_now timestamptz := clock_timestamp();
   v_vn date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
@@ -886,6 +887,11 @@ BEGIN
     campaign_schedule = CASE WHEN el.lease_token = EXCLUDED.lease_token THEN el.campaign_schedule ELSE EXCLUDED.campaign_schedule END,
     heartbeat_at = EXCLUDED.heartbeat_at, expires_at = EXCLUDED.expires_at;
 
+  -- V666: lõi bản cũ (không gửi ctx.sendExclusionRunner) mà chiến dịch có cấu hình loại trừ mới cho tài khoản: tạm dừng, trả campaign_paused.
+  IF c.status IN ('chờ xử lý', 'đang chạy')
+     AND private.aka_agent_send_exclusion_claim_check(v_campaign_id, v_account_id, p_ctx->>'sendExclusionRunner') IS NOT NULL THEN
+    c.status := 'tạm dừng';
+  END IF;
   IF c.status = 'tạm dừng' THEN RETURN jsonb_build_object('status', 'campaign_paused', 'leaseToken', v_token); END IF;
   IF c.status NOT IN ('chờ xử lý', 'đang chạy') THEN
     RETURN jsonb_build_object('status', 'campaign_not_runnable', 'campaignStatus', c.status, 'leaseToken', v_token);
@@ -1266,7 +1272,7 @@ DELETE FROM public.auto_system_settings WHERE key = 'engine.zalo_server_vps';
 DO $post$
 DECLARE v_acl text;
 BEGIN
-  IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)'))) IS DISTINCT FROM '8f574b0a75065ce562bc56f043f24967' THEN
+  IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)'))) IS DISTINCT FROM '2db540225a612d0e33111b1e8021b025' THEN
     RAISE EXCEPTION 'Gỡ V667 p2 postflight: định nghĩa claim %', md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_claim_target_v1(jsonb)')));
   END IF;
   IF md5(pg_get_functiondef(to_regprocedure('public.aka_agent_engine_finish_campaign_v2(bigint,uuid,text)'))) IS DISTINCT FROM '9b29fe98391f682819e4458a6a1387aa' THEN

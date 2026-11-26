@@ -40,8 +40,11 @@ bản Desktop mới.
 
 ### 3.1 DB: một migration, hai phần
 
-Số migration lấy lúc code (kiểm sổ production và mọi nhánh; 26/11 các nhánh đã tới V663). Mọi hàm thay đều sinh từ thân production bằng
-script, kiểm md5 trước / sau, có bản gỡ (cách của V576, V585).
+Số V667 (viết là V664, đổi số 26/11 tối trước khi mở PR vì nhánh `claude/pensive-sagan-4kz4zp` đã đẩy V664 của đồng bộ Google Sheet; lúc đổi
+sổ production có V660–V663, V665, dev_3 có V666 chưa apply). Mọi hàm thay đều sinh từ thân production bằng script, kiểm md5 trước / sau,
+có bản gỡ (cách của V576, V585). **Apply sau V666** (sửa lỗi review loại trừ gửi, đã vào dev_3): hai bản cùng thay
+`aka_agent_engine_claim_target_v1` từ một bản production (`8f574b0a…`), nên claim của V667 dựng trên thân V666 (V666 chèn bước tạm dừng
+chiến dịch khi bộ chạy cũ gặp cấu hình loại trừ mới, không đụng ba chỗ V667 sửa); p2 từ chối khi sổ chưa có V666.
 
 **p1: ràng buộc (DDL, giao dịch riêng, `lock_timeout` 2 giây, làm buổi tối)**
 
@@ -173,7 +176,8 @@ Giống những gì tổ chức Fly / Desktop đã có sau khi lên engine v2:
 
 ## 7. Đưa lên
 
-1. Merge code. Apply p1 rồi p2 buổi tối (DDL làm PostgREST nạp lại schema). Chưa có dòng công tắc nên mọi tổ chức VPS vẫn chạy bộ cũ.
+1. Merge code. Apply V666 trước (nếu chưa), rồi V667 p1 → p2 → p3 buổi tối (DDL làm PostgREST nạp lại schema). Công tắc mặc định off nên
+   mọi tổ chức VPS vẫn chạy bộ cũ.
 2. Build App Server, cài VPS ngoài giờ: khởi động lại làm mọi tài khoản đăng nhập lại cùng lúc (lần cài 10/11, p50 REST lên ~580 ms trong 5
    phút). Build Desktop (anh tự phát hành); thiếu bản Desktop mới thì chỉ tài khoản Server của tổ chức thử chạy engine v2.
 3. Bật `engine.zalo_server_vps` = `{"mode":"orgs","organizationIds":[…]}` cho 2–3 tổ chức thử.
@@ -222,10 +226,9 @@ Nhánh `claude/engine-v2-vps-server` (worktree `.claude/worktrees/engine-v2-vps-
 | `migrations/migration_v667_engine_server_runtime_p3.sql` | VALIDATE 3 ràng buộc (chạy lại được) |
 | `migrations/rollback_v667_engine_server_runtime_p2.sql`, `…_p1.sql` | gỡ ngược, p2 trước. Gỡ p2 từ chối khi còn lượt `'server'` đang mở; gỡ p1 từ chối khi còn dòng `'server'` |
 
-md5 `pg_get_functiondef`: claim `8f574b0a…` → `fd173e5b…`, finish `9b29fe98…` → `e9988535…`, recover `e51b1240…` → `48b966d5…`; hàm mới
+md5 `pg_get_functiondef`: claim `2db54022…` (thân sau V666) → `df4b8e42…`, finish `9b29fe98…` → `e9988535…`, recover `e51b1240…` → `48b966d5…`; hàm mới
 `aka_agent_engine_server_org_enabled` `043e87cc…`, `aka_agent_engine_server_enabled_orgs_v1` `dc808103…`,
-`aka_agent_engine_close_server_runs_v1` `6db47b78…`, `aka_agent_engine_desktop_vps_enabled_v1` `916ded11…` (chỉ `aka_agent_desktop`). Số V667: lúc viết sổ production tới V662, một nhánh khác đã có V663; kiểm lại sổ và mọi
-nhánh ngay trước khi apply. p2 nặng ~116 KB (chép nguyên 3 thân hàm): công cụ MCP không nhận thì apply bằng `supabase db query --linked -f`.
+`aka_agent_engine_close_server_runs_v1` `6db47b78…`, `aka_agent_engine_desktop_vps_enabled_v1` `916ded11…` (chỉ `aka_agent_desktop`). p2 cần V666 trong sổ (kiểm ở preflight); kiểm lại sổ và mọi nhánh ngay trước khi apply. p2 nặng ~118 KB (chép nguyên 3 thân hàm): công cụ MCP không nhận thì apply bằng `supabase db query --linked -f`.
 
 **Lõi** (`packages/campaign-engine`): `RuntimeTarget` thêm `'server'`; 3 câu tạm dừng theo nơi chạy, `'server'` dùng câu của Fly (vốn chép từ
 bộ cũ VPS). Chép sang ChatApi ở lần đồng bộ lõi kế tiếp; Fly không đổi hành vi.
@@ -244,8 +247,9 @@ bộ cũ VPS). Chép sang ChatApi ở lần đồng bộ lõi kế tiếp; Fly k
 không có trong công tắc: Desktop không đổi hành vi.
 
 **Kiểm thử (26/11, trên máy dev):**
-- `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-server-runtime-v667-smoke.cjs`: 20/20. PostgreSQL 17 cục bộ có đúng thân hàm
-  production (`scripts/fixtures/engine-v2-server/db.cjs`, kèm V513 bản production); trước V667 claim từ chối `'server'`; p1 / p2 / p3; apply rồi
+- `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-server-runtime-v667-smoke.cjs`: 21/21. PostgreSQL 17 cục bộ có đúng thân hàm
+  production (`scripts/fixtures/engine-v2-server/db.cjs`, kèm V513 bản production, dựng tới V666 như thứ tự apply); p2 từ chối khi sổ chưa
+  có V666; trước V667 claim từ chối `'server'`; p1 / p2 / p3; apply rồi
   ROLLBACK không để lại gì; quyền; chính sách; công tắc; hàm Desktop mới theo công tắc trong khi V513 vẫn theo cờ; claim `desktop` cho tài
   khoản QR của tổ chức tắt cờ vẫn nhận; claim theo công tắc / định tuyến Fly / loại tài khoản / phiên Desktop; kết thúc lượt khi tài khoản bị
   tạm dừng; hàm khôi phục (chưa ghi dấu về hàng đợi, đã ghi dấu hoàn thành không gửi lại, lượt Desktop không bị đóng, data bộ cũ như trước);
