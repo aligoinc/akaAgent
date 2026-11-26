@@ -6,7 +6,7 @@ Câu 9004 của hộp thư lỗi (bộ kiểm lỗi chiến dịch Facebook, eng
 [rollback](../migrations/rollback_v673_engine_facebook_group_post_frequency_early.sql). Chỉ dữ liệu, **không cần build / phát hành Desktop**
 (Desktop đọc code block và element từ DB lúc chạy, tự nạp lại element khi gặp tên mới, như V597).
 
-**Chưa apply, chưa PR.**
+**Đã apply akachat 06:15:52 VN 27/11/2026** theo yêu cầu ("apply đi"): sổ `20261126231551`, md5 sổ = file `e821a3d6…`, 1 giây, chỉ dữ liệu; block 2871 `f981cac7…` → `2ce23f2d…`, bước 4 cùng md5, element 1823; 0 lỗi 5xx / 0 lỗi Postgres quanh phút apply. [Biên nhận](../migrations/snapshots/engine-facebook-v673/apply-receipt.json). Chưa PR.
 
 ## Ca lỗi
 
