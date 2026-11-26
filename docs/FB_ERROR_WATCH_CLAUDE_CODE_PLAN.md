@@ -88,7 +88,7 @@ Hệ quả: nhân viên akaBiz thấy agent này trong panel Hỏi đáp AI củ
 | Thứ | Việc |
 |---|---|
 | Bảng `private.auto_engine_error_cases` | Sổ ca lỗi: khoá ca, loại, mã lỗi, thao tác, bước, mẫu câu lỗi, số lượt, số lần dừng chiến dịch, 5 lượt mẫu, lượt có ảnh, hội thoại của ca, lần báo gần nhất, mã yêu cầu ảnh, trạng thái (`new` / `queued` / `reported` / `failed` / `known` / `muted`) |
-| Bảng `private.auto_engine_error_hourly` | Số kết quả lỗi theo giờ cho từng mã và thao tác, giữ 15 ngày, để xét tăng bất thường |
+| Bảng `private.auto_engine_error_hourly` | Số lượt data có kết quả lỗi theo giờ cho từng mã và thao tác (từ V661, 26/11/2026; trước đó là số dòng kết quả), giữ 15 ngày, để xét tăng bất thường |
 | Bảng `private.auto_engine_error_watch_state` | Một dòng: đã đọc tới đâu, số việc đã chèn trong ngày, lỗi và kết quả của lượt gần nhất |
 | Hàm `aka_agent_engine_error_watch_tick_v1()` | Đọc kết quả lỗi mới của engine Facebook, cập nhật sổ, chèn việc bằng `aka_agent_ai_chat_insert`, xin ảnh bằng `aka_agent_desktop_diagnostic_request_v1`, tuỳ chọn gọi `/fire`. Chỉ `service_role` và pg_cron gọi được |
 | Job pg_cron `aka-agent-engine-error-watch` | `*/2 * * * *`. Câu lệnh tạo job nằm trong migration, anh duyệt cùng lúc |
