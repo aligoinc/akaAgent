@@ -1,6 +1,6 @@
 # Chạy cùng lúc chiến dịch Zalo trên một tài khoản (V670)
 
-Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), PR mở theo yêu cầu ("Mở PR"): [#810](https://github.com/aligoinc/akaAgent/pull/810), [aligoinc/akaAgentChatApi#199](https://github.com/aligoinc/akaAgentChatApi/pull/199), [aligoinc/akaAgentWebApp#327](https://github.com/aligoinc/akaAgentWebApp/pull/327). **Chưa merge, chưa apply, chưa deploy, chưa build**:
+Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), PR mở theo yêu cầu ("Mở PR"): [#810](https://github.com/aligoinc/akaAgent/pull/810), [aligoinc/akaAgentChatApi#199](https://github.com/aligoinc/akaAgentChatApi/pull/199), [aligoinc/akaAgentWebApp#327](https://github.com/aligoinc/akaAgentWebApp/pull/327). V667 rồi V670 đã apply akachat 20:57–20:59 VN 26/11 theo yêu cầu ("apply rồi chạy explain rồi merge đi"; [biên nhận V667](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json), [biên nhận V670](../migrations/snapshots/campaign-parallel-run-v670/apply-receipt.json)). **Chưa deploy ChatApi / Web, chưa build / phát hành Desktop / iOS**:
 
 - akaAgent: worktree `.claude/worktrees/campaign-parallel-run`, nhánh `claude/campaign-parallel-run`, commit `f4d5e08a` trên `dev_3` `cab27ed3` (sau #807, #808, #809).
 - ChatApi: worktree `../akaAgentChatApi-parallel-run`, nhánh `feat/campaign-parallel-run`, commit `cf34727` trên `dev` `ddc8c58` (sau #198). Lõi `packages/campaign-engine` chép từ akaAgent `f4d5e08a` (`SOURCE.json`, `sourceDirty: false`).
@@ -280,11 +280,11 @@ Bài kiểm có sẵn hỏng trên bản gốc (không do thay đổi này): `sc
 ## Thứ tự đưa lên
 
 1. ~~Đẩy ba nhánh để giữ số V670~~ (đã đẩy tối 26/11). Kiểm lại sổ ngay trước khi apply.
-2. Apply V667 p1 → p2 → p3 (phiên engine trên VPS).
-3. Apply V670 p1 → p2 → p3 (buổi tối).
+2. ~~Apply V667 p1 → p2 → p3~~ (đã apply 20:57:21–20:58:13 VN 26/11).
+3. ~~Apply V670 p1 → p2 → p3~~ (đã apply 20:58:44–20:59:04 VN 26/11).
    - Từ lúc này ba loại đã bật nhưng chưa nơi nào hiện ô.
    - Client cũ nhận `parallel_wait` như trạng thái không nhận lượt, vẫn chạy lần lượt.
-   - Chạy câu EXPLAIN chỉ đọc của câu tìm chiến dịch Fly (cũ và có V670) trên production, so với số đo cục bộ ở mục Fly.
+   - ~~Chạy câu EXPLAIN chỉ đọc của câu tìm chiến dịch Fly (cũ và có V670) trên production~~ (21:0x VN 26/11): câu V670 như câu cũ. Hiện tại 248 chủ: 89,6–89,9 ms → 90,2–91,6 ms, khối đọc +0,1%. Mọi tổ chức trên Fly, 679 chủ: 119,6 → 118,9–119,5 ms, khối đọc +1%. Lập kế hoạch +1,2–1,5 ms. Chạy thật hai câu: cùng 30 dòng.
 4. Deploy ChatApi `api` (hạn chờ lệnh khi cùng tài khoản có nhiều lệnh), rồi `worker` (làn trên Fly). Sau đó deploy API / Web WebApp (ô ở Web; từ đây khách tích được).
 5. Phát hành Desktop, iOS.
 

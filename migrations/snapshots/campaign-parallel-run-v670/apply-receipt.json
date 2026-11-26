@@ -1,0 +1,69 @@
+{
+  "migration": "migration_v670_campaign_parallel_run_p1..p3",
+  "files": {
+    "migrations/migration_v670_campaign_parallel_run_p1.sql": "9769f7beb5c92ba64a14ffdaa5c82941",
+    "migrations/migration_v670_campaign_parallel_run_p2.sql": "48731540aae38ac5245b3a96fac48129",
+    "migrations/migration_v670_campaign_parallel_run_p3.sql": "f49f98ff0d60811060e1f5ae7e8e0954"
+  },
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 26/11/2026: \"apply rồi chạy explain rồi merge đi\"",
+  "method": "supabase db query --linked -f, mỗi phần bọc bằng scripts/make-migration-ledger-apply.cjs (dòng sổ cùng giao dịch), apply ngay sau V667",
+  "ledger": [
+    { "version": "20261126135844", "name": "migration_v670_campaign_parallel_run_p1", "statements_md5": "9769f7beb5c92ba64a14ffdaa5c82941", "applied_at_vn": "2026-11-26 20:58:44" },
+    { "version": "20261126135845", "name": "migration_v670_campaign_parallel_run_p2", "statements_md5": "48731540aae38ac5245b3a96fac48129", "applied_at_vn": "2026-11-26 20:58:45" },
+    { "version": "20261126135904", "name": "migration_v670_campaign_parallel_run_p3", "statements_md5": "f49f98ff0d60811060e1f5ae7e8e0954", "applied_at_vn": "2026-11-26 20:59:04" }
+  ],
+  "preflight_20_57_vn": {
+    "v670_number_free": "sổ không có V669 trở lên; không nhánh nào trong akaAgent / akaAgentChatApi / akaAgentWebApp / SqlServerDashboard và không worktree nào có tệp V67x khác",
+    "old_md5": {
+      "release": "98f1c7c681578426195214e1fe8b4f64",
+      "close_stale": "8ed4775297c061bc35cbc6f0944dc905",
+      "health": "eca4b5f1773ccc4b51b83c690b01565a",
+      "create_control_campaign_v2": "661579fa2e8b6571f429079dd0b89c0a",
+      "update_control_campaign_atomic": "a86278195e18d1ef8d0091b41d1d0c5b",
+      "claim_after_v667": "df4b8e4284c911dad4b275383f7ddb2b"
+    },
+    "old_md5_all_match": true
+  },
+  "postflight": {
+    "columns": ["auto_campaign_actions.allow_parallel_run boolean default false", "auto_campaigns.parallel_run_enabled boolean default false"],
+    "allow_parallel_run": ["zalo_add_group_member", "zalo_cancel_sent_friend_request", "zalo_join_group_link"],
+    "ticked_campaigns": 0,
+    "desktop_column_privileges": { "insert": true, "update": true },
+    "auto_engine_leases_pk": "PRIMARY KEY (account_id, lane)",
+    "leases_by_lane_after": { "main": 64 },
+    "new_md5": {
+      "claim": "8d45e070990c03a5a98884f5660a19e6",
+      "release": "85ee6d8541b0d5cd0462063dc11bccf0",
+      "close_stale": "b4e2c1664e90212edec6fa2bfd036009",
+      "health": "57e92899db9a4a784a04e66fba205d56",
+      "create_control_campaign_v2": "532953944687fe2ee6a50612f97418ec",
+      "update_control_campaign_atomic": "5e2c0fdaee6a786a05e3724fa2ea35e4",
+      "parallel_wait_v1_prosrc": "b7ff277bb25a6f7bd56e2f206c2c4ed5"
+    },
+    "acl": {
+      "aka_agent_engine_parallel_wait_v1": "{postgres=X/postgres,service_role=X/postgres,aka_agent_desktop=X/postgres}",
+      "claim_and_release_unchanged": "{postgres, service_role, aka_agent_chat_api, aka_agent_desktop}"
+    }
+  },
+  "impact": {
+    "postgrest_schema_reload": "p1: 0,82 s; p2: 0,78 s; p3: 0,73 s",
+    "rest_minute_20_59": "14.385 request, 1 quá 1 giây, 0 lỗi 5xx, p50 47 ms",
+    "rest_minute_21_00": "13.747 request, 3 quá 1 giây, 0 lỗi 5xx, p50 48 ms",
+    "rest_minute_21_01": "13.921 request, 1 quá 1 giây, 0 lỗi 5xx, p50 47 ms",
+    "engine_rpc": "209 / 170 / 208 lượt RPC engine ở ba phút đó, 0 lỗi; không lỗi Postgres nào trong hàm engine",
+    "close_stale_job": "lượt 21:00:00 chạy thân V670, succeeded, 38 ms",
+    "engine_runs_after_apply": "tới 21:00:01: 41 lượt (29 Desktop đã báo xong, 12 Fly đang chạy); lease mới tạo được theo khoá chính mới"
+  },
+  "fly_discovery_explain_21_0x_vn": {
+    "method": "ChatApi DISCOVERY_EXPLAIN_V670=1 load-tests/campaign-discovery-scale/production-explain.mjs; chủ sở hữu thật lấy bằng production-owners.sql; mỗi câu chạy trong giao dịch chỉ đọc, statement_timeout 20 s, mỗi câu hai lần",
+    "current_248_owners": { "old": "89,6–89,9 ms, 5.910 khối, lập kế hoạch 10,3–10,4 ms", "v670": "90,2–91,6 ms, 5.913–5.914 khối, lập kế hoạch 11,4–11,8 ms" },
+    "full_679_owners": { "old": "199,6 ms lần đầu (đọc đĩa 155 khối) rồi 119,6 ms, 20.519–20.600 khối", "v670": "118,9–119,5 ms, 20.748–20.819 khối, lập kế hoạch +1,3–1,5 ms" },
+    "result_rows": "chạy thật hai câu (bỏ EXPLAIN): cùng 30 dòng ở cả current lẫn full sau khi bỏ ba cột V670; 0 chiến dịch có tích"
+  },
+  "not_done": [
+    "ChatApi worker bản có làn chưa deploy: worker đang chạy vẫn là bản cũ (câu tìm chiến dịch cũ, chạy lần lượt)",
+    "API / Web WebApp chưa deploy, Desktop / iOS chưa phát hành: chưa nơi nào hiện ô, chưa khách nào tích được"
+  ],
+  "rollback": "migrations/rollback_v670_campaign_parallel_run.sql (p3 → p2 → p1)"
+}

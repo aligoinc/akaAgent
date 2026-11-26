@@ -1,0 +1,49 @@
+{
+  "migration": "migration_v667_engine_server_runtime_p1..p3",
+  "files": {
+    "migrations/migration_v667_engine_server_runtime_p1.sql": "c82659750e4e5aa3fc4415dd35a7c08c",
+    "migrations/migration_v667_engine_server_runtime_p2.sql": "62b75fa5ad9368066974168f1ccd4e27",
+    "migrations/migration_v667_engine_server_runtime_p3.sql": "d75ed150395d8045ca589775add55c22"
+  },
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 26/11/2026: \"apply rồi chạy explain rồi merge đi\" (apply V667 trước V670 theo thứ tự đã ghi ở docs/CAMPAIGN_PARALLEL_RUN_V670.md)",
+  "method": "supabase db query --linked -f; p1, p2 bọc bằng scripts/make-migration-ledger-apply.cjs (dòng sổ cùng giao dịch); p3 (VALIDATE, không bọc giao dịch) chạy nguyên file rồi ghi dòng sổ ở giao dịch riêng có kiểm ba ràng buộc đã VALIDATE",
+  "ledger": [
+    { "version": "20261126135721", "name": "migration_v667_engine_server_runtime_p1", "statements_md5": "c82659750e4e5aa3fc4415dd35a7c08c", "applied_at_vn": "2026-11-26 20:57:21" },
+    { "version": "20261126135740", "name": "migration_v667_engine_server_runtime_p2", "statements_md5": "62b75fa5ad9368066974168f1ccd4e27", "applied_at_vn": "2026-11-26 20:57:40" },
+    { "version": "20261126135813", "name": "migration_v667_engine_server_runtime_p3", "statements_md5": "d75ed150395d8045ca589775add55c22", "applied_at_vn": "2026-11-26 20:58:10" }
+  ],
+  "preflight_20_57_vn": {
+    "ledger": "có V666, V668 p1 / p2; chưa có V667, V669, V670",
+    "old_md5": { "claim": "2db540225a612d0e33111b1e8021b025", "finish": "9b29fe98391f682819e4458a6a1387aa", "recover": "e51b12406b7c1d67c36c9885c79f3a18" },
+    "old_md5_all_match": true,
+    "engine.zalo_server_vps": "chưa có dòng",
+    "active_backends": 1,
+    "lock_waiters": 0
+  },
+  "postflight": {
+    "constraints": "auto_engine_leases / auto_engine_target_runs / auto_outcome_policies runtime_target_check nhận 'desktop','fly','server', đã VALIDATE",
+    "new_md5": {
+      "claim": "df4b8e4284c911dad4b275383f7ddb2b",
+      "finish": "e998853516d029ca9edf005e389372e0",
+      "recover": "48b966d5e98d8ac9125dc2ba918f1c64",
+      "aka_agent_engine_server_org_enabled": "043e87cc42a0a3d29462eac68213590c",
+      "aka_agent_engine_server_enabled_orgs_v1": "dc80810392f1ff798c048f17449aabbe",
+      "aka_agent_engine_close_server_runs_v1": "6db47b785dbe718810c7aa46fe2eb5d5",
+      "aka_agent_engine_desktop_vps_enabled_v1": "916ded1183a7de8be5422c332be249a5"
+    },
+    "engine.zalo_server_vps": "{\"mode\":\"off\",\"organizationIds\":[]}",
+    "server_policy_rows": 1
+  },
+  "impact": {
+    "postgrest_schema_reload": "p1: truy vấn schema 2,4 s (20:57:22–20:57:26); p2: 0,97 s; p3: 0,80 s",
+    "rest_minute_20_57": "15.225 request, 8 quá 1 giây, 0 lỗi 5xx, p50 47 ms",
+    "rest_minute_20_58": "14.551 request, 1 quá 1 giây, 0 lỗi 5xx, p50 47 ms",
+    "engine_rpc": "171 / 195 lượt RPC engine trong hai phút đó, 0 lỗi"
+  },
+  "not_done": [
+    "Công tắc engine.zalo_server_vps đang off: mọi tổ chức VPS vẫn chạy bộ cũ",
+    "App Server bản có nơi chạy 'server' chưa build / cài VPS; Desktop bản có hàm aka_agent_engine_desktop_vps_enabled_v1 chưa phát hành"
+  ],
+  "rollback": "migrations/rollback_v667_engine_server_runtime_p2.sql rồi …_p1.sql; phải gỡ V670 trước (bản gỡ V667 từ chối khi claim không phải thân V667)"
+}
