@@ -154,6 +154,8 @@ async function main() {
           return { message: { msgId: `m-${uid}` }, attachment: [] }
         },
         sendFriendRequestToUser: async (accountId, uid, message) => { sent.push(`friend:${uid}:${message}`); return { ok: 1 } },
+        // Trạng thái bạn bè: người lạ (người được gắn tag chưa là bạn bè). Bộ chạy không được hỏi trước khi gửi (V669, Cách A).
+        getFriendRequestStatus: async (accountId, uid) => { sent.push(`friend_status:${uid}`); return { raw: { is_friend: 0, isFriend: 0 } } },
         // Loại theo UID / group / thêm thành viên / vào group bằng link (cùng chữ ký zaloRuntimeService).
         getUserProfile: async (accountId, uid) => {
           sent.push(`profile:${uid}`)
@@ -422,6 +424,18 @@ async function main() {
       assert.equal((await db.query(`SELECT status FROM public.auto_campaigns WHERE id = $1`, [f.campaign.id])).rows[0].status, 'hoàn thành', actionId)
     }
     pass('Desktop: thành viên nhóm, bạn bè, nhắn group, thêm thành viên, vào group bằng link chạy qua cổng Desktop thật, đúng câu và lịch sử')
+
+    // D7: người vừa được gắn tag (dòng zalotag:, V660) mà chưa là bạn bè vẫn được gửi như mọi dòng khác (anh chốt 26/11/2026 "Cách A"):
+    // không hỏi trạng thái bạn bè, không "Bỏ qua: Chưa là bạn bè".
+    const f7 = await makeTyped('zalo_message_friend', [{ name: '7105', uid: '7105' }], {})
+    await db.query(`UPDATE public.auto_campaign_input_data SET control_append_idempotency_key = $2 WHERE id = $1`,
+      [f7.ids[0], `zalotag:${f7.campaign.id}:7105`])
+    const r7 = await runWith(f7, {})
+    assert.equal((await r7.run()).reason, 'no_target')
+    assert.deepEqual(r7.runtime.sent, ['profile:7105', 'text:7105:Chào Hồ sơ 7105'], 'gửi bằng tên hồ sơ Zalo, không hỏi trạng thái bạn bè')
+    assert.deepEqual((await details(f7.ids[0])).map(d => [d.action_code, d.status]), [['zalo_message_friend', 'thành công']])
+    assert.ok(!r7.lines.some(l => /Chưa là bạn bè/.test(l)), r7.lines.join('\n'))
+    pass('Desktop: người được gắn tag chưa là bạn bè vẫn được gửi, dùng tên hồ sơ Zalo khi data chỉ có UID')
   } finally {
     await db.end().catch(() => {})
     stop()

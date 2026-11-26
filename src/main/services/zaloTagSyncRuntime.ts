@@ -123,8 +123,22 @@ export class ZaloTagSyncRuntime {
     if (snapshots.size === 0) return
 
     const heartbeat: ZaloTagSyncItem[] = [...snapshots.entries()].map(([a, s]) => ({ a: String(a), v: s.version }))
-    const needTags: number[] = []
     const rejected = new Set<number>()
+    try {
+      await this.sendSnapshots(heartbeat, snapshots, rejected)
+    } finally {
+      // DB không nhận tài khoản này nữa (chiến dịch tắt, đổi tài khoản): bỏ khỏi danh sách tới lần đọc lại, kể cả khi nhịp dừng giữa
+      // chừng (lô sau lỗi mạng / DB báo tắt), không thì nhịp sau vẫn đọc Zalo của tài khoản DB đã từ chối.
+      if (rejected.size > 0) {
+        this.accounts = { ...this.accounts, accountIds: this.accounts.accountIds.filter(id => !rejected.has(id)) }
+      }
+    }
+  }
+
+  private async sendSnapshots(heartbeat: ZaloTagSyncItem[],
+    snapshots: Map<number, { version: string; labels: Array<{ id: unknown; text?: unknown; conversations?: unknown }> }>,
+    rejected: Set<number>): Promise<void> {
+    const needTags: number[] = []
     for (let i = 0; i < heartbeat.length; i += MAX_ITEMS_PER_CALL) {
       const result = await this.call(heartbeat.slice(i, i + MAX_ITEMS_PER_CALL))
       if (!result) return
@@ -142,10 +156,6 @@ export class ZaloTagSyncRuntime {
       this.metrics.added += result.added
       this.metrics.campaignRows += result.campaignRows
       result.rejected.forEach(id => rejected.add(id))
-    }
-    if (rejected.size > 0) {
-      // DB không nhận tài khoản này nữa (chiến dịch tắt, đổi tài khoản): bỏ khỏi danh sách tới lần đọc lại.
-      this.accounts = { ...this.accounts, accountIds: this.accounts.accountIds.filter(id => !rejected.has(id)) }
     }
   }
 

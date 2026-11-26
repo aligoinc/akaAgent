@@ -1,0 +1,14 @@
+{
+  "migration": "migration_v671_engine_action_lock_keep_longer",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-26 21:46:45",
+  "ledger_version": "20261126144645",
+  "file_md5": "17c59190ffcae1676075ff7bc844e966",
+  "ledger_md5": "17c59190ffcae1676075ff7bc844e966",
+  "requested_by_user": "apply",
+  "method": "Supabase MCP execute_sql, một giao dịch, dòng sổ chèn trước COMMIT kèm kiểm md5",
+  "report_v1_md5": {"before": "b39e1e9dbcab4775d96779bd4799b63a", "after": "014a3d036874e3ea6cfbee02f4aa9441"},
+  "postgrest_schema_reload": "truy vấn schema 3,6 s, nạp 15,7 ms",
+  "errors_5xx": "0 trong 14:46–14:48 UTC; 10 lượt aka_agent_engine_report_v1 đầu tiên sau apply đều HTTP 200",
+  "rollback": "migrations/rollback_v671_engine_action_lock_keep_longer.sql (không apply lại V671)"
+}

@@ -1,7 +1,8 @@
 # Tự gửi tin khi một người được gắn tag Zalo — phương án
 
-Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8), chưa apply V660, chưa deploy, chưa build,
-chưa merge, chưa đổi gì trên production.**
+Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8). V660 đã apply 12:30 VN 26/11, công tắc
+bật. Chiều 26/11 anh chốt "Cách A": gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè (mục 10; V669 đã apply 21:46:19 VN 26/11). Chưa
+deploy, chưa build, chưa merge.**
 
 Tính năng: chiến dịch "Nhắn tin bạn bè" ở chế độ "Gửi cho bạn bè thuộc danh sách tag" có thêm ô chọn. Bật ô này thì mỗi khi
 một người được gắn một trong các tag đã chọn trên Zalo, hệ thống tự thêm người đó vào chiến dịch và gửi tin. Chiến dịch đang
@@ -11,7 +12,7 @@ một người được gắn một trong các tag đã chọn trên Zalo, hệ 
 
 | Điểm | Chốt |
 |---|---|
-| Người nhận | Đợt này chỉ gửi cho người đã là bạn bè. "Chỉ người lạ" / "Tất cả" để đợt sau. |
+| Người nhận | ~~Đợt này chỉ gửi cho người đã là bạn bè.~~ Đổi chiều 26/11 ("Cách A", mục 10): gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè. |
 | Gỡ tag | Sổ tag ghi cả gắn lẫn gỡ. Tính năng gửi tin chỉ phản ứng với gắn tag. |
 | Mất kết nối rồi nối lại | Bỏ: những người được gắn tag trong lúc mất kết nối không được gửi. |
 | Zalo trình duyệt | Chưa làm. |
@@ -138,7 +139,7 @@ Chiến dịch chưa lấy danh sách lần đầu thì không cần thêm: lư�
 
 Nhóm (hội thoại nhóm cũng gắn tag được) bị bỏ ở bước này; sổ tag vẫn ghi.
 
-### 4.3 Chỉ gửi cho bạn bè
+### 4.3 Chỉ gửi cho bạn bè (đã bỏ chiều 26/11, xem mục 10)
 
 Danh sách tag của Zalo không cho biết ai là bạn bè. Kiểm ngay trước khi gửi, chỉ với dòng có khoá `zalotag:`:
 
@@ -334,3 +335,139 @@ Chạy đồng thời ở mọi vòng: 0 trùng, 0 khoá chéo, 0 lần chờ kh
 - Zalo thật (bước 0 ở mục 5): phiên bản tag có đổi mỗi lần gắn / gỡ không. zca-js `updateLabels` gửi kèm phiên bản nên nhiều khả năng có, nhưng chưa thử trên Zalo thật.
 - Electron thật, runtime Fly thật.
 - Hàm chọn chính sách của engine trên DB thật với EXC05. Dòng chính sách viết giống EXC04 / lớp `target_temporary` sẵn có.
+
+## 10. Gửi cả người chưa là bạn bè ("Cách A", chiều 26/11/2026)
+
+Anh yêu cầu: "không phân biệt bạn bè hay không, chỉ cần gắn tag là gửi", chọn Cách A (bỏ hẳn bước kiểm, mọi người gửi như bạn bè).
+
+Số đo trước khi đổi (chỉ đọc, 54 tài khoản đang chạy chiến dịch gửi theo tag trong 60 ngày): trong các tag của họ có 86.185 người
+(không tính 2.251 nhóm): 51% đã là bạn bè, 6% có trong danh bạ đã đồng bộ nhưng chưa là bạn bè, 43% không có trong danh bạ đã đồng
+bộ (nhiều khả năng cũng chưa là bạn bè). Với luật cũ khoảng một nửa số người được gắn tag sẽ bị "Bỏ qua".
+
+Đã làm:
+
+- Lõi engine (`packages/campaign-engine`, gửi thường lẫn dạng chia sẻ) và bộ chạy cũ (`campaignScheduler.ts`) bỏ bước kiểm bạn bè
+  cho dòng `zalotag:`. Mã EXC04 / EXC05 của V660 còn trong DB nhưng không còn chỗ phát. Lõi đã chép sang ChatApi.
+- Tên người nhận: data chỉ có UID (người không có trong danh bạ) vẫn được gửi bằng tên hồ sơ Zalo, vì cả hai bộ chạy đọc hồ sơ theo
+  UID trước khi gửi (`getUserProfile`). Bài kiểm Desktop có ca này.
+- Zalo hạn chế nhắn người lạ (120 / 802) khi nhắn tin bạn bè, [V669](../migrations/migration_v669_zalo_friend_stranger_restricted.sql)
+  (chỉ dữ liệu; chạy thử trên DB thật trong giao dịch tự huỷ 26/11 đạt):
+  - engine v2: hẹn riêng data đó chạy lại lúc mở khoá "Nhắn tin người lạ" của tài khoản (120: 09:45 hôm sau, 802: 09:45 sau 2
+    ngày; hàm báo kết quả lấy giờ mở khoá trước `requeue_after_minutes`), câu cho khách "Zalo đang hạn chế nhắn người lạ, sẽ gửi lại
+    người này lúc {giờ} (Z120)", không tính lượt, không cộng chuỗi, không dừng chiến dịch, lượt chạy tiếp người khác; vẫn khoá
+    "Nhắn tin người lạ" như cũ. Trước V669: data về hàng đợi ngay (gửi lại ngay lượt sau), 3 data liền thì tạm dừng chiến dịch.
+  - bộ chạy cũ (không có hẹn giờ theo data): hai dòng `auto_error` mới `err_zalo_message_friend_stranger_restricted` (120, Z120) và
+    `..._802` (802, Z802), data "thất bại", không tính lượt, không cộng chuỗi, không khoá thao tác (bộ cũ gặp dòng có khoá thì in
+    "⏸ Dừng chiến dịch" và nghỉ một lượt kể cả khi khoá thao tác khác). Trước V669 rơi vào lỗi chung (tính lượt, cộng chuỗi, 4 data
+    liền thì tạm dừng). Bản gỡ tắt hai dòng và bỏ `error_class` (engine đọc nhóm lỗi cả ở dòng đã tắt); apply lại sau khi gỡ được.
+  - Bạn bè thật không gặp 120 / 802 (3 ngày tới 26/11: 0 lần trên ~22.000 lượt nhắn bạn bè của engine v2).
+- Câu trên form (Desktop, Web, iOS): "Tự động gửi cho người được gắn tag này về sau (kể cả người chưa là bạn bè)", bỏ câu "người chưa
+  là bạn bè sẽ bị bỏ qua", thêm câu nhắc nhắn nhiều người chưa là bạn bè dễ bị Zalo hạn chế. Câu cho khách chưa được anh duyệt.
+
+Giữ nguyên:
+
+- Danh sách lần đầu (lấy người đang có trong tag lúc bật chiến dịch) vẫn chỉ lấy bạn bè: chỉ người được gắn tag sau mới được gửi
+  dù chưa là bạn bè.
+- Tin gửi người chưa là bạn bè tính vào hạn mức "Nhắn tin bạn bè" của chiến dịch, không theo hạn mức "Nhắn tin người lạ".
+- Gửi nhanh cho nhiều người chưa là bạn bè liền nhau có thể gặp Z127 (Zalo chặn vì gửi nhanh): chính sách hiện tại của nhắn tin bạn
+  bè khoá nhắn bạn bè 30 phút và 3 data liền thì tạm dừng chiến dịch. Chưa đổi.
+
+Kiểm: `CHAT_REPO=<akaAgentChatApi> node scripts/campaign-engine-desktop-smoke.cjs` (12 nhóm; ca "người được gắn tag chưa là bạn bè
+vẫn được gửi" hỏng trên code trước khi sửa), typecheck ba tsconfig, ChatApi `npm run verify`, WebApp bài kiểm iOS `Options.test.tsx`.
+`fuzz-round.sh` thay bước "Lõi engine: kiểm bạn bè" bằng bài kiểm Desktop. Thứ tự đưa lên: apply V669 trước hoặc cùng lúc bản chạy
+mới (V669 chỉ đổi cách xử lý 120 / 802 của nhắn tin bạn bè, chạy được với bản cũ).
+
+### 10.1 Kiểm thử lặp Cách A (26/11/2026, anh yêu cầu "Kiểm thử và cải tiến … ít nhất 3 vòng không còn vấn đề")
+
+Một vòng = `CHAT_REPO=<akaAgentChatApi> CACH_A_POOL=<pool> CACH_A_SIGNALS=<tín hiệu> CACH_A_SCENARIOS=150 bash
+scripts/zalo-tag-sync/fuzz-round.sh <seed> <pool tag V660>`, mỗi vòng lấy mẫu thật mới (chỉ đọc, ngoài repo):
+
+- data của chiến dịch nhắn tin bạn bè thật (~1.600 dòng / vòng, 220 chiến dịch chọn theo `md5(id || salt)`; UID băm giữ độ dài, tên
+  che giữ dấu / khoảng trắng / ký tự đặc biệt);
+- tín hiệu engine v2 thật đã gom (`auto_engine_outcomes`, 2–3 ngày khác nhau mỗi vòng, 100–420 nghìn kết quả; engine Zalo chỉ có
+  dữ liệu từ 13/11).
+
+Bài kiểm mới:
+
+- `scripts/zalo-tag-sync/cach-a-engine-fuzz.cjs`: bộ chạy engine v2 thật của Desktop trên PG cục bộ (V495–V501 + V669, chính sách /
+  luật / mã lỗi chép từ bản sao danh mục production 26/11), Zalo giả trả kết quả ngẫu nhiên (câu 120 / 802 thật), data sai cố ý (UID
+  là SĐT, rỗng, có chữ, hậu tố `_0`, khoảng trắng, 26 chữ số, trùng; tên rỗng / bằng UID / dài / emoji / xuống dòng / chứa
+  `#{FULL_NAME}`; khoá `zalotag:` sai dạng). Mỗi kịch bản chạy hai lần (có / không khoá `zalotag:`) và so từng data. Bất biến A1–A7
+  ở đầu tệp; `--no-v669` là đối chứng (data 120 bị gửi lại ngay).
+- `scripts/zalo-tag-sync/cach-a-policy-fuzz.cjs`: bản sao danh mục production; ~16.000 tổ hợp (mã, status, thao tác, nơi chạy, pha)
+  trước / sau V669, cách chọn dòng `auto_error` của bộ cũ Desktop (logic `getZaloErrorPolicyByCode`) và ChatApi (câu SQL nguyên văn)
+  trên ~1.300 cặp (mã Zalo kể cả chuỗi sai, thao tác), phát lại tín hiệu thật (và cùng tín hiệu nếu xảy ra trong chiến dịch bạn bè),
+  gỡ rồi apply lại, 17 kiểu danh mục bị làm sai cố ý (V669 phải từ chối và không đổi gì, hoặc vẫn chạy khi sai ở chỗ không liên quan).
+
+Tìm ra và sửa:
+
+1. Câu V669 ghi "sẽ gửi lại người này sau 24 / 48 giờ" nhưng data hẹn theo giờ mở khoá người lạ (09:45 hôm sau / sau 2 ngày) → câu
+   dùng `{until}`.
+2. Bản gỡ chỉ tắt dòng `auto_error` mà engine vẫn đọc `error_class` của dòng đã tắt → gỡ chưa trả đủ; bản gỡ bỏ cả `error_class`.
+3. Apply lại sau khi gỡ bị chặn vì dòng `auto_error` cũ (tắt) còn đó → V669 bật lại dòng tắt (`ON CONFLICT`), chỉ từ chối dòng đang bật.
+4. Bộ cũ: một dòng cho cả 120 và 802, không mã công khai → hai dòng (Z120 / Z802). Thử khoá "Nhắn tin người lạ" như dòng nhắn người
+   lạ rồi bỏ: bộ cũ gặp dòng có khoá thì in "⏸ Dừng chiến dịch" và nghỉ một lượt (`applyZaloPolicySideEffects`).
+5. (V660, Desktop / App Server) `zaloTagSyncRuntime.ts`: nhịp có trên 200 tài khoản, lô đầu bị DB từ chối vài tài khoản rồi lô sau lỗi
+   mạng thì thoát sớm, quên danh sách bị từ chối, nhịp sau vẫn đọc Zalo của các tài khoản đó tới lần đọc lại danh sách → áp dụng
+   danh sách từ chối trong `finally` (`runtime-fuzz.cjs` seed 204 tái hiện).
+6. Bài kiểm: `fuzz-loop.cjs` chọn chiến dịch từ danh sách rỗng khi mọi chiến dịch đã xoá hẳn; nhánh "chiến dịch hết hạn" hiếm nên có
+   seed không phủ (tăng tỉ lệ); các bất biến A4 / A5 so nhầm khi kịch bản có mã dừng khác (Z112) hoặc UID trùng.
+
+Vòng: seed 1–3 và 201–204 ra lỗi (đã sửa ở trên); 205, 206, 207 sạch liền (mỗi vòng: ~850 data × 2 lần chạy bộ chạy mới, ~1.400 lần
+gửi Zalo giả, 16.362 tổ hợp chính sách, ~1.350 cặp bộ cũ, 16 kiểu danh mục sai, 200–420 nhóm tín hiệu thật; cùng các bài V660:
+50.000 lần so DB, 3.000 kết nối Fly, 400 lượt bộ hỏi tag). V669 đã sửa chạy thử lại trên DB thật trong giao dịch tự huỷ: đạt,
+`aka_agent_engine_policy_lint` không thêm cảnh báo.
+
+Phát hiện (có từ trước, không do V669): khoá thao tác của tài khoản bị ghi đè bởi lỗi đến sau, kể cả khoá ngắn hơn
+(`ON CONFLICT … date_enable = EXCLUDED.date_enable` trong `aka_agent_engine_report_v1`). Ví dụ khoá "Nhắn tin người lạ" tới 09:45 hôm
+sau vì 120 bị NET01 (rớt mạng, khoá mọi thao tác Zalo 5 phút) đè thành 5 phút. Đo 4 ngày tới 26/11: 219 lần khoá vì 120 / 802, 6 lần
+(2,7%) bị lỗi sau đè, 1 lần tài khoản nhắn người lạ lại trong thời gian lẽ ra còn khoá và gặp 120 / 802 lần nữa. Cách A làm tăng khả năng
+gặp (chiến dịch bạn bè chạy tiếp sau 120).
+
+### 10.2 V671: giữ khoá dài hơn (26/11/2026, anh đồng ý "Ok"; đã apply akachat 21:46:45 VN 26/11, sổ `20261126144645`)
+
+[V671](../migrations/migration_v671_engine_action_lock_keep_longer.sql) (sinh bằng `node scripts/build-v671-sql.cjs` từ thân production
+đọc 26/11, md5 `b39e1e9d…` = bản sau V659 → `014a3d03…`; có bản gỡ) chỉ thêm một mệnh đề `WHERE` vào câu ghi khoá: khoá đang có còn
+hiệu lực (`is_disable`, `date_enable` không thời hạn hoặc sau giờ hiện tại) và dài hơn khoá mới thì giữ nguyên cả dòng (giờ mở, mã,
+câu, lúc khoá). Khoá mới không thời hạn luôn ghi; khoá cũ đã hết hạn luôn bị thay; khoá dài hơn vẫn thay khoá ngắn. Không đổi giờ hẹn
+lại data và câu "tới {until}" của chính lượt đó (lượt nhận sau vẫn chờ theo khoá dài hơn vì claim đọc `auto_account_action_status`);
+bộ chạy cũ không đổi. CREATE OR REPLACE nên PostgREST nạp lại schema: apply ngoài giờ cao điểm.
+
+Kiểm: `CHAT_REPO=… node scripts/engine-v2-lock-keep/v671-smoke.cjs` (migration / gỡ / chặn chạy lại / số 671 trong sổ trên thân
+production; câu ghi khoá chép nguyên văn trước / sau vá so với mô hình độc lập, 20.000–30.000 ca mỗi seed gồm khoá không thời hạn, đã
+hết, bằng giờ, khoá mới không thời hạn); bộ kiểm engine Cách A có bất biến A8 (bộ chạy Desktop thật, khoá do `report_v1` ghi, đếm bằng
+trigger; mặc định có V671, `--no-v671` để đối chứng). Cùng seed 301: không V671 rút ngắn 14 khoá đang còn hiệu lực, có V671 0 lần,
+mọi kết quả khác y hệt. Vòng seed 311, 312, 313 (data thật ẩn danh, 80 kịch bản + 30.000 ca mỗi vòng) sạch liền.
+
+### 10.3 Kiểm thử lặp lần 2 (26/11/2026, anh yêu cầu lại "Kiểm thử và cải tiến … ít nhất 3 vòng không còn vấn đề")
+
+Thêm hai bài kiểm cho V671, mỗi vòng lấy mẫu thật mới (data nhắn bạn bè, tín hiệu engine của 2 ngày khác, tag của 60 tài khoản khác,
+chuỗi khoá thật; đều chỉ đọc, ngoài repo):
+
+- `scripts/engine-v2-lock-keep/v671-replay.cjs <seq.json> [--inject N --seed S]`: phát lại mọi lần khoá thật của engine v2 (cùng khoá
+  không thời hạn đang có) theo thứ tự thời gian qua đúng câu ghi khoá trước / sau V671, khoá nào bị ghi lấy theo chính sách production;
+  trước mỗi lượt thật đọc khoá như claim. Đếm khoá bị rút ngắn và lượt thật lẽ ra bị chặn, so DB với mô hình JS. `--inject` cố ý chèn
+  lỗi mạng (NET01, khoá mọi thao tác Zalo 5 phút) vào lúc ngẫu nhiên trên tài khoản thật. Có trong `fuzz-round.sh` khi đặt `V671_SEQ`.
+- `v671-smoke.cjs` thêm ca ghi đồng thời: 8 phiên ghi khoá cho 400 tài khoản, thứ tự ngẫu nhiên, có khoá cũ còn / hết / không thời hạn.
+  Có V671 thì kết quả cuối luôn là khoá dài nhất (không thời hạn thắng) và mã lỗi đi đúng giờ mở khoá; câu trước vá trượt ca này.
+
+Kết quả: vòng seed 411, 412, 413 sạch liền (không phải sửa gì). Phát lại thật:
+
+| Khoảng | Lần khoá thật | Bản cũ rút ngắn | V671 rút ngắn | Lượt thật V671 chặn thêm |
+| --- | --- | --- | --- | --- |
+| 7 ngày tới 26/11 | 6.541 (609 tài khoản) | 0 | 0 | 0 |
+| 30 ngày tới 26/11 | 10.313 (764 tài khoản) | 2 | 0 | 1 (thực tế gặp lại 127) |
+| 7 ngày + 3.000 lỗi mạng chèn | 9.541 | 511 | 0 | 12 (đều là lượt lỗi mạng chèn thêm) |
+
+Ghi nhận khi rà (không sửa):
+
+- 7 lượt thật đã gửi trong lúc khoá 120 / 802 / 127 còn hiệu lực đều do nhân viên bấm "Chạy lại ngay" (Web / Desktop gỡ khoá bằng
+  REST, ví dụ tài khoản 12591 lúc 16:55:50 VN 26/11), lượt sau gặp lại đúng lỗi đó. Không phải lỗi của engine hay V671.
+- Khoá không thời hạn đang có: 13 dòng, đều `err_zalo_224_add_friend_full` (danh sách bạn bè đầy) của "Kết bạn". Trước V671 một lỗi mạng
+  sau đó sẽ đổi khoá này thành 5 phút (vô tình mở lại kết bạn); sau V671 khoá giữ tới khi nhân viên bấm "Chạy lại ngay". 14 ngày qua
+  chỉ 2 lần 224, không lần nào bị lỗi mạng đè.
+
+
+### 10.4 Apply V669 + V671 (26/11/2026 21:46 VN, anh: "apply")
+
+Kiểm trước: `report_v1` vẫn md5 `b39e1e9d…` (V667 / V670 apply chiều cùng ngày không đụng), hai dòng chính sách 120 / 802 × nhắn tin bạn bè đúng bản V500 Q4, số 669 / 671 còn trống. V669 sổ `20261126144619`, V671 sổ `20261126144645`; md5 sổ = file (kiểm ngay trong giao dịch). Sau apply: `report_v1` md5 `014a3d03…`; chính sách 802 × nhắn bạn bè (Fly) = hẹn data 2880 phút, không cộng chuỗi, không dừng chiến dịch, khoá `zalo_message_stranger`; hai dòng `auto_error` Z120 / Z802 bật. PostgREST nạp lại schema 3,6 s, 0 lỗi 5xx; 10 lượt `report_v1` đầu tiên sau apply HTTP 200. Biên nhận: `migrations/snapshots/zalo-friend-stranger-v669/`, `migrations/snapshots/engine-action-lock-keep-v671/`. Gỡ: `rollback_v669_…`, `rollback_v671_…`.
