@@ -1,12 +1,14 @@
 import { BrowserWindow, session, shell, type Session, type WebContents } from 'electron'
 import { getCurrentUser, requireCurrentUserCredentials } from '../data/currentUser'
 import {
-  JOURNEY_WEB_EXPIRED_TITLE, JOURNEY_WEB_IPC, classifyJourneyWebOutside, journeyWebInsidePath, journeyWebUrl,
-  type JourneyWebState, type JourneyWebTheme
+  JOURNEY_WEB_EXPIRED_TITLE, JOURNEY_WEB_IPC, JOURNEY_WEB_VIEWS, classifyJourneyWebOutside, journeyWebInsidePath, journeyWebUrl,
+  journeyWebViewOfPath, type JourneyWebState, type JourneyWebTheme, type JourneyWebView
 } from '../../shared/journeyWebDesktop'
 
 /**
- * Thẻ Tự động hóa › Quy trình: webview nạp trang Tự động hóa của Web ở chế độ nhúng (`?embed=desktop`).
+ * Dịch vụ nhúng trang Web (`?embed=desktop`) dùng chung một phiên: thẻ Tự động hóa › Quy trình (`automation`, đường `/automation`)
+ * và mục menu Bot sự kiện (`eventBot`, đường `/automation/event-bot`). Mỗi trang nhúng một webview, một trạng thái, một đường mặc
+ * định và tiêu đề trong câu báo (JOURNEY_WEB_VIEWS); đăng nhập, cookie, phân vùng dùng chung. Trang `automation` giữ nguyên hành vi cũ.
  *
  * Đăng nhập: main gọi đăng nhập native của API Web bằng tài khoản akaAgent đang dùng (như trang Chat), rồi đặt cookie phiên
  * `aka_agent_control_session` vào phân vùng riêng của webview. Phiên native không tính vào hạn 3 thiết bị Web, không đẩy phiên
@@ -23,7 +25,16 @@ const COOKIE_NAME = 'aka_agent_control_session'
 /** Phiên native sống 30 ngày ở API; cookie đặt ngắn hơn để lần mở sau đăng nhập lại. */
 const COOKIE_TTL_SECONDS = 7 * 24 * 60 * 60
 
+/** Câu lỗi đăng nhập có chỗ cho tiêu đề trang nhúng (`{title}`). */
 class JourneyWebAuthError extends Error {}
+
+interface EmbedView {
+  key: JourneyWebView
+  title: string
+  defaultPath: string
+  state: JourneyWebState
+  guest: WebContents | null
+}
 
 interface NativeLoginBody {
   status?: number
@@ -58,12 +69,14 @@ export class JourneyWebService {
   private readonly browserSession: Session
   private readonly staffId: number
   private readonly organizationId: number
-  private state: JourneyWebState
+  private readonly partition: string
+  private readonly views = new Map<JourneyWebView, EmbedView>()
+  /** Trang nhúng của các webview đang gắn (will-attach → did-attach, theo thứ tự). */
+  private readonly pendingAttach: JourneyWebView[] = []
   private disposed = false
   private loggedIn = false
   private inflight: Promise<void> | null = null
   private requestAbort: AbortController | null = null
-  private guest: WebContents | null = null
   private readonly contents = new Set<WebContents>()
   private theme: JourneyWebTheme = 'light'
   private automaticRecoveryUsed = false
@@ -74,8 +87,9 @@ export class JourneyWebService {
     this.staffId = staffId
     this.organizationId = organizationId
     const partition = `persist:akaagent_web_${organizationId}_${staffId}`
+    this.partition = partition
     this.browserSession = session.fromPartition(partition)
-    this.state = { revision: 0, webviewGeneration: 0, status: 'connecting', partition, url: journeyWebUrl(JOURNEY_WEB_ORIGIN, '/automation', 'light') }
+    this.viewOf('automation', 'light')
     mainWindow.webContents.on('will-attach-webview', this.beforeAttach)
     mainWindow.webContents.on('did-attach-webview', this.afterAttach)
     this.browserSession.setPermissionCheckHandler((contents, permission, origin) =>
@@ -101,33 +115,61 @@ export class JourneyWebService {
     return !this.disposed && !!user && user.staffId === this.staffId && user.organizationId === this.organizationId
   }
 
-  private publish(status: JourneyWebState['status'], message?: string, url?: string): void {
-    this.state = { ...this.state, revision: this.state.revision + 1, status, message, ...(url ? { url } : {}) }
+  /** Trang nhúng `key` (tạo ở lần mở đầu, theo giao diện lúc đó). */
+  private viewOf(key: JourneyWebView, theme: JourneyWebTheme): EmbedView {
+    let view = this.views.get(key)
+    if (!view) {
+      const def = JOURNEY_WEB_VIEWS[key]
+      view = {
+        key, title: def.title, defaultPath: def.defaultPath, guest: null,
+        state: { revision: 0, webviewGeneration: 0, status: 'connecting', partition: this.partition, url: journeyWebUrl(JOURNEY_WEB_ORIGIN, def.defaultPath, theme, def.defaultPath), view: key }
+      }
+      this.views.set(key, view)
+    }
+    return view
+  }
+
+  private publish(view: EmbedView, status: JourneyWebState['status'], message?: string, url?: string): void {
+    view.state = { ...view.state, revision: view.state.revision + 1, status, message, ...(url ? { url } : {}) }
     if (!this.mainWindow.isDestroyed() && !this.mainWindow.webContents.isDestroyed()) {
-      this.mainWindow.webContents.send(JOURNEY_WEB_IPC.state, this.state)
+      this.mainWindow.webContents.send(JOURNEY_WEB_IPC.state, view.state)
     }
   }
 
-  /** Mở thẻ: đăng nhập nếu chưa có phiên; `path` là đường trong `/automation` cần mở (ví dụ một quy trình). */
-  async prepare(theme: JourneyWebTheme, path?: string | null): Promise<JourneyWebState> {
+  /** Trạng thái phiên đổi (đang kết nối / sẵn sàng / lỗi): báo mọi trang nhúng đã mở. `message` nhận tiêu đề của từng trang. */
+  private publishAll(status: JourneyWebState['status'], message?: (title: string) => string): void {
+    for (const view of this.views.values()) this.publish(view, status, message?.(view.title))
+  }
+
+  private viewByContents(contents: WebContents): EmbedView | null {
+    for (const view of this.views.values()) if (view.guest === contents) return view
+    return null
+  }
+
+  /** Mở trang: đăng nhập nếu chưa có phiên; `path` là đường trong `/automation` cần mở (ví dụ một quy trình). */
+  async prepare(theme: JourneyWebTheme, path?: string | null, key: JourneyWebView = 'automation'): Promise<JourneyWebState> {
     if (!this.isCurrent()) throw new Error('Phiên akaAgent đã kết thúc.')
     this.theme = theme
-    const url = journeyWebUrl(JOURNEY_WEB_ORIGIN, path, theme)
-    if (!this.loggedIn || this.state.status !== 'ready') await this.authenticate()
-    if (this.state.status === 'ready' && url !== this.state.url) {
-      this.publish('ready', undefined, url)
-      if (path && this.guest && !this.guest.isDestroyed()) void this.guest.loadURL(url).catch(() => {})
+    const view = this.viewOf(key, theme)
+    const url = journeyWebUrl(JOURNEY_WEB_ORIGIN, path, theme, view.defaultPath)
+    // Trang nhúng mới mở khi phiên đã có (trang kia đã đăng nhập): dùng chung phiên, không đăng nhập lại.
+    if (this.loggedIn && view.state.status === 'connecting' && !this.inflight) this.publish(view, 'ready')
+    if (!this.loggedIn || view.state.status !== 'ready') await this.authenticate()
+    if (view.state.status === 'ready' && url !== view.state.url) {
+      this.publish(view, 'ready', undefined, url)
+      if (path && view.guest && !view.guest.isDestroyed()) void view.guest.loadURL(url).catch(() => {})
     }
-    return this.state
+    return view.state
   }
 
-  async reload(): Promise<JourneyWebState> {
+  async reload(key: JourneyWebView = 'automation'): Promise<JourneyWebState> {
     if (!this.isCurrent()) throw new Error('Phiên akaAgent đã kết thúc.')
+    const view = this.viewOf(key, this.theme)
     this.automaticRecoveryUsed = false
     this.loggedIn = false
     await this.authenticate()
-    if (this.state.status === 'ready' && this.guest && !this.guest.isDestroyed()) void this.guest.loadURL(this.state.url).catch(() => {})
-    return this.state
+    if (view.state.status === 'ready' && view.guest && !view.guest.isDestroyed()) void view.guest.loadURL(view.state.url).catch(() => {})
+    return view.state
   }
 
   credentialsChanged(): void {
@@ -148,7 +190,7 @@ export class JourneyWebService {
   private async performAuthentication(): Promise<void> {
     const controller = new AbortController()
     this.requestAbort = controller
-    if (this.state.status !== 'ready') this.publish('connecting', 'Đang kết nối Tự động hóa…')
+    for (const view of this.views.values()) if (view.state.status !== 'ready') this.publish(view, 'connecting', `Đang kết nối ${view.title}…`)
     try {
       const credentials = requireCurrentUserCredentials()
       // Đăng nhập bằng fetch của main (không qua phân vùng): token chỉ đi vào cookie httpOnly của phân vùng webview.
@@ -164,7 +206,7 @@ export class JourneyWebService {
       const body = await response.json().catch(() => null) as NativeLoginBody | null
       if (response.status === 401 || response.status === 403) {
         const message = typeof body?.message === 'string' && body.message.length <= 300 ? body.message : ''
-        throw new JourneyWebAuthError(message || 'Không đăng nhập được Tự động hóa bằng tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.')
+        throw new JourneyWebAuthError(message || 'Không đăng nhập được {title} bằng tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.')
       }
       if (!response.ok || body?.status !== 1 || !body.data) throw new Error('journey_web_unavailable')
       if (body.data.status === 'policy_required') {
@@ -174,7 +216,7 @@ export class JourneyWebService {
       const me = body.data.me
       if (typeof token !== 'string' || !/^[A-Za-z0-9._~-]{16,512}$/.test(token)) throw new Error('journey_web_token_invalid')
       if (me && (Number(me.id) !== this.staffId || Number(me.organization?.id) !== this.organizationId)) {
-        throw new JourneyWebAuthError('Phiên Tự động hóa không khớp tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.')
+        throw new JourneyWebAuthError('Phiên {title} không khớp tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.')
       }
       await this.browserSession.cookies.set({
         url: `${JOURNEY_WEB_ORIGIN}${CONTROL_PREFIX}`, name: COOKIE_NAME, value: token, path: CONTROL_PREFIX,
@@ -186,15 +228,16 @@ export class JourneyWebService {
       this.token = token
       if (previous && previous !== token) void revokeNativeSession(previous)
       this.loggedIn = true
-      this.publish('ready')
+      this.publishAll('ready')
     } catch (error) {
       if (!this.isCurrent() || controller.signal.aborted) return
       this.loggedIn = false
       if (error instanceof JourneyWebAuthError) {
         await this.browserSession.cookies.remove(`${JOURNEY_WEB_ORIGIN}${CONTROL_PREFIX}`, COOKIE_NAME).catch(() => {})
-        this.publish('error', error.message)
+        const template = error.message
+        this.publishAll('error', title => template.split('{title}').join(title))
       } else {
-        this.publish('error', 'Không thể kết nối Tự động hóa. Vui lòng kiểm tra internet và thử lại.')
+        this.publishAll('error', title => `Không thể kết nối ${title}. Vui lòng kiểm tra internet và thử lại.`)
       }
     } finally {
       if (this.requestAbort === controller) this.requestAbort = null
@@ -205,27 +248,33 @@ export class JourneyWebService {
   private recoverExpiredSession(): void {
     if (!this.isCurrent() || this.inflight) return
     if (this.automaticRecoveryUsed) {
-      this.publish('error', 'Phiên Tự động hóa không còn hợp lệ. Vui lòng thử kết nối lại.')
+      this.publishAll('error', title => `Phiên ${title} không còn hợp lệ. Vui lòng thử kết nối lại.`)
       return
     }
     this.automaticRecoveryUsed = true
     this.loggedIn = false
     void this.authenticate().then(() => {
-      if (this.state.status === 'ready' && this.guest && !this.guest.isDestroyed()) void this.guest.loadURL(this.state.url).catch(() => {})
+      for (const view of this.views.values()) {
+        if (view.state.status === 'ready' && view.guest && !view.guest.isDestroyed()) void view.guest.loadURL(view.state.url).catch(() => {})
+      }
     })
   }
 
   private beforeAttach = (event: Electron.Event, preferences: Electron.WebPreferences, params: Record<string, string>): void => {
-    if (preferences.partition !== this.state.partition) return
+    if (preferences.partition !== this.partition) return
     let allowed = false
+    let key: JourneyWebView = 'automation'
     try {
       const url = new URL(params.src)
       allowed = url.origin === JOURNEY_WEB_ORIGIN && journeyWebInsidePath(url.pathname) && url.searchParams.get('embed') === 'desktop'
+      key = journeyWebViewOfPath(url.pathname)
     } catch { allowed = false }
-    if (!this.isCurrent() || this.state.status !== 'ready' || !allowed) {
+    const view = this.views.get(key)
+    if (!this.isCurrent() || !view || view.state.status !== 'ready' || !allowed) {
       event.preventDefault()
       return
     }
+    this.pendingAttach.push(key)
     delete preferences.preload
     preferences.nodeIntegration = false
     preferences.nodeIntegrationInSubFrames = false
@@ -237,9 +286,12 @@ export class JourneyWebService {
 
   private afterAttach = (_event: Electron.Event, contents: WebContents): void => {
     if (contents.session !== this.browserSession) return
+    const key = this.pendingAttach.shift() ?? 'automation'
     if (!this.isCurrent()) { contents.close(); return }
-    if (this.guest && !this.guest.isDestroyed()) this.guest.close()
-    this.guest = contents
+    const view = this.views.get(key)
+    if (!view) { contents.close(); return }
+    if (view.guest && !view.guest.isDestroyed()) view.guest.close()
+    view.guest = contents
     this.configureContents(contents)
   }
 
@@ -247,7 +299,8 @@ export class JourneyWebService {
     this.contents.add(contents)
     contents.once('destroyed', () => {
       this.contents.delete(contents)
-      if (this.guest === contents) this.guest = null
+      const view = this.viewByContents(contents)
+      if (view) view.guest = null
     })
     const guardNavigation = (event: Electron.Event, href: string): void => {
       let inside = false
@@ -268,9 +321,10 @@ export class JourneyWebService {
     contents.setWindowOpenHandler(({ url }) => {
       if (isJourneyOrigin(url)) {
         const parsed = new URL(url)
-        if (journeyWebInsidePath(parsed.pathname) && this.guest && !this.guest.isDestroyed()) {
+        const view = this.viewByContents(contents)
+        if (journeyWebInsidePath(parsed.pathname) && view?.guest && !view.guest.isDestroyed()) {
           // Tab mới trong Tự động hóa: mở ngay trong khung (giữ chế độ nhúng).
-          void this.guest.loadURL(journeyWebUrl(JOURNEY_WEB_ORIGIN, `${parsed.pathname}${parsed.search}`, this.theme)).catch(() => {})
+          void view.guest.loadURL(journeyWebUrl(JOURNEY_WEB_ORIGIN, `${parsed.pathname}${parsed.search}`, this.theme, view.defaultPath)).catch(() => {})
         } else {
           const target = classifyJourneyWebOutside(url, JOURNEY_WEB_ORIGIN)
           if (target.kind === 'external') openExternal(target.url)
@@ -282,20 +336,22 @@ export class JourneyWebService {
       return { action: 'deny' }
     })
     contents.on('page-title-updated', (_event, title) => {
-      if (contents === this.guest && title === JOURNEY_WEB_EXPIRED_TITLE) this.recoverExpiredSession()
+      if (this.viewByContents(contents) && title === JOURNEY_WEB_EXPIRED_TITLE) this.recoverExpiredSession()
     })
     contents.on('did-fail-load', (_event, code, _description, _url, isMainFrame) => {
-      if (contents === this.guest && this.isCurrent() && isMainFrame && code !== -3) {
-        this.publish('error', 'Không thể tải trang Tự động hóa. Vui lòng kiểm tra internet và thử lại.')
+      const view = this.viewByContents(contents)
+      if (view && this.isCurrent() && isMainFrame && code !== -3) {
+        this.publish(view, 'error', `Không thể tải trang ${view.title}. Vui lòng kiểm tra internet và thử lại.`)
       }
     })
     contents.on('render-process-gone', () => {
-      if (contents === this.guest && this.isCurrent()) {
+      const view = this.viewByContents(contents)
+      if (view && this.isCurrent()) {
         // Không nạp lại webview đã sập (Electron có thể dừng main): báo renderer dựng webview mới.
-        this.guest = null
-        this.state = { ...this.state, webviewGeneration: this.state.webviewGeneration + 1 }
+        view.guest = null
+        view.state = { ...view.state, webviewGeneration: view.state.webviewGeneration + 1 }
         contents.close({ waitForBeforeUnload: false })
-        this.publish('error', 'Trang Tự động hóa đã dừng. Vui lòng tải lại.')
+        this.publish(view, 'error', `Trang ${view.title} đã dừng. Vui lòng tải lại.`)
       }
     })
   }
@@ -308,7 +364,7 @@ export class JourneyWebService {
     if (this.disposed) return
     this.disposed = true
     this.requestAbort?.abort()
-    this.publish('closed')
+    this.publishAll('closed')
     if (!this.mainWindow.webContents.isDestroyed()) {
       this.mainWindow.webContents.removeListener('will-attach-webview', this.beforeAttach)
       this.mainWindow.webContents.removeListener('did-attach-webview', this.afterAttach)

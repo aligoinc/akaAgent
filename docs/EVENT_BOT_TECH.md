@@ -166,13 +166,15 @@ Mọi `accountId` phải là tài khoản Zalo chưa xoá của chính nhân vi�
 - Lõi gửi `packages/campaign-engine/src/eventBot/`: dựng nội dung (module nội dung của lõi), gửi qua cổng
   `{ sendText(accountId, uid, text) → {msgId?}, getProfile?(accountId, uid) }`, xếp loại lỗi Zalo thành `p_result`.
 - `src/main/services/eventBotRuntime.ts`: một vòng cho cả tiến trình. Đọc `sync` lúc đăng nhập và 2 phút một lần;
-  `enabled=false` hoặc không tài khoản nào thì không gọi gì thêm. Có tài khoản: mỗi `pollSeconds` gọi `claim` cho tài
+  `enabled=false` hoặc không tài khoản nào thì không gọi gì thêm (`enabled=false`: `sync` đọc lại 30 phút một lần thay vì 2 phút;
+  App Server không giữ tài khoản Zalo nào thì không gọi `sync`). Desktop không nhận việc khi bộ giữ sau khi máy ngủ đang giữ. Có tài khoản: mỗi `pollSeconds` gọi `claim` cho tài
   khoản đang đăng nhập mà nơi chạy này giữ, gửi lần lượt từng việc, báo kết quả. Sinh nhật: tài khoản có
   `birthday.scanToday` thì đọc danh sách bạn bè (đoạn lọc ngày sinh của chiến dịch sinh nhật), gọi `birthdays`.
   Hạn chờ đo bằng `monotonicNow`.
 - Ảnh chụp bộ chạy Desktop (`desktopRuntimeSnapshot.ts`) thêm khối `eventBot: {state, accounts, lastClaimAt}`.
 - Trang: mục menu "Bot sự kiện" mở Web `/automation/event-bot?embed=desktop` qua dịch vụ nhúng tách từ
-  `JourneyWebService`.
+  `JourneyWebService` (IPC `journey-web:prepare` / `reload` nhận thêm `view` = `automation` | `eventBot`; trạng thái mang `view`).
+  Chi tiết phần Desktop: [EVENT_BOT_DESKTOP.md](EVENT_BOT_DESKTOP.md).
 
 ## 9. WebApp
 
