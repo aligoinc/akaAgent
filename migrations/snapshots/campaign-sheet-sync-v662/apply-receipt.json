@@ -1,0 +1,25 @@
+{
+  "migration": "migrations/migration_v662_campaign_sheet_sync.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 26/11/2026: \"Áp 662 đi\"",
+  "applied_at_vn": "2026-11-26 15:04:42",
+  "ledger": { "version": "20261126080442", "name": "migration_v662_campaign_sheet_sync", "md5_statements": "b7fe16032533e6a9ed981081d255a63c", "md5_file": "b7fe16032533e6a9ed981081d255a63c" },
+  "method": "Không có Supabase CLI trong container nên file được chép lên bảng tạm private.ops_stage_v662 qua MCP execute_sql thành 4 phần (ký tự khoảng trắng Unicode / emoji mã hoá dạng ~~U<hex>~~ rồi giải mã trên DB), so md5 từng phần và cả file = file, rồi trong một giao dịch: EXECUTE thân giữa BEGIN; / COMMIT;, chèn dòng sổ (statements = nguyên văn file), DROP bảng tạm.",
+  "preflight_prod_14_56_vn": { "tick_md5": "10a2465bf8273b269ed5123344cff4db", "ledger_v662": 0, "tables": 0, "setting_row": 0, "deps": true },
+  "postflight": {
+    "tables": ["auto_campaign_sheet_syncs", "auto_campaign_sheet_sync_logs"],
+    "stage_table_dropped": true,
+    "functions": 17,
+    "tick_md5_after": "49b928185f55e9c6e85d04cb47c64e29",
+    "setting": {"audience": "off", "worker": false, "maxSourcesPerStaff": 20, "minEveryHours": 1},
+    "grants": { "anon_finish": false, "desktop_sync": true, "service_role_control": true },
+    "tick_cron_after_apply": "15:04:48 VN succeeded 169 ms, các lượt trước 10-23 ms",
+    "sync_rows": 0
+  },
+  "postgrest": {
+    "stage_table_create_14_57_43_vn": "nạp lại schema 9,7 s; phút đó 1.385 request REST quá 1 giây; 2 lỗi 500 đúng giây đó (auto_run_steps, rpc/aka_agent_engine_report_v1 Desktop trần 3 s); 0 lỗi 503",
+    "apply_15_04_42_vn": "nạp lại schema 9,1 s; phút đó 504 request REST quá 1 giây; 0 lỗi 503; các lỗi 500 lẻ còn lại là contacts của gateway chat cũ, có cả trước lúc apply"
+  },
+  "not_done": ["Edge Function aka-agent-campaign-sheet-sync chưa deploy", "campaign.sheet_sync vẫn audience off / worker false", "API/Web chưa deploy, Desktop chưa build"],
+  "do_not_reapply": true
+}

@@ -1,6 +1,6 @@
 # Đồng bộ định kỳ từ Google Sheet vào data của chiến dịch — phương án
 
-Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); V662 CHƯA apply, Edge CHƯA deploy, chưa đổi gì trên production.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
+Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); đã merge `dev_3` / WebApp `dev_1` 26/11 ("Pr và mege"); V662 đã apply akachat 15:04:42 VN 26/11 ("Áp 662 đi"; sổ `20261126080442`, md5 sổ = file, không apply lại; [biên nhận](../migrations/snapshots/campaign-sheet-sync-v662/apply-receipt.json)); Edge CHƯA deploy, `campaign.sheet_sync` vẫn `audience: off` / `worker: false`.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
 
 ## 1. Yêu cầu
 
@@ -260,7 +260,7 @@ Câu ở mục 9 dùng đúng cột "Đề xuất" (anh chưa chốt khác). M�
 | Desktop | IPC `campaign-sheet-sync:call` ([repository](../src/main/data/repositories/campaignSheetSyncRepository.ts)); ô trong tab Link sheet; dòng tóm tắt trong form thường + form Agent (chỉ giữ trong phiên mở form, không vào nháp); thẻ đầu tab Data của chiến dịch (Sửa, Tắt, Bật lại, Gia hạn, Kết nối lại khi cột đổi, Lịch sử); biểu tượng cạnh tên + mục "Tắt đồng bộ Google Sheet" trong menu Hành động | `node scripts/run-campaign-sheet-sync-ui-smoke.cjs` (10 PASS, Chromium + IPC giả); hai typecheck sạch |
 | Web / API / iOS | akaAgentWebApp cùng tên nhánh (`docs/CAMPAIGN_SHEET_SYNC.md`): `POST /api/aka-agent/control/v1/campaigns/sheet-sync` → `aka_agent_control_campaign_sheet_sync`; Web: ô ở tab Link Google Sheet, dòng tóm tắt trong form, thẻ ở tab Data (Kết nối lại trên Web chỉ cho Zalo); iOS: thẻ chỉ xem + Tắt đồng bộ. "Thêm thành viên nhóm" trên Web nhận SĐT hoặc UID nên không có ô đồng bộ | API `npx vitest run src/modules/campaign-sheet-sync` (7), Web `src/test/CampaignSheetSyncUpload.test.tsx` (3), iOS `SheetSyncCard.test.tsx` (3); `WEBAPP_REPO=… node scripts/campaign-sheet-sync/rows-smoke.cjs` so bản chép hợp đồng |
 
-Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần apply + deploy). Thứ tự đưa lên như mục 8.
+V662 đã apply 15:04:42 VN 26/11 (hàm tick sau apply md5 `49b92818…`, lượt tick đầu 169 ms đạt). Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần deploy Edge + bật `worker`). Thứ tự đưa lên như mục 8.
 
 ## 12. Kiểm thử vòng lặp (26/11/2026)
 
