@@ -1,0 +1,46 @@
+{
+ "readAt": "2026-11-26T03:05:00Z",
+ "note": "Phát lại chỉ đọc (scripts/engine-v2-facebook/v658-replay.cjs) trên 12.401 lượt workflow 316 từ 18/11 05:55 tới 26/11 03:02 UTC: đường dẫn thật ở bước nav, kết quả thật của lượt. Không lưu đường dẫn thật; đường dẫn đã che mã nhóm / mã số.",
+ "rows": 12401,
+ "noNav": 51,
+ "disagree": 0,
+ "byOutcome": {
+  "hoàn thành | V658=-": 1292,
+  "err_engine_fb_no_history | V658=-": 5671,
+  "err_engine_fb_no_history | V658=err_fb_checkpoint": 5134,
+  "err_fb_comment_box_not_found | V658=-": 191,
+  "err_engine_cancelled | V658=-": 26,
+  "err_engine_fb_action_failed | V658=-": 10,
+  "err_engine_interrupted_before_send | V658=err_fb_checkpoint": 1,
+  "err_engine_cancelled | V658=err_fb_checkpoint": 2,
+  "err_undefined | V658=-": 12,
+  "err_engine_interrupted_before_send | V658=-": 4,
+  "err_engine_interrupted_while_sending | V658=-": 4,
+  "err_fb_ai_filter_unavailable | V658=-": 2,
+  "không có lượt engine | V658=-": 1
+ },
+ "flaggedSuccess": 0,
+ "flaggedPaths": {
+  "www.facebook.com/checkpoint/<n>/": 5137
+ },
+ "fb45ZeroScannedNotFlagged": {
+  "www.facebook.com/groups/<g>": 164,
+  "www.facebook.com/groups/<g>/": 24
+ },
+ "flaggedFb45": {
+  "runs": 5134,
+  "accounts": 24,
+  "campaigns": 26,
+  "orgs": 9,
+  "byDay": {
+   "2026-11-18": 73,
+   "2026-11-19": 185,
+   "2026-11-20": 741,
+   "2026-11-21": 1403,
+   "2026-11-22": 494,
+   "2026-11-23": 448,
+   "2026-11-24": 356,
+   "2026-11-25": 1434
+  }
+ }
+}
