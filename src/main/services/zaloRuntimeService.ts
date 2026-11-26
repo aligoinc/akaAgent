@@ -19,6 +19,7 @@ import { MISSING_ACCOUNT_PROXY_MESSAGE } from '../../shared/proxyRuntime'
 import { observeProxyConnectRejections, zaloQrProxyRejectedMessage } from './zaloProxyConnectObserver'
 import { markZaloPreCallError, zaloPreCall } from './zaloPreCallError'
 import { startZaloListenerGuarded, stopZaloListenerGuarded } from './zaloListenerStopGuard'
+import { mapZaloGroupMemberProfile } from './zaloGroupMemberMapping'
 
 export type { ZaloOutgoingText, ZaloStyledText } from './zaloFormattedContent'
 
@@ -3294,38 +3295,8 @@ export class ZaloRuntimeService {
     rawMember: Record<string, unknown>,
     source: 'profile' | 'link'
   ): ZaloGroupMemberInfo {
-    const uid = normalizeZaloMemberId(firstString(
-      rawMember.id,
-      rawMember.uid,
-      rawMember.userId,
-      rawMember.globalId
-    ))
-    const creatorId = normalizeZaloMemberId(group.creatorId)
-    const adminIds = new Set(toStringArray(group.adminIds).map(normalizeZaloMemberId).filter(Boolean))
-    const isCreator = !!uid && uid === creatorId
-    const isAdmin = !!uid && adminIds.has(uid)
-    const role: ZaloGroupMemberRole = isCreator ? 'owner' : isAdmin ? 'admin' : 'member'
-
-    return {
-      zaloGroupId,
-      zaloUid: uid,
-      displayName: firstString(rawMember.displayName, rawMember.dName, rawMember.name),
-      zaloName: firstString(rawMember.zaloName, rawMember.zalo_name),
-      avatar: firstString(rawMember.avatar),
-      accountStatus: nullableNumber(rawMember.accountStatus),
-      type: nullableNumber(rawMember.type),
-      lastUpdateTime: nullableNumber(rawMember.lastUpdateTime),
-      globalId: firstString(rawMember.globalId),
-      role,
-      roleRank: role === 'owner' ? 1 : role === 'admin' ? 2 : 3,
-      isCreator,
-      isAdmin,
-      rawPayload: {
-        ...rawMember,
-        source,
-        zaloGroupId
-      }
-    }
+    // Global ID trong hồ sơ thành viên nhóm là của chính nick đang xem: không lấy (xem zaloGroupMemberMapping.ts).
+    return mapZaloGroupMemberProfile(zaloGroupId, group, rawMember, source)
   }
 
   private async loadFetchPolyfillWithSetCookieSupport(): Promise<typeof globalThis.fetch> {
