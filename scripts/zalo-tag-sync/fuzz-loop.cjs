@@ -415,6 +415,7 @@ async function mutateCampaign(db, w, m, ctx) {
     for (const c of w.campaigns.filter(x => x.account === a.id)) await toggle(db, w, m, ctx, c, w.staffs.find(s => s.id === c.staff), false)
     return
   }
+  if (!w.campaigns.length) return // mọi chiến dịch đã bị xoá hẳn ở lượt trước
   const c = pick(w.campaigns)
   const r = rnd()
   if (r < 0.25) { // công tắc qua API Web (nhân viên đúng hoặc sai)
@@ -453,7 +454,7 @@ async function editCampaign(db, w, m, ctx, c, r) {
     else if (r < 0.78) { c.extra = { ...c.extra, zaloFriendTagAutoAddEnabled: pick([true, false, 'true', null]) }; ops.push('flag') }
     else if (r < 0.82) { const a = pick(w.accounts); c.account = a.id; ops.push('account') }
     else if (r < 0.86) { c.extra = pick([null, [], { other: 1 }, { ...c.extra, zaloFriendTagAutoAddEnabled: true, zaloFriendTargetMode: 'tagged_friends', zaloFriendSourceTagIds: [] }]); ops.push('extra') }
-    else if (r < 0.92) { // khách tự thêm / xoá một dòng data
+    else if (r < 0.90) { // khách tự thêm / xoá một dòng data
       const z = w.zalo.get(c.account)
       const all = z ? [...z.tags.values()].flatMap(t => [...t.members]).filter(isPerson) : []
       if (chance(0.6) && all.length) { const uid = pick(all); c.inputs.push({ uid, deleted: false, key: null, name: 'tay' }); await db.query('INSERT INTO auto_campaign_input_data (campaign_id, name, uid, status) VALUES ($1,$2,$3,$4)', [c.id, 'tay', uid, 'chờ xử lý']) }
