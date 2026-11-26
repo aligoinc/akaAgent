@@ -78,7 +78,9 @@ function fakeZaloApi({ groupId, memberIds, viewerGlobalId }) {
               return {
                 profiles: Object.fromEntries(params.friend_pversion_map.map(key => {
                   const id = key.replace(/_0$/, '')
-                  return [key, { id, displayName: `Người ${id}`, zaloName: `Người ${id}`, globalId: viewerGlobalId, type: 0 }]
+                  // Thành viên cuối: hồ sơ thiếu id (Zalo ID phải lấy theo mã thành viên của nhóm, không theo globalId).
+                  const last = id === memberIds.at(-1)
+                  return [key, { ...(last ? {} : { id }), displayName: `Người ${id}`, zaloName: `Người ${id}`, globalId: viewerGlobalId, type: 0 }]
                 }))
               }
             }

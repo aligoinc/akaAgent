@@ -1391,7 +1391,8 @@ export class ZaloRuntimeService {
     }
 
     const members = memberIds.map(memberId => {
-      const profile = profiles[memberId] || { id: memberId }
+      // Hồ sơ thiếu id thì dùng mã thành viên của nhóm (không dùng globalId: là của nick đang xem).
+      const profile = { id: memberId, ...(profiles[memberId] || {}) }
       return this.mapZaloGroupMember(normalizedGroupId, group, profile, 'profile')
     })
 
