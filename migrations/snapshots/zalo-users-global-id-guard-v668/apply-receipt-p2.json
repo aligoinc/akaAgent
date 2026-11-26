@@ -1,0 +1,25 @@
+{
+  "migration": "migrations/migration_v668_zalo_users_global_id_guard_p2.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh: \"ủa sửa hết luôn đi chứ, nếu cần chạy thật thì cứ chạy thật\" (26/11/2026); phiên loại trừ gửi xác nhận không giữ V668, không làm migration nào đụng 4 hàm (\"Bạn làm cả p1 lẫn p2\")",
+  "merged": "chưa (nhánh claude/zalo-users-global-id-426088, PR #807)",
+  "method": "node scripts/make-migration-ledger-apply.cjs → supabase db query --linked -f (dòng sổ chèn trước COMMIT, cùng giao dịch); file = node scripts/build-gid-trust-proposal-sql.cjs --migration-p2",
+  "applied_at_utc": "2026-11-26T12:25:53Z – 2026-11-26T12:25:55Z",
+  "applied_at_vn": "26/11/2026 19:25:53",
+  "ledger": { "version": "20261126122553", "name": "migration_v668_zalo_users_global_id_guard_p2", "md5_statements_1": "c403e1f3c211d38ae462eb02487650ed", "md5_file": "c403e1f3c211d38ae462eb02487650ed" },
+  "preflight": {
+    "ledger_tail_before": ["20261126114412 migration_v664_campaign_sheet_sync_key_speed", "20261126113403 migration_v668_zalo_users_global_id_guard_p1", "20261126104354 migration_v666_send_exclusion_review_fixes"],
+    "other_v668_v669": "V669 thuộc claude/loving-mendel-zig1jb (chưa apply); phiên chạy song song dời sang V670",
+    "function_md5_before": { "aka_agent_zalo_gid_ok": "1b8c3ec56d0a289aaa73309be1f876a2", "aka_agent_send_exclusion_person_keys": "01b21650e451fa8855e27477fd341297", "aka_agent_send_exclusion_match": "634462cc73b51aecc5a7aa80d3f989c3", "aka_agent_send_exclusion_block_facts": "907673fd7a7d58c594bdcae574fba6c2", "aka_agent_zalo_user_gid_trusted": "5cb04d481f679bcd5bf24de8a202b011" }
+  },
+  "postflight": {
+    "function_md5_after": { "aka_agent_zalo_gid_ok": "109d3ed0e996e4cdf9610f0e75a21a77", "aka_agent_send_exclusion_person_keys": "7a852a8ed934f483e7d8ecb388c251b7", "aka_agent_send_exclusion_match": "86daa2d825167120257250df5b88eaba", "aka_agent_send_exclusion_block_facts": "bf5ea1c298aa57b475418d180337d16f" },
+    "acl": "{postgres=X/postgres} cả 4 hàm",
+    "match_md5_equals_local_proposal": true,
+    "realdata_blocklist_pending_23_staff": "trước p2 (sau sửa dữ liệu): 2.333 data, 65 cặp khớp, 65 có bằng chứng đúng; sau p2: 65 cặp khớp, 0 cặp khác, 0 khớp sai",
+    "edge_logs_12_23_to_12_26_utc_5xx": 0,
+    "claims_12_26_to_12_30_utc": "aka_agent_engine_claim_target_v1 152, aka_agent_claim_campaign_runtime_v2 190, 0 lỗi 5xx",
+    "postgres_errors_12_25_50_to_12_30_utc": 0
+  },
+  "rollback": "migrations/rollback_v668_zalo_users_global_id_guard_p2.sql (trả 4 hàm về thân sau V666, kiểm md5; giữ p1)"
+}
