@@ -35,6 +35,12 @@ import { InputDuplicateAccountPicker, type InputDuplicateAccountOption } from '.
 import { DataGroupMatchPicker, type DataGroupMatchOptions } from './DataGroupMatchPicker'
 import { inputDuplicateMemoryKey, readDuplicateMemory, writeDuplicateMemory } from '../../utils/inputDuplicateMemory'
 import './CampaignImportDuplicates.css'
+import { CampaignSheetSyncUploadBlock } from '../CampaignSheetSync/CampaignSheetSyncUploadBlock'
+import {
+  canonicalCampaignSheetUrl, campaignSheetSyncEndDates, CAMPAIGN_SHEET_SYNC_DEFAULT_HOURS, supportsCampaignSheetSync,
+  validateCampaignSheetSyncSchedule, type CampaignSheetSyncDraft, type CampaignSheetSyncSettings
+} from '../../../../shared/campaignSheetSync'
+import { buildCampaignSheetSyncConfig, campaignSheetSyncValues } from '../../../../shared/campaignSheetSyncRows'
 
 type ImportTab = ImportSourceKind
 type TableTab = 'excel' | 'akabizTemplate' | 'sheet' | 'textbox'
@@ -82,6 +88,17 @@ export interface CampaignDataUploadSubmission {
   duplicates?: ImportDuplicateSummary
   /** Có khi đã đối chiếu với thành viên Nhóm data (V519/V522): số mục hợp lệ đã bỏ ở từng nhóm kết quả. */
   members?: ImportMemberSummary
+  /** Có khi khách bật "Đồng bộ liên tục từ link Google Sheet này" (V662); nơi gọi đăng ký nguồn lúc lưu chiến dịch. */
+  sheetSync?: CampaignSheetSyncDraft
+}
+
+/**
+ * Khối "Đồng bộ định kỳ" ở tab Link sheet (V662). Chỉ form chiến dịch truyền; cửa sổ tự đọc công tắc `campaign.sheet_sync`
+ * (audience) và chỉ hiện khi loại chiến dịch hỗ trợ và link là Google Sheet.
+ */
+export interface CampaignImportSheetSync {
+  /** Ngày kết thúc lịch của chiến dịch (yyyy-mm-dd), dùng làm ngày dừng mặc định khi sớm hơn 30 ngày. */
+  campaignEndDate?: string | null
 }
 
 export interface ImportMemberSummary {
@@ -179,7 +196,9 @@ interface CampaignDataUploadModalProps {
   actionName?: string
   accountIds: number[]
   onClose: () => void
-  onInsert: (rows: Partial<CampaignInputData>[], meta?: { duplicates?: ImportDuplicateSummary }) => void
+  onInsert: (rows: Partial<CampaignInputData>[], meta?: { duplicates?: ImportDuplicateSummary; sheetSync?: CampaignSheetSyncDraft }) => void
+  /** Hiện khối "Đồng bộ định kỳ" ở tab Link sheet (V662). */
+  sheetSync?: CampaignImportSheetSync
   /** Hiện khung "Lọc trùng dữ liệu" (V491/V493). Kiểm tra SĐT, Nhóm data không phải loại SĐT và nơi gọi cũ không truyền: chỉ lọc trong file như trước. */
   duplicateCheck?: CampaignImportDuplicateCheck
   /** Nhóm data đang nhận danh sách. Không truyền thì chữ là "chèn" như trước. */
@@ -312,7 +331,7 @@ const getFieldsForPlatform = (platform: CampaignImportPlatform, actionId: string
 export default function CampaignDataUploadModal({
   platform, actionId, actionName, accountIds, onClose, onInsert, onSubmitRows, contextSlot,
   title = 'Upload dữ liệu', datasetNameLabel = 'Tên nhóm dữ liệu', showDatasetName = true,
-  layout = 'default', submitLabel = 'Chèn xuống chi tiết', initialSource, readImageText, duplicateCheck, destination
+  layout = 'default', submitLabel = 'Chèn xuống chi tiết', initialSource, readImageText, duplicateCheck, destination, sheetSync
 }: CampaignDataUploadModalProps) {
   const showAlert = useUiStore(state => state.showAlert)
   // Nhóm data: "thêm vào nhóm" thay cho "chèn"; lựa chọn 2 là tài khoản gắn với nhóm.
@@ -335,6 +354,12 @@ export default function CampaignDataUploadModal({
   const [sources, setSources] = useState<Partial<Record<TableTab, ImportTableSource>>>({})
   const [configs, setConfigs] = useState<Partial<Record<TableTab, TableConfig>>>({})
   const [phonePolicy, setPhonePolicy] = useState<ImportPhonePolicy>('first')
+  // "Đồng bộ định kỳ" (V662): đọc công tắc một lần khi mở cửa sổ; tắt / lỗi / DB chưa có hàm thì ẩn khối.
+  const sheetSyncSupported = Boolean(sheetSync) && !toGroup && supportsCampaignSheetSync(actionId) && ['zalo', 'facebook', 'email'].includes(platform)
+  const [sheetSyncSettings, setSheetSyncSettings] = useState<CampaignSheetSyncSettings | null>(null)
+  const [sheetSyncOn, setSheetSyncOn] = useState(false)
+  const [sheetSyncHours, setSheetSyncHours] = useState<number>(CAMPAIGN_SHEET_SYNC_DEFAULT_HOURS)
+  const [sheetSyncEndDate, setSheetSyncEndDate] = useState(() => campaignSheetSyncEndDates(new Date(), sheetSync?.campaignEndDate).defaultDate)
   const [templateStatus, setTemplateStatus] = useState<TemplateReadStatus>('idle')
   const [templateError, setTemplateError] = useState('')
   const [report, setReport] = useState<ImportVerificationResult | null>(null)
@@ -440,6 +465,17 @@ export default function CampaignDataUploadModal({
     }).catch(() => { /* Chỉ lọc trong file như trước. */ })
     return () => { disposed = true }
   }, [dupSupported, actionId, dupStorageKey])
+
+  useEffect(() => {
+    setSheetSyncSettings(null)
+    if (!sheetSyncSupported) return
+    let disposed = false
+    void window.electronAPI.campaignSheetSyncCall<CampaignSheetSyncSettings>({ action: 'settings' }).then(result => {
+      if (!disposed && result.ok && result.data?.available) setSheetSyncSettings(result.data)
+    }).catch(() => { /* Ẩn khối như khi công tắc tắt. */ })
+    return () => { disposed = true }
+  }, [sheetSyncSupported, actionId])
+  const sheetSyncVisible = Boolean(sheetSyncSettings) && activeTab === 'sheet' && canonicalCampaignSheetUrl(sheetLink) !== null
 
   const invalidateFormattedPreview = (): void => {
     sourceRevisionRef.current++
@@ -809,7 +845,8 @@ export default function CampaignDataUploadModal({
     importSource: ImportTab,
     sourceLink: string | null,
     duplicates?: ImportDuplicateSummary,
-    memberSummary?: ImportMemberSummary
+    memberSummary?: ImportMemberSummary,
+    sheetSyncDraft?: CampaignSheetSyncDraft
   ): Promise<void> => {
     if (rows.length > MAX_IMPORT_ROW_COUNT) {
       showAlert(IMPORT_ROW_LIMIT_MESSAGE, 'error')
@@ -841,7 +878,8 @@ export default function CampaignDataUploadModal({
           sourceLink,
           rows: normalizedRows,
           ...(duplicates ? { duplicates } : {}),
-          ...(memberSummary ? { members: memberSummary } : {})
+          ...(memberSummary ? { members: memberSummary } : {}),
+          ...(sheetSyncDraft ? { sheetSync: sheetSyncDraft } : {})
         })
         onClose()
       } catch (err) {
@@ -878,7 +916,7 @@ export default function CampaignDataUploadModal({
         ...row,
         note: '',
         status: 'chờ xử lý'
-      })), duplicates ? { duplicates } : undefined)
+      })), duplicates || sheetSyncDraft ? { duplicates, sheetSync: sheetSyncDraft } : undefined)
       showAlert(
         `Đã lưu ${result.count} data vào ${result.datasets.length} nhóm dữ liệu.`,
         'success'
@@ -914,13 +952,32 @@ export default function CampaignDataUploadModal({
     }
     // Đã đối chiếu chiến dịch khác, hoặc có dòng bị bỏ vì đã có trong nhóm: khách xác nhận lần cuối trước khi chèn.
     if (((checked.existing && checked.dupMeta) || memberFilteredCount(checked) > 0) && !confirmed) { setConfirmOpen(true); return }
+    let sheetSyncDraft: CampaignSheetSyncDraft | undefined
+    if (sheetSyncVisible && sheetSyncOn && source === 'sheet') {
+      const scheduleError = validateCampaignSheetSyncSchedule(sheetSyncHours, sheetSyncEndDate, new Date(), sheetSyncSettings?.minEveryHours ?? 1)
+      const table = selectedTable('sheet'), tableConfig = configs.sheet
+      const config = table && tableConfig && sourceLink ? buildCampaignSheetSyncConfig({
+        link: sourceLink, table, mapping: tableConfig.mapping, skipHeader: tableConfig.skipHeader, phonePolicy, platform, actionId
+      }) : null
+      if (scheduleError || !config) {
+        showAlert(scheduleError || 'Không bật được đồng bộ cho link này. Hãy đọc lại dữ liệu từ link Google Sheet.', 'error')
+        return
+      }
+      sheetSyncDraft = {
+        enabled: true, config, everyHours: sheetSyncHours, endDate: sheetSyncEndDate,
+        sheetValues: campaignSheetSyncValues({
+          valid: [...checked.report.valid, ...(checked.existing ?? []), ...(checked.members?.inGroup ?? []), ...(checked.members?.otherGroups ?? [])]
+        }),
+        requestId: `sheet-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+      }
+    }
     setConfirmOpen(false)
     insertInFlightRef.current = true
     const duplicates = checked.existing && checked.dupMeta ? { ...checked.dupMeta, skipped: checked.existing.length } : undefined
     const memberSummary = checked.members && checked.memberMeta
       ? { checkedAt: checked.memberMeta.checkedAt, inGroup: checked.members.inGroup.length, otherGroups: checked.members.otherGroups.length }
       : undefined
-    try { await insertFormattedRows(checked.report.valid.map(entry => entry.row), source, sourceLink, duplicates, memberSummary) }
+    try { await insertFormattedRows(checked.report.valid.map(entry => entry.row), source, sourceLink, duplicates, memberSummary, sheetSyncDraft) }
     finally { insertInFlightRef.current = false }
   }
   const groupEntries = (group: ResultGroupKey): ImportVerificationEntry[] => group === 'existing' ? existing ?? []
@@ -1220,6 +1277,16 @@ export default function CampaignDataUploadModal({
           : 'Nhóm không gắn tài khoản Zalo: số đã có trong nhóm từ lần nhập khác vẫn được thêm thành dòng mới.'}</span>}
         {memberUi && !showCampaignDedup && memberCheck?.contactType !== 'phone' && <span className="campaign-import-dedup-note">Loại data này chưa đối chiếu được với chiến dịch.</span>}
       </fieldset>}
+      {sheetSyncVisible && <CampaignSheetSyncUploadBlock
+        disabled={busy}
+        enabled={sheetSyncOn}
+        everyHours={sheetSyncHours}
+        endDate={sheetSyncEndDate}
+        minEveryHours={sheetSyncSettings?.minEveryHours ?? 1}
+        onEnabledChange={setSheetSyncOn}
+        onEveryHoursChange={setSheetSyncHours}
+        onEndDateChange={setSheetSyncEndDate}
+      />}
       {!showCampaignDedup && !(memberUi && memberCheck) && !memberSettingLoading && destination?.duplicateNote && <div className="campaign-import-dedup-info" role="note">
         <Info size={16} aria-hidden="true" /><span><strong>Lọc trùng:</strong> {destination.duplicateNote}</span>
       </div>}

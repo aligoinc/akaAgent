@@ -1,0 +1,76 @@
+/* Đồng bộ Google Sheet vào data chiến dịch (V662): khối ở cửa sổ Upload, dòng tóm tắt trong form, thẻ trong chiến dịch. */
+.campaign-sheet-sync-block {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  font-size: 13px;
+}
+.campaign-sheet-sync-block.active { border-color: var(--accent-primary); background: var(--bg-accent-subtle); }
+.campaign-sheet-sync-block legend { padding: 0 6px; font-weight: 600; }
+.campaign-sheet-sync-toggle { display: flex; align-items: center; gap: 10px; font-weight: 600; cursor: pointer; }
+.campaign-sheet-sync-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent-primary); }
+.campaign-sheet-sync-fields { display: flex; flex-wrap: wrap; gap: 12px 16px; padding-left: 26px; }
+.campaign-sheet-sync-field { display: grid; gap: 4px; min-width: 150px; }
+.campaign-sheet-sync-field > span { color: var(--text-secondary); }
+.campaign-sheet-sync-field small { color: var(--text-secondary); font-size: 12px; }
+.campaign-sheet-sync-help { padding-left: 26px; color: var(--text-secondary); line-height: 1.5; }
+.campaign-sheet-sync-error { padding-left: 26px; color: var(--danger-color, #b91c1c); }
+
+.campaign-sheet-sync-note {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  margin: 10px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-md);
+  background: var(--bg-accent-subtle);
+  font-size: 13px;
+}
+.campaign-sheet-sync-note-text { flex: 1 1 260px; min-width: 0; color: var(--text-primary); }
+.campaign-sheet-sync-note-edit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+
+.campaign-sheet-sync-card {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  font-size: 13px;
+}
+.campaign-sheet-sync-card.on { border-color: var(--accent-primary); }
+.campaign-sheet-sync-card.warn { border-color: var(--warning-color, #d97706); }
+.campaign-sheet-sync-card.danger { border-color: var(--danger-color, #dc2626); }
+.campaign-sheet-sync-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.campaign-sheet-sync-card-title { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 14px; }
+.campaign-sheet-sync-pill {
+  padding: 2px 10px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.campaign-sheet-sync-pill.on { background: color-mix(in srgb, var(--success-color, #16a34a) 14%, transparent); color: var(--success-color, #15803d); }
+.campaign-sheet-sync-pill.warn { background: color-mix(in srgb, var(--warning-color, #d97706) 14%, transparent); color: var(--warning-color, #b45309); }
+.campaign-sheet-sync-pill.danger { background: color-mix(in srgb, var(--danger-color, #dc2626) 12%, transparent); color: var(--danger-color, #b91c1c); }
+.campaign-sheet-sync-grid { display: grid; grid-template-columns: minmax(110px, max-content) minmax(0, 1fr); gap: 6px 14px; }
+.campaign-sheet-sync-grid dt { color: var(--text-secondary); }
+.campaign-sheet-sync-grid dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.campaign-sheet-sync-reason { color: var(--text-primary); line-height: 1.5; }
+.campaign-sheet-sync-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.campaign-sheet-sync-runs { display: grid; gap: 0; border: 1px solid var(--border-default); border-radius: var(--radius-sm); overflow: hidden; }
+.campaign-sheet-sync-run { display: grid; grid-template-columns: 130px minmax(0, 1fr) 90px; gap: 10px; padding: 6px 10px; border-top: 1px solid var(--border-default); }
+.campaign-sheet-sync-run:first-child { border-top: 0; }
+.campaign-sheet-sync-run.head { background: var(--bg-tertiary); color: var(--text-secondary); font-weight: 600; font-size: 12px; }
+.campaign-sheet-sync-run .bad { color: var(--danger-color, #b91c1c); }
+.campaign-sheet-sync-icon { display: inline-flex; flex-shrink: 0; color: var(--accent-primary); }
+.campaign-sheet-sync-icon.danger { color: var(--danger-color, #dc2626); }
