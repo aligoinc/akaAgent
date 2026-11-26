@@ -9,6 +9,8 @@
 > Số liệu lấy bằng truy vấn chỉ đọc trên `akachat` ngày 26/11/2026 (chỉ đếm, đọc cấu trúc bảng và mã hàm SQL).
 > Tính năng gốc: akaAgentChatApi `docs/ZALO_EVENT_CHATBOT.md`; giao diện gốc: akaAgentChatWeb `app/settings/chatbot/`.
 > Các câu còn cần anh chốt ở mục 12, mỗi câu có đề xuất sẵn.
+> Bản thiết kế giao diện (26/11/2026, chưa duyệt, dựng theo các đề xuất của mục 12):
+> https://claude.ai/artifact/4UQDyJzycDXBqeFpVLhGJ2
 
 ## 1. Mục tiêu và phạm vi
 
