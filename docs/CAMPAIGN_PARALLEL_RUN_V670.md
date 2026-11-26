@@ -1,6 +1,8 @@
 # Chạy cùng lúc chiến dịch Zalo trên một tài khoản (V670)
 
-Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), PR mở theo yêu cầu ("Mở PR"): [#810](https://github.com/aligoinc/akaAgent/pull/810), [aligoinc/akaAgentChatApi#199](https://github.com/aligoinc/akaAgentChatApi/pull/199), [aligoinc/akaAgentWebApp#327](https://github.com/aligoinc/akaAgentWebApp/pull/327). V667 rồi V670 đã apply akachat 20:57–20:59 VN 26/11 theo yêu cầu ("apply rồi chạy explain rồi merge đi"; [biên nhận V667](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json), [biên nhận V670](../migrations/snapshots/campaign-parallel-run-v670/apply-receipt.json)). **Chưa deploy ChatApi / Web, chưa build / phát hành Desktop / iOS**:
+Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), PR mở theo yêu cầu ("Mở PR"): [#810](https://github.com/aligoinc/akaAgent/pull/810), [aligoinc/akaAgentChatApi#199](https://github.com/aligoinc/akaAgentChatApi/pull/199), [aligoinc/akaAgentWebApp#327](https://github.com/aligoinc/akaAgentWebApp/pull/327). V667 rồi V670 đã apply akachat 20:57–20:59 VN 26/11 theo yêu cầu ("apply rồi chạy explain rồi merge đi"; [biên nhận V667](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json), [biên nhận V670](../migrations/snapshots/campaign-parallel-run-v670/apply-receipt.json)). Ba PR đã merge 21:04 VN 26/11 theo cùng yêu cầu: #810 `581826a0`, ChatApi #199 `972e1385`, WebApp #327 `8f2fa0c1`. Phiên khác đã deploy ChatApi (`api`, `zalo_runtime`, `worker`, image `dev-972e138-20261126`) và Web (v147, `dev_1` `8f2fa0c1`) 21:22–21:24 VN, rồi phát hành Desktop 10.8.0 lúc 21:47 VN (build từ `5f91bbfc` trên `dev_3` `581826a0`, có tính năng). iOS chưa phát hành. Thử thật trên Fly đạt 22:12–22:13 VN 26/11 (mục "Thử thật").
+
+Nhánh lúc code:
 
 - akaAgent: worktree `.claude/worktrees/campaign-parallel-run`, nhánh `claude/campaign-parallel-run`, commit `f4d5e08a` trên `dev_3` `cab27ed3` (sau #807, #808, #809).
 - ChatApi: worktree `../akaAgentChatApi-parallel-run`, nhánh `feat/campaign-parallel-run`, commit `cf34727` trên `dev` `ddc8c58` (sau #198). Lõi `packages/campaign-engine` chép từ akaAgent `f4d5e08a` (`SOURCE.json`, `sourceDirty: false`).
@@ -277,6 +279,31 @@ Giả lập A (`scripts/engine-v2-scenarios/parallel-run.cjs`):
 
 Bài kiểm có sẵn hỏng trên bản gốc (không do thay đổi này): `scripts/server-rest-request-reduction-smoke.cjs` (`isWebAccountPlatform is not defined`) và phần `verifyIpcBoundary` của `scripts/campaign-pending-reason-smoke.cjs`.
 
+## Thử thật (26/11/2026 22:12 VN)
+
+Theo yêu cầu ("Thử thật", "tạo giúp tôi luôn đi, tôi cho phép"). Tạo bằng form Web thật, nhân viên 4, tài khoản Zalo Server "zl QN sv" (id 1159, tổ chức 1, chạy trên Fly). Cả hai hẹn 22:12:
+
+- 63337 "Thử chạy cùng lúc 26/11 - Nhắn SĐT": nhân bản chiến dịch 42220 (`/campaigns/42220/clone`), 4 số thử của anh, nghỉ 30 giây. Không tích; loại này không hiện ô.
+- 63338 "Thử chạy cùng lúc 26/11 - Vào group": 2 link group, có tích.
+
+Kết quả đạt:
+
+- Hai lượt bắt đầu cùng 22:12:00, mỗi chiến dịch một lease (token khác nhau): làn `main` cho 63337, làn vào group cho 63338.
+- Lệnh Zalo `campaign_find_user` (63337) và `join_group_link` (63338) phát cùng giây. 63338 xong 22:12:02, trong lúc 63337 còn đang chạy data đầu (22:12:00–22:12:08).
+- Tài khoản vẫn "đang chạy" sau khi làn vào group nhả (đọc lúc 22:12:05). Tài khoản về "chờ xử lý" khi làn chính xong (22:13:22).
+- Mỗi data chạy một lượt, mỗi bước một lệnh Zalo, không gửi trùng. Chiến dịch nhắn SĐT vẫn nghỉ 30 giây giữa hai data; data bị bỏ qua thì không nghỉ, như trước.
+- Dòng tiến trình của hai chiến dịch xen kẽ trong `auto_campaign_logs`. Chi tiết chiến dịch trên Web hiện "Chạy cùng lúc: Có".
+- Chưa xem được khung "Tiến trình" trực tiếp của Web trong lúc chạy: khung chỉ hiện dòng mới từ lúc mở trang.
+
+Kết quả từng data, không do làn:
+
+- Số đầu là chính tài khoản, Zalo trả 114 (Z114), như các lần chạy chiến dịch gốc 16/10, 23/10, 28/10. Bước nhận ra chính tài khoản (DAT03) chỉ có ở đường nhắn theo UID; đường nhắn theo SĐT vẫn gọi Zalo.
+- Một số đã từ chối nhận tin: OPT01, data "tạm dừng".
+- Link gagjsq990: Z227, link không còn hợp lệ.
+- Link tjghix150: "Đã gửi yêu cầu tham gia group …, đang chờ duyệt". Tài khoản không còn ở group dù `zalo_groups` có dòng (`last_seen_at` 26/08).
+
+Chưa thử thật trên Desktop (làn chạy trong `DesktopEngineRunner`) và iOS.
+
 ## Thứ tự đưa lên
 
 1. ~~Đẩy ba nhánh để giữ số V670~~ (đã đẩy tối 26/11). Kiểm lại sổ ngay trước khi apply.
@@ -285,7 +312,7 @@ Bài kiểm có sẵn hỏng trên bản gốc (không do thay đổi này): `sc
    - Từ lúc này ba loại đã bật nhưng chưa nơi nào hiện ô.
    - Client cũ nhận `parallel_wait` như trạng thái không nhận lượt, vẫn chạy lần lượt.
    - ~~Chạy câu EXPLAIN chỉ đọc của câu tìm chiến dịch Fly (cũ và có V670) trên production~~ (21:0x VN 26/11): câu V670 như câu cũ. Hiện tại 248 chủ: 89,6–89,9 ms → 90,2–91,6 ms, khối đọc +0,1%. Mọi tổ chức trên Fly, 679 chủ: 119,6 → 118,9–119,5 ms, khối đọc +1%. Lập kế hoạch +1,2–1,5 ms. Chạy thật hai câu: cùng 30 dòng.
-4. Deploy ChatApi `api` (hạn chờ lệnh khi cùng tài khoản có nhiều lệnh), rồi `worker` (làn trên Fly). Sau đó deploy API / Web WebApp (ô ở Web; từ đây khách tích được).
-5. Phát hành Desktop, iOS.
+4. ~~Deploy ChatApi `api` (hạn chờ lệnh khi cùng tài khoản có nhiều lệnh), rồi `worker` (làn trên Fly). Sau đó deploy API / Web WebApp (ô ở Web; từ đây khách tích được).~~ (phiên khác deploy 21:22–21:24 VN 26/11.)
+5. ~~Phát hành Desktop~~ (10.8.0, 21:47 VN 26/11). iOS chưa phát hành.
 
 Tắt nhanh theo loại: `UPDATE auto_campaign_actions SET allow_parallel_run = false WHERE id = …`. Chiến dịch đã tích về làn chính ở lần nhận lượt kế tiếp; lease làn cũ còn hạn thì `busy` tới khi lượt đó nhả.
