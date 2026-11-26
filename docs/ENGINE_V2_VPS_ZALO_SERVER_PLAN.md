@@ -188,6 +188,11 @@ Giống những gì tổ chức Fly / Desktop đã có sau khi lên engine v2:
    - request REST từ IP VPS, CPU / RAM của App Server.
 5. Mở dần theo lô (vd 20 tổ chức → 100 → `all`).
 
+Không cần deploy ChatApi / Web / iOS cho V667: Fly chạy nơi chạy `fly`, các nhánh `fly` của hàm DB không đổi; Web / iOS không đọc các bảng
+engine (trường `runtimeTarget` của Web tính từ loại tài khoản, không phải nơi chạy của engine). Thứ tự bắt buộc chỉ có V666 trước V667 và bật
+công tắc khi đã có cả V667 lẫn App Server mới trên VPS; apply V667 và cài App Server làm bên nào trước cũng được (App Server mới gặp DB chưa có
+V667 thì đọc công tắc lỗi PGRST202, coi như tắt).
+
 **Tắt khẩn:** `{"mode":"off"}`, có hiệu lực ở lần nhận data kế tiếp (chiến dịch quay về bộ cũ sau data đang chạy), không phải cài lại. Phía
 Desktop (tài khoản QR / trình duyệt) tắt ở lần đăng nhập sau. **Gỡ hẳn:** cài lại App Server bản trước, rồi chạy bản gỡ migration khi không
 còn lượt `server` nào mở.
@@ -302,6 +307,10 @@ không có trong công tắc: Desktop không đổi hành vi.
   - **`server` so với Fly trên cùng DB và mẫu:** 67/67 nhóm kết quả trùng từng data, trạng thái data cuối và câu lịch sử trùng; chỉ 2 chiến
     dịch khác giờ "chạy tiếp lúc" (17:55 / 17:58) vì hai lượt phát lại cách nhau 3 phút. Nơi chạy `server` không thêm khác biệt nào so với engine
     v2 đang chạy trên Fly.
+  - **Chạy lại trên bản V667 cuối** (claim dựng trên V666; 26/11 khoảng 18:20 VN theo yêu cầu "Chạy lại phát lại"; cùng 64 chiến dịch, mẫu xuất lại
+    chỉ đọc, danh mục production không đổi từ 17:16 VN): 3.641 dòng khớp, 1.346 khác (711 data chưa chạy tới), cùng các loại khác như lần đầu,
+    không có loại mới; 47 chiến dịch chạy hết, 12 dừng ở giới hạn / khoá, 5 gói đã hết hạn. `server` và Fly chạy song song: trùng 67/67 nhóm kết
+    quả, 0/64 kết quả chiến dịch khác (cả giờ "chạy tiếp lúc"), trạng thái data cuối và câu lịch sử trùng.
   - Lần chạy đầu 20 chiến dịch dừng ở "Không thể kiểm tra giới hạn gửi/đăng lặp" (`campaign_delivery_cooldown_scope_not_found`): mẫu không chép
     `org_staff` mà hàm chống gửi lặp production (V431) đòi nhân viên đang hoạt động. Lỗi của môi trường phát lại; `replay.cjs` nay dựng dòng
     nhân viên giả ở chế độ server.
