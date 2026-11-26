@@ -141,6 +141,16 @@ thêm lời gọi / hằng mới vào hàm được dựng (10.6.0: `handleRecur
 có thể đang ở nhánh cũ). `staff-email-prompt/run-email-prompt-ui-smoke.cjs` hỏng ở bước 7 từ #789 là lỗi bài kiểm (điền vào form cũ đang bị gỡ khi đổi scope), sửa ở #800.
 `WEBAPP_REPO` = `git archive origin/dev_1 packages apps` (đủ `apps/web`) thì `campaign-result-groups-desktop-smoke` đạt.
 
+**Build 10.8.0 (26/11/2026 tối, Desktop + App Server, cùng đợt deploy ChatApi + Web).** `dist/build-10.8.0-work/`, script sinh từ 10.7.0
+(đổi worktree, số bản, `(10<<16)+8`, `server-graph.cjs` so với `3832c81d`). Đối chứng là `out/main/index.js` và mọi `.js` của `out/renderer`
+lấy từ `app.asar` Mac ARM64 còn trong worktree `release-10.7.0` (cùng lần build với `akaAgent.dmg` trên feed, so sha256 trước khi dùng);
+dấu mới chọn bằng cách lấy chuỗi trong các dòng `src/` thêm từ `3832c81d`, giữ chuỗi có trong bundle mới mà vắng trong bundle cũ.
+`CHAT_REPO` của bộ kiểm trỏ vào `git archive origin/dev` của ChatApi đã `npm ci` (checkout ChatApi chính còn ở `dev` 19/11).
+`desktop-session-rls/session-clock-skew-smoke.cjs` hỏng từ #804 vì `supabaseClient.ts` import thêm `../../shared/campaignSendExclusion` mà
+bài chưa giả module này: bản chép `patched-session/` thêm mock thì 15/15 đạt. Kiểm WebApp trên `git archive`: phải
+`npm run build -w @aka-agent/control-api` trước `npm run typecheck` / `npm test`, không thì mọi workspace báo thiếu `@aka-agent/control-api`.
+Trước khi deploy Web, so source map của bản đang chạy với git (bản trên máy có thể do tài khoản Fly khác deploy, 26/11: v145 / v146).
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
