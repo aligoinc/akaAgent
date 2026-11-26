@@ -159,6 +159,43 @@ Mọi `accountId` phải là tài khoản Zalo chưa xoá của chính nhân vi�
 | `log_detail` | `{accountId, jobId}` | một việc đủ trường + mẫu tin |
 | `report` | `{accountId, days≤90}` | `{totals:{matched, sent, skipped, expired, failed, unknown}, byDay:[{date, sent, skipped, expired, failed}], byRule:[{ruleId, name, eventType, matched, sent}], byReason:[{code, count}]}` |
 
+### 7a. Chi tiết theo V672 đã viết (bổ sung, không đổi tên hàm / khoá cũ)
+
+- Thành công luôn là `{ok:true, data}`. Lỗi thêm `index` / `field` khi lỗi thuộc một quy tắc (`rule_invalid`,
+  `data_group_not_found`, `data_group_no_filter`), `ruleId` với `rule_not_found`. Mã lỗi trang: `not_enabled`,
+  `invalid_request`, `unknown_action`, `account_not_found`, `revision_conflict` (kèm `revision` hiện tại),
+  `account_on_akachat`, `runtime_not_supported`, `blocklist_not_found`, `rule_not_found`, `rule_invalid`,
+  `data_group_not_found`, `data_group_no_filter`, `duplicate_group`, `exclusion_invalid`, `exclusion_limit`, `job_not_found`.
+- `get` của tài khoản chưa có dòng settings trả `revision: 0`; `save` đầu tiên gửi `revision: 0`.
+- `save` bật bot bị chặn khi `runsOn` là `akachat` (`account_on_akachat`) hoặc nơi chạy có runtime tắt, ví dụ `fly`
+  (`runtime_not_supported`). Nhóm điều kiện phải là Nhóm data `zalo_person` của nhân viên (gắn đúng tài khoản hoặc không
+  gắn) và có Bộ lọc động; mỗi nhóm một quy tắc mỗi tài khoản. `save` và `stop` trả thêm `data.closedJobs`: việc chờ bị
+  đóng (`bot_off` khi tắt bot; `rule_off` khi tắt / xoá quy tắc; `rule_changed` khi đổi `config` / nhóm / khoảng cách,
+  lúc đó `revision` của quy tắc tăng; đổi tên / thứ tự / bật không tăng).
+- `blocklists[]` có thêm `accountId` (tài khoản của danh sách). DB so danh sách theo UID Zalo của liên hệ trong danh sách,
+  nên danh sách của tài khoản khác hầu như không khớp (UID riêng theo tài khoản).
+- `stop` / `save` đổi việc tài khoản có được hỏi tag: ghi `auto_zalo_tag_sync_resets` (khi không có chiến dịch tự thêm),
+  sổ tag lấy lại mốc ở lần đọc kế tiếp.
+- Nơi chạy: `claim` trả thêm `enabled`, `pollSeconds` (`enabled=false` khi công tắc `off`, runtime tắt, hoặc nhân viên
+  Desktop không qua công tắc). `birthdays` trả thêm `duplicates`, `date`; lỗi `not_enabled`, `invalid_request`,
+  `too_many_people`, `account_not_eligible`, `rule_off`. `report` báo lại trả `{ok, status, pausedUntil, replay:true}`;
+  việc đã bị job dọn đóng `unknown`/`runner_lost` vẫn nhận báo kết quả thật đến muộn (cùng token). `claim` tối đa
+  `p_limit` 20, `p_account_ids` 500.
+- `reason_code` khi báo kết quả: 120/802 → `account_restricted`, 221 → `rate_limited`, mã Zalo khác → `recipient_error`,
+  không mã → `send_error`, không `msgId` → `no_msg_id`; `unknown` không có lý do. Nhận việc còn ra `rule_off`.
+- Tạo việc chỉ khi runtime của `runsOn` đang bật (tài khoản Fly lúc `runtimes.fly=false` không có việc). Vào / ra nhóm
+  chỉ tính khi thay đổi do job Bộ lọc động ghi (giao dịch đang giữ khoá `data-group-dynamic-filter:<staff>`); `leave` theo
+  nguồn bộ lọc thôi `is_current`, kể cả khi người đó còn trong nhóm do nguồn khác.
+- **Trang Web cần thêm ở `get` (đề xuất của phần WebApp, 26/11; trường tuỳ chọn, thiếu thì trang vẫn chạy):**
+  `desktop: {online, lastSeenAt, appVersion, supportsEventBot} | null` cho tài khoản `runsOn = 'desktop'`, đọc phiên
+  `auto_staff_device_presence` mới nhất của nhân viên (`online` = heartbeat trong 120 giây và `ended_at IS NULL`,
+  `supportsEventBot` = `runtime_state ? 'eventBot'`, null nếu không có `runtime_state`). Dải trạng thái dùng nó để phân
+  biệt "app Desktop đang tắt" với "app cần cập nhật"; thiếu thì chỉ dựa vào `lastClaimAt` (dưới 5 phút = đang chạy).
+- Nội dung có nhiều mẫu: trang ghép các mẫu bằng dấu `|` ở cấp ngoài cùng (như nội dung chiến dịch, `|` trong mẫu được
+  thoát thành `\|`). Nơi chạy dựng tin như nội dung chiến dịch: chọn ngẫu nhiên một mẫu, rồi spin `{a|b}`, rồi biến.
+- Cột thêm `auto_event_bot_jobs.runner_id` (`p_runner_id`), chỉ mục thêm: duy nhất `(account_id) WHERE status='sending'`,
+  `(created_at)` cho job dọn.
+
 ## 8. Desktop / App Server
 
 - `src/shared/eventBot.ts`: hợp đồng (kiểu dữ liệu, mã lý do, nhãn tiếng Việt, kiểm quy tắc) **chép nguyên văn**
