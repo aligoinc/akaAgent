@@ -59,8 +59,11 @@ async function main() {
     await seed(A, 'a-old', G('ownA'), SCAN('a-old', G('ownA')))   // để thử lô sửa dữ liệu sau khi có trigger
 
     await check('apply V668 p1 trên DB thử (preflight md5 đạt), apply lại bị từ chối', async () => {
-      await db.query('BEGIN'); await db.query(P1); await db.query(`INSERT INTO supabase_migrations.schema_migrations(version, name, statements) VALUES ('20261126999998','migration_v668_zalo_users_global_id_guard_p1','{}')`); await db.query('COMMIT')
+      // như make-migration-ledger-apply.cjs: dòng sổ chèn ngay trước COMMIT cuối, cùng giao dịch
+      const i = P1.lastIndexOf('COMMIT;')
+      await db.query(P1.slice(0, i) + `INSERT INTO supabase_migrations.schema_migrations(version, name, statements) VALUES ('20261126999998','migration_v668_zalo_users_global_id_guard_p1','{}');\n` + P1.slice(i))
       await assert.rejects(db.query(P1), /V668 đã có trong sổ migration/)
+      await db.query('ROLLBACK')   // file mở BEGIN; lỗi ở preflight nên COMMIT không chạy tới
     })
 
     // Câu upsert như PostgREST (Desktop / WebApp): INSERT ... ON CONFLICT (account_id, zalo_uid) DO UPDATE SET cột = EXCLUDED.cột.
@@ -145,9 +148,9 @@ async function main() {
       assert.ok(withT < without * 4 + 500, 'trigger làm chậm quá nhiều')
     })
     await check('gỡ V668 p1 rồi apply lại', async () => {
-      await db.query('BEGIN'); await db.query(RB1); await db.query(`DELETE FROM supabase_migrations.schema_migrations WHERE name='migration_v668_zalo_users_global_id_guard_p1'`); await db.query('COMMIT')
+      await db.query(RB1); await db.query(`DELETE FROM supabase_migrations.schema_migrations WHERE name='migration_v668_zalo_users_global_id_guard_p1'`)
       assert.equal((await one(`SELECT count(*)::int n FROM pg_trigger WHERE tgname LIKE 'trg_zalo_users_guard%'`)).n, 0)
-      await db.query('BEGIN'); await db.query(P1); await db.query('COMMIT')
+      await db.query(P1)
       assert.equal((await one(`SELECT count(*)::int n FROM pg_trigger WHERE tgname LIKE 'trg_zalo_users_guard%'`)).n, 2)
     })
   } finally { await T.stop() }

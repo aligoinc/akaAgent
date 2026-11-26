@@ -1,5 +1,6 @@
 -- Gỡ V668 p1: bỏ trigger chặn ghi Global ID của người xem vào zalo_users và 3 hàm mới. Gỡ p2 (nếu đã apply) trước: p2 dùng
 -- private.aka_agent_zalo_user_gid_trusted.
+BEGIN;
 SET LOCAL lock_timeout = '5s';
 DO $pre$
 BEGIN
@@ -14,3 +15,5 @@ DROP TRIGGER IF EXISTS trg_zalo_users_guard_global_id_upd ON public.zalo_users;
 DROP FUNCTION IF EXISTS private.aka_agent_zalo_users_guard_global_id();
 DROP FUNCTION IF EXISTS private.aka_agent_zalo_own_uids(bigint);
 DROP FUNCTION IF EXISTS private.aka_agent_zalo_user_gid_trusted(jsonb, text);
+
+COMMIT;

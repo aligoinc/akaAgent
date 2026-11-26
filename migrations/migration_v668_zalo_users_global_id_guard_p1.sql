@@ -15,6 +15,7 @@
 --   - Bỏ qua trong một giao dịch: SELECT set_config('aka.zalo_gid_guard', 'off', true) (hoàn tác sửa dữ liệu).
 -- Thêm private.aka_agent_zalo_user_gid_trusted (dòng có Global ID tin được, dùng cho hàm so khớp ở p2) và private.aka_agent_zalo_own_uids.
 -- Kiểm: scripts/zalo-users-gid-guard-smoke.cjs. Gỡ: migrations/rollback_v668_zalo_users_global_id_guard_p1.sql.
+BEGIN;
 SET LOCAL lock_timeout = '5s';
 
 DO $pre$
@@ -119,3 +120,5 @@ BEGIN
   END IF;
  END LOOP;
 END $grants$;
+
+COMMIT;
