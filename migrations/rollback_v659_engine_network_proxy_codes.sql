@@ -31,6 +31,7 @@ UPDATE public.auto_outcome_policies SET log_template = 'Mất kết nối tới 
    AND source IS DISTINCT FROM 'v659';
 UPDATE public.auto_outcome_policies SET is_active = false WHERE source = 'v659' AND is_active;
 UPDATE public.auto_error SET customer_help = NULL, updated_at = now() WHERE error_code = 'err_proxy_failed' AND customer_help = 'Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch.';
+UPDATE public.auto_error SET customer_title = 'Kết nối mạng tạm thời gián đoạn', updated_at = now() WHERE error_code = 'err_network_offline' AND customer_title = 'Kết nối mạng bị gián đoạn';
 UPDATE public.auto_error SET is_active = false, updated_at = now() WHERE error_code = 'err_proxy_unknown_delivery';
 DO $post$
 BEGIN
@@ -38,7 +39,8 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.auto_outcome_signal_rules WHERE source = 'v659' AND is_active)
      OR (SELECT count(*) FROM public.auto_outcome_policies WHERE error_code = 'err_network_offline' AND is_active AND NOT is_delete
            AND action_code = ANY (ARRAY['zalo_find_phone_user', 'zalo_message_stranger', 'zalo_message_friend', 'zalo_message_group', 'zalo_add_friend', 'zalo_add_group_member', 'zalo_join_group', 'zalo_join_group_link', 'zalo_tag_contact', 'zalo_change_alias', 'zalo_cancel_sent_friend_request']::text[]) AND log_template = 'Mất kết nối tới Zalo, tạm ngưng tài khoản tới {until}') <> 11
-     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_proxy_failed' AND customer_help IS NULL) THEN
+     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_proxy_failed' AND customer_help IS NULL)
+     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_network_offline' AND customer_title = 'Kết nối mạng tạm thời gián đoạn') THEN
     RAISE EXCEPTION 'Gỡ V659: dữ liệu chưa về bản cũ';
   END IF;
 END $post$;

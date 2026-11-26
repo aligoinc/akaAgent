@@ -3,7 +3,7 @@
 --   * Facebook trước lúc gửi: ERR_CONNECTION_* / ERR_TIMED_OUT / ERR_SOCKET_NOT_CONNECTED / ERR_TOO_MANY_RETRIES / ERR_NAME_NOT_RESOLVED /
 --     ERR_ADDRESS_UNREACHABLE → NET01 (trước đây FB44: đóng data chưa đăng, cộng chuỗi).
 --   * NET01 Facebook như Zalo (V500 Q5): data về hàng đợi, khoá thao tác Facebook của tài khoản 5 phút, cộng chuỗi, 4 lần liền tạm dừng.
---   * Câu NET01 Facebook và Zalo: "Kết nối mạng bị gián đoạn, tạm ngưng tài khoản tới {until}".
+--   * Câu NET01 Facebook và Zalo: "Kết nối mạng bị gián đoạn, tạm ngưng tài khoản tới {until}"; tên mã NET01 (câu chờ) "Kết nối mạng bị gián đoạn".
 --   * Lỗi proxy chắc chắn trước lúc gửi (Facebook, Zalo) → NET02 như NET01, câu "Proxy của tài khoản không kết nối được, tạm ngưng tài khoản tới {until}"; câu dừng
 --     NET02 nối "Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch." (vá aka_agent_engine_report_v1).
 --   * Zalo lỗi proxy lúc đang gửi → NET04 mới, y UNK01; tìm SĐT lỗi proxy lúc đang chạy → NET02.
@@ -26,6 +26,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_proxy_failed' AND customer_help IS NULL) THEN
     RAISE EXCEPTION 'V659: câu bước tiếp theo của NET02 đã có';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_network_offline' AND customer_title = 'Kết nối mạng tạm thời gián đoạn') THEN
+    RAISE EXCEPTION 'V659: tên mã NET01 đã đổi';
   END IF;
   SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE error_code = 'err_network_offline' AND is_active AND NOT is_delete
     AND action_code = ANY (ARRAY['zalo_find_phone_user', 'zalo_message_stranger', 'zalo_message_friend', 'zalo_message_group', 'zalo_add_friend', 'zalo_add_group_member', 'zalo_join_group', 'zalo_join_group_link', 'zalo_tag_contact', 'zalo_change_alias', 'zalo_cancel_sent_friend_request']::text[]) AND log_template = 'Mất kết nối tới Zalo, tạm ngưng tài khoản tới {until}' AND lock_minutes = 5 AND streak_threshold = 4
@@ -61,6 +64,9 @@ INSERT INTO public.auto_error (error_type, error_code, error_name, error_desc, n
   is_active, is_delete, public_code, error_class, customer_title, customer_help)
 VALUES ('engine v2', 'err_proxy_unknown_delivery', 'Proxy của tài khoản không kết nối được lúc đang gửi', 'V659 (engine v2): Proxy của tài khoản không kết nối được lúc đang gửi; xử lý y UNK01 (không gửi lại).', NULL, NULL,
   '{}', false, false, 'fixed_minutes', '{}', '{}', true, false, 'NET04', 'unknown_delivery', 'Proxy của tài khoản không kết nối được lúc đang gửi', NULL);
+
+-- NET01: tên mã cho khách (câu chờ lúc khoá) khớp dòng tiến trình. Bộ cũ đọc noti_*, giữ nguyên.
+UPDATE public.auto_error SET customer_title = 'Kết nối mạng bị gián đoạn', updated_at = now() WHERE error_code = 'err_network_offline' AND customer_title = 'Kết nối mạng tạm thời gián đoạn';
 
 -- NET02: câu bước tiếp theo nối sau câu dừng (report_v1 vá bên dưới). Bộ cũ đọc noti_*, giữ nguyên.
 UPDATE public.auto_error SET customer_help = 'Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch.', updated_at = now() WHERE error_code = 'err_proxy_failed' AND customer_help IS NULL;
@@ -213,6 +219,8 @@ BEGIN
     IF v_text IN ('err_network_offline', 'err_proxy_failed', 'err_proxy_unknown_delivery') THEN RAISE EXCEPTION 'V659 postflight: tín hiệu % lúc đang gửi ra %', v_c, v_text; END IF;
   END LOOP;
 
+  v_text := public.aka_agent_engine_wait_note('err_network_offline', timestamptz '2026-11-26 10:05:00+07');
+  IF v_text IS DISTINCT FROM '⏳ Kết nối mạng bị gián đoạn, chạy tiếp lúc 10:05 26/11 (NET01)' THEN RAISE EXCEPTION 'V659 postflight: câu chờ NET01: %', v_text; END IF;
   v_text := public.aka_agent_engine_wait_note('err_proxy_failed', timestamptz '2026-11-26 10:05:00+07');
   IF v_text IS DISTINCT FROM '⏳ Proxy của tài khoản không kết nối được, chạy tiếp lúc 10:05 26/11 (NET02)' THEN
     RAISE EXCEPTION 'V659 postflight: câu chờ NET02: %', v_text;

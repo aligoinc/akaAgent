@@ -41,6 +41,9 @@ const ZALO_ACTIONS = ['zalo_find_phone_user', 'zalo_message_stranger', 'zalo_mes
 const TEXT = {
   net01Old: 'Mất kết nối tới Zalo, tạm ngưng tài khoản tới {until}',
   net01: 'Kết nối mạng bị gián đoạn, tạm ngưng tài khoản tới {until}',
+  // Tên mã NET01 (câu chờ "⏳ … chạy tiếp lúc …" và mọi chỗ engine hiện tên mã), anh chốt đổi cho khớp dòng tiến trình.
+  net01TitleOld: 'Kết nối mạng tạm thời gián đoạn',
+  net01Title: 'Kết nối mạng bị gián đoạn',
   net02: 'Proxy của tài khoản không kết nối được, tạm ngưng tài khoản tới {until}',
   net02Help: 'Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch.',
   net04: 'Proxy của tài khoản không kết nối được lúc đang gửi'
@@ -149,6 +152,9 @@ const coreSql = `INSERT INTO public.auto_error (error_type, error_code, error_na
 VALUES ('engine v2', ${lit(NET04.code)}, ${lit(NET04.title)}, ${lit(`V659 (engine v2): ${NET04.title}; xử lý y UNK01 (không gửi lại).`)}, NULL, NULL,
   '{}', false, false, 'fixed_minutes', '{}', '{}', true, false, ${lit(NET04.pub)}, ${lit(NET04.cls)}, ${lit(NET04.title)}, NULL);
 
+-- NET01: tên mã cho khách (câu chờ lúc khoá) khớp dòng tiến trình. Bộ cũ đọc noti_*, giữ nguyên.
+UPDATE public.auto_error SET customer_title = ${lit(TEXT.net01Title)}, updated_at = now() WHERE error_code = ${lit(NET01)} AND customer_title = ${lit(TEXT.net01TitleOld)};
+
 -- NET02: câu bước tiếp theo nối sau câu dừng (report_v1 vá bên dưới). Bộ cũ đọc noti_*, giữ nguyên.
 UPDATE public.auto_error SET customer_help = ${lit(TEXT.net02Help)}, updated_at = now() WHERE error_code = ${lit(NET02)} AND customer_help IS NULL;
 
@@ -254,7 +260,7 @@ const migration = `-- ${NAME}: lỗi mạng / proxy khi mở trang Facebook, l�
 --   * Facebook trước lúc gửi: ERR_CONNECTION_* / ERR_TIMED_OUT / ERR_SOCKET_NOT_CONNECTED / ERR_TOO_MANY_RETRIES / ERR_NAME_NOT_RESOLVED /
 --     ERR_ADDRESS_UNREACHABLE → NET01 (trước đây FB44: đóng data chưa đăng, cộng chuỗi).
 --   * NET01 Facebook như Zalo (V500 Q5): data về hàng đợi, khoá thao tác Facebook của tài khoản 5 phút, cộng chuỗi, 4 lần liền tạm dừng.
---   * Câu NET01 Facebook và Zalo: "${TEXT.net01}".
+--   * Câu NET01 Facebook và Zalo: "${TEXT.net01}"; tên mã NET01 (câu chờ) "${TEXT.net01Title}".
 --   * Lỗi proxy chắc chắn trước lúc gửi (Facebook, Zalo) → NET02 như NET01, câu "${TEXT.net02}"; câu dừng
 --     NET02 nối "${TEXT.net02Help}" (vá aka_agent_engine_report_v1).
 --   * Zalo lỗi proxy lúc đang gửi → NET04 mới, y UNK01; tìm SĐT lỗi proxy lúc đang chạy → NET02.
@@ -277,6 +283,9 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = ${lit(NET02)} AND customer_help IS NULL) THEN
     RAISE EXCEPTION 'V659: câu bước tiếp theo của NET02 đã có';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = ${lit(NET01)} AND customer_title = ${lit(TEXT.net01TitleOld)}) THEN
+    RAISE EXCEPTION 'V659: tên mã NET01 đã đổi';
   END IF;
   SELECT count(*) INTO v_n FROM public.auto_outcome_policies WHERE error_code = ${lit(NET01)} AND is_active AND NOT is_delete
     AND action_code = ANY (${arr(ZALO_ACTIONS)}) AND log_template = ${lit(TEXT.net01Old)} AND lock_minutes = 5 AND streak_threshold = 4
@@ -322,6 +331,8 @@ BEGIN
   IF v_n <> 1 THEN RAISE EXCEPTION 'V659 postflight: câu bước tiếp theo NET02'; END IF;
 ${postChecks}
 
+  v_text := public.aka_agent_engine_wait_note(${lit(NET01)}, timestamptz '2026-11-26 10:05:00+07');
+  IF v_text IS DISTINCT FROM '⏳ ${TEXT.net01Title}, chạy tiếp lúc 10:05 26/11 (NET01)' THEN RAISE EXCEPTION 'V659 postflight: câu chờ NET01: %', v_text; END IF;
   v_text := public.aka_agent_engine_wait_note(${lit(NET02)}, timestamptz '2026-11-26 10:05:00+07');
   IF v_text IS DISTINCT FROM '⏳ Proxy của tài khoản không kết nối được, chạy tiếp lúc 10:05 26/11 (NET02)' THEN
     RAISE EXCEPTION 'V659 postflight: câu chờ NET02: %', v_text;
@@ -342,6 +353,7 @@ UPDATE public.auto_outcome_policies SET log_template = ${lit(TEXT.net01Old)}
    AND source IS DISTINCT FROM ${lit(SOURCE)};
 UPDATE public.auto_outcome_policies SET is_active = false WHERE source = ${lit(SOURCE)} AND is_active;
 UPDATE public.auto_error SET customer_help = NULL, updated_at = now() WHERE error_code = ${lit(NET02)} AND customer_help = ${lit(TEXT.net02Help)};
+UPDATE public.auto_error SET customer_title = ${lit(TEXT.net01TitleOld)}, updated_at = now() WHERE error_code = ${lit(NET01)} AND customer_title = ${lit(TEXT.net01Title)};
 UPDATE public.auto_error SET is_active = false, updated_at = now() WHERE error_code = ${lit(NET04.code)};
 DO $post$
 BEGIN
@@ -349,7 +361,8 @@ BEGIN
      OR EXISTS (SELECT 1 FROM public.auto_outcome_signal_rules WHERE source = ${lit(SOURCE)} AND is_active)
      OR (SELECT count(*) FROM public.auto_outcome_policies WHERE error_code = ${lit(NET01)} AND is_active AND NOT is_delete
            AND action_code = ANY (${arr(ZALO_ACTIONS)}) AND log_template = ${lit(TEXT.net01Old)}) <> ${ZALO_ACTIONS.length}
-     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = ${lit(NET02)} AND customer_help IS NULL) THEN
+     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = ${lit(NET02)} AND customer_help IS NULL)
+     OR NOT EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = ${lit(NET01)} AND customer_title = ${lit(TEXT.net01TitleOld)}) THEN
     RAISE EXCEPTION 'Gỡ V659: dữ liệu chưa về bản cũ';
   END IF;
 END $post$;
