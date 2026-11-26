@@ -356,7 +356,8 @@ async function main() {
       const c = await make({ selection: { groupId: 502, blocklistIds: [] }, targets: [{ name: 'Tâm', uid: 'd-1' }, { name: 'Tú', uid: 'd-2' }] })
       await db.query(`INSERT INTO public.test_delivery VALUES ($1, now() - interval '1 day', ARRAY['zalo:d-1'])`, [c.account])
       const r = await run(c)
-      assert.ok(r.calls.includes('facts:{"uid":"d-1","days":7}'), r.calls.join(' '))
+      // V666: kèm Global ID của người nhận (lấy từ hồ sơ) để "đã gửi trong N ngày" tính cả các Zalo ID cũ của cùng người.
+      assert.ok(r.calls.includes('facts:{"uid":"d-1","days":7,"globalId":"g-d-1"}'), r.calls.join(' '))
       const i = await inputs(c)
       assert.deepEqual(i.map(x => x.status), ['tạm dừng', 'hoàn thành'], 'gửi trong 7 ngày → loại trừ')
       const c2 = await make({ selection: { groupId: 502, blocklistIds: [] }, targets: [{ name: 'Vy', uid: 'd-3' }] })

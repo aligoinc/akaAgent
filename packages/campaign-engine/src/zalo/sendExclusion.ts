@@ -44,7 +44,7 @@ export interface ZaloSendExclusionPort {
    */
   sendExclusionSnapshot(ctx: StepContext): Promise<SendExclusionSnapshot>
   /** V504 'facts': tag akaBiz (tags) / số ngày từ lần gửi gần nhất (days) của người nhận. Ném SendExclusionRpcError. */
-  sendExclusionFacts(ctx: StepContext, payload: { uid: string; tags?: boolean; days?: number }): Promise<ExclusionFacts>
+  sendExclusionFacts(ctx: StepContext, payload: { uid: string; tags?: boolean; days?: number; globalId?: string | undefined }): Promise<ExclusionFacts>
   /** V654 'remote': danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác (một lần mỗi data). */
   sendExclusionRemote?(ctx: StepContext, payload: { uid: string; globalId?: string | undefined; phone?: string | undefined }): Promise<SendExclusionRemoteFacts>
   /**
@@ -204,8 +204,9 @@ export async function checkZaloSendExclusion(port: ZaloSendExclusionPort, ctx: S
         return zaloProfileFacts(found?.raw ?? null)
       }
       if (source === 'akabiz_contact' || source === 'campaign_delivery') {
+        // V666: kèm Global ID để "đã gửi trong N ngày" tính cả các Zalo ID cũ của cùng người (V657 nhận, trước đây không gửi).
         const facts = await read('send_exclusion_facts', s => port.sendExclusionFacts({ ...ctx, signal: s },
-          source === 'akabiz_contact' ? { uid, tags: true } : { uid, days: days(source) }))
+          source === 'akabiz_contact' ? { uid, tags: true } : { uid, days: days(source), globalId: String(input.globalId || '').trim() || undefined }))
         return facts[source]
       }
       return null

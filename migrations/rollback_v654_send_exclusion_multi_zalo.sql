@@ -5,6 +5,15 @@
 -- DROP INDEX CONCURRENTLY public.idx_zalo_users_account_global_id;
 BEGIN;
 SET LOCAL lock_timeout = '3s';
+-- Thêm 26/11/2026 (review V666): V657 / V666 dùng hàm của V654 (aka_agent_send_exclusion_ids…); gỡ V654 khi chúng còn thì bước lọc ở bước
+-- nhận data âm thầm tắt (lỗi bị khối EXCEPTION nuốt). Gỡ V666 rồi V657 trước.
+DO $pre$
+BEGIN
+ IF to_regprocedure('private.aka_agent_send_exclusion_match(public.auto_campaigns,bigint,jsonb,text,text,text,boolean)') IS NOT NULL
+   OR to_regprocedure('private.aka_agent_send_exclusion_runtime_ready(bigint,boolean)') IS NOT NULL THEN
+  RAISE EXCEPTION 'Gỡ V654: gỡ V666 và V657 trước';
+ END IF;
+END $pre$;
 
 DROP FUNCTION IF EXISTS public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text);
 

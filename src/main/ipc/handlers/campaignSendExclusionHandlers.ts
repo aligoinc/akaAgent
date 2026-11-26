@@ -7,6 +7,9 @@ import {
 
 const positive = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value > 0
 const ids = (value: unknown, max: number) => value === undefined || Array.isArray(value) && value.length <= max && value.every(positive)
+/** V666: form nhân bản có id chiến dịch 0 = chưa lưu. */
+const campaignRef = (value: unknown): number | null | false => value === undefined || value === null || value === 0 ? null : positive(value) ? value : false
+const CAMPAIGN_STATUSES = new Set(['chờ xử lý', 'đang chạy', 'hoàn thành', 'tạm dừng', 'lỗi'])
 
 export function registerSendExclusionHandlers(window: BrowserWindow): void {
   const sender = (event: Electron.IpcMainInvokeEvent) => {
@@ -24,9 +27,10 @@ export function registerSendExclusionHandlers(window: BrowserWindow): void {
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.lists, (event, query: SendExclusionListsQuery) => {
     sender(event)
     const q = query && typeof query === 'object' ? query : {}
+    const exclude = campaignRef(q.excludeCampaignId)
     if (q.kind !== undefined && !['all', 'dataGroups', 'campaigns'].includes(q.kind) || q.query !== undefined && (typeof q.query !== 'string' || q.query.length > 100)
-      || q.excludeCampaignId != null && !positive(q.excludeCampaignId) || !ids(q.dataGroupIds, 20) || !ids(q.sentCampaignIds, 20)) throw new Error('Yêu cầu không hợp lệ.')
-    return getSendExclusionV2Lists({ kind: q.kind, query: q.query, excludeCampaignId: q.excludeCampaignId ?? undefined, dataGroupIds: q.dataGroupIds, sentCampaignIds: q.sentCampaignIds })
+      || exclude === false || !ids(q.dataGroupIds, 20) || !ids(q.sentCampaignIds, 20) || q.status != null && !CAMPAIGN_STATUSES.has(q.status)) throw new Error('Yêu cầu không hợp lệ.')
+    return getSendExclusionV2Lists({ kind: q.kind, query: q.query, excludeCampaignId: exclude ?? undefined, dataGroupIds: q.dataGroupIds, sentCampaignIds: q.sentCampaignIds, status: q.status ?? undefined })
   })
   // V657: xem trước ở bước lưu (chỉ đọc). DB kiểm lại quyền với danh sách / Nhóm data / chiến dịch đã chọn.
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.preview, (event, query: SendExclusionPreviewQuery) => {
@@ -34,12 +38,14 @@ export function registerSendExclusionHandlers(window: BrowserWindow): void {
     const q = query && typeof query === 'object' ? query : ({} as SendExclusionPreviewQuery)
     const sel = q.selection
     const text = (v: unknown) => v === undefined || v === null || typeof v === 'string' && v.length <= 64
-    if (!positive(q.accountId) || !sel || typeof sel !== 'object' || !(sel.groupId === null || positive(sel.groupId)) || !ids(sel.blocklistIds, 20) || sel.blocklistIds === undefined
-      || !ids(sel.dataGroupIds, 20) || !ids(sel.sentCampaignIds, 20) || q.campaignId != null && !positive(q.campaignId) || q.afterId != null && !positive(q.afterId)
+    // V666: danh sách Zalo ID tới 1.000 như cấu hình lưu được (trước: 20, chọn 21 danh sách thì xem trước báo lỗi).
+    const campaignId = campaignRef(q.campaignId)
+    if (!positive(q.accountId) || !sel || typeof sel !== 'object' || !(sel.groupId === null || positive(sel.groupId)) || !ids(sel.blocklistIds, 1000) || sel.blocklistIds === undefined
+      || !ids(sel.dataGroupIds, 20) || !ids(sel.sentCampaignIds, 20) || campaignId === false || q.afterId != null && !positive(q.afterId)
       || q.limit !== undefined && !(positive(q.limit) && q.limit <= SEND_EXCLUSION_PREVIEW_MAX_TARGETS)
       || q.targets !== undefined && !(Array.isArray(q.targets) && q.targets.length <= SEND_EXCLUSION_PREVIEW_MAX_TARGETS && q.targets.every(t => t && typeof t === 'object' && text(t.phone) && text(t.uid))))
       throw new Error('Yêu cầu không hợp lệ.')
-    return getSendExclusionV2Preview({ accountId: q.accountId, selection: sel, campaignId: q.campaignId ?? null, targets: q.targets, afterId: q.afterId ?? null, limit: q.limit })
+    return getSendExclusionV2Preview({ accountId: q.accountId, selection: sel, campaignId, targets: q.targets, afterId: q.afterId ?? null, limit: q.limit })
   })
   ipcMain.handle(SEND_EXCLUSION_V2_IPC.save, (event, group: SaveSendExclusionGroupV2) => {
     sender(event)

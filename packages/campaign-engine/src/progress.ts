@@ -3,7 +3,7 @@
  * câu lỗi. Câu kết quả do DB dựng (log của kết quả); ở đây chỉ ghép tên thao tác như formatZaloProgressLog và
  * chọn mức độ. Không lộ ID, stacktrace hay tên kỹ thuật.
  */
-import type { GateDecision, OutcomeDecision, ProgressLevel, ProgressLine } from './contracts.js'
+import type { GateDecision, OutcomeDecision, ProgressLevel, ProgressLine, RuntimeTarget } from './contracts.js'
 import type { ConfigIssue } from './validation.js'
 
 /** Mã của cổng từ chối nhận tin: Desktop in "🚫 Bỏ qua ..." thay cho dòng của thao tác. */
@@ -99,7 +99,7 @@ export function formatVietnamDateTime(iso: string): string {
  * deferCampaignUntilFutureInput / transitionCampaignToCompleted. Lý do không có câu (còn data chờ trong khung giờ, không đổi gì) → null.
  */
 export function finishProgress(campaignId: number, campaignName: string, finished: { reason?: unknown; schedule?: unknown; slot?: unknown;
-  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown; repeat?: unknown; hours?: unknown }, runtime: 'desktop' | 'fly',
+  suffix?: unknown; pendingCount?: unknown; ranTargets?: unknown; repeat?: unknown; hours?: unknown }, runtime: RuntimeTarget,
   formatDateTime: (iso: string) => string = formatVietnamDateTime): ProgressLine | null {
   const name = `"${campaignName}"`
   const done = (suffix = ''): ProgressLine => line(campaignId, null, `✅ Hoàn thành chiến dịch ${name}${suffix}`, 'success')
@@ -146,8 +146,8 @@ export function finishProgress(campaignId: number, campaignName: string, finishe
       // Như executeCampaignV2: nhắn bạn bè "toàn bộ / theo tag" đã lấy data một lần mà không có dòng nào.
       return line(campaignId, null, '⚠️ Chiến dịch đã lấy data bạn bè Zalo một lần nhưng chưa có data để chạy', 'warning')
     case 'account_control_won':
-      // Chỉ Fly (finalizer của VPS); Desktop không có nhánh này.
-      return runtime === 'fly' ? line(campaignId, null, '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.', 'info') : null
+      // Chỉ Fly / VPS (finalizer của VPS); Desktop không có nhánh này.
+      return runtime !== 'desktop' ? line(campaignId, null, '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.', 'info') : null
     default: return null
   }
 }
@@ -183,8 +183,8 @@ export function dailyBoundaryProgress(campaignId: number, stopTime: string | nul
 }
 
 /** Tạm dừng chiến dịch sau data đang xử lý: Desktop completeCampaignPause, VPS completePauseAtBoundary. */
-export function campaignPausedProgress(campaignId: number, campaignName: string, runtime: 'desktop' | 'fly'): ProgressLine {
-  return line(campaignId, null, runtime === 'fly' ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng chiến dịch.'
+export function campaignPausedProgress(campaignId: number, campaignName: string, runtime: RuntimeTarget): ProgressLine {
+  return line(campaignId, null, runtime !== 'desktop' ? '⏸ Đã hoàn thành lượt hiện tại và tạm dừng chiến dịch.'
     : `⏸ Chiến dịch "${campaignName}" đã được tạm dừng.`, 'info')
 }
 
@@ -198,9 +198,9 @@ export function policyPausedProgress(campaignId: number, campaignName: string): 
 }
 
 /** Tài khoản bị đăng xuất / tạm dừng trong lượt: Desktop stopCampaignForAccountCondition, VPS completePauseAtBoundary. */
-export function accountStopProgress(campaignId: number, campaignName: string, runtime: 'desktop' | 'fly', reason: 'logged_out' | 'paused',
+export function accountStopProgress(campaignId: number, campaignName: string, runtime: RuntimeTarget, reason: 'logged_out' | 'paused',
   accountStatus?: string | null): ProgressLine {
-  if (reason === 'paused' && runtime === 'fly') return line(campaignId, null, '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.', 'info')
+  if (reason === 'paused' && runtime !== 'desktop') return line(campaignId, null, '⏸ Đã hoàn thành lượt hiện tại và tạm dừng tài khoản.', 'info')
   const why = reason === 'logged_out' ? 'Tài khoản bị đăng xuất' : `Tài khoản đang ở trạng thái ${accountStatus || 'tạm dừng'}`
   return line(campaignId, null, `⚠️ Dừng chiến dịch "${campaignName}": ${why}`, 'warning')
 }

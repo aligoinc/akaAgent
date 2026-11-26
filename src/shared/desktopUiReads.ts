@@ -47,7 +47,7 @@ export interface DesktopPollingSettings {
    * Đọc chung câu này, không thêm request. Thiếu dòng/sai JSON = `off` = ẩn.
    */
   affPartnerAudience?: AffPartnerAudience
-  /** Form loại trừ gửi mới (nhiều Zalo, Nhóm data, chiến dịch đã gửi; `campaign.send_exclusion_multi_zalo`, V654). Thiếu = off = form cũ. */
+  /** Form loại trừ gửi mới (nhiều Zalo, Nhóm data, chiến dịch đã gửi; `campaign.send_exclusion_multi_zalo_v2` từ V666, V654 dùng khoá không có _v2). Thiếu = off = form cũ. */
   sendExclusionMultiAudience?: SendExclusionMultiAudience
 }
 export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, campaignRepeatAudience: 'off',

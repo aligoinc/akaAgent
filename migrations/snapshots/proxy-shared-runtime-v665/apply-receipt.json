@@ -1,0 +1,46 @@
+{
+  "migration": "migrations/migration_v665_proxy_shared_runtime_bound_device.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh: \"apply luôn đi\" (26/11/2026)",
+  "merged": "dev_3 qua https://github.com/aligoinc/akaAgent/pull/801 (4f1469ce)",
+  "method": "node scripts/make-migration-ledger-apply.cjs → supabase db query --linked --workdir /Users/lequangnhut/Repos/akaAgent -f (dòng sổ chèn trước COMMIT, cùng giao dịch)",
+  "applied_at_utc": "2026-11-26T10:25:21Z – 2026-11-26T10:25:23Z",
+  "applied_at_vn": "26/11/2026 17:25:21",
+  "ledger": {
+    "version": "20261126102511",
+    "name": "migration_v665_proxy_shared_runtime_bound_device",
+    "md5_statements_1": "14ea0a97e274459d985bec5ec3b71eed",
+    "md5_file": "14ea0a97e274459d985bec5ec3b71eed",
+    "created_by": null
+  },
+  "preflight": {
+    "ledger_v665_before": [],
+    "last_ledger_before": "20261126095821 migration_v663_engine_facebook_page_identity_wait",
+    "number_665_other_repos_and_worktrees": "không có (akaAgent / akaAgentWebApp / akaAgentChatApi / SqlServerDashboard, mọi worktree; campaign-parallel-run đã đổi sang V666)",
+    "function_md5_before": "5c25d073f3a9ee1859dccf6cc4f45fff",
+    "default_transaction_read_only": "off",
+    "setting": "{\"server\":true,\"desktopMinVersion\":\"9.6.0\"}"
+  },
+  "postflight": {
+    "function_md5_after": "ee76fb5dae789f510cb90425f24e0f03",
+    "function_acl": "{postgres=X/postgres}",
+    "function_owner": "postgres",
+    "trigger_trg_account_proxy_scope_guard": "O (bật)",
+    "staff_with_presence_30d": 610,
+    "ready_desktop_before": 105,
+    "ready_desktop_after": 392,
+    "server_branch_ready_0_true": true,
+    "can_assign_sample": "nhân viên 1 / tổ chức 1 (còn phiên bản < 9.6.0 trong 30 ngày), proxy 1 của đồng nghiệp, server=false ⇒ {\"ok\":true,\"ownProxy\":false,\"reason\":null} (giao dịch chỉ đọc)"
+  },
+  "postgrest": {
+    "schema_reload_message_utc": "2026-11-26T10:25:22.435Z",
+    "schema_cache_queried_ms": 8587.5,
+    "schema_cache_loaded_utc": "2026-11-26T10:25:31.533Z",
+    "edge_logs_10s_bucket_10_25_20": { "requests": 4392, "over_1s": 298, "p50_ms": 146, "p99_ms": 1877 },
+    "edge_logs_5xx_10_24_30_to_10_26_00": 0,
+    "edge_logs_503_10_24_30_to_10_26_00": 0,
+    "note": "Truy vấn schema 8,6 s (quá mức ~8 s ghi trong CLAUDE.md) nhưng không có PGRST002 / 503; độ trễ về bình thường từ 10:25:30 UTC."
+  },
+  "postgres_logs_errors_mentioning_function_since_apply": 0,
+  "rollback": "migrations/rollback_v665_proxy_shared_runtime_bound_device.sql (cần dòng sổ V665 + md5 thân ee76fb5d…, trả về 5c25d073…, xoá dòng sổ)"
+}

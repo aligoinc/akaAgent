@@ -1,6 +1,24 @@
 -- Gỡ V657 phần 2: trả 7 hàm về đúng thân production 25/11 (kiểm md5), xoá 6 hàm private mới.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
+DO $pre$
+DECLARE r record; v_md5 text;
+BEGIN
+ IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name='migration_v666_send_exclusion_review_fixes') THEN
+  RAISE EXCEPTION 'Gỡ V657 p2: gỡ V666 trước (rollback_v666_send_exclusion_review_fixes.sql)';
+ END IF;
+ FOR r IN SELECT * FROM (VALUES
+   ('private.aka_agent_send_exclusion_snapshot(public.auto_campaigns,bigint,boolean)','b83447fc79f1a71c1a77d8a91c72c1e9'),
+   ('private.aka_agent_send_exclusion_block_facts(public.auto_campaigns,bigint,text,text,jsonb)','907673fd7a7d58c594bdcae574fba6c2'),
+   ('private.aka_agent_send_exclusion_remote(public.auto_campaigns,bigint,bigint,jsonb)','997ce9ab8547815a8f302dd518349fa7'),
+   ('public.aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)','b8fb3c31c939426a8e2ac2f9d60da7c7'),
+   ('public.aka_agent_engine_send_exclusion_v1(bigint,uuid,text,jsonb)','3142ef991f8fe84ad2eb54c009bba444'),
+   ('public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)','54721efc19e365fc2a4181e62a7f596a'),
+   ('public.aka_agent_engine_claim_target_v1(jsonb)','8f574b0a75065ce562bc56f043f24967')) v(sig, md5) LOOP
+  SELECT md5(pg_get_functiondef(to_regprocedure(r.sig))) INTO v_md5;
+  IF v_md5 IS DISTINCT FROM r.md5 THEN RAISE EXCEPTION 'Gỡ V657 p2: % không phải bản V657 (md5 %): gỡ migration sau đã vá hàm này trước', r.sig, v_md5; END IF;
+ END LOOP;
+END $pre$;
 CREATE OR REPLACE FUNCTION private.aka_agent_send_exclusion_snapshot(p_campaign public.auto_campaigns, p_account bigint, p_v2 boolean)
  RETURNS jsonb
  LANGUAGE plpgsql

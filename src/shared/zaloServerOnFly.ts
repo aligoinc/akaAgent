@@ -32,6 +32,30 @@ export function resolveZaloServerOnFlyAtLogin(input: {
   return !input.isChatSync && !input.separateAccess && input.orgEngineFlag
 }
 
+/**
+ * Hai lựa chọn chốt lúc đăng nhập Desktop từ cờ engine v2 của tổ chức (V513) và công tắc `engine.zalo_server_vps` (V667, chỉ đọc khi
+ * cờ tắt):
+ * - `campaignEngineV2`: tài khoản Zalo QR/Web của bản này chạy engine v2 khi cờ bật, hoặc khi cờ tắt mà tổ chức có trong công tắc (tài
+ *   khoản Zalo Server của tổ chức chạy engine v2 trên App Server).
+ * - `zaloServerOnFly`: chỉ theo cờ. Công tắc không chuyển tài khoản Server sang Fly: tổ chức trong công tắc vẫn chạy Server trên App Server,
+ *   nên quét QR / kiểm phiên / đăng xuất / quét data của tài khoản Server vẫn đi App Server.
+ */
+export function resolveDesktopZaloAtLogin(input: {
+  isChatSync: boolean
+  separateAccess: boolean
+  orgEngineFlag: boolean
+  vpsEngineSwitch: boolean
+}): { campaignEngineV2: boolean; zaloServerOnFly: boolean } {
+  return {
+    campaignEngineV2: input.orgEngineFlag || input.vpsEngineSwitch,
+    zaloServerOnFly: resolveZaloServerOnFlyAtLogin({
+      isChatSync: input.isChatSync,
+      separateAccess: input.separateAccess,
+      orgEngineFlag: input.orgEngineFlag
+    })
+  }
+}
+
 /** Tài khoản Zalo Server của người đăng nhập đi ChatApi thay vì App Server: tổ chức có Chat, hoặc chạy trên Fly theo cờ. */
 export function serverAccountsUseChatApi(user: AuthUser | null | undefined): boolean {
   return !!user && (user.isChatSync === true || isServerOnFlyUser(user))
