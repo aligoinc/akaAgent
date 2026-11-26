@@ -79,6 +79,7 @@ import { registerCampaignTypeVisibilityHandlers } from './handlers/campaignTypeV
 import { registerNotificationCenterHandlers } from './handlers/notificationCenterHandlers'
 import { registerAffPartnerHandlers } from './handlers/affPartnerHandlers'
 import { registerEmailPromptHandlers } from './handlers/emailPromptHandlers'
+import { registerCampaignSheetSyncHandlers } from './handlers/campaignSheetSyncHandlers'
 import { registerEngineErrorReviewHandlers } from './handlers/engineErrorReviewHandlers'
 import { registerAiChatHandlers } from './handlers/aiChatHandlers'
 import { registerCampaignResultGroupsHandlers } from './handlers/campaignResultGroupsHandlers'
@@ -202,6 +203,7 @@ export function registerIpcHandlers(
   registerCampaignResultGroupsHandlers(mainWindow)
   registerAffPartnerHandlers(mainWindow)
   registerEmailPromptHandlers(mainWindow)
+  registerCampaignSheetSyncHandlers(mainWindow)
   registerEngineErrorReviewHandlers(mainWindow)
   const supabase = new SupabaseService()
   const webviewRegistry = new WebviewRegistry()

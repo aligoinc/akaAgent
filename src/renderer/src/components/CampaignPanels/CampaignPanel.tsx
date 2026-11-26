@@ -1,4 +1,7 @@
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
+import { CampaignSheetSyncCard } from '../CampaignSheetSync/CampaignSheetSyncCard'
+import { supportsCampaignSheetSync, campaignSheetSyncErrorMessage } from '../../../../shared/campaignSheetSync'
+import { useCampaignSheetSyncList } from '../CampaignSheetSync/useCampaignSheetSyncList'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import { displayHistoryEntry } from '../../../../shared/campaignHistory'
 import { campaignEdit, useCampaignEditSession } from './campaignEdit'
@@ -5115,6 +5118,24 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       return row ? [row] : []
     })
   }, [filteredCampaigns, filteredCampaignDrafts, showCampaignTableLoading, campaignPage, campaignPageError])
+  // Đồng bộ Google Sheet (V662): biểu tượng cạnh tên + mục "Tắt đồng bộ Google Sheet" trong menu Hành động.
+  const sheetSyncList = useCampaignSheetSyncList(useMemo(() => campaignTableRows.flatMap(row => row.kind === 'campaign'
+    ? [{ id: row.item.id, actionId: row.item.actionId }] : []), [campaignTableRows]))
+  const handleStopCampaignSheetSync = (campaign: { id: number; name?: string }) => {
+    const item = sheetSyncList.items.get(campaign.id)
+    setOpenCampaignActionMenuId(null)
+    if (!item) return
+    useUiStore.getState().showConfirm(
+      `Dòng mới trong Sheet sẽ không được thêm vào chiến dịch "${campaign.name || campaign.id}" nữa. Data đã thêm vẫn giữ nguyên và chiến dịch vẫn chạy.`,
+      async () => {
+        const result = await window.electronAPI.campaignSheetSyncCall({ action: 'stop', syncId: item.syncId, campaignId: campaign.id })
+        if (!result.ok) { showAlert(result.message || campaignSheetSyncErrorMessage(result.code), 'error'); return }
+        showAlert('Đã tắt đồng bộ. Data đã thêm vẫn được giữ.', 'success')
+        sheetSyncList.refresh()
+      },
+      { title: 'Tắt đồng bộ Google Sheet?', confirmText: 'Tắt đồng bộ', cancelText: 'Giữ đồng bộ', variant: 'danger' }
+    )
+  }
   // Cột "Giới hạn lượt" (V502): đọc sau lượt danh sách tải xong (tối đa 1 lượt/60 giây cho cùng tập chiến dịch), chỉ
   // cho chiến dịch chưa hoàn thành đang hiện và chiến dịch đang mở chi tiết. Số "trong giờ" tự giảm theo đồng hồ.
   // Theo trang đã tải (không theo bảng đang hiện): lúc bảng chờ truy vấn mới (đổi chọn/lọc) tập id giữ nguyên, không đọc thừa.
@@ -6043,7 +6064,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                         />
                       </div>
                       <div className="campaign-main-cell">
-                        <div className="campaign-name-line">{campaign.name}</div>
+                        <div className="campaign-name-line">{campaign.name}{sheetSyncList.items.has(campaign.id) && (() => {
+                          const sync = sheetSyncList.items.get(campaign.id)!
+                          const failed = sync.status === 'error' || sync.status === 'retry'
+                          return <span className={`campaign-sheet-sync-icon${failed ? ' danger' : ''}`} style={{ marginLeft: 6, verticalAlign: 'middle' }}
+                            role="img" aria-label={failed ? 'Đồng bộ Google Sheet đang lỗi' : `Đồng bộ Google Sheet mỗi ${sync.everyHours} giờ`}
+                            title={failed ? 'Đồng bộ Google Sheet đang lỗi. Mở chi tiết chiến dịch, tab Data để xem.' : `Đồng bộ Google Sheet mỗi ${sync.everyHours} giờ`}>
+                            <RefreshCw size={13} aria-hidden="true" /></span>
+                        })()}</div>
                         <div className="campaign-meta-line">{actionLabel}</div>
                         {displayedNote ? <div className="campaign-note-line">{displayedNote}</div> : canCheckCampaignPendingReason(campaign) && (
                           <button
@@ -6209,6 +6237,17 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                               <FileText size={14} />
                               <span>Cập nhật nội dung + media</span>
                             </button>
+                            {sheetSyncList.items.get(campaign.id)?.isEnabled && (
+                              <button
+                                type="button"
+                                className="campaign-action-menu-item"
+                                onClick={() => handleStopCampaignSheetSync(campaign)}
+                                role="menuitem"
+                              >
+                                <RefreshCw size={14} />
+                                <span>Tắt đồng bộ Google Sheet</span>
+                              </button>
+                            )}
                             {campaign.dataTargetSourceMode !== 'data_group' ? (
                               <button
                                 type="button"
@@ -6660,6 +6699,9 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               {/* Tab: Campaign Input Data */}
               {detailTab === 'data' && (
                 <>
+                  {selectedCampaign && supportsCampaignSheetSync(selectedCampaign.actionId) && (
+                    <CampaignSheetSyncCard key={selectedCampaign.id} campaignId={selectedCampaign.id} campaignName={selectedCampaign.name} onChanged={sheetSyncList.refresh} />
+                  )}
                   <div className="detail-export-bar detail-filter-bar campaign-data-filter-bar">
                     <div className="campaign-data-filter-fields">
                       {renderDetailFilters(
