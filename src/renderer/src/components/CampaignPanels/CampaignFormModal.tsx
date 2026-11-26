@@ -1,3 +1,4 @@
+import { ZALO_TAG_AUTO_ADD_HINT, ZALO_TAG_AUTO_ADD_LABEL } from '../../../../shared/zaloTagAutoAdd'
 import { applyCampaignContentFixes, campaignContentSaveWarning, checkCampaignContentSyntax, expandPackedVariants, packedVariantsPrompt } from '../../../../shared/contentSyntax'
 import { useCampaignContentFormData, CampaignContentObserver } from './useCampaignContentFormData'
 import {
@@ -2167,6 +2168,7 @@ export default function CampaignFormModal({
     zaloFriendTargetMode: (campaign?.extraSettings?.zaloFriendTargetMode || 'selected') as ZaloFriendTargetMode,
     zaloFriendSourceTagIds: normalizeZaloTagIdList(campaign?.extraSettings?.zaloFriendSourceTagIds),
     zaloFriendSourceTagNames: normalizeZaloTagNameList(campaign?.extraSettings?.zaloFriendSourceTagNames),
+    zaloFriendTagAutoAddEnabled: campaign?.extraSettings?.zaloFriendTagAutoAddEnabled === true,
     zaloFriendBlocklistEnabled: campaign?.extraSettings?.zaloFriendBlocklistEnabled ?? false,
     zaloFriendBlocklistId: campaign?.extraSettings?.zaloFriendBlocklistId ?? null as number | null,
     zaloFriendBlocklistName: campaign?.extraSettings?.zaloFriendBlocklistName || '',
@@ -6843,6 +6845,10 @@ export default function CampaignFormModal({
             zaloFriendTargetMode: isDataGroupSource ? 'selected' : (isZaloMessageFriendCampaign ? formData.zaloFriendTargetMode : 'selected'),
             zaloFriendSourceTagIds: selectedZaloFriendSourceTagIds,
             zaloFriendSourceTagNames: selectedZaloFriendSourceTagNames,
+            // V660: tự gửi cho người được gắn tag về sau (chỉ chế độ theo tag, không dùng với Zalo trình duyệt).
+            // Tắt trong form thì bỏ hẳn khoá (dải Dừng / Tiếp tục ở chi tiết chỉ hiện khi khoá có mặt).
+            zaloFriendTagAutoAddEnabled: useZaloFriendSourceTags && !(selectedPrimaryAccount && isZaloWebAccount(selectedPrimaryAccount)) &&
+              formData.zaloFriendTagAutoAddEnabled === true ? true : undefined,
             zaloFriendDataMaterializedAt: isZaloMessageFriendCampaign && isZaloFriendAutoDataMode && !cloneFromId
               ? (campaign?.extraSettings?.zaloFriendDataMaterializedAt ?? null)
               : null,
@@ -11227,6 +11233,23 @@ export default function CampaignFormModal({
         })),
         emptyHint: 'Bấm “Tải tag” để lấy tag từ Zalo.'
       })}
+
+      {formData.zaloFriendTargetMode === 'tagged_friends' && !(selectedPrimaryAccount && isZaloWebAccount(selectedPrimaryAccount)) && (
+        <div className="stepper-form-group">
+          <label className="schedule-checkbox-label">
+            <input
+              type="checkbox"
+              checked={formData.zaloFriendTagAutoAddEnabled}
+              disabled={isDataGroupSource}
+              onChange={event => setFormData(p => ({ ...p, zaloFriendTagAutoAddEnabled: event.target.checked }))}
+            />
+            <span>{ZALO_TAG_AUTO_ADD_LABEL}</span>
+          </label>
+          {formData.zaloFriendTagAutoAddEnabled && (
+            <div className="schedule-hint">{ZALO_TAG_AUTO_ADD_HINT}</div>
+          )}
+        </div>
+      )}
 
       <div style={{ borderTop: '1px solid var(--border-default)', margin: '16px 0' }} />
 

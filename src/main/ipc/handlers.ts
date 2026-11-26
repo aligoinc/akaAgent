@@ -39,6 +39,7 @@ import { startAccountPoller, type AccountPollerController } from '../domain/acco
 
 import { registerBrowserHandlers } from './handlers/browserHandlers'
 import { registerCampaignHandlers } from './handlers/campaignHandlers'
+import { registerZaloTagAutoAddHandlers } from './handlers/zaloTagAutoAddHandlers'
 import { registerCampaignDiagnosticsHandlers } from './handlers/campaignDiagnosticsHandlers'
 import { registerCampaignFormAiHandlers } from './handlers/campaignFormAiHandlers'
 import { registerCampaignPendingReasonHandlers } from './handlers/campaignPendingReasonHandlers'
@@ -1595,6 +1596,7 @@ export function registerIpcHandlers(
   })
   registerCampaignPendingReasonHandlers(mainWindow, campaignScheduler)
   registerCampaignAccountActionsHandlers(mainWindow)
+  registerZaloTagAutoAddHandlers()
   registerCampaignHandlers(supabase, {
     requestCampaignStatus: async (campaignId, status) => {
       const campaign = await supabase.getCampaign(campaignId)

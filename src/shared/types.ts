@@ -680,6 +680,8 @@ export interface CampaignExtraSettings {
   zaloAliasTemplate?: string
   zaloFriendTargetMode?: 'selected' | 'all_friends' | 'tagged_friends'
   zaloFriendSourceTagIds?: Array<number | string>
+  /** V660: tự thêm người vừa được gắn tag nguồn vào chiến dịch (chỉ chế độ theo tag). */
+  zaloFriendTagAutoAddEnabled?: boolean
   zaloFriendSourceTagNames?: string[]
   zaloFriendDataMaterializedAt?: string | null
   zaloFriendMaterializedCount?: number
@@ -999,6 +1001,8 @@ export interface CampaignInputData {
   createdAt?: string
   /** Per-campaign immutable delivery identity. Information can be enriched without changing the target. */
   canonicalTargetKey?: string | null
+  /** Khoá chống thêm trùng của dòng thêm tự động; `zalotag:` = DB thêm vì người đó vừa được gắn tag Zalo (V660). */
+  controlAppendIdempotencyKey?: string | null
   /** Immutable semantic type snapshot. Legacy rows may intentionally remain NULL. */
   dataTypeCategoryItemId?: number | null
   dataTypeCode?: DataTypeCategoryCode | null

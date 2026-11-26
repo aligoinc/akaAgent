@@ -25,6 +25,7 @@ import { beginZaloMessageStatusSend, type ZaloMessageStatusSend } from './zaloMe
 import { CampaignLabelContext, evaluateSendExclusionWithRemote, hasSendExclusionPrecheck, SEND_EXCLUSION_CLIENT_VERSION, type SendExclusionRemoteFacts, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
+import { isZaloTagAutoAddInput, ZALO_TAG_NOT_FRIEND_NOTE } from '../../shared/zaloTagAutoAdd'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
 import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
@@ -120,6 +121,7 @@ import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/fa
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
+import { parseNavigationError } from '../engineAdapters/facebook/navigationError'
 import { cleanupScreenshots, findErrorScreenshots, gzipErrorDom, PAGE_DOM_MAX_CHARS, PAGE_DOM_SCRIPT, PAGE_DOM_TIMEOUT_MS, readErrorScreenshotDataUrl,
   saveErrorEvidence, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
@@ -4768,6 +4770,13 @@ export class CampaignScheduler {
         continue
       }
 
+      // Người vừa được gắn tag (V660): chỉ gửi khi đã là bạn bè. Chưa là bạn bè: bỏ qua; không kiểm được: để lượt sau.
+      if (detail && campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID && isZaloTagAutoAddInput(detail)) {
+        const friend = await this.checkZaloTagAutoAddFriend(account, campaign, detail)
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        if (friend !== true) continue
+      }
+
       if (detail && ZALO_MESSAGE_OPT_OUT_ACTION_IDS.has(campaign.actionId)) {
         zaloOptOutContext = await this.preflightZaloMessageOptOut(account, campaign, detail)
         if (zaloOptOutContext.blocked) continue
@@ -6783,8 +6792,13 @@ export class CampaignScheduler {
           return state.stopped ?? { done: true }
         }
         const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 6282 / 633 / 3484 của bộ kiểm lỗi (anh chốt 26/11/2026): bước đọc / chuyển danh tính hỏng ngay lúc mở trang (lỗi mạng / proxy
+        // của trình duyệt, chưa tới phần tìm nút) báo như bước mở trang, không gắn sẵn mã, để DB phân loại theo luật mạng / proxy (NET01 /
+        // NET02, V659) như mọi bước mở trang. Lỗi trên trang (không thấy nút menu, không đọc được tên, chọn Page hết giờ) vẫn FB06.
+        const navigation = parseNavigationError(message)
         await report('__identity', firstAction, { ok: false, phase: 'before_send',
-          signal: { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+          signal: navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
+            : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
         return state.stopped ?? { done: true }
       }
       if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {
@@ -7726,6 +7740,13 @@ export class CampaignScheduler {
             await this.markZaloFriendBlocklistSkipped(campaign, detail, zaloFriendBlocklist!, { logProgress: false })
             zaloFriendBlocklistSkippedCount += 1
             continue
+          }
+
+          // Người vừa được gắn tag (V660): chỉ vào lô khi đã là bạn bè.
+          if (campaign.actionId === ZALO_MESSAGE_FRIEND_ACTION_ID && isZaloTagAutoAddInput(detail)) {
+            const friend = await this.checkZaloTagAutoAddFriend(account, campaign, detail)
+            if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+            if (friend !== true) continue
           }
 
           batchCandidates.push(detail)
@@ -9350,6 +9371,42 @@ export class CampaignScheduler {
     if (options.logProgress !== false) {
       await this.logCampaignProgress(campaign, `🚫 Bỏ qua "${targetName}" vì nằm trong danh sách không gửi tin: ${groupName}`)
     }
+  }
+
+  /**
+   * V660: dòng data do DB thêm vì người đó vừa được gắn tag Zalo. Đã là bạn bè: true. Chưa là bạn bè: đóng data "hoàn thành",
+   * ghi chú "Chưa là bạn bè nên không gửi", không gửi, không tính lượt. Không kiểm được: null, data giữ "chờ xử lý" cho lượt sau.
+   */
+  private async checkZaloTagAutoAddFriend(
+    account: AutoAccount,
+    campaign: Campaign,
+    detail: CampaignInputData
+  ): Promise<boolean | null> {
+    const uid = String(detail.uid || '').trim()
+    if (!uid || !this.zaloRuntime) return true
+    const targetName = this.getInputDataDisplayName(campaign, detail)
+    let status: boolean | null = null
+    try {
+      const response = await this.zaloRuntime.getFriendRequestStatus(account.id, uid)
+      status = readZaloApiFriendStatus(response.raw)
+    } catch (err) {
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      await this.logCampaignProgress(campaign, `⚠️ Không kiểm tra được trạng thái bạn bè của "${targetName}", sẽ thử lại lượt sau: ${getErrorMessage(err) || 'Lỗi không xác định'}`)
+      return null
+    }
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    if (status === true) return true
+    if (status === null) {
+      await this.logCampaignProgress(campaign, `⚠️ Không kiểm tra được trạng thái bạn bè của "${targetName}", sẽ thử lại lượt sau`)
+      return null
+    }
+    await this.supabase.updateCampaignInputData(detail.id, {
+      status: 'hoàn thành',
+      note: ZALO_TAG_NOT_FRIEND_NOTE,
+      dateAction: new Date().toISOString()
+    })
+    await this.logCampaignProgress(campaign, `🚫 Bỏ qua "${targetName}": ${ZALO_TAG_NOT_FRIEND_NOTE}`)
+    return false
   }
 
   private isZaloBirthdayCampaign(campaign: Campaign): boolean {

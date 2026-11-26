@@ -1,0 +1,12 @@
+{
+  "migration": "migrations/migration_v660_zalo_tag_sync.sql",
+  "ledger": { "version": "20261126053058", "name": "migration_v660_zalo_tag_sync", "statements_md5": "88718703ca7516634b69900f2f3d5633", "file_md5": "88718703ca7516634b69900f2f3d5633" },
+  "applied_at_vn": "2026-11-26 12:30:58",
+  "requested": "\"Hãy bật công tắc luôn\", rồi chọn \"Apply ngay rồi bật\" qua hộp chọn",
+  "method": "Tệp 48 KB quá dài để gửi qua MCP: đưa nguyên văn lên một dòng tạm auto_system_settings id 219 (key ops.stage.v660_migration, is_secret, is_active false) bằng REST, kiểm md5 = tệp, chạy thân giữa BEGIN; … COMMIT; bằng EXECUTE trong một khối DO cùng câu ghi sổ, rồi xoá dòng tạm (đã xoá).",
+  "preflight_read_only": "sổ chưa có v660; chưa có bảng / công tắc zalo.tag_sync.* / EXC04 / EXC05; có private.aka_agent_desktop_data_context(); V658, V659, V661 đã apply trước không đụng đối tượng của V660",
+  "postflight": { "settings": "zalo.tag_sync.enabled/organization_ids=all/poll_seconds=60/stale_minutes=30/event_retention_days=30", "triggers": 3, "codes": "EXC04 err_engine_zalo_tag_not_friend, EXC05 err_engine_zalo_tag_friend_unavailable", "cron": "aka-agent-zalo-tag-sync-retention", "anon_execute": false, "watched_campaigns": 0 },
+  "postgrest": "nạp lại schema: truy vấn 6,1 s (05:30:59–05:31:07 UTC), 0 lỗi 5xx / 503 trong 05:27–05:31 UTC; phút 05:30–05:31 có 193 + 348 request quá 1 giây",
+  "switch": { "key": "zalo.tag_sync.enabled", "value": "true", "at_vn": "2026-11-26 12:31:21", "requested": "\"Hãy bật công tắc luôn\"", "rollback": "update auto_system_settings set value='false' where key='zalo.tag_sync.enabled'" },
+  "not_done": "chưa merge; chưa deploy ChatApi zalo_runtime/worker, API/Web; chưa build Desktop / App Server; iOS chưa phát hành ⇒ chưa có máy nào gửi tag lên"
+}

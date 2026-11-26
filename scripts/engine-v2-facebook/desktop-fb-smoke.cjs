@@ -19,6 +19,7 @@ if (!process.versions.electron) {
 const { build } = require('esbuild')
 const { startCluster } = require('../fixtures/campaign-outcome-engine/pg-fixture.cjs')
 const { buildFacebookFixture, applyFacebookMigrations, FACEBOOK_POLICY_MIGRATIONS, applyV563SignsOnly, applyV575 } = require('./fixture.cjs')
+const V659 = require('../build-v659-sql.cjs')
 const V563 = require('../build-v563-sql.cjs')
 const V575 = require('../build-v575-sql.cjs')
 const V597 = require('../build-v597-sql.cjs')
@@ -171,6 +172,12 @@ class FakePage {
     if (this.scenario.checkpointAfterClick === sel) { this.url = 'https://www.facebook.com/checkpoint/1501092823525282/'; throw new Error('Element not found: ' + sel) }
   }
   async type() { if (this.destroyed) throw new Error('Browser page is not connected') }
+  // V659: lỗi mở trang của Chromium ("ERR_X (-n) loading '<url>'"), như page.navigate production khi mạng / proxy hỏng.
+  async navigate(url) {
+    if (this.destroyed) throw new Error('Browser page is not connected')
+    if (this.scenario.navigateError) throw new Error(`${this.scenario.navigateError} loading '${url}'`)
+    this.url = url
+  }
   async captureJpeg() { return Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0xff, 0xd9]) }
   async press(key) { this.clicks.push('press:' + key) }
   async evaluate(code) {
@@ -184,6 +191,8 @@ class FakePage {
     // Câu block 2871 trả khi hết giờ mà form chưa đóng (V597: câu riêng khi thấy chữ đỏ của Facebook trong hộp Tạo bài viết).
     if (code === 'verifyMessage') return this.scenario.verifyMessage ?? null
     if (code === 'typeError') return this.scenario.typeError ?? null
+    // V659: câu lỗi của bước đọc tên danh tính Page (lỗi trên trang, sau khi mở trang chủ được).
+    if (code === 'identityError') return this.scenario.identityError ?? null
     if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
     if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
@@ -1874,6 +1883,136 @@ return { commented: true, position: vars.loopIndex + 1, text: 'Bình luận ' + 
       } finally {
         globalThis.__fbTest.blocks.set(ANON_BLOCK.id, { ...ANON_BLOCK, configSchema: [], defaultConfig: {}, isBuiltin: false })
       }
+    })
+
+    // V659 (anh chốt 26/11/2026, câu 6282 / 6281 / 3590 / 638 / 633 / 3484 của bộ kiểm lỗi): lỗi mạng / proxy khi mở trang Facebook. DB thử
+    // không giống production từng dòng nên nạp phần dữ liệu của migration (V659.coreSql, nguyên văn) và vá đúng đoạn report_v1 như migration.
+    // DB thử dựng như production 18/11: thêm hai cột chính sách V571 (kiểu như production) để chép dòng UNK01 cho NET04 như migration.
+    await db.query(`ALTER TABLE public.auto_outcome_policies ADD COLUMN IF NOT EXISTS target_check_enabled boolean,
+      ADD COLUMN IF NOT EXISTS target_check_days integer, ADD COLUMN IF NOT EXISTS streak_after_delivery text`)
+    await db.query(`BEGIN; ${V659.coreSql}
+${V659.reportPatchSql(V659.REPORT_OLD, V659.REPORT_NEW, null, null, 'v659')}
+COMMIT;`)
+    const lockRows = async accountId => (await db.query(`SELECT action_code, date_enable, disabled_error_code FROM public.auto_account_action_status
+      WHERE account_id = $1 AND is_disable AND date_enable > now() ORDER BY action_code`, [accountId])).rows
+    const unlock = accountId => db.query(`UPDATE public.auto_account_action_status SET is_disable = false, date_enable = now() - interval '1 second'
+      WHERE account_id = $1`, [accountId])
+    const campaignRow = id => one('SELECT status, note FROM public.auto_campaigns WHERE id = $1', [id])
+    const block27 = globalThis.__fbTest.blocks.get(27)
+    const withNavigate = () => globalThis.__fbTest.blocks.set(27, { ...block27, code: `await page.navigate('https://www.facebook.com/groups/g1/')\n${block27.code}` })
+
+    await check('V659: mở trang nhóm lỗi ERR_CONNECTION_TIMED_OUT → NET01: data về hàng đợi, khoá mọi thao tác Facebook của tài khoản 5 phút, dòng "⚠️ … Kết nối mạng bị gián đoạn, tạm ngưng tài khoản tới …", chiến dịch không dừng, lượt sau chờ hết khoá', async () => {
+      withNavigate()
+      try {
+        const entry = await makeCampaign()
+        const { page: fake } = await run(entry, { navigateError: 'ERR_CONNECTION_TIMED_OUT (-118)' })
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => [o.action_code, o.phase, o.error_code]), [['fb_post_group', 'before_send', 'err_network_offline']], JSON.stringify(out))
+        assert.equal(fake.clicks.length, 0)
+        assert.equal((await inputs(entry.campaign.id))[0].status, 'chờ xử lý')
+        const locks = await lockRows(entry.account.id)
+        assert.ok(['fb_post_group', 'fb_comment', 'fb_add_friend'].every(code => locks.some(l => l.action_code === code)), JSON.stringify(locks))
+        assert.ok(locks.every(l => l.disabled_error_code === 'err_network_offline'), JSON.stringify(locks))
+        const minutes = (new Date(locks[0].date_enable).getTime() - Date.now()) / 60_000
+        assert.ok(minutes > 4 && minutes <= 5.1, String(minutes))
+        const line = progress.find(p => p.includes('(NET01)'))
+        assert.match(String(line), /^⚠️ .+"Nhóm 1": Kết nối mạng bị gián đoạn, tạm ngưng tài khoản tới \d{2}:\d{2} \d{2}\/\d{2} \(NET01\)$/u, progress.join('\n'))
+        assert.notEqual((await campaignRow(entry.campaign.id)).status, 'tạm dừng')
+        // Còn khoá: lượt sau không mở trang, không thêm kết quả.
+        const again = await run(entry, { navigateError: 'ERR_CONNECTION_TIMED_OUT (-118)' })
+        assert.equal((await outcomes(entry.campaign.id)).length, 1, JSON.stringify(again.result))
+        assert.equal(again.result.reason, 'wait', JSON.stringify(again.result))
+        const waiting = await campaignRow(entry.campaign.id)
+        assert.equal(waiting.status, 'chờ xử lý')
+        assert.match(String(waiting.note), /^⏳ Kết nối mạng bị gián đoạn, chạy tiếp lúc \d{2}:\d{2} \d{2}\/\d{2} \(NET01\)$/u)
+      } finally {
+        globalThis.__fbTest.blocks.set(27, block27)
+      }
+    })
+
+    await check('V659: lỗi proxy (ERR_PROXY_CONNECTION_FAILED) 4 lần liền → NET02, data về hàng đợi; lần thứ 4 tạm dừng chiến dịch, câu dừng nối "Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch."', async () => {
+      withNavigate()
+      try {
+        const entry = await makeCampaign({ targets: 4 })
+        for (let i = 0; i < 4; i++) {
+          await unlock(entry.account.id)
+          await run(entry, { navigateError: 'ERR_PROXY_CONNECTION_FAILED (-130)' })
+          if (i < 3) assert.notEqual((await campaignRow(entry.campaign.id)).status, 'tạm dừng', `lần ${i + 1}`)
+        }
+        const out = await outcomes(entry.campaign.id)
+        assert.deepEqual(out.map(o => o.error_code), Array(4).fill('err_proxy_failed'), JSON.stringify(out))
+        const camp = await campaignRow(entry.campaign.id)
+        assert.equal(camp.status, 'tạm dừng')
+        assert.match(String(camp.note), /^Dừng sau 4 data lỗi\/thất bại liên tiếp \(ngưỡng 4\): Proxy của tài khoản không kết nối được, tạm ngưng tài khoản tới \d{2}:\d{2} \d{2}\/\d{2} \(NET02\)\. Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch\.$/u)
+        assert.ok((await inputs(entry.campaign.id)).every(i => i.status === 'chờ xử lý'), JSON.stringify(await inputs(entry.campaign.id)))
+        assert.ok(progress.some(p => /^⚠️ .+: Proxy của tài khoản không kết nối được, tạm ngưng tài khoản tới .+ \(NET02\)$/u.test(p)), progress.join('\n'))
+      } finally {
+        globalThis.__fbTest.blocks.set(27, block27)
+      }
+    })
+
+    // Bước đọc / chuyển danh tính Page (FB06): nhánh page_identity_* như workflow "[engine]" production (assertPageIdentityWorkflow).
+    const IDENTITY_BLOCKS = [
+      { id: 9721, name: 'fb_get_current_identity_name', code: `const fail = await page.evaluate('identityError')
+await page.navigate('https://www.facebook.com/')
+if (fail) throw new Error(fail)
+vars.originalIdentityName = 'Tài khoản gốc'
+return { ok: true, identityName: 'Tài khoản gốc' }` },
+      { id: 9722, name: 'fb_switch_identity_by_name', code: `return { ok: true, identityName: input.useOriginalIdentity === true ? vars.originalIdentityName : vars.runAsPageName }` },
+      { id: 9723, name: 'fb_campaign_page_identity_state', code: `return { ok: true, operation: input.pageIdentityStateOperation }` }
+    ]
+    for (const b of IDENTITY_BLOCKS) globalThis.__fbTest.blocks.set(b.id, { ...b, configSchema: [], defaultConfig: {}, isBuiltin: false })
+    const withPageIdentity = (wf, root, leaf) => {
+      const id = name => 'page_identity_' + name
+      const state = operation => ({ blockId: 9723, blockName: 'fb_campaign_page_identity_state', config: { pageIdentityStateOperation: operation } })
+      const ifElse = condition => ({ blockId: 0, blockName: 'if_else', systemType: 'ifElse', config: { condition } })
+      const merge = () => ({ blockId: 0, blockName: 'merge', systemType: 'merge', config: { mode: 'any' } })
+      const nodes = {
+        restore_only: ifElse('vars.runAsPage === true && vars.pageIdentityRestoreOnly === true'),
+        needs_switch: ifElse('vars.runAsPage === true && vars.pageIdentityReady !== true'),
+        original: { blockId: 9721, blockName: 'fb_get_current_identity_name', config: {} },
+        switch: { blockId: 9722, blockName: 'fb_switch_identity_by_name', config: { identityNameFromVars: 'runAsPageName' } },
+        ready: state('ready'), enter: merge(), capture_result: state('capture_result'), restore_join: merge(),
+        needs_restore: ifElse('vars.runAsPage === true && !!vars.originalIdentityName && (vars.pageIdentityRestoreOnly === true || vars.pageIdentityRestoreAfterTarget !== false)'),
+        restore: { blockId: 9722, blockName: 'fb_switch_identity_by_name', config: { useOriginalIdentity: true } },
+        restored: state('restored'), result_join: merge(), result: state('result')
+      }
+      const edges = ['restore_only:restore_join:true', 'restore_only:needs_switch:false', 'needs_switch:original:true', 'needs_switch:enter:false',
+        'original:switch:', 'switch:ready:', 'ready:enter:', 'original:restore_join:', 'capture_result:restore_join:', 'restore_join:needs_restore:',
+        'needs_restore:restore:true', 'needs_restore:result_join:false', 'restore:restored:', 'restored:result_join:', 'result_join:result:']
+        .map((text, index) => { const [source, target, handle] = text.split(':'); return { id: 'pi' + index, source: id(source), target: id(target), ...(handle ? { sourceHandle: handle } : {}) } })
+      return { ...wf, nodes: [...Object.entries(nodes).map(([name, node]) => ({ id: id(name), ...node })), ...wf.nodes],
+        edges: [...edges, { id: 'pi-enter', source: id('enter'), target: root }, { id: 'pi-leaf', source: leaf, target: id('capture_result') }, ...wf.edges] }
+    }
+    const identityRun = async identityError => {
+      const workflows = globalThis.__fbTest.workflows
+      const original = workflows.get(UID_WORKFLOW_ID)
+      workflows.set(UID_WORKFLOW_ID, withPageIdentity(uidWorkflow(), 'send', 'send'))
+      try {
+        const entry = await makeCampaign({ actionId: 'facebook_message_uid', extra: { runAsPage: true, runAsPageUid: '900', runAsPageName: 'Page thử' } })
+        await run(entry, { identityError, navigateError: identityError.startsWith('ERR_') ? identityError.replace(/ loading .*$/, '') : undefined })
+        return { entry, out: await outcomes(entry.campaign.id), camp: await campaignRow(entry.campaign.id), data: await inputs(entry.campaign.id) }
+      } finally {
+        workflows.set(UID_WORKFLOW_ID, original)
+      }
+    }
+
+    await check('V659: bước đọc tên danh tính Page hỏng lúc mở trang chủ vì proxy → NET02 (không còn FB06 "kiểm tra Page"), data về hàng đợi, chiến dịch không dừng ở lần đầu', async () => {
+      const { entry, out, camp, data } = await identityRun("ERR_PROXY_CONNECTION_FAILED (-130) loading 'https://www.facebook.com/'")
+      assert.deepEqual(out.map(o => [o.result_key.split(':').at(-1), o.phase, o.error_code]).map(r => r.slice(1)), [['before_send', 'err_proxy_failed']], JSON.stringify(out))
+      assert.equal(out[0].signal.errorCode ?? null, null)
+      assert.match(String(out[0].signal.code), /^navigate:www\.facebook\.com$/)
+      assert.notEqual(camp.status, 'tạm dừng', JSON.stringify(camp))
+      assert.equal(data[0].status, 'chờ xử lý')
+      assert.ok((await lockRows(entry.account.id)).length > 0)
+    })
+
+    await check('V659: bước đọc tên danh tính Page lỗi trên trang (không thấy nút menu) → vẫn FB06 như cũ, tạm dừng chiến dịch kèm câu kiểm tra Page', async () => {
+      const { out, camp } = await identityRun('Không tìm thấy nút mở menu profile/page hiện tại')
+      assert.deepEqual(out.map(o => o.error_code), ['err_fb_identity_switch_failed'], JSON.stringify(out))
+      assert.equal(out[0].signal.errorCode, 'err_fb_identity_switch_failed')
+      assert.equal(camp.status, 'tạm dừng')
+      assert.match(String(camp.note), /FB06/)
     })
   } finally {
     await db.end().catch(() => {})
