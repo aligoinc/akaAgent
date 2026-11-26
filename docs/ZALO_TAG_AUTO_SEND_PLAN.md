@@ -14,6 +14,7 @@ một người được gắn một trong các tag đã chọn trên Zalo, hệ 
 | Gỡ tag | Sổ tag ghi cả gắn lẫn gỡ. Tính năng gửi tin chỉ phản ứng với gắn tag. |
 | Mất kết nối rồi nối lại | Bỏ: những người được gắn tag trong lúc mất kết nối không được gửi. |
 | Zalo trình duyệt | Chưa làm. |
+| Dừng tự thêm | Có công tắc Dừng / Tiếp tục ngay ở chi tiết chiến dịch (mục 4.6), không phải mở form sửa. |
 
 Tôi đang hiểu câu trả lời "có" của anh là đồng ý các đề xuất còn lại. Nếu sai anh sửa giúp:
 
@@ -128,6 +129,8 @@ tag nguồn, chưa xoá, chưa qua ngày kết thúc, đã lấy danh sách lầ
    chống thêm trùng và để bộ chạy nhận ra dòng do tag thêm vào; không sửa cấu trúc bảng data 7,9 GB).
 3. Chiến dịch đang "hoàn thành": chuyển về "chờ xử lý", lịch = bây giờ, như đường "Thêm data" đang làm
    (`reopenCompletedCampaignAfterInputInsert`). Chiến dịch "tạm dừng": giữ nguyên trạng thái.
+
+Chiến dịch đang tắt tự thêm (`zaloFriendTagAutoAddEnabled` = false, mục 4.6) không khớp, nên không nhận ai.
 4. Ghi một dòng tiến trình: `🏷️ Đã thêm "<tên>" vào chiến dịch vì vừa được gắn tag "<T>"`.
 
 Chiến dịch chưa lấy danh sách lần đầu thì không cần thêm: lượt đầu sẽ đọc tag và thấy người này.
@@ -164,7 +167,7 @@ nhiều tag nhất khoảng 64 KB.
 
 `extra_settings` thêm:
 
-- `zaloFriendTagAutoAddEnabled: boolean`
+- `zaloFriendTagAutoAddEnabled: boolean` — ô trong form ghi giá trị này; công tắc nhanh ở mục 4.6 cũng chỉ đổi đúng giá trị này.
 - `zaloFriendTagAutoAddAudience: 'friends'` (đợt này chỉ một giá trị; để sẵn cho đợt sau)
 
 Ô chọn nằm ngay dưới danh sách "Tag nguồn", chỉ hiện ở chế độ theo tag và khi tài khoản không phải Zalo trình duyệt. Chữ đề
@@ -177,6 +180,23 @@ năng chưa có thì ẩn, không hiện ô bị khoá).
 
 Nơi sửa: Desktop `CampaignFormModal.tsx` và `CampaignAgentFormModal.tsx` (sửa cả hai), `CampaignInfoView.tsx`; Web
 `CampaignFormPage.tsx`, `CampaignRuntimeOptions.tsx`, `packages/campaign-core`; iOS `apps/mobile/src/features/campaign`.
+
+### 4.6 Công tắc dừng tự thêm (anh chốt 26/11)
+
+Chiến dịch bật ô có thêm công tắc **Dừng tự thêm / Tiếp tục tự thêm** ở đầu chi tiết chiến dịch (Desktop, Web, iOS), bấm là có
+hiệu lực, không cần mở form sửa và không cần tạm dừng chiến dịch.
+
+- Bấm Dừng: DB không đưa ai mới vào chiến dịch nữa. Người đã vào hàng chờ trước đó vẫn được gửi như thường. Muốn ngừng gửi cả họ
+  thì tạm dừng chiến dịch như hiện nay.
+- Bấm Tiếp tục: từ lúc đó người mới gắn tag lại được thêm. Người được gắn tag trong khoảng đang dừng không được thêm bù.
+- Đổi được cả khi chiến dịch đang chạy, vì không đụng data đang gửi.
+- Ghi một dòng tiến trình mỗi lần đổi: `Đã dừng tự thêm người được gắn tag` / `Đã tiếp tục tự thêm người được gắn tag`.
+
+Cách làm: hàm DB riêng `aka_agent_set_campaign_zalo_tag_auto_add(chiến dịch, bật/tắt)` (Desktop theo phiên đăng nhập, API Web
+bằng `service_role`) chỉ đổi đúng khoá `zaloFriendTagAutoAddEnabled` trong `extra_settings` bằng `jsonb_set`, khoá dòng chiến
+dịch kiểu `FOR NO KEY UPDATE`, không đi qua đường lưu cả form (đường đó dựng lại cả `extra_settings` và có thể đè thay đổi của
+người khác). Không có chiến dịch nào bật ô của tài khoản thì tài khoản ra khỏi danh sách cần hỏi tag ở lượt đọc kế tiếp; bật
+lại thì lần đọc tag đầu tiên chỉ lấy mốc (mục 4.1), đúng với ý "không thêm bù".
 
 Các cài đặt khác của chiến dịch giữ nguyên ý nghĩa:
 
