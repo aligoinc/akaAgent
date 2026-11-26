@@ -271,8 +271,9 @@ Khác bản thiết kế ở mục 4:
 - ChatApi (commit `2beac84`): capability `tag_sync`, `packages/zalo-zca-adapter/src/tagSync.ts`, `accountSupervisor` hỏi tag,
   worker gọi `aka_agent_sync_zalo_tags('fly', …)`, `api` gắn `tagSync` cho tài khoản có chiến dịch bật; lõi engine đã chép.
 - Web: ô chọn trong `CampaignRuntimeOptions.tsx`, `campaignFormLogic.ts` (chỉ ghi khoá khi gửi theo tag và đang bật), route
-  `POST /campaigns/:id/zalo-tag-auto-add`, dải Dừng / Tiếp tục trong tab Thông tin. iOS chỉ hiện một dòng ở bước Xem lại
-  (lưu từ iOS vẫn giữ khoá).
+  `POST /campaigns/:id/zalo-tag-auto-add`, dải Dừng / Tiếp tục trong tab Thông tin. iOS (`apps/mobile/src/features/campaign`): ô chọn dưới "Tag nguồn Zalo"
+  ở bước Tùy chọn (`Options.tsx`), công tắc Dừng / Tiếp tục ở mục Thông tin của chi tiết chiến dịch (`ZaloTagAutoAdd.tsx`, gọi
+  cùng API Web), dòng ở bước Xem lại. Bản iOS hiện có trên App Store chưa có các phần này (cần phát hành bản mới).
 
 Kiểm (đều đạt): `bash scripts/zalo-tag-sync/v660-smoke.sh` (PG16, gồm gỡ và apply lại), `node
 scripts/zalo-tag-sync/engine-friend-check-smoke.cjs`, `node scripts/zalo-tag-sync/runtime-smoke.cjs`, hai typecheck Desktop;
