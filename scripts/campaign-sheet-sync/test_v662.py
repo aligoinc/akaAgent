@@ -82,6 +82,9 @@ def run(pg):
     ok(pg.one("SELECT count(*) FROM pg_class WHERE relname IN ('auto_campaign_sheet_syncs','auto_campaign_sheet_sync_logs')") == '2',
        'migration tạo 2 bảng')
     ok(pg.error(MIGRATION) is not None, 'chạy lại migration bị từ chối')
+    if os.environ.get('WITH_V664'):  # chạy lại mọi ca trên thân hàm V664
+        pg.psql("INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261126080442', 'migration_v662_campaign_sheet_sync')")
+        pg.psql(open(os.path.join(ROOT, 'migrations/migration_v664_campaign_sheet_sync_key_speed.sql'), encoding='utf-8').read())
     ok(pg.one("SELECT value FROM auto_system_settings WHERE key='campaign.sheet_sync'").startswith('{"audience":"off"'),
        'cài đặt mặc định: ẩn ô, worker tắt')
     ok(pg.one("SELECT position('Campaign Sheet dispatch' in prosrc) > 0 FROM pg_proc WHERE proname='aka_agent_data_group_background_tick'") == 't',

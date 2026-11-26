@@ -308,3 +308,31 @@ có / không tham số theo dõi vẫn là hai giá trị, như Upload hôm nay)
 **Kết quả các vòng:** vòng 1–3 tìm ra lỗi 1–6; vòng 4, 5 sạch; vòng 6 tìm ra lỗi 7 (đếm lại); **vòng 7, 8, 9 sạch liền**
 (mỗi vòng 600 Sheet, ~750 lượt đồng bộ ở tầng JS; ~300 kịch bản, ~600 lượt, ~5.500 dòng thêm, ~120 lượt nhận việc song song và
 ~130 lượt `finish` song song ở tầng DB).
+
+## 13. V664: lọc trùng rẻ hơn (26/11/2026)
+
+Anh hỏi "Edge làm việc này có tốn tài nguyên của Supabase không", rồi "Ok" làm bản sửa. Edge chạy trên máy riêng của Supabase,
+tính vào số lượt gọi Edge của gói (tối đa ~2 lượt / phút); phần tốn là CPU của DB trong `finish`: mỗi lượt tính khoá lọc trùng
+cho mọi data đang có của các chiến dịch thuộc nguồn. Đo production (chiến dịch 63019, 8.685 dòng, chỉ đọc): hàm khoá V662
+565 ms / lượt tính (riêng `aka_agent_internal_normalize_phone` 137 ms) vì đi qua 5–6 hàm SQL có `SET search_path` (mỗi lần gọi
+đặt lại GUC), và câu `LATERAL (SELECT khoá) k WHERE k.key IS NOT NULL` bị planner gộp nên tính khoá hai lần ⇒ ~1,2 s CPU DB
+mỗi chiến dịch mỗi lượt.
+
+[V664](../migrations/migration_v664_campaign_sheet_sync_key_speed.sql) (sinh bằng `node scripts/build-v664-sql.cjs` từ nguyên
+văn V662, chỉ thay thân 3 hàm, không đổi bảng / quyền; V663 đã có nhánh khác giữ):
+- `private.aka_agent_campaign_sheet_key` viết lại bằng plpgsql, không `SET search_path`, gọi thẳng `public.normalize_phone` một
+  lần (đúng thân `aka_agent_internal_normalize_phone` = `normalize_phone` + kiểm dạng số; preflight khoá md5 hai hàm này), lớp
+  khoảng trắng kiểu JS chép từ hàm trim của V662.
+- `unmatched_keys` và `finish`: `LATERAL ... OFFSET 0` để mỗi dòng tính khoá một lần; `finish` tính khoá dòng Sheet một lần vào
+  bảng tạm `campaign_sheet_incoming` rồi đếm dòng sai / trùng (V662 tính ba lần), cột `phone` của dòng thêm lấy luôn khoá.
+- Bản gỡ [rollback_v664](../migrations/rollback_v664_campaign_sheet_sync_key_speed.sql) trả 3 hàm về nguyên văn V662.
+
+Kiểm: `python3 scripts/campaign-sheet-sync/test_v664.py` (19 PASS: khoá V662 = V664 trên 540.081 cặp trường × loại chiến dịch
+× giá trị sinh ngẫu nhiên; 5 kịch bản `finish` cùng kết quả, cùng dòng thêm; khoá 20.000 dòng 759 → 65 ms; `finish` 9.000 dòng
+Sheet + 20.000 data 1.792 → 293 ms; bản gỡ trả đúng md5), `WITH_V664=1 python3 scripts/campaign-sheet-sync/test_v662.py`
+(82 PASS), bộ thử vòng lặp với `WITH_V664=1` cho `fuzz_db.py`.
+
+Chạy thử trên production 26/11 (khối DO tự huỷ bằng RAISE nên không lưu gì, không nạp lại schema): md5 nguyên văn khớp
+`56abfd2a…`, preflight đạt, khoá trên chiến dịch 63019 (8.685 dòng) 1.261 → 110 ms giữa giờ chiều, cùng 8.685 khoá; thân sau
+apply: khoá `dacc0179…`, `unmatched_keys` `4336e127…`, `finish` `ee0f2515…`. Chưa apply: `CREATE OR REPLACE FUNCTION` nạp lại
+schema PostgREST (V662 giữa giờ chiều 9,1 s), nên apply buổi tối.
