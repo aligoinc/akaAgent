@@ -3136,8 +3136,10 @@ export interface AuthUser {
    */
   zaloServerOnFly?: boolean
   /**
-   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly).
-   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ.
+   * V513: tổ chức bật cờ engine v2 (`org_organization.use_new_zalo_runtime`, cùng cờ chọn bộ mới cho tài khoản Server trên Fly), hoặc
+   * V667: cờ tắt mà tổ chức có trong công tắc `engine.zalo_server_vps` (tài khoản Server chạy engine v2 trên App Server).
+   * Chốt lúc đăng nhập; chỉ khi true bản Desktop này mới chạy bộ mới cho tài khoản Zalo QR/Web, còn lại chạy bộ cũ. Không dùng để chọn
+   * nơi chạy tài khoản Zalo Server (`zaloServerOnFly` chỉ theo cờ).
    */
   campaignEngineV2?: boolean
   /**

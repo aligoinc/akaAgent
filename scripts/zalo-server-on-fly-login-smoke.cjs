@@ -18,7 +18,7 @@ async function main() {
   try {
     const outfile = join(dir, 'zaloServerOnFly.cjs')
     await build({ entryPoints: [join(ROOT, 'src/shared/zaloServerOnFly.ts')], bundle: true, platform: 'node', format: 'cjs', outfile, logLevel: 'silent' })
-    const { resolveZaloServerOnFlyAtLogin: pick, serverAccountsUseChatApi } = require(outfile)
+    const { resolveZaloServerOnFlyAtLogin: pick, resolveDesktopZaloAtLogin: atLogin, serverAccountsUseChatApi } = require(outfile)
 
     assert.equal(pick({ isChatSync: false, separateAccess: false, orgEngineFlag: true }), true)
     assert.equal(pick({ isChatSync: false, separateAccess: false, orgEngineFlag: false }), false)
@@ -47,6 +47,17 @@ async function main() {
     assert.equal(serverAccountsUseChatApi(user(false, true, { isChatSync: true })), true, 'tổ chức có Chat luôn đi ChatApi')
     assert.equal(serverAccountsUseChatApi(null), false)
     pass('tổ chức có Chat luôn đi ChatApi')
+
+    // V667 (26/11/2026): công tắc engine.zalo_server_vps chỉ đổi bộ chạy Zalo QR/Web, không chuyển tài khoản Server sang Fly.
+    const base = { isChatSync: false, separateAccess: false }
+    assert.deepEqual(atLogin({ ...base, orgEngineFlag: false, vpsEngineSwitch: true }), { campaignEngineV2: true, zaloServerOnFly: false })
+    assert.equal(serverAccountsUseChatApi(user(atLogin({ ...base, orgEngineFlag: false, vpsEngineSwitch: true }).zaloServerOnFly, true)), false,
+      'tổ chức trong công tắc: tài khoản Server vẫn đi App Server')
+    assert.deepEqual(atLogin({ ...base, orgEngineFlag: false, vpsEngineSwitch: false }), { campaignEngineV2: false, zaloServerOnFly: false })
+    assert.deepEqual(atLogin({ ...base, orgEngineFlag: true, vpsEngineSwitch: false }), { campaignEngineV2: true, zaloServerOnFly: true })
+    assert.deepEqual(atLogin({ isChatSync: true, separateAccess: false, orgEngineFlag: false, vpsEngineSwitch: true }),
+      { campaignEngineV2: true, zaloServerOnFly: false })
+    pass('V667: công tắc VPS bật engine v2 cho Zalo QR/Web, tài khoản Server vẫn ở App Server')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

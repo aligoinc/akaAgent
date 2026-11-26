@@ -17,7 +17,8 @@ let handle: BetterSqlite3.Database | null = null
 
 function db(): BetterSqlite3.Database {
   if (handle) return handle
-  // Nạp lười: App Server dùng chung bộ lập lịch nhưng không chạy engine v2, không cần thư viện native này.
+  // Nạp lười: chỉ khi engine v2 chạy lượt đầu. App Server chỉ cần khi có tổ chức bật engine.zalo_server_vps (V667); bộ cài App Server
+  // đã đóng gói better-sqlite3 (electron-builder.server.yml asarUnpack).
   const Database = require('better-sqlite3') as typeof BetterSqlite3
   const dir = join(app.getPath('userData'), JOURNAL_DIR)
   mkdirSync(dir, { recursive: true })

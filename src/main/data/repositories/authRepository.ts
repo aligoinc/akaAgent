@@ -26,8 +26,8 @@ import { isRenewalPortalUrl, type RenewalRequirement } from '../../../shared/ren
 import { loadStaffZaloServerModeSnapshot } from './zaloRuntimeModeRepository'
 import { readStaffAccess } from './staffManagementRepository'
 import { loadAppAccessForStaff } from './appAccessRepository'
-import { resolveZaloServerOnFlyAtLogin } from '../../../shared/zaloServerOnFly'
-import { loadCampaignEngineV2Enabled } from './campaignEngineFlagRepository'
+import { resolveDesktopZaloAtLogin } from '../../../shared/zaloServerOnFly'
+import { loadCampaignEngineV2Enabled, loadDesktopVpsEngineEnabled } from './campaignEngineFlagRepository'
 import { loadFacebookEngineCatalog, loadFacebookEngineEnabled } from './facebookEngineRepository'
 import { loadWebScanAccess } from './webScanRepository'
 
@@ -178,7 +178,10 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   const isChatSync = appAccess.separateAccess ? appAccess.usesChatRuntime : chatSyncEnabled
   // V513: cờ engine v2 của tổ chức; chỉ hỏi khi tổ chức có quyền Zalo. Cờ chọn bộ chạy chiến dịch Zalo QR/Web của bản này, và
   // chọn nơi chạy tài khoản Zalo Server: bật = Fly (ChatApi), tắt = App Server (không còn hỏi V498 lúc đăng nhập).
-  const campaignEngineV2 = entitlements.zalo === true ? await loadCampaignEngineV2Enabled() : false
+  const orgEngineFlag = entitlements.zalo === true ? await loadCampaignEngineV2Enabled() : false
+  // V667: cờ tắt mà tổ chức có trong công tắc engine.zalo_server_vps (tài khoản Server chạy engine v2 trên App Server) thì tài khoản
+  // Zalo QR/Web cũng chạy engine v2. Chỉ đổi bộ chạy, không đổi nơi chạy tài khoản Server (resolveDesktopZaloAtLogin).
+  const vpsEngineSwitch = entitlements.zalo === true && !orgEngineFlag ? await loadDesktopVpsEngineEnabled() : false
   // V556: engine v2 cho Facebook theo thiết lập engine.facebook; chỉ hỏi khi tổ chức có quyền Facebook.
   const facebookEngineV2 = entitlements.facebookCore === true || entitlements.facebookFanpage === true
     ? await loadFacebookEngineEnabled() : false
@@ -186,10 +189,11 @@ async function buildAuthUser(staffRow: StaffRow, deviceRecord: StaffDeviceColumn
   const webScan = await loadWebScanAccess(staffRow.organization_id)
   // Nạp sẵn danh mục engine Facebook (workflow "[engine]", danh mục bước) để chiến dịch FB đầu tiên của phiên không phải chờ.
   if (facebookEngineV2) void loadFacebookEngineCatalog(true).catch(error => console.warn('[auth] Không nạp được danh mục engine Facebook:', error))
-  const zaloServerOnFly = resolveZaloServerOnFlyAtLogin({
+  const { campaignEngineV2, zaloServerOnFly } = resolveDesktopZaloAtLogin({
     isChatSync,
     separateAccess: appAccess.separateAccess,
-    orgEngineFlag: campaignEngineV2
+    orgEngineFlag,
+    vpsEngineSwitch
   })
 
   return {

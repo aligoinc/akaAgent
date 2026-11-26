@@ -3,6 +3,12 @@
 //
 //   node scripts/engine-v2-realdata/replay.cjs <snapshot.json> [--types a,b] [--out report.json] [--limit N]
 //
+// ENGINE_REPLAY_SERVER=1: chạy tài khoản Zalo Server như App Server (nơi chạy 'server', V667) trên DB thử ở trạng thái production
+// (scripts/fixtures/engine-v2-server/db.cjs: claim / finish / recover bản production + V667) thay cho chuỗi migration V495–V512; tổ chức tắt
+// cờ use_new_zalo_runtime, công tắc engine.zalo_server_vps = all. ENGINE_REPLAY_CATALOG=<file> (chép chỉ đọc từ production: thân
+// report_v1, bảng chính sách / luật / mã lỗi / trạng thái / loại thao tác, thiết lập không bí mật engine.* / zalo.* / campaign.*) thay dữ
+// liệu danh mục của DB thử bằng bản production, để quyết định kết quả giống production. Cần CHAT_REPO (node_modules/pg).
+//
 // Mỗi data chạy lại bằng lõi mới; cổng Zalo giả trả đúng kết quả Zalo đã trả trong lịch sử (data.zalo, data.target,
 // data.response). Kết quả là bảng chuyển đổi: kết quả bộ cũ → kết quả bộ mới (thao tác, trạng thái, mã lỗi, tính hạn mức)
 // kèm số lượng, cùng trạng thái cuối của data. Cặp khác nhau phải nằm trong các quyết định đã duyệt (Q1–Q8).
@@ -35,6 +41,42 @@ const limit = Number(opt('--limit') || 0)
 const only = opt('--only') ? new Set(opt('--only').split(',').map(Number)) : null
 const outPath = opt('--out')
 const PORT = Number(process.env.ENGINE_REPLAY_PORT || 55512)
+const SERVER = process.env.ENGINE_REPLAY_SERVER === '1'
+// ENGINE_REPLAY_SERVER_AS=fly: cùng DB thử của ENGINE_REPLAY_SERVER (production + V667), nhưng tài khoản Server chạy như Fly (cờ tổ chức bật),
+// để so hai nơi chạy trên đúng một bộ dữ liệu / danh mục.
+const SERVER_AS_FLY = SERVER && process.env.ENGINE_REPLAY_SERVER_AS === 'fly'
+const CATALOG = process.env.ENGINE_REPLAY_CATALOG || null
+
+/** Thay danh mục engine của DB thử bằng bản production (chỉ đọc lúc chép): thân report_v1, bảng danh mục, thiết lập. */
+async function loadCatalog(db, cat) {
+  await db.query('SET check_function_bodies = off')
+  await db.query(cat.report_v1)
+  await db.query('SET check_function_bodies = on')
+  const tables = ['auto_outcome_policies', 'auto_outcome_signal_rules', 'auto_status_event_rules', 'auto_error', 'auto_status',
+    'auto_campaign_actions', 'auto_account_actions']
+  // Thay cả bảng trong một giao dịch, tạm tắt trigger / khoá ngoại (DB thử chạy bằng superuser).
+  await db.query('BEGIN')
+  try {
+    await db.query(`SET LOCAL session_replication_role = replica`)
+    for (const t of tables) {
+      const rows = cat[t] || []
+      const cols = (await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`, [t])).rows.map(r => r.column_name)
+      if (!cols.length) continue
+      const keys = [...new Set(rows.flatMap(r => Object.keys(r)))].filter(k => cols.includes(k))
+      const list = keys.map(k => `"${k}"`).join(', ')
+      await db.query(`DELETE FROM public."${t}"`)
+      if (rows.length) await db.query(`INSERT INTO public."${t}" (${list}) OVERRIDING SYSTEM VALUE SELECT ${list} FROM jsonb_populate_recordset(NULL::public."${t}", $1::jsonb)`,
+        [JSON.stringify(rows)])
+      const seq = cols.includes('id') ? (await db.query(`SELECT pg_get_serial_sequence('public.' || $1, 'id') s`, [t])).rows[0].s : null
+      if (seq) await db.query(`SELECT setval($1, greatest((SELECT coalesce(max(id), 0) FROM public."${t}"), 1))`, [seq])
+    }
+    for (const s of cat.auto_system_settings || []) {
+      await db.query(`DELETE FROM public.auto_system_settings WHERE key = $1`, [s.key])
+      await db.query(`INSERT INTO public.auto_system_settings (key, value, is_active) VALUES ($1, $2, $3)`, [s.key, s.value, s.is_active !== false])
+    }
+    await db.query('COMMIT')
+  } catch (e) { await db.query('ROLLBACK').catch(() => {}); throw e }
+}
 
 async function loadEngine() {
   const out = fs.mkdtempSync(path.join((fs.mkdirSync(path.join(ROOT, 'node_modules', '.cache'), { recursive: true }), path.join(ROOT, 'node_modules', '.cache')), 'aka-engine-replay-')) // trong repo: lõi import htmlparser2 từ node_modules
@@ -84,6 +126,12 @@ function freshCampaignIds(E, snap) {
 const MATERIALIZED_MARKERS = /^zalo(Birthday|CancelFriendRequest|Friend|FriendRecommendation)(Data)?Materialized/
 
 async function loadData(db, snap, fresh = new Set()) {
+  // DB thử của ENGINE_REPLAY_SERVER có trigger của production (kiểm nhóm loại trừ gửi, …): nạp mẫu nguyên trạng, tạm tắt trigger.
+  if (SERVER) await db.query('SET session_replication_role = replica')
+  try { await loadDataRows(db, snap, fresh) } finally { if (SERVER) await db.query('SET session_replication_role = origin') }
+}
+
+async function loadDataRows(db, snap, fresh) {
   const insert = async (table, rows, override = {}) => {
     if (!rows.length) return
     const cols = (await db.query(`SELECT column_name FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1`, [table])).rows
@@ -95,8 +143,16 @@ async function loadData(db, snap, fresh = new Set()) {
       [JSON.stringify(payload)])
   }
   const serverOrgs = new Set(snap.accounts.filter(a => a.is_zalo_server).map(a => Number(a.organization_id)))
-  await insert('org_organization', snap.orgs.map(o => ({ id: o.id, name: `Org ${o.id}`, use_new_zalo_runtime: serverOrgs.has(Number(o.id)) })))
+  // Bình thường tài khoản Server chạy như Fly (cờ bật); ENGINE_REPLAY_SERVER chạy như App Server: tổ chức tắt cờ, công tắc VPS bật.
+  await insert('org_organization', snap.orgs.map(o => ({ id: o.id, name: `Org ${o.id}`, use_new_zalo_runtime: SERVER && !SERVER_AS_FLY ? false : serverOrgs.has(Number(o.id)) })))
   await insert('org_organization_product', snap.orgProducts)
+  if (SERVER) {
+    // Hàm production của DB thử (chống gửi lặp V431, …) đòi dòng nhân viên đang hoạt động cùng tổ chức với chiến dịch; mẫu không chép org_staff,
+    // nên dựng dòng giả (chỉ id + tổ chức) cho mọi nhân viên của chiến dịch / tài khoản.
+    const staff = new Map()
+    for (const r of [...snap.accounts, ...snap.campaigns]) if (r.staff_id) staff.set(Number(r.staff_id), Number(r.organization_id))
+    await insert('org_staff', [...staff].map(([id, org]) => ({ id, organization_id: org, username: `replay${id}`, password: 'replay', is_active: true })))
+  }
   await insert('auto_account_groups', snap.accountGroups)
   await insert('auto_accounts', snap.accounts, { login_status: 'đã đăng nhập', status: 'chờ xử lý', runtime_operation_claim_token: null })
   await insert('auto_campaigns', snap.campaigns.map(c => ({ ...c, schedule: new Date(Date.now() - 60000).toISOString(),
@@ -176,19 +232,35 @@ function campaignPort(E, rctx, c, oldRows, portFor, messageCode) {
 async function main() {
   const snap = JSON.parse(fs.readFileSync(snapshotPath, 'utf8'))
   const E = await loadEngine()
-  const { connect, stop } = startCluster({ port: PORT, label: 'aka-engine-replay-', timeoutMs: 3 * 3600 * 1000 })
-  const db = await connect()
+  let db, stopDb
+  if (SERVER) {
+    const { buildV667Db } = require('../fixtures/engine-v2-server/db.cjs')
+    const T = await buildV667Db({ label: 'aka-engine-replay-server-', applyV667: true })
+    db = T.db
+    stopDb = () => T.stop()
+  } else {
+    const { connect, stop } = startCluster({ port: PORT, label: 'aka-engine-replay-', timeoutMs: 3 * 3600 * 1000 })
+    db = await connect()
+    stopDb = async () => { await db.end().catch(() => {}); stop() }
+  }
   const report = { snapshot: path.basename(snapshotPath), startedAt: new Date().toISOString(), campaigns: [], unsupported: {}, matrix: {}, logDiffs: {},
     targetStates: {}, notSelected: {} }
   try {
-    await buildFixture(db, [])
-    await db.query(MIGRATION)
-    await db.query(v499.migration)
-    await db.query(V500)
-    await db.query(v501.migration)
-    // ENGINE_REPLAY_UNTIL=508: dừng chuỗi ở bản đó, để so trước / sau một migration trên cùng dữ liệu.
-    const until = Number(process.env.ENGINE_REPLAY_UNTIL || 9999)
-    for (const [n, m] of [[503, v503], [504, v504], [505, v505], [506, v506], [507, v507], [508, v508], [509, v509], [512, v512]]) if (n <= until) await db.query(m.migration)
+    if (SERVER) {
+      if (CATALOG) await loadCatalog(db, JSON.parse(fs.readFileSync(CATALOG, 'utf8')))
+      await db.query(`DELETE FROM public.auto_system_settings WHERE key = 'engine.zalo_server_vps'`)
+      await db.query(`INSERT INTO public.auto_system_settings (key, value, is_active) VALUES ('engine.zalo_server_vps', '{"mode":"all","organizationIds":[]}', true)`)
+      report.server = { catalog: CATALOG ? path.basename(CATALOG) : null }
+    } else {
+      await buildFixture(db, [])
+      await db.query(MIGRATION)
+      await db.query(v499.migration)
+      await db.query(V500)
+      await db.query(v501.migration)
+      // ENGINE_REPLAY_UNTIL=508: dừng chuỗi ở bản đó, để so trước / sau một migration trên cùng dữ liệu.
+      const until = Number(process.env.ENGINE_REPLAY_UNTIL || 9999)
+      for (const [n, m] of [[503, v503], [504, v504], [505, v505], [506, v506], [507, v507], [508, v508], [509, v509], [512, v512]]) if (n <= until) await db.query(m.migration)
+    }
     // Chỉ ở DB thử: giữ hạn mức theo ngày (như bộ cũ, kể cả "tiếp tục khi chạm giới hạn"), bỏ hạn mức theo khung giờ vì phát lại
     // dồn trong vài giây sẽ bị chặn giả (hạn mức khung giờ có bộ kiểm SQL riêng).
     await db.query(`ALTER FUNCTION public.aka_agent_engine_action_limit(bigint, bigint, text) RENAME TO aka_agent_engine_action_limit_replay_orig`)
@@ -198,12 +270,17 @@ async function main() {
     const freshIds = freshCampaignIds(E, snap)
     await loadData(db, snap, freshIds)
     // Nhóm data: hàm kết thúc thật của production + nguồn "đang nhận" cho mỗi chiến dịch Nhóm data của mẫu (mẫu không chép bảng nguồn).
-    await db.query(`CREATE TABLE public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,
+    // DB thử của ENGINE_REPLAY_SERVER đã có một số đối tượng này: chỉ tạo khi thiếu.
+    await db.query(`CREATE TABLE IF NOT EXISTS public.auto_campaign_data_group_sources (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, staff_id bigint,
       organization_id bigint, status text NOT NULL, stopped_at timestamptz, stop_reason text, updated_at timestamptz DEFAULT now())`)
-    await db.query(`CREATE FUNCTION public.aka_agent_internal_require_staff_tenant(p_staff_id bigint, p_organization_id bigint) RETURNS void
-      LANGUAGE plpgsql AS $$ BEGIN END $$`)
-    await db.query(`CREATE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint) RETURNS void LANGUAGE sql
-      AS $$ SELECT pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0)) $$`)
+    if (!(await db.query(`SELECT to_regprocedure('public.aka_agent_internal_require_staff_tenant(bigint,bigint)') r`)).rows[0].r) {
+      await db.query(`CREATE FUNCTION public.aka_agent_internal_require_staff_tenant(p_staff_id bigint, p_organization_id bigint) RETURNS void
+        LANGUAGE plpgsql AS $$ BEGIN END $$`)
+    }
+    if (!(await db.query(`SELECT to_regprocedure('public.aka_agent_lock_campaign_input_serialization(bigint)') r`)).rows[0].r) {
+      await db.query(`CREATE FUNCTION public.aka_agent_lock_campaign_input_serialization(p_campaign_id bigint) RETURNS void LANGUAGE sql
+        AS $$ SELECT pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || p_campaign_id::text, 0)) $$`)
+    }
     await db.query(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/campaign-outcome-engine/data-group-finalizer-v219.sql'), 'utf8'))
     await db.query(`INSERT INTO public.auto_campaign_data_group_sources (campaign_id, staff_id, organization_id, status)
       SELECT id, staff_id, organization_id, 'active' FROM public.auto_campaigns WHERE data_target_source_mode = 'data_group'`)
@@ -229,7 +306,7 @@ async function main() {
     for (const c of campaigns) {
       const type = types[c.action_id]
       const account = accounts.get(Number(c.account_id))
-      const entry = { id: c.id, action: c.action_id, runtime: account?.is_zalo_server ? 'fly' : 'desktop' }
+      const entry = { id: c.id, action: c.action_id, runtime: account?.is_zalo_server ? (SERVER && !SERVER_AS_FLY ? 'server' : 'fly') : 'desktop' }
       if (!type) { entry.skipped = 'type_not_registered'; report.unsupported[`${c.action_id}:type_not_registered`] = (report.unsupported[`${c.action_id}:type_not_registered`] || 0) + 1; report.campaigns.push(entry); continue }
       const cfg = type.campaignConfig(c)
       const exclusion = E.sendExclusionActive(cfg) ? 'send_exclusion_replay' : E.friendBlocklistActive(cfg) ? 'friend_blocklist_replay' : null
@@ -335,8 +412,7 @@ async function main() {
         (result.reason === 'no_target' ? '' : ` — ${entry.final?.status}: ${String(entry.final?.note ?? '').slice(0, 160)}`))
     }
   } finally {
-    await db.end().catch(() => {})
-    stop()
+    await stopDb()
   }
   report.finishedAt = new Date().toISOString()
   const same = Object.entries(report.matrix).filter(([k]) => { const [, a, b] = k.split(' => '); return a === b })
