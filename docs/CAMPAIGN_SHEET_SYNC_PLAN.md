@@ -1,6 +1,6 @@
 # Đồng bộ định kỳ từ Google Sheet vào data của chiến dịch — phương án
 
-Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); đã merge `dev_3` / WebApp `dev_1` 26/11 ("Pr và mege"); V662 đã apply akachat 15:04:42 VN 26/11 ("Áp 662 đi"; sổ `20261126080442`, md5 sổ = file, không apply lại; [biên nhận](../migrations/snapshots/campaign-sheet-sync-v662/apply-receipt.json)); Edge đã deploy bản 1 lúc 15:09:47 VN 26/11 (gọi thử từ DB ra 200 `processed: 0`), `campaign.sheet_sync` vẫn `audience: off` / `worker: false`.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
+Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); đã merge `dev_3` / WebApp `dev_1` 26/11 ("Pr và mege"); V662 đã apply akachat 15:04:42 VN 26/11 ("Áp 662 đi"; sổ `20261126080442`, md5 sổ = file, không apply lại; [biên nhận](../migrations/snapshots/campaign-sheet-sync-v662/apply-receipt.json)); Edge đã deploy bản 1 lúc 15:09:47 VN 26/11, bản 2 lúc 15:27:48 VN (giới hạn 20.000 dòng / lượt gọi vì trần 2 giây CPU, tách dòng tiêu đề khi đọc; gọi thử từ DB ra 200 `processed: 0`), `campaign.sheet_sync` vẫn `audience: off` / `worker: false`.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
 
 ## 1. Yêu cầu
 
