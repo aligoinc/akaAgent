@@ -1,10 +1,10 @@
 # Chạy cùng lúc chiến dịch Zalo trên một tài khoản (V670)
 
-Trạng thái (26/11/2026 tối): code ở ba nhánh, **chưa commit, chưa đẩy, chưa apply, chưa deploy, chưa build**:
+Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), **chưa PR, chưa merge, chưa apply, chưa deploy, chưa build**:
 
-- akaAgent: worktree `.claude/worktrees/campaign-parallel-run`, nhánh `claude/campaign-parallel-run`, đã lên `dev_3` `9a610b6c` (sau #804, #805, #806).
-- ChatApi: worktree `../akaAgentChatApi-parallel-run`, nhánh `feat/campaign-parallel-run`, đã lên `dev` `c1a5975` (sau #197).
-- WebApp: worktree `../akaAgentWebApp-parallel-run`, nhánh `claude/campaign-parallel-run`, đã lên `dev_1` `1adf3fd4` (sau #324, #325).
+- akaAgent: worktree `.claude/worktrees/campaign-parallel-run`, nhánh `claude/campaign-parallel-run`, commit `f4d5e08a` trên `dev_3` `cab27ed3` (sau #807, #808, #809).
+- ChatApi: worktree `../akaAgentChatApi-parallel-run`, nhánh `feat/campaign-parallel-run`, commit `cf34727` trên `dev` `ddc8c58` (sau #198). Lõi `packages/campaign-engine` chép từ akaAgent `f4d5e08a` (`SOURCE.json`, `sourceDirty: false`).
+- WebApp: worktree `../akaAgentWebApp-parallel-run`, nhánh `claude/campaign-parallel-run`, commit `f1dc3334` trên `dev_1` `437ec742` (sau #326).
 
 Thiết kế anh đã duyệt: https://claude.ai/artifact/6rFygSGCcMZAzUx5vfbFx9 (bản 3).
 
@@ -211,7 +211,7 @@ Ngoài ra, giả lập A seed 9 tìm ra trường hợp chiến dịch đổi l�
 | `LC_ALL=C CHAT_REPO=<ChatApi> node scripts/campaign-parallel-run-v670-smoke.cjs` | 22 nhóm đạt (PG17). Chi tiết ở danh sách ngay dưới bảng. |
 | `LC_ALL=C CHAT_REPO=<ChatApi> node scripts/campaign-parallel-run-v670-apply-smoke.cjs` (mới) | 7 nhóm đạt trên DB đã chạy thật migration V666 và V667 p1–p3 (`scripts/fixtures/engine-v2-server/db.cjs`). Chi tiết ở danh sách dưới bảng. |
 | Giả lập A `LC_ALL=C CHAT_REPO=<ChatApi> node scripts/engine-v2-scenarios/parallel-run.cjs [--seed N] [--accounts 24] [--rounds 4] [--kills 3] [--steals 6] [--parity \| --parity-only]` (đặt `ENGINE_PARALLEL_PORT` khi chạy song song) | Seed 1–12 sau khi sửa: 0 vi phạm mới. Mỗi seed có sự cố 395–908 lượt, 773–1.323 cặp lần gọi Zalo của hai làn chồng nhau mà không xung đột. `--parity` seed 4, 6, 7, 9: 29–38 chiến dịch không tích giống hệt (data, lịch sử, chuỗi lần gửi, trạng thái). Chạy lại trên bản cuối (sau bản sửa release / close_stale): seed 1, 6, 9, 11, 13 với `--accounts 24 --rounds 4 --kills 3 --steals 6` 0 vi phạm mới; `--parity` seed 4, 6: 32/32 chiến dịch giống hệt. |
-| `LC_ALL=C CHAT_REPO=<ChatApi> node scripts/campaign-parallel-run-desktop-runner-smoke.cjs` (giả lập B, tự chạy lại dưới Electron) | 27/27 ca: 7 ca bản mới, cộng 4 ca app cũ (6a, 6c, 6d, 6e) cho mỗi bản 9.6.0, 10.1.0, 10.6.0, 10.7.0 và `dev_3` hiện tại. Bản cũ dựng từ nguyên cây mã của commit phát hành (`PARALLEL_RUN_OLD_REFS`). Chi tiết ở mục "App cũ gặp chiến dịch có tích" phần Desktop. |
+| `LC_ALL=C CHAT_REPO=<ChatApi> node scripts/campaign-parallel-run-desktop-runner-smoke.cjs` (giả lập B, tự chạy lại dưới Electron) | 27/27 ca: 7 ca bản mới, cộng 4 ca app cũ (6a, 6c, 6d, 6e) cho mỗi bản 9.6.0, 10.1.0, 10.6.0, 10.7.0 và `dev_3` ngay trước tính năng (`cab27ed3`, `PARALLEL_RUN_BASELINE_REF`). Bản cũ dựng từ nguyên cây mã của commit phát hành (`PARALLEL_RUN_OLD_REFS`). Chi tiết ở mục "App cũ gặp chiến dịch có tích" phần Desktop. |
 | `node scripts/campaign-parallel-run-desktop-smoke.cjs` | 7 nhóm (bộ lập lịch thật) |
 | `node scripts/run-campaign-parallel-run-ui-smoke.cjs` | 9 ca (form thật) |
 | `scripts/campaign-engine-desktop-smoke.cjs` | 11 nhóm |
@@ -279,7 +279,7 @@ Bài kiểm có sẵn hỏng trên bản gốc (không do thay đổi này): `sc
 
 ## Thứ tự đưa lên
 
-1. Đẩy ba nhánh để giữ số V670, kiểm lại sổ ngay trước khi apply.
+1. ~~Đẩy ba nhánh để giữ số V670~~ (đã đẩy tối 26/11). Kiểm lại sổ ngay trước khi apply.
 2. Apply V667 p1 → p2 → p3 (phiên engine trên VPS).
 3. Apply V670 p1 → p2 → p3 (buổi tối).
    - Từ lúc này ba loại đã bật nhưng chưa nơi nào hiện ô.

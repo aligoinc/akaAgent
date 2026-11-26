@@ -8,9 +8,10 @@
 //   3. Mở lại app (runner mới, đóng / mở lại file nhật ký): mỗi làn gửi bù đúng mục của nó cho đúng lease, không làn nào phát lại nhật ký của làn
 //      kia, không gửi trùng; chạy tiếp hết data.
 //   4. Không chạy chồng: run lần hai cùng tài khoản + cùng làn trong tiến trình (null), máy khác cùng làn (busy), cùng loại ở làn chính (parallel_wait).
-//   5. Không có làn riêng: runner bản trước (HEAD) trên DB trước V670, runner mới trên DB trước V670 và sau V670 cho cùng kết quả.
+//   5. Không có làn riêng: runner bản trước (PARALLEL_RUN_BASELINE_REF, mặc định dev_3 cab27ed3 ngay trước tính năng) trên DB trước V670,
+//      runner mới trên DB trước V670 và sau V670 cho cùng kết quả.
 //   6. App cũ gặp chiến dịch có tích (khách tích trên Web / iOS, máy Desktop chưa cập nhật): nguyên cây mã (bộ chạy, lõi engine, cổng Zalo,
-//      nhật ký) của từng bản đã phát hành (PARALLEL_RUN_OLD_REFS, mặc định dev_3 hiện tại, 10.7.0, 10.6.0, 10.1.0, 9.6.0) trên DB sau V670.
+//      nhật ký) của từng bản đã phát hành (PARALLEL_RUN_OLD_REFS, mặc định bản trước tính năng, 10.7.0, 10.6.0, 10.1.0, 9.6.0) trên DB sau V670.
 //      6a chạy lần lượt như không tích (so với cùng việc không tích); 6c dừng đột ngột rồi mở lại app cũ (gửi bù, parallel_wait, busy, chạy
 //      tiếp); 6d nâng cấp lên bản mới sau khi app cũ dừng giữa chiến dịch có tích (nhật ký phạm vi cũ được làn chính gửi bù); 6e như 6d nhưng
 //      tài khoản chỉ có chiến dịch có tích: nhật ký phạm vi cũ nằm lại tới khi làn chính chạy (DB từ chối vô hại), data đang chạy dở lúc
@@ -65,7 +66,7 @@ async function runCase(label, fn) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
-// Bản dựng runner (mới: file đang sửa; cũ: HEAD) với các module ngoài thay bằng bản giả như scripts/campaign-engine-desktop-smoke.cjs
+// Bản dựng runner (mới: file đang sửa; cũ: BASELINE_REF) với các module ngoài thay bằng bản giả như scripts/campaign-engine-desktop-smoke.cjs
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
 const STUBS = {
@@ -642,7 +643,9 @@ async function case4(env, mod) {
 // 6. App cũ (bản đã phát hành, không biết làn) gặp chiến dịch có tích trên DB sau V670
 // ---------------------------------------------------------------------------------------------------------------------------------------
 
-const OLD_REFS = (process.env.PARALLEL_RUN_OLD_REFS ?? 'HEAD,3832c81d,dc3ca157,a195d29d,3c59c5cd').split(',').map(s => s.trim()).filter(Boolean)
+// Bản trước tính năng: dev_3 ngay trước commit "Chạy cùng lúc" (cố định, vì sau khi commit HEAD đã có làn).
+const BASELINE_REF = process.env.PARALLEL_RUN_BASELINE_REF ?? 'cab27ed3'
+const OLD_REFS = (process.env.PARALLEL_RUN_OLD_REFS ?? `${BASELINE_REF},3832c81d,dc3ca157,a195d29d,3c59c5cd`).split(',').map(s => s.trim()).filter(Boolean)
 let oldSeq = 0
 const oldUniq = () => ++oldSeq
 
@@ -955,8 +958,9 @@ async function main() {
   console.info = (...a) => { if (engineLog(a)) engineLogs.push(['info', ...a]); else quiet.info(...a) }
   console.warn = (...a) => { if (engineLog(a)) engineLogs.push(['warn', ...a]); else quiet.warn(...a) }
   const outs = []
-  const headSource = spawnSync('git', ['-C', ROOT, 'show', 'HEAD:src/main/engineAdapters/desktopEngineRunner.ts'], { encoding: 'utf8' })
-  if (headSource.status !== 0) throw new Error('Không đọc được runner bản HEAD: ' + headSource.stderr)
+  const headSource = spawnSync('git', ['-C', ROOT, 'show', `${BASELINE_REF}:src/main/engineAdapters/desktopEngineRunner.ts`], { encoding: 'utf8' })
+  if (headSource.status !== 0) throw new Error(`Không đọc được runner bản trước (${BASELINE_REF}): ` + headSource.stderr)
+  if (/PARALLEL_RUN_MAIN_LANE/.test(headSource.stdout)) throw new Error(`Bản trước ${BASELINE_REF} đã có làn: đặt PARALLEL_RUN_BASELINE_REF về commit trước tính năng`)
   // Đối chứng (PARALLEL_RUN_DESKTOP_RUNNER_MUTANT=scope|key): dựng runner mới đã sửa sai như bản trước V670 để thấy bài kiểm bắt được lỗi.
   const MUTANTS = {
     scope: [/return lane === PARALLEL_RUN_MAIN_LANE \? `\$\{staffId\}:\$\{accountId\}` : `\$\{staffId\}:\$\{accountId\}:\$\{lane\}`/, 'return `${staffId}:${accountId}`'],
@@ -976,7 +980,7 @@ async function main() {
   outs.push(current.out, head.out)
   const compat = {}
   try {
-    // ---- DB trước V670 (6 hàm production 26/11): runner HEAD và runner mới, chỉ chiến dịch không tích ----------------------------------
+    // ---- DB trước V670 (6 hàm production 26/11): runner bản trước và runner mới, chỉ chiến dịch không tích -------------------------------
     const live = await openEnv('live')
     try {
       useEnv(live)
@@ -1002,7 +1006,7 @@ async function main() {
       console.log(`  (kiểm tĩnh) hàm còn "ON CONFLICT (account_id)" trên lease: ${conflict.length ? conflict.join(', ') : 'không có'}`)
 
       compat.newV670 = await compatWorkload(env, current.mod, 'new-v670')
-      await runCase('5. Không có làn riêng: runner HEAD và runner mới trên DB trước V670, runner mới trên DB sau V670 cho cùng kết quả', async expect => {
+      await runCase('5. Không có làn riêng: runner bản trước và runner mới trên DB trước V670, runner mới trên DB sau V670 cho cùng kết quả', async expect => {
         const n = compat.newV670
         expect('chạy được: hai chiến dịch hoàn thành, không lease, không lượt mở, nhật ký trống', n.campaigns.every(s => s === 'hoàn thành') && n.end.leases === 0
           && n.end.open === 0 && n.end.journal === 0 && n.end.account === 'chờ xử lý', n)
@@ -1012,7 +1016,7 @@ async function main() {
           n.isRunning.during.every(x => x[0] === true && x[1] === true && x[2] === false) && n.isRunning.after.isRunning.every(x => x === false)
           && n.isRunning.after.active === 0, n.isRunning)
         expect('mỗi lúc chỉ một lease, một lượt', n.samples.every(s => s.leases === 1 && s.active === 1), n.samples)
-        compareCompat(expect, compat.headLive, compat.newLive, 'runner HEAD = runner mới trên DB trước V670')
+        compareCompat(expect, compat.headLive, compat.newLive, 'runner bản trước = runner mới trên DB trước V670')
         compareCompat(expect, compat.newLive, compat.newV670, 'runner mới: DB trước V670 = DB sau V670')
         expect('isRunning của runner mới như nhau trước / sau V670', JSON.stringify(compat.newLive.isRunning) === JSON.stringify(compat.newV670.isRunning),
           { live: compat.newLive.isRunning, v670: compat.newV670.isRunning })
