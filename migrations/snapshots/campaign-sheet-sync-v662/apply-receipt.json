@@ -44,8 +44,8 @@
     "apply_15_04_42_vn": "nạp lại schema 9,1 s; phút đó 504 request REST quá 1 giây; 0 lỗi 503; các lỗi 500 lẻ còn lại là contacts của gateway chat cũ, có cả trước lúc apply"
   },
   "not_done": [
-    "campaign.sheet_sync vẫn audience off / worker false (job 30 giây chưa gọi Edge)",
-    "API/Web chưa deploy, Desktop chưa build"
+    "API/Web chưa deploy, Desktop chưa build nên khách chưa có ô bật đồng bộ",
+    "chưa thử thật với Sheet công khai"
   ],
   "do_not_reapply": true,
   "edge_function": {
@@ -82,5 +82,18 @@
       "rows-smoke 16 PASS, fuzz-loop seed 1 sạch",
       "net.http_post từ DB: 200 processed 0"
     ]
+  },
+  "setting_on": {
+    "at_vn": "2026-11-26 15:33:43",
+    "requested_by": "anh, 26/11/2026: \"bật cho tất cả các khách hàng vì đây là tính năng cơ bản\"",
+    "row_id": 225,
+    "value": {
+      "audience": "all",
+      "worker": true,
+      "maxSourcesPerStaff": 20,
+      "minEveryHours": 1
+    },
+    "after": "tick 15:33:50 / 15:34:20 succeeded 18 / 13 ms, 0 nguồn",
+    "off": "{\"audience\":\"off\",\"worker\":false,\"maxSourcesPerStaff\":20,\"minEveryHours\":1} (worker false dừng đồng bộ nền ngay; audience off chỉ ẩn ô bật mới)"
   }
 }
