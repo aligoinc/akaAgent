@@ -16,9 +16,25 @@ export interface SendExclusionGroup {
   id: number; requestId?: string; accountId: number; name: string; matchMode: 'and' | 'or'; revision: number; rules: ExclusionRule[]
 }
 export interface SaveSendExclusionGroup extends Omit<SendExclusionGroup, 'id'> { id?: number }
-export interface SendExclusionSelection { groupId: number | null; blocklistIds: number[] }
+/** dataGroupIds / sentCampaignIds (V654): Nhóm data và chiến dịch đã gửi; khách có trong một danh sách bất kỳ thì không gửi. */
+export interface SendExclusionSelection { groupId: number | null; blocklistIds: number[]; dataGroupIds?: number[]; sentCampaignIds?: number[] }
 export type SendExclusionsByAccount = Record<string, SendExclusionSelection>
-export interface SendExclusionSnapshot { catalog: ExclusionCatalog; group: SendExclusionGroup | null; blocklistUids: string[] }
+/** Bộ chạy gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} khi lấy 'snapshot' thì nhận thêm phần cần tra trong DB (V654). */
+export const SEND_EXCLUSION_CLIENT_VERSION = 2
+/** Khối điều kiện của một Zalo khác Zalo đang gửi: dữ kiện đọc trong DB qua thao tác 'remote'. */
+export interface SendExclusionRemoteBlock { accountId: number; accountName?: string | null; matchMode: 'and' | 'or'; rules: ExclusionRule[] }
+export interface SendExclusionRemotePlan {
+  groupName: string | null; blocks: SendExclusionRemoteBlock[]; blocklistIds: number[]
+  dataGroups: Array<{id: number; name: string}>; campaigns: Array<{id: number; name: string}>
+}
+export interface SendExclusionSnapshot { catalog: ExclusionCatalog; group: SendExclusionGroup | null; blocklistUids: string[]; version?: number; remote?: SendExclusionRemotePlan | null }
+/** Kết quả 'remote': lý do khớp danh sách (Zalo ID của Zalo khác, Nhóm data, chiến dịch đã gửi) và dữ kiện khối Zalo khác. */
+export interface SendExclusionRemoteFacts {
+  match: { kind: 'blocklist' | 'data_group' | 'campaign'; id: number; name: string; note: string } | null
+  blocks: Array<{ accountId: number; state: 'ok' | 'unknown' | 'not_synced' | 'empty'; facts?: Record<string, unknown> }>
+  /** V657: còn nguồn cần Global ID mà không xác định được Global ID của người nhận (không gửi). */
+  unknown?: string | null
+}
 export interface SendExclusionPage { catalog: ExclusionCatalog; groups: SendExclusionGroup[]; options: FilterOption[]; blocklists: Array<{id: number; name: string; count: number}> }
 export interface ExclusionFacts { akabiz_contact: { ids: string[] } | null; campaign_delivery: { daysSince: number } | null }
 export const SEND_EXCLUSION_IPC = { page: 'send-exclusions:page', save: 'send-exclusions:save' } as const
@@ -32,13 +48,24 @@ export function exclusionSelection(extra: {zaloSendExclusionsByAccountId?: unkno
   if (!map || typeof map !== 'object' || Array.isArray(map)) throw new Error('Cấu hình loại trừ không hợp lệ.')
   const entry = (map as SendExclusionsByAccount)[String(accountId)]
   if (!entry) throw new Error('Chưa cấu hình loại trừ cho tài khoản thực hiện.')
+  const idList = (value: unknown, optional: boolean) => value === undefined ? optional : Array.isArray(value) && value.length <= (optional ? 20 : 1000) && value.every(id => Number.isSafeInteger(id) && id > 0)
   if (!(entry.groupId === null || Number.isSafeInteger(entry.groupId) && entry.groupId > 0) ||
-    !Array.isArray(entry.blocklistIds) || entry.blocklistIds.some(id => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Cấu hình loại trừ không hợp lệ.')
+    !idList(entry.blocklistIds, false) || !idList(entry.dataGroupIds, true) || !idList(entry.sentCampaignIds, true)) throw new Error('Cấu hình loại trừ không hợp lệ.')
   return entry
 }
 export function hasSendExclusions(extra: {zaloSendExclusionsByAccountId?: unknown}, accountId: number | string): boolean {
   const selection = exclusionSelection(extra, accountId)
-  return !!selection && (!!selection.groupId || selection.blocklistIds.length > 0)
+  return !!selection && (!!selection.groupId || selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length)
+}
+/** V657: có danh sách / Nhóm data / chiến dịch để lọc ở bước đầu tiên (trước kiểm từ chối nhận tin / tra số). Cấu hình sai thì false. */
+export function hasSendExclusionPrecheck(actionId: string, extra: {zaloSendExclusionsByAccountId?: unknown; enableMessage?: unknown}, accountId: number | string): boolean {
+  if (!supportsSendExclusion(actionId, extra)) return false
+  try {
+    const selection = exclusionSelection(extra, accountId)
+    return !!selection && (selection.blocklistIds.length > 0 || !!selection.dataGroupIds?.length || !!selection.sentCampaignIds?.length)
+  } catch {
+    return false
+  }
 }
 export const FILTER_SOURCES = new Set(['zalo_profile', 'zalo_friendship', 'zalo_labels', 'akabiz_contact', 'campaign_delivery'])
 export const FILTER_EVALUATORS = new Set(['equals', 'not_equals', 'contains_any', 'contains_none', 'text_contains', 'text_not_contains', 'text_starts_with', 'text_not_starts_with', 'lt', 'lte', 'gt', 'gte'])
@@ -117,7 +144,7 @@ export function evaluateFilter(key: string, actual: unknown, operand: unknown, d
 }
 export interface ExclusionDecision { decision: 'allowed' | 'excluded' | 'unknown'; note: string }
 /** Resolver failures are unknown. Cancellation/lifecycle errors must be thrown by the caller's checkActive. */
-export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid: string, resolve: (source: string) => Promise<unknown>, checkActive: () => void = () => {}, onSourceError?: (source: string, error: unknown) => Promise<void>): Promise<ExclusionDecision> {
+export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid: string, resolve: (source: string) => Promise<unknown>, checkActive: () => void = () => {}, onSourceError?: (source: string, error: unknown) => Promise<void>, scope = ''): Promise<ExclusionDecision> {
   checkActive()
   if (uid && snapshot.blocklistUids.includes(uid.trim())) return {decision: 'excluded', note: 'Thuộc danh sách Zalo ID loại trừ.'}
   if (!uid && snapshot.blocklistUids.length) return {decision: 'unknown', note: 'Chưa xác định được Zalo ID để kiểm tra danh sách loại trừ.'}
@@ -160,13 +187,50 @@ export async function evaluateSendExclusion(snapshot: SendExclusionSnapshot, uid
       result = missingOption ? null : evaluateFilter(operator.evaluatorKey, actual, rule.value, field.dataType)
     }
     evaluatedRules += 1
-    if (result === true && group.matchMode === 'or') return {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”: ${field.name}.`}
+    if (result === true && group.matchMode === 'or') return {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”${scope}: ${field.name}.`}
     if (result === false && group.matchMode === 'and') return {decision: 'allowed', note: ''}
     if (result === null) unknown = true
   }
-  if (unknown) return {decision: 'unknown', note: `Chưa đủ dữ liệu để kiểm tra nhóm “${group.name}”.`}
+  if (unknown) return {decision: 'unknown', note: `Chưa đủ dữ liệu để kiểm tra nhóm “${group.name}”${scope}.`}
   if (evaluatedRules === 0) return {decision: 'allowed', note: ''}
-  return group.matchMode === 'and' ? {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”.`} : {decision: 'allowed', note: ''}
+  return group.matchMode === 'and' ? {decision: 'excluded', note: `Thỏa điều kiện loại trừ của nhóm “${group.name}”${scope}.`} : {decision: 'allowed', note: ''}
+}
+/**
+ * V654: thứ tự rẻ trước: danh sách Zalo ID của Zalo đang gửi (đã có trong snapshot), một lần tra DB ('remote': danh sách của Zalo
+ * khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác), cuối cùng khối của Zalo đang gửi (đọc Zalo). Giữa các khối là
+ * HOẶC: một khối khớp là không gửi; khối chưa đủ dữ liệu chỉ làm kết luận "chưa đủ dữ liệu" khi không khối nào khớp.
+ * Zalo chưa đồng bộ lần nào ('not_synced') thì bỏ qua khối đó. Lỗi đọc DB của readRemote ném ra cho bên gọi xử lý như lỗi 'facts'.
+ */
+export async function evaluateSendExclusionWithRemote(snapshot: SendExclusionSnapshot, uid: string, resolve: (source: string) => Promise<unknown>,
+  readRemote: () => Promise<SendExclusionRemoteFacts>, checkActive: () => void = () => {}, onSourceError?: (source: string, error: unknown) => Promise<void>): Promise<ExclusionDecision> {
+  checkActive()
+  const id = uid.trim()
+  if (id && snapshot.blocklistUids.includes(id)) return {decision: 'excluded', note: 'Thuộc danh sách Zalo ID loại trừ.'}
+  if (!id && snapshot.blocklistUids.length) return {decision: 'unknown', note: 'Chưa xác định được Zalo ID để kiểm tra danh sách loại trừ.'}
+  const plan = snapshot.remote
+  let unknownNote = ''
+  if (plan) {
+    const remote = await readRemote()
+    checkActive()
+    if (remote.match) return {decision: 'excluded', note: remote.match.note}
+    if (remote.unknown) unknownNote ||= String(remote.unknown)
+    const groupName = plan.groupName || 'Loại trừ'
+    for (const block of plan.blocks) {
+      const state = remote.blocks.find(item => Number(item.accountId) === Number(block.accountId))
+      const where = block.accountName ? ` ở ${block.accountName}` : ''
+      if (!state || state.state === 'not_synced' || state.state === 'empty') continue
+      if (state.state !== 'ok') { unknownNote ||= `Chưa xác định được khách${where} để kiểm tra nhóm “${groupName}”.`; continue }
+      const facts = state.facts ?? {}
+      const decision = await evaluateSendExclusion({catalog: snapshot.catalog, blocklistUids: [],
+        group: {id: 0, accountId: block.accountId, name: groupName, matchMode: block.matchMode, revision: 0, rules: block.rules}},
+      id, async source => Object.prototype.hasOwnProperty.call(facts, source) ? facts[source] : null, checkActive, undefined, where)
+      if (decision.decision === 'excluded') return decision
+      if (decision.decision === 'unknown') unknownNote ||= decision.note
+    }
+  }
+  const own = await evaluateSendExclusion({...snapshot, blocklistUids: []}, id, resolve, checkActive, onSourceError)
+  if (own.decision !== 'allowed') return own
+  return unknownNote ? {decision: 'unknown', note: unknownNote} : own
 }
 /** Both findUser and getUserInfo envelopes expose the same profile properties to definitions. */
 export function zaloProfileFacts(raw: unknown): Record<string, unknown> | null {

@@ -1,0 +1,23 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Kiểm thử và cải tiến … fix và cập nhật … cho đến khi ít nhất 3 vòng không còn vấn đề",
+  "applied_at_vn": "2026-11-25 18:25:36",
+  "ledger_version": "20261125112536",
+  "ledger_name": "migration_v655_send_exclusion_input_guards",
+  "ledger_md5": "eedea2730df4e68f2e73272d7331ef00",
+  "file_md5": "eedea2730df4e68f2e73272d7331ef00",
+  "via": "nội dung file đưa vào dòng tạm auto_system_settings (is_active=false) qua REST, kiểm md5 trong DB, EXECUTE thân file và ghi sổ nguyên văn trong cùng giao dịch; dòng tạm đã xoá",
+  "function_source_md5": {
+    "public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)": ["6620a8bda64da5a6cc5235cc400c8a9e", "d8a78dc8336571831d775fee4cf01857"],
+    "public.aka_agent_internal_validate_send_exclusion_selection(jsonb,bigint,bigint,bigint)": ["70f4027f6037cf6fcc9e608771f6f252", "d42f8c4422b40ad6d3565e3e2213ae70"],
+    "public.aka_agent_internal_validate_send_exclusion_rules(jsonb,bigint,bigint,bigint)": ["f5137095425480507d0eb44ab65990a9", "f9c93ef4d769b40e5596a904979acbc2"]
+  },
+  "after_checks": { "edge_5xx_11_20_to_11_26_utc": 0, "send_exclusion_request_errors": 0 },
+  "tests_before_apply": {
+    "fuzz_clean_rounds": "seed 13, 14, 15 liên tiếp 0 vấn đề (~20.800 phép kiểm, dữ liệu thật + V655 + engine + API Web)",
+    "planted_bugs_caught": ["status", "member", "order"],
+    "smoke": "send-exclusion-v655-smoke.cjs đạt (apply, chạy lại bị từ chối, gỡ, apply lại); send-exclusion-v654-smoke.cjs 18 nhóm đạt"
+  },
+  "do_not_reapply": true,
+  "rollback": "migrations/rollback_v655_send_exclusion_input_guards.sql"
+}

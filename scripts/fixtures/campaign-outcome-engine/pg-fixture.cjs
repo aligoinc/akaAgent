@@ -16,7 +16,8 @@ const { Client } = requireFrom('pg')
 const SNAP = JSON.parse(fs.readFileSync(path.join(__dirname, 'akachat-catalog-20261106.json'), 'utf8'))
 const MIGRATION = fs.readFileSync(path.join(ROOT, 'migrations/migration_v495_campaign_outcome_engine.sql'), 'utf8')
 const ROLLBACK = fs.readFileSync(path.join(ROOT, 'migrations/rollback_v495_campaign_outcome_engine.sql'), 'utf8')
-const BIN = process.env.PG17_BIN || '/opt/homebrew/opt/postgresql@17/bin'
+const BIN = process.env.PG17_BIN || ['/opt/homebrew/opt/postgresql@17/bin', '/usr/lib/postgresql/17/bin', '/usr/lib/postgresql/16/bin']
+  .find(dir => fs.existsSync(path.join(dir, 'initdb'))) || '/opt/homebrew/opt/postgresql@17/bin'
 const TABLES = ['auto_account_actions', 'auto_status', 'auto_error', 'auto_account_action_status_policies', 'auto_campaign_actions',
   'auto_system_settings', 'auto_accounts', 'auto_campaigns', 'auto_campaign_input_data', 'auto_campaign_details',
   'auto_account_action_status', 'auto_campaign_error_state']
@@ -105,7 +106,16 @@ FOR EACH ROW EXECUTE FUNCTION public.aka_agent_guard_detail_result_v361();`)
 function startCluster({ port, label = 'aka-v495-', timeoutMs = 240000 }) {
   const temp = fs.mkdtempSync(path.join(os.tmpdir(), label))
   const env = { ...process.env, LC_ALL: 'C', LANG: 'C' }
-  const run = (cmd, args) => { const r = spawnSync(path.join(BIN, cmd), args, { encoding: 'utf8', env }); if (r.status !== 0) throw new Error(r.stderr || r.stdout); return r.stdout }
+  // Container chạy bằng root: initdb / pg_ctl từ chối root nên chạy qua tài khoản postgres.
+  const asRoot = typeof process.getuid === 'function' && process.getuid() === 0
+  if (asRoot) fs.chmodSync(temp, 0o777)
+  const run = (cmd, args) => {
+    const r = asRoot
+      ? spawnSync('su', ['postgres', '-s', '/bin/sh', '-c', [path.join(BIN, cmd), ...args].map(a => `'${a.replace(/'/g, `'\\''`)}'`).join(' ')], { encoding: 'utf8', env })
+      : spawnSync(path.join(BIN, cmd), args, { encoding: 'utf8', env })
+    if (r.status !== 0) throw new Error(r.stderr || r.stdout)
+    return r.stdout
+  }
   run('initdb', ['-D', path.join(temp, 'db'), '-A', 'trust', '-U', 'postgres', '--encoding=UTF8', '--locale=C'])
   run('pg_ctl', ['-D', path.join(temp, 'db'), '-l', path.join(temp, 'pg.log'), '-o', `-h '' -k ${temp} -p ${port} -c max_connections=30 -c timezone=UTC`, '-w', 'start'])
   let stopped = false

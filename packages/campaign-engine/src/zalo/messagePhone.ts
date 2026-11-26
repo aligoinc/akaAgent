@@ -667,6 +667,7 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
       // Loại trừ gửi (gateSendExclusion của Desktop): sau từ chối nhận tin, trước link từ chối; chặn cả nhắn tin lẫn kết bạn.
       if (exclusionOn) {
         const exclusion = await checkZaloSendExclusion(port, ctx, { campaign, uid: firstString(target.uid, ctx.target.uid) ?? '',
+          globalId: globalId || undefined, phone: firstString(target.phone, ctx.target.phone) ?? undefined,
           profileTarget: exclusionProfileTarget(target, uidType !== null), labelContextRunId: ctx.targetRunId })
         if (exclusion.kind === 'blocked') { flush(); return exclusion.outcome }
         if (exclusion.warning) warnings.push(exclusion.warning)

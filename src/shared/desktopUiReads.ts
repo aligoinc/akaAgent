@@ -3,6 +3,7 @@ import type { AutoAccount, CampaignListItem } from './types'
 import type { CampaignTypeVisibilitySnapshot } from './campaignTypeVisibility'
 import type { RenewalReminderSettings } from './renewalReminder'
 import type { AffPartnerAudience } from './affPartner'
+import type { SendExclusionMultiAudience } from './campaignSendExclusionMulti'
 
 export const DESKTOP_POLL_KEYS = {
   campaigns: 'desktop.campaigns.poll_interval_seconds',
@@ -46,6 +47,8 @@ export interface DesktopPollingSettings {
    * Đọc chung câu này, không thêm request. Thiếu dòng/sai JSON = `off` = ẩn.
    */
   affPartnerAudience?: AffPartnerAudience
+  /** Form loại trừ gửi mới (nhiều Zalo, Nhóm data, chiến dịch đã gửi; `campaign.send_exclusion_multi_zalo`, V654). Thiếu = off = form cũ. */
+  sendExclusionMultiAudience?: SendExclusionMultiAudience
 }
 export const DEFAULT_DESKTOP_POLLING: DesktopPollingSettings = { campaigns: 30, accounts: 30, zaloShareRepeatEnabled: false, campaignRepeatAudience: 'off',
   affPartnerAudience: 'off', facebookMaxComments: 20 }

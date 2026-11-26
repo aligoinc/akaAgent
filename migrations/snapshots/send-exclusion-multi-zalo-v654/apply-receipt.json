@@ -1,0 +1,58 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "cho phiên bản web trước → chọn \"Apply V653 + deploy Web\" (V653 đổi số thành V654 vì sổ/nhánh khác đã có migration_v653_*)",
+  "applied_at_vn": "2026-11-25 17:54–17:59",
+  "preflight": {
+    "ledger_latest_before": "v652",
+    "p2_expected_source_md5_6_functions": "khớp production",
+    "existing_groups": 102,
+    "existing_rules": 187
+  },
+  "steps": [
+    {
+      "part": "p1",
+      "file": "migrations/migration_v654_send_exclusion_multi_zalo_p1.sql",
+      "via": "MCP apply_migration",
+      "ledger_version": "20261125105400",
+      "ledger_name": "migration_v654_send_exclusion_multi_zalo_p1",
+      "ledger_md5": "1e0edab9161b1bdb8bf3dc1157e608a8",
+      "file_md5": "1e0edab9161b1bdb8bf3dc1157e608a8",
+      "postflight": "102 nhóm = 102 khối, 0 điều kiện chưa gắn khối; công tắc {\"audience\":\"off\"}"
+    },
+    {
+      "part": "index",
+      "file": "migrations/migration_v654_send_exclusion_multi_zalo_index.sql",
+      "via": "MCP execute_sql (CREATE INDEX CONCURRENTLY, một lệnh; công cụ cắt ở 60 giây, lệnh chạy tiếp tới xong)",
+      "result": "idx_zalo_users_account_global_id indisvalid=true, 321 MB",
+      "ledger": "không ghi sổ (CONCURRENTLY không chạy trong giao dịch)"
+    },
+    {
+      "part": "p2",
+      "file": "migrations/migration_v654_send_exclusion_multi_zalo_p2.sql",
+      "via": "nội dung file (73.573 byte) đưa vào dòng tạm auto_system_settings key tmp.migration_v654_p2_staging (is_active=false) qua REST, kiểm md5 trong DB, chạy EXECUTE thân file (bỏ đúng một dòng BEGIN; và một dòng COMMIT;) rồi ghi sổ statements = nguyên văn file trong cùng một giao dịch; dòng tạm đã xoá (DELETE 204)",
+      "ledger_version": "20261125105848",
+      "ledger_name": "migration_v654_send_exclusion_multi_zalo_p2",
+      "ledger_md5": "e384cb98be490f6de62990f5e926eb2f",
+      "file_md5": "e384cb98be490f6de62990f5e926eb2f",
+      "postflight": "đạt (trong file); 0 nhóm không đọc được bằng hàm cũ",
+      "function_source_md5_after": {
+        "public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)": "6620a8bda64da5a6cc5235cc400c8a9e",
+        "public.aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)": "b70e4713c0fd0e11e9ec3bb6a2b6e1c4",
+        "public.aka_agent_engine_send_exclusion_v1(bigint,uuid,text,jsonb)": "fcdbd280685e4151a1606171ba6dc93e",
+        "public.aka_agent_send_exclusion_groups(bigint,bigint,bigint,text,jsonb,text,text)": "d5cdb495efdc2413b6b05702cb3c3738",
+        "public.aka_agent_internal_send_exclusion_group(bigint)": "12b33a04f42d4298dac662c45af5ff6f"
+      },
+      "v2_execute_grantees": ["postgres", "service_role", "aka_agent_desktop"]
+    }
+  ],
+  "after_checks": {
+    "edge_5xx_10_45_to_11_00_utc": 0,
+    "edge_503": 0,
+    "send_exclusion_requests_errors": 0,
+    "postgres_send_exclusion_errors_after_apply": 0,
+    "rpc_smoke": "aka_agent_send_exclusion_v2 page (service_role, giao dịch huỷ) trên nhân viên có 7 nhóm: trả groups/catalog/accounts/blocklists, mỗi nhóm 1 khối",
+    "switch": "campaign.send_exclusion_multi_zalo = {\"audience\":\"off\"}"
+  },
+  "do_not_reapply": true,
+  "rollback": "migrations/rollback_v654_send_exclusion_multi_zalo.sql (gỡ p2 rồi p1; chỉ mục bỏ bằng DROP INDEX CONCURRENTLY nếu cần)"
+}

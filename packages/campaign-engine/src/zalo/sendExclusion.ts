@@ -15,9 +15,12 @@ import { CancelledError, errorMessage, stepFailure, withDeadline } from '../boun
 import type { ConfigIssue } from '../validation.js'
 import { ZaloPortError, zaloFailure, type ZaloFoundUser, type ZaloResolvedTarget } from './common.js'
 import {
-  evaluateSendExclusion, exclusionSelection, hasSendExclusions, readFriendship, ruleDefinition, supportsSendExclusion,
-  validateExclusionGroup, zaloProfileFacts, type ExclusionFacts, type SendExclusionSnapshot
+  evaluateSendExclusionWithRemote, exclusionSelection, hasSendExclusions, readFriendship, ruleDefinition, supportsSendExclusion,
+  validateExclusionGroup, zaloProfileFacts, type ExclusionFacts, type SendExclusionRemoteFacts, type SendExclusionSnapshot
 } from './sendExclusionRules.js'
+
+/** Nơi chạy gửi {clientVersion} khi lấy 'snapshot' (V654) thì nhận cả cấu hình cần bước 'remote'; xuất cho cổng Fly của ChatApi. */
+export { SEND_EXCLUSION_CLIENT_VERSION, type SendExclusionRemoteFacts } from './sendExclusionRules.js'
 
 /** Mã cổng trong auto_engine_gates. */
 export const SEND_EXCLUSION_GATE = 'send_exclusion'
@@ -34,10 +37,16 @@ export class SendExclusionRpcError extends Error {
 }
 
 export interface ZaloSendExclusionPort {
-  /** V504 'snapshot': danh mục điều kiện, nhóm điều kiện của tài khoản, danh sách Zalo ID loại trừ. Ném SendExclusionRpcError. */
+  /**
+   * V504 'snapshot': danh mục điều kiện, nhóm điều kiện của tài khoản, danh sách Zalo ID loại trừ. Ném SendExclusionRpcError.
+   * Nơi chạy có sendExclusionRemote thì gửi {clientVersion: SEND_EXCLUSION_CLIENT_VERSION} (V654) để nhận thêm phần 'remote';
+   * không gửi thì DB từ chối cấu hình theo nhiều Zalo / Nhóm data / chiến dịch đã gửi (config_invalid, không gửi sai).
+   */
   sendExclusionSnapshot(ctx: StepContext): Promise<SendExclusionSnapshot>
   /** V504 'facts': tag akaBiz (tags) / số ngày từ lần gửi gần nhất (days) của người nhận. Ném SendExclusionRpcError. */
   sendExclusionFacts(ctx: StepContext, payload: { uid: string; tags?: boolean; days?: number }): Promise<ExclusionFacts>
+  /** V654 'remote': danh sách của Zalo khác, Nhóm data, chiến dịch đã gửi, dữ kiện khối các Zalo khác (một lần mỗi data). */
+  sendExclusionRemote?(ctx: StepContext, payload: { uid: string; globalId?: string | undefined; phone?: string | undefined }): Promise<SendExclusionRemoteFacts>
   /**
    * Tag Zalo của người nhận ({ ids, availableValues }) từ một lần đọc tag của tài khoản, dùng chung cho cả data (cả lô khi chia sẻ)
    * như CampaignLabelContext của Desktop; contextRunId là lượt data giữ ngữ cảnh, nơi chạy dọn ở onTargetEnd của lượt đó.
@@ -103,6 +112,9 @@ export interface SendExclusionInput {
   campaign: ExclusionCampaign
   /** Zalo ID của người nhận (UID tìm được, hoặc UID của data). */
   uid: string
+  /** Zalo ID chung / SĐT của người nhận (V654: nhận ra khách ở Zalo khác, Nhóm data, chiến dịch đã gửi). */
+  globalId?: string | undefined
+  phone?: string | undefined
   /** Mục tiêu đã có hồ sơ (tra số / getUserProfile thành công); null thì đọc hồ sơ khi điều kiện cần, như Desktop. */
   profileTarget: ZaloResolvedTarget | null
   /** Lượt data giữ ngữ cảnh tag: data đang chạy, hoặc data đầu lô khi gửi dạng chia sẻ. */
@@ -150,6 +162,7 @@ export async function checkZaloSendExclusion(port: ZaloSendExclusionPort, ctx: S
     }
     try {
       if (loaded.group) validateExclusionGroup(loaded.catalog, loaded.group)
+      for (const block of loaded.remote?.blocks ?? []) validateExclusionGroup(loaded.catalog, { name: loaded.remote?.groupName || 'Loại trừ', matchMode: block.matchMode, rules: block.rules })
     } catch (error) {
       return configInvalid(error)
     }
@@ -163,8 +176,18 @@ export async function checkZaloSendExclusion(port: ZaloSendExclusionPort, ctx: S
   const days = (source: string): number => Math.max(1, ...(current.group?.rules ?? [])
     .filter(rule => rule.isEnabled && ruleDefinition(current.catalog, rule).field.sourceKey === source).map(rule => Number(rule.value)))
   const read = <T>(label: string, fn: (s: AbortSignal) => Promise<T>): Promise<T> => withDeadline(label, timeoutMs, ctx.signal, fn)
+  const readRemote = async (): Promise<SendExclusionRemoteFacts> => {
+    try {
+      if (!port.sendExclusionRemote) throw new Error('Nơi chạy chưa hỗ trợ loại trừ theo nhiều Zalo.')
+      const remotePort = port.sendExclusionRemote.bind(port)
+      return await read('send_exclusion_remote', s => remotePort({ ...ctx, signal: s }, {
+        uid, globalId: String(input.globalId || '').trim() || undefined, phone: String(input.phone || '').trim() || undefined }))
+    } catch (error) {
+      throw new SourceFailure('remote', error)
+    }
+  }
   try {
-    const decision = await evaluateSendExclusion(current, uid, async source => {
+    const decision = await evaluateSendExclusionWithRemote(current, uid, async source => {
       if (source === 'zalo_labels') {
         return uid ? read('send_exclusion_labels', s => port.labelMembership({ ...ctx, signal: s }, input.labelContextRunId, uid)) : null
       }
@@ -186,7 +209,7 @@ export async function checkZaloSendExclusion(port: ZaloSendExclusionPort, ctx: S
         return facts[source]
       }
       return null
-    }, () => { if (ctx.signal.aborted) throw new CancelledError('send_exclusion') }, async (source, error) => {
+    }, readRemote, () => { if (ctx.signal.aborted) throw new CancelledError('send_exclusion') }, async (source, error) => {
       throw new SourceFailure(source, error)
     })
     if (decision.decision === 'allowed') return { kind: 'allowed' }
@@ -202,7 +225,7 @@ export async function checkZaloSendExclusion(port: ZaloSendExclusionPort, ctx: S
       const raw = stepFailure(cause, false)
       return { kind: 'blocked', outcome: raw.ok ? raw : { ...raw, data: { gate: SEND_EXCLUSION_GATE, source: error.source } } }
     }
-    // Dữ kiện trong DB (tag akaBiz, lần gửi gần nhất): cổng theo on_error.
+    // Dữ kiện trong DB (tag akaBiz, lần gửi gần nhất, phần 'remote'): cổng theo on_error.
     return unavailable(cause)
   }
 }

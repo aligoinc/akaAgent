@@ -22,7 +22,7 @@ import { inspectPendingCampaign } from './campaignPendingReasonService'
 import type { CampaignPendingReasonResult } from '../../shared/campaignPendingReason'
 import { makeEngagementSource } from '../../shared/zaloCampaignEngagement'
 import { beginZaloMessageStatusSend, type ZaloMessageStatusSend } from './zaloMessageStatusSync'
-import { CampaignLabelContext, evaluateSendExclusion, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
+import { CampaignLabelContext, evaluateSendExclusionWithRemote, hasSendExclusionPrecheck, SEND_EXCLUSION_CLIENT_VERSION, type SendExclusionRemoteFacts, hasSendExclusions, zaloProfileFacts, readFriendship, ruleDefinition, supportsSendExclusion, validateExclusionGroup, type ExclusionFacts, type SendExclusionSnapshot } from '../../shared/campaignSendExclusion'
 import { callSendExclusionRuntime } from '../data/repositories/campaignSendExclusionRepository'
 import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkipResult } from '../../shared/zaloAuxiliaryActions'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
@@ -1067,6 +1067,8 @@ export class CampaignScheduler {
   private failedRunErrorPolicies = new Map<number, unknown>()
   private sendExclusionProfileErrors = new WeakMap<ZaloResolvedTarget, unknown>()
   private sendExclusionRuns = new Map<number, SendExclusionSnapshot>()
+  /** V657: DB chưa có thao tác precheck (chưa apply V657) thì không gọi lại trong tiến trình này. */
+  private sendExclusionPrecheckUnsupported = false
   private sendExclusionLabels = new Map<number, CampaignLabelContext>()
   private zaloMessageOptOutContexts = new Map<string, ZaloMessageOptOutRuntimeContext>()
   private boundaryStoppedAccountQueues = new Set<number>()
@@ -4180,8 +4182,9 @@ export class CampaignScheduler {
 
       try {
         if (supportsSendExclusion(campaign.actionId, campaign.extraSettings) && hasSendExclusions(campaign.extraSettings ?? {}, account.id)) {
-          const snapshot = await this.sendExclusionRpc<SendExclusionSnapshot>(account, campaign, 'snapshot')
+          const snapshot = await this.sendExclusionRpc<SendExclusionSnapshot>(account, campaign, 'snapshot', {clientVersion: SEND_EXCLUSION_CLIENT_VERSION})
           if (snapshot.group) validateExclusionGroup(snapshot.catalog, snapshot.group)
+          for (const block of snapshot.remote?.blocks ?? []) validateExclusionGroup(snapshot.catalog, {name: snapshot.remote?.groupName || 'Loại trừ', matchMode: block.matchMode, rules: block.rules})
           this.sendExclusionRuns.set(campaign.id, snapshot)
         }
       } catch (error) {
@@ -4750,6 +4753,12 @@ export class CampaignScheduler {
           }
           continue
         }
+      }
+
+      if (detail && hasSendExclusionPrecheck(campaign.actionId, campaign.extraSettings ?? {}, account.id) &&
+        await this.precheckSendExclusion(account, campaign, detail)) {
+        if (this.isServerZaloCampaign(account, campaign) && !this.running) return
+        continue
       }
 
       if (detail && this.isZaloFriendBlockedByBlocklist(campaign, detail, zaloFriendBlocklist)) {
@@ -8946,7 +8955,33 @@ export class CampaignScheduler {
     ).catch(() => {})
   }
 
-  private sendExclusionRpc<T>(account: AutoAccount, campaign: Campaign, operation: 'snapshot' | 'facts' | 'pause', payload: Record<string, unknown> = {}): Promise<T> {
+  /**
+   * V657: bước lọc đầu tiên của loại trừ gửi (danh sách Zalo ID / Nhóm data / chiến dịch đã gửi, so theo SĐT / Global ID), trước kiểm
+   * từ chối nhận tin, chống gửi lặp và tra số. DB tạm dừng data khớp kèm lý do; data bị loại không gọi Zalo, không tính lượt, không nghỉ.
+   * Lỗi ở bước này (kể cả DB chưa có V657) thì bỏ qua: bước sau khi tra số / đọc hồ sơ vẫn kiểm đủ.
+   */
+  private async precheckSendExclusion(account: AutoAccount, campaign: Campaign, detail: CampaignInputData): Promise<boolean> {
+    if (this.sendExclusionPrecheckUnsupported) return false
+    let result: {excluded?: boolean; note?: string; changed?: boolean}
+    try {
+      result = await this.sendExclusionRpc<typeof result>(account, campaign, 'precheck', {inputId: detail.id, expectedStatus: 'chờ xử lý'})
+    } catch (error) {
+      if (String((error as {rpcMessage?: unknown})?.rpcMessage ?? '').includes('send_exclusion_operation_invalid')) this.sendExclusionPrecheckUnsupported = true
+      this.throwIfZaloRuntimeStopping(campaign.id)
+      console.warn('[SendExclusion] precheck bỏ qua:', getErrorMessage(error))
+      return false
+    }
+    this.throwIfZaloRuntimeStopping(campaign.id)
+    if (!result?.excluded) return false
+    const note = String(result.note || '')
+    if (result.changed) {
+      detail.status = 'tạm dừng'; detail.note = note
+      await this.logZaloMessageOptOutBlocked(campaign, detail, note, false)
+    }
+    return true
+  }
+
+  private sendExclusionRpc<T>(account: AutoAccount, campaign: Campaign, operation: 'snapshot' | 'facts' | 'remote' | 'pause' | 'precheck', payload: Record<string, unknown> = {}): Promise<T> {
     const token = this.campaignRunBoundaries.get(campaign.id)?.runtimeClaimToken
     if (!token) throw new Error('Lượt chạy loại trừ không còn hợp lệ.')
     this.throwIfZaloRuntimeStopping(campaign.id)
@@ -8968,7 +9003,12 @@ export class CampaignScheduler {
     if (!snapshot) return false
     const uid = String(target?.uid || detail.uid || '').trim()
     let stopReads = false
-    let decision = await evaluateSendExclusion(snapshot, uid, async source => {
+    // V654: danh sách / Nhóm data / chiến dịch đã gửi / khối Zalo khác tra một lần trong DB; khối Zalo đang gửi đọc như cũ.
+    const readRemote = () => this.sendExclusionRpc<SendExclusionRemoteFacts>(account, campaign, 'remote', {
+      inputId: detail.id, uid, globalId: String(target?.globalId || '').trim() || undefined,
+      phone: String(target?.phone || detail.phone || '').trim() || undefined
+    })
+    let decision = await evaluateSendExclusionWithRemote(snapshot, uid, async source => {
       if (stopReads) return null
       if (source === 'zalo_labels') return uid ? this.getSendExclusionLabels(account, campaign).ids(uid) : null
       if (source === 'zalo_friendship') {
@@ -8992,7 +9032,7 @@ export class CampaignScheduler {
         return data[source]
       }
       return null
-    }, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
+    }, readRemote, () => this.throwIfZaloRuntimeStopping(campaign.id), async (source, error) => {
       if (!source.startsWith('zalo_')) return
       const policy = await this.getZaloPolicyByErrorCode(this.getZaloErrorCode(error))
       const note = `Không thể kiểm tra loại trừ: ${this.getZaloErrorMessage(error)}`

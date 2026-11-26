@@ -1,0 +1,435 @@
+# Loại trừ gửi theo nhiều Zalo, Nhóm data và chiến dịch đã gửi — phương án
+
+**Tình trạng 25/11/2026:** anh bảo "Đồng ý hãy thực thi phương án này" (các đề xuất ở mục 9 coi như đã chốt). Đã code xong
+DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
+**chưa merge, V654 đã apply akachat 17:54–17:59 VN 25/11 ([biên nhận](../migrations/snapshots/send-exclusion-multi-zalo-v654/apply-receipt.json), không apply lại), chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V654 đặt `off`**.
+**V657 (mục 12) đã apply akachat 04:18 VN 26/11** (p1 sổ `20261125211803`, p2 `20261125211830`, không apply lại; [biên nhận](../migrations/snapshots/send-exclusion-global-match-v657/apply-receipt.json)).
+Chi tiết ở mục 10.
+Thiết kế: https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB (anh duyệt 25/11, dạng 2 tầng xếp chồng).
+Anh đồng ý các đề xuất ở vòng thiết kế 2 và yêu cầu thêm hai loại loại trừ: theo Nhóm data, theo chiến dịch đã gửi.
+
+## 1. Hiện trạng (đọc code và production 25/11, chỉ đọc)
+
+- Nhóm loại trừ (`auto_campaign_send_exclusion_groups`, [V330](../migrations/migration_v330_campaign_send_exclusions.sql))
+  gắn đúng 1 tài khoản (`account_id NOT NULL`). Mọi điều kiện xét dữ liệu của tài khoản đang gửi:
+  - **Trạng thái bạn bè:** hỏi Zalo bằng tài khoản đang gửi.
+  - **Tag Zalo:** đọc tag của tài khoản đang gửi.
+  - **Tag akaBiz:** gồm tag dùng chung của nhân viên và tag riêng của tài khoản; khách có tag hay không đọc theo liên hệ hoặc hội thoại của tài khoản đó.
+  - **Số ngày từ lần gửi thành công:** `aka_agent_internal_send_delivery_history(account)`, chỉ đếm tin của tài khoản đó.
+- Danh sách không gửi (`auto_account_contact_groups.purpose = 'zalo_friend_blocklist'`, 71 danh sách) cũng theo tài khoản.
+- Cấu hình chiến dịch: `extra_settings.zaloSendExclusionsByAccountId[accountId] = {groupId, blocklistIds}`.
+  Trigger `auto_validate_campaign_send_exclusion` kiểm khi lưu.
+- **Ba nơi chạy:**
+  - Bộ chạy cũ của Desktop và App Server: `gateSendExclusion` trong [campaignScheduler.ts](../src/main/services/campaignScheduler.ts), gọi RPC `aka_agent_campaign_send_exclusion_runtime` (`snapshot` / `facts` / `pause`).
+  - Engine v2: lõi [sendExclusion.ts](../packages/campaign-engine/src/zalo/sendExclusion.ts), RPC `aka_agent_engine_send_exclusion_v1` ([V504](../migrations/migration_v504_engine_send_exclusion.sql)), chạy cả trên Desktop lẫn Fly.
+  - Bộ chạy cũ của ChatApi.
+- Luật đánh giá có 3 bản chép phải giống nhau từng byte: [campaignSendExclusion.ts](../src/shared/campaignSendExclusion.ts), `packages/campaign-engine/src/zalo/sendExclusionRules.ts` và bản ở `runtime-protocol` của ChatApi.
+- **Form:**
+  - Desktop: [CampaignSendExclusions.tsx](../src/renderer/src/components/CampaignPanels/CampaignSendExclusions.tsx) và form Agent `CampaignAgentSendExclusions.tsx`.
+  - Web: `apps/web/src/features/CampaignSendExclusions.tsx`, API `apps/api/.../campaignSendExclusions.ts`. Cả Desktop lẫn Web đều gọi RPC `aka_agent_send_exclusion_groups`.
+  - iOS: `apps/mobile/src/features/campaign/SendExclusions.tsx`.
+  - AI tạo nhóm: `ai_form_configs` id 7.
+  - Quy trình: `packages/journey-core/src/stepCampaign.ts`.
+- **Số đo:**
+  - 102 nhóm loại trừ của 50 nhân viên. 16 nhân viên đang tạo nhóm riêng cho nhiều Zalo (nhiều nhất 5). 9 chiến dịch chưa xong có cấu hình cho từ 2 tài khoản.
+  - Một nhân viên có tối đa 50 Zalo, 90% nhân viên có từ 5 Zalo trở xuống.
+  - Nhóm data: 5.667 nhóm, trong đó "Zalo · User theo UID" 3.663 nhóm và "Số điện thoại" 147 nhóm.
+- **Nhận ra cùng một khách giữa các Zalo được:** Zalo ID riêng của khách khác nhau ở mỗi Zalo, nhưng Zalo ID chung (`global_id`) có ở:
+  - 99,7% danh bạ (mẫu 30.365 liên hệ);
+  - 99,5% thành viên Nhóm data UID (14.660 thành viên, tất cả đều gắn tài khoản);
+  - 100% kết quả gửi thành công gần đây (`data.target.globalId`, 5.196 kết quả nhắn tin và kết bạn).
+- **Thiếu một chỉ mục:** `zalo_users` (5,7 triệu dòng, 7,9 GB) chưa có chỉ mục theo `global_id`. Chỉ mục `(account_id, zalo_uid)` hiện có nặng 392 MB.
+
+## 2. Đã chốt
+
+1. Nhóm loại trừ có 2 tầng:
+   - Tầng 1 chọn 1 hoặc nhiều Zalo của nhân viên.
+   - Tầng 2: mỗi Zalo một khối điều kiện riêng, có VÀ/HOẶC riêng, xét dữ liệu của chính Zalo đó.
+   - Giao diện dạng xếp chồng (2A).
+2. Giữa các Zalo luôn là HOẶC: khách khớp khối của 1 Zalo bất kỳ là không gửi.
+3. Danh sách bạn bè/Zalo ID: chọn được danh sách của mọi Zalo của nhân viên.
+4. Zalo đang gửi tin đọc trực tiếp từ Zalo như hiện nay. Zalo khác dùng bạn bè và tag đã đồng bộ gần nhất; lịch sử gửi luôn mới nhất.
+5. Zalo chưa đồng bộ lần nào thì bỏ qua khối của Zalo đó.
+6. Bổ sung loại trừ khách trong Nhóm data.
+7. Bổ sung loại trừ data đã nhận tin ở chiến dịch khác (khách tự chọn chiến dịch).
+8. Nhóm tạo trước đây thành nhóm 1 khối và chạy y như cũ.
+
+## 3. Cách xét
+
+### 3.1 Khoá nhận ra khách
+
+- Ưu tiên Zalo ID chung, sau đó tới SĐT chuẩn hoá (`normalize_phone`).
+- **Với người nhận đang xét:** Zalo ID chung lấy ở kết quả tra số hoặc hồ sơ Zalo (lõi đã có `globalId`); bộ cũ không có thì tra `zalo_users (account_id, zalo_uid)` của tài khoản gửi. SĐT lấy từ data.
+- **Với Zalo khác trong nhóm:** từ Zalo ID chung tra `zalo_users (account_id, global_id)` để ra Zalo ID riêng của khách ở Zalo đó (cần chỉ mục mới, mục 4), rồi đọc dữ liệu theo Zalo ID riêng ấy.
+
+### 3.2 Khối của từng Zalo
+
+Bốn điều kiện giữ nguyên như hiện nay. Khối của Zalo đang gửi chạy y như hôm nay. Khối của Zalo khác đọc dữ kiện trong DB:
+
+| Điều kiện | Khi Zalo đó không phải Zalo đang gửi |
+|---|---|
+| Trạng thái bạn bè | Bạn bè / Người lạ: theo danh sách bạn bè đã đồng bộ của Zalo đó (`zalo_users.is_fr` hoặc `auto_account_contacts.is_friend`; khi code phải xác minh cột nào được ghi lúc đồng bộ bạn bè). Gửi lời mời kết bạn: có lời mời app đã gửi thành công từ Zalo đó mà chưa được đồng ý và chưa bị từ chối (`auto_campaign_detail_zalo_engagement`, cột `rejected_at` của V615). Nhận kết bạn: DB không có nên coi là không khớp; form ghi chú điều này dưới điều kiện. |
+| Tag Zalo | Tag đã đồng bộ của Zalo đó: dòng `zalo_tag` trong `auto_account_contacts` (`extra_data.conversations`), hoặc `chat_zalo_account_conversation_tag` với tài khoản chạy trên Fly hay có Chat. Tag đã xoá xử lý như V573. |
+| Tag akaBiz | Như `facts` hiện nay, nhưng tính với liên hệ hoặc hội thoại của Zalo đó. |
+| Đã gửi tin trong N ngày | `aka_agent_internal_send_delivery_history(account_id = Zalo đó)`, khoá là Zalo ID riêng của khách ở Zalo đó cộng SĐT. |
+
+Ngoài ra:
+
+- **Zalo chưa đồng bộ lần nào:** bỏ qua cả khối, form cảnh báo.
+  - Tài khoản có Chat đã có mốc `chat_zalo_account.last_user_sync_at` / `last_tag_sync_at`.
+  - Tài khoản chỉ chạy Desktop chưa có mốc nào. Phải thêm mốc theo tài khoản và ghi ở chỗ đồng bộ hiện có; hoặc lấy mốc mới nhất của dòng liên hệ, việc này cần đo trước.
+- **Zalo đã xoá hoặc không còn thuộc nhân viên:** bỏ qua khối đó, không dừng chiến dịch; thẻ cảnh báo.
+- **Không đọc được dữ liệu của Zalo đang gửi, hoặc DB lỗi:** như hiện nay (bộ cũ tạm dừng data; engine v2 dùng mã EXC02, cổng ở chế độ closed).
+
+### 3.3 Loại trừ theo danh sách (ở thẻ chiến dịch)
+
+Khách có trong một danh sách bất kỳ thì không gửi.
+
+- **Danh sách bạn bè/Zalo ID:** chọn được danh sách của mọi Zalo của nhân viên. Cùng Zalo đang gửi thì so Zalo ID riêng như cũ; danh sách của Zalo khác so theo Zalo ID chung của thành viên.
+- **Nhóm data:**
+  - Chỉ hai loại: Số điện thoại (so SĐT chuẩn hoá với `uid` của liên hệ, giống [V519](DATA_GROUP_MEMBER_MATCHES_V519.md)) và Zalo · User theo UID (so Zalo ID chung của thành viên).
+  - Gồm nhóm của nhân viên và nhóm được chia sẻ cho nhân viên (`auto_data_group_recipients`, `sharing_scope`).
+  - Thành viên đã xoá mềm không tính. Nhóm bị xoá thì không còn loại trừ theo nhóm đó, thẻ cảnh báo.
+- **Chiến dịch đã gửi:**
+  - Chọn trong các chiến dịch nhắn tin Zalo của nhân viên, trừ chính chiến dịch đang sửa.
+  - Tính data đã được gửi tin thành công, dùng đúng bộ trạng thái của chống gửi lặp (`thành công`, `đã gửi`, `đã nhận`, `đã xem`, `đã click`); khớp theo Zalo ID chung hoặc SĐT.
+  - Kiểm từng data lúc gửi, không chụp danh sách lúc đầu lượt, để chiến dịch đang chạy song song cũng được tính.
+  - Chiến dịch bị xoá vẫn loại trừ theo lịch sử đã gửi của nó.
+  - Đường tra chỉ dùng chỉ mục: Zalo ID chung ra Zalo ID riêng ở tài khoản của từng chiến dịch (`zalo_users`), sang data qua `idx_campaign_input_cooldown_uid`, rồi sang kết quả qua `idx_campaign_details_input_data_id`. Tra theo SĐT đi qua `idx_campaign_input_cooldown_phone`.
+
+### 3.4 Thứ tự xét và câu ghi chú
+
+- **Thứ tự** (giữ nguyên tắc "rẻ trước" của V330, dừng ngay khi đã có kết quả): danh sách (DB), rồi khối các Zalo khác (DB), cuối cùng khối Zalo đang gửi (gọi Zalo).
+- **Câu ghi chú** của data và dòng tiến trình nêu đúng lý do:
+  - `Thỏa điều kiện loại trừ của nhóm "<tên>" (<Zalo>: <điều kiện khớp>).`
+  - `Có trong Nhóm data "<tên>".`
+  - `Đã nhận tin ở chiến dịch "<tên>" ngày dd/mm.`
+- Data bị loại vẫn sang Tạm dừng và không tính lượt gửi như hiện nay.
+
+### 3.5 Giới hạn đề xuất
+
+Mỗi nhóm tối đa 20 Zalo; mỗi chiến dịch tối đa 20 Nhóm data và 20 chiến dịch đã gửi cho mỗi Zalo gửi.
+Phải đo thời gian bước `facts` với 20 Zalo trước khi chốt các con số này.
+
+## 4. Dữ liệu (migration)
+
+- **Bảng mới** `auto_campaign_send_exclusion_group_accounts`: `id`, `group_id` (FK tới nhóm), `account_id` (FK tới `auto_accounts`), `match_mode`, `sort_order`, `created_at`, `UNIQUE (group_id, account_id)`. Bật RLS, quyền như các bảng V330.
+- **`auto_campaign_send_exclusion_rules`:** thêm `group_account_id` (FK tới bảng mới). Ràng buộc "mỗi trường một lần" đổi từ theo nhóm sang theo khối.
+- **`auto_campaign_send_exclusion_groups`:**
+  - Giữ `account_id` (= Zalo của khối đầu) để app cũ đọc không lỗi.
+  - Thêm `version smallint NOT NULL DEFAULT 1`; nhóm từ 2 khối mang `version = 2`.
+- **Điền sẵn:** mỗi nhóm cũ có 1 khối, lấy `account_id` và `match_mode` của nhóm; các điều kiện gắn vào khối đó. Hiện có 102 nhóm, chỉ là chép dữ liệu.
+- **Cấu hình chiến dịch:** `zaloSendExclusionsByAccountId[acc]` thêm `dataGroupIds: number[]` và `sentCampaignIds: number[]`; `blocklistIds` nhận danh sách của mọi Zalo của nhân viên.
+  - Trigger kiểm: Nhóm data là của nhân viên hoặc được chia sẻ, đúng loại; chiến dịch là của nhân viên, đúng loại, không phải chính nó; trong giới hạn.
+  - Ô "dùng chung cho các Zalo gửi" chỉ là form ghi cùng lựa chọn vào mọi khoá tài khoản, không cần đổi lúc chạy.
+- **Chỉ mục mới:** `zalo_users (account_id, global_id) WHERE global_id IS NOT NULL AND global_id <> ''`.
+  - Dựng `CONCURRENTLY` trong một lệnh riêng, ngoài giờ cao điểm, ước khoảng 400 MB.
+  - `CREATE INDEX` không làm PostgREST nạp lại schema.
+- **Mốc đồng bộ bạn bè/tag** cho tài khoản Desktop (mục 3.2).
+- **Công tắc** `auto_system_settings` `campaign.send_exclusion_multi_zalo` = `{"audience":"off"|"admin_akabiz"|"all"}`. Chỉ quyết định form có hiện phần mới hay không; thiếu dòng thì tắt.
+
+## 5. Hàm DB
+
+Thêm hàm `_v2` thay vì đổi chữ ký cũ, để app cũ vẫn gọi được hàm cũ.
+
+- **`aka_agent_send_exclusion_groups_v2`** (Desktop) và bản cho API Web (`service_role`):
+  - `page`: mọi nhóm của nhân viên kèm các khối; danh sách Zalo của nhân viên với lựa chọn của từng Zalo (tag Zalo, tag akaBiz, mốc đồng bộ).
+  - `save`: lưu nhóm nhiều khối, giữ cách kiểm `revision` và `create_request_id` hiện có.
+  - `lists`: Nhóm data dùng được (cả nhóm được chia sẻ, kèm số thành viên) và chiến dịch nhắn tin Zalo kèm số data đã nhận tin.
+- **Hàm cũ `aka_agent_send_exclusion_groups`:**
+  - `page` chỉ trả nhóm 1 khối của đúng tài khoản, như hôm nay.
+  - `save` từ chối nhóm `version = 2` (`send_exclusion_group_requires_update`), để form cũ không xoá mất các khối.
+- **Bộ chạy cũ `aka_agent_campaign_send_exclusion_runtime`:**
+  - `snapshot` trả nhóm theo khối và danh sách đã chọn.
+  - `facts` nhận thêm `globalId`, `phone`, các khối cần đọc trong DB, danh sách cần kiểm; trả dữ kiện của từng khối và lý do khớp danh sách.
+- **Engine `aka_agent_engine_send_exclusion_v1`:** đổi tương tự, xác thực theo lease như V504.
+- **App cũ gặp cấu hình mới:** chiến dịch dùng nhóm `version = 2`, hoặc có `dataGroupIds` / `sentCampaignIds`, hoặc chọn danh sách của Zalo khác, mà app không gửi khoá báo đã hỗ trợ.
+  - `snapshot` từ chối (`send_exclusion_client_outdated`), app cũ tạm dừng chiến dịch như khi cấu hình loại trừ lỗi: không gửi, không gửi sai.
+  - Câu cho khách: "Cập nhật akaAgent để chạy loại trừ theo nhiều Zalo."
+- **Thời gian:** giữ `statement_timeout` 15 giây của RPC hiện có. Đo bước `facts` trên bản chép dữ liệu thật trước khi apply.
+
+## 6. Code app và giao diện
+
+- **Luật đánh giá** (3 bản chép):
+  - Đánh giá từng khối bằng hàm hiện có, rồi lấy HOẶC giữa các khối.
+  - Khối của Zalo khác dùng dữ kiện từ DB.
+  - Kiểm danh sách trước. Thêm lý do khớp để dựng câu ghi chú.
+  - Script kiểm 3 bản giống nhau từng byte giữ nguyên.
+- **Bộ chạy cũ Desktop/App Server:** `gateSendExclusion` gửi khoá mới, dựng câu ghi chú mới.
+- **Lõi engine v2:** cập nhật `sendExclusion.ts`, cổng Desktop `desktopZaloPort.ts` / `desktopEngineData.ts`. Chép lõi sang ChatApi (`scripts/sync-campaign-engine.cjs`) rồi deploy `worker`.
+- **Bộ cũ ChatApi:** cập nhật bản chép luật và lời gọi RPC.
+- **Form Desktop** (cả form thường lẫn form Agent; bản gọn 25/11 theo yêu cầu "tối ưu UI/UX", [thiết kế](https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB)):
+  - Thẻ đổi tên thành "Không gửi cho", một danh sách dòng: "Khách đã từ chối nhận tin" (luôn áp dụng), rồi mỗi loại đã thêm là một dòng đọc như câu, có Sửa / bỏ. Khách thuộc 1 dòng bất kỳ là không gửi.
+  - Nút "Thêm loại trừ" mở menu 4 loại, mỗi loại có ví dụ: đã được gửi tin ở chiến dịch (chọn 1 hoặc nhiều chiến dịch), có trong Nhóm data, theo điều kiện ở Zalo (nhóm điều kiện), trong danh sách bạn bè/Zalo ID. Mỗi loại một dòng.
+  - Bỏ thanh chọn Zalo gửi và ô dùng chung: mặc định dùng chung cho mọi Zalo của chiến dịch; "Đặt riêng cho từng Zalo gửi" là liên kết nhỏ dưới thẻ (chiến dịch cũ có cấu hình riêng từng Zalo thì mở sẵn chế độ này).
+  - Hộp chọn chiến dịch / Nhóm data: tìm theo tên, lọc trạng thái (chiến dịch), mỗi dòng có số khách đã gửi / số data, chân hộp "Đã chọn N · M khách".
+  - Nhóm điều kiện: bước 1 tích các Zalo cần xét (lưới ô tích, có giờ đồng bộ); bước 2 mỗi Zalo một thẻ chỉ có điều kiện đã thêm, viết thành câu ("Khách là bạn bè", "Khách có tag Zalo …", "Khách đã được Zalo này gửi tin trong N ngày"), "Thêm điều kiện" mở menu loại còn lại; "Khách thỏa tất cả / 1 điều kiện bất kỳ" chỉ hiện khi Zalo có từ 2 điều kiện; giữa các Zalo ghi "hoặc"; cuối form là câu tóm tắt "Sẽ không gửi cho khách: …". Trạng thái bạn bè chỉ còn 3 lựa chọn: là bạn bè, không phải bạn bè, đã được gửi lời mời kết bạn (bỏ "Nhận kết bạn").
+  - Ghi chú data / tiến trình dùng đúng câu của dòng trên thẻ.
+- **Web:** cùng giao diện. **iOS:** đề xuất đợt đầu chỉ hiện tóm tắt nhóm nhiều Zalo và chọn được nhóm có sẵn; sửa nhóm nhiều khối làm sau.
+- **AI tạo nhóm (config 7):** giữ tạo 1 khối cho Zalo đang cấu hình; AI tạo nhiều khối để đợt sau.
+- **Quy trình (journey):** chép cấu hình như cũ, kiểm lại phần mô tả bước.
+
+## 7. Kiểm thử
+
+- **SQL (PG17 cục bộ, nạp đè thân hàm production):**
+  - Chuyển 102 nhóm sang 1 khối: quyết định của mọi nhóm phải giống hệt trước khi đổi.
+  - `save`/CAS; quyền Nhóm data và chiến dịch; giới hạn.
+  - App cũ bị chặn đúng chỗ.
+  - Hiệu năng `facts` với 20 Zalo, Nhóm data 100 nghìn thành viên, chiến dịch 60 nghìn kết quả.
+- **Luật:** `send-exclusion-smoke-test.cjs` thêm các ca nhiều khối, HOẶC giữa khối, Zalo chưa đồng bộ, Zalo đã xoá, danh sách mới, lý do khớp.
+- **Chạy thật code app:** `send-exclusion-runtime-smoke.cjs`, `campaign-failure-cleanup-smoke-test.cjs`, `core-smoke` của engine, bộ kịch bản engine v2 với cấu hình mới.
+- **Giao diện:** `run-send-exclusion-ui-smoke.cjs`, `run-send-exclusion-form-smoke.cjs`, Web `campaign-send-exclusions.spec.ts`.
+- **Phát lại dữ liệu thật (chỉ đọc):** chiến dịch đang dùng loại trừ chạy qua luật mới với nhóm 1 khối phải ra cùng quyết định; nhóm nhiều khối dựng từ nhóm của 16 nhân viên đang tạo nhóm riêng cho từng Zalo.
+
+## 8. Thứ tự đưa lên
+
+1. DB p1: bảng, cột, điền sẵn khối cho nhóm cũ. Chỉ mục `zalo_users` dựng riêng bằng `CONCURRENTLY`.
+2. DB p2: hàm `_v2`, sửa hàm cũ và trigger. Có `CREATE OR REPLACE FUNCTION` nên apply buổi tối, ngoài giờ cao điểm. Công tắc để `off`.
+3. Deploy ChatApi `worker`, gồm lõi mới và bộ cũ.
+4. Phát hành Desktop và App Server.
+5. Deploy API/Web; phát hành iOS.
+6. Bật công tắc cho admin akaBiz, thử thật, rồi bật cho mọi khách.
+
+Trước bước 6: Desktop bản cũ mở chiến dịch có cấu hình mới thì bị tạm dừng với câu báo cập nhật (mục 5), không gửi sai.
+
+## 9. Đã chốt (25/11, theo đề xuất khi anh bảo thực thi)
+
+1. Nhóm data và chiến dịch đã gửi đặt ở thẻ chiến dịch, cạnh danh sách bạn bè (đề xuất, như thiết kế), hay đặt trong nhóm loại trừ để dùng lại ở nhiều chiến dịch?
+2. "Đã nhận tin ở chiến dịch": chỉ data đã gửi tin thành công (đề xuất), hay cả data chiến dịch đó chưa gửi hoặc gửi lỗi?
+3. Lời mời kết bạn có tính là "đã gửi" không? Đề xuất: chỉ tính tin nhắn.
+4. iOS đợt đầu chỉ xem và chọn nhóm có sẵn (đề xuất), hay làm đủ editor 2 tầng như Desktop và Web?
+
+Chốt: (1) thẻ chiến dịch; (2) chỉ data đã gửi tin thành công; (3) chỉ tin nhắn (`zalo_message_friend`, `zalo_message_stranger`), không tính lời mời kết bạn; (4) iOS đợt đầu chỉ xem, giữ nguyên cấu hình mới, kiểm lúc lưu bằng trang v2.
+
+## 10. Đã làm (25/11/2026, nhánh `claude/festive-rubin-5zi6qe`)
+
+**DB (akaAgent, đã apply 25/11 17:54–17:59 VN, không apply lại):** [p1](../migrations/migration_v654_send_exclusion_multi_zalo_p1.sql) (bảng khối
+`auto_campaign_send_exclusion_group_accounts`, cột `groups.version`, `rules.group_account_id` điền 1 khối cho mọi nhóm cũ,
+trigger điền khối chính khi bản app cũ ghi luật, công tắc `off`) → [chỉ mục](../migrations/migration_v654_send_exclusion_multi_zalo_index.sql)
+`idx_zalo_users_account_global_id` (CONCURRENTLY, chạy riêng) → [p2](../migrations/migration_v654_send_exclusion_multi_zalo_p2.sql)
+(khoá md5 6 thân hàm production đọc 25/11; hàm cũ giữ hình dạng cũ, hàm mới `aka_agent_send_exclusion_v2` page / options / lists / save,
+bộ chạy lấy phần `remote` khi gửi `clientVersion: 2`, op `remote` tra danh sách / Nhóm data / chiến dịch đã gửi / dữ kiện khối Zalo khác
+trong một lượt) và [gỡ](../migrations/rollback_v654_send_exclusion_multi_zalo.sql) (thân production nguyên văn, kiểm md5).
+Kiểm `PG_MODULE_DIR=<thư mục có module pg> node scripts/send-exclusion-v654-smoke.cjs` (PG16, 18 nhóm, có gỡ).
+
+**Bộ chạy:** luật dùng chung `evaluateSendExclusionWithRemote` (`src/shared/campaignSendExclusion.ts`, lõi engine chép nguyên văn;
+`node scripts/send-exclusion-multi-zalo-smoke.cjs`). Bộ cũ Desktop / App Server và engine v2 Desktop đã đọc phần mới. Bản app cũ
+và ChatApi (bộ cũ + cổng engine trên Fly, **chưa sửa**, repo không gắn vào phiên này) gặp cấu hình mới thì DB trả
+`send_exclusion_client_outdated`: bộ cũ tạm dừng chiến dịch, engine báo cấu hình lỗi; không gửi sai. Bản chép luật ở ChatApi
+`packages/runtime-protocol` đang cũ: phải chép lại trước khi deploy `worker`.
+
+**Desktop:** thẻ [CampaignSendExclusionsCard](../src/renderer/src/components/CampaignPanels/CampaignSendExclusionsCard.tsx) (form thường
+và form Agent, chỉ khi công tắc bật; tắt thì thẻ cũ), IPC `send-exclusions-v2:*`, hợp đồng `src/shared/campaignSendExclusionMulti.ts`
+(chép nguyên văn sang WebApp `packages/control-api`). Kiểm `node scripts/run-send-exclusion-card-ui-smoke.cjs` (9 nhóm, Chromium,
+IPC giả; `SX_UI_SHOTS=<thư mục>` để chụp). Chưa chạy trong Electron thật, chưa gọi RPC thật.
+
+**WebApp:** API `/data/send-exclusions-v2` (page, `/options`, `/lists`, POST lưu), thẻ Web `apps/web/src/features/CampaignSendExclusionsCard.tsx`
+(chép từ Desktop), công tắc trong `web-polling-settings`; `projectSendExclusions` giữ `dataGroupIds` / `sentCampaignIds`
+(trước đó Web bỏ hai khoá này khi lưu); iOS hiện câu và giữ nguyên, kiểm lúc lưu bằng `verifySendExclusionsV2`.
+
+**Thứ tự đưa lên (mục 8):** apply p1 → chỉ mục → p2 (tối) → chép luật + sửa ChatApi rồi deploy `worker` → phát hành Desktop / App Server
+→ deploy API/Web, phát hành iOS → bật công tắc cho admin akaBiz, thử thật → mọi khách. Bật công tắc trước khi ChatApi có bản mới thì
+chiến dịch Fly dùng cấu hình mới bị dừng ngay ở bước loại trừ.
+
+
+## 11. Kiểm thử ngẫu nhiên và V655 (25/11/2026)
+
+Anh yêu cầu "Kiểm thử và cải tiến … cho đến khi ít nhất 3 vòng không còn vấn đề". Bộ kiểm
+[`scripts/send-exclusion-v654-fuzz.cjs`](../scripts/send-exclusion-v654-fuzz.cjs) (`PG_MODULE_DIR=… node scripts/send-exclusion-v654-fuzz.cjs
+--seed N [--cases 500] [--v655] [--real <file xuất>] [--webapp <checkout WebApp>] [--plant status|member|order]`; DB dựng bằng
+`scripts/send-exclusion-v654-fixture.cjs`):
+
+- **Dữ liệu thật** (`--real`, xuất ẩn danh 102 nhóm / 187 điều kiện / 170 cấu hình chiến dịch / 87 Zalo / tag / danh sách, để ngoài
+  repo): ghi kết quả hàm cũ trước V654, apply, so lại: 816 phép kiểm mỗi vòng, luôn giống hệt; bộ chạy mới thấy cùng điều kiện,
+  không có phần tra DB; trang v2 thấy mỗi nhóm đúng một khối.
+- **Thế giới sinh ngẫu nhiên**: nhiều nhân viên / tổ chức, Zalo đã xoá / không phải Zalo, khách có mặt ở nhiều Zalo (Zalo ID chung,
+  có dòng trùng / trống), SĐT 6 cách viết, Nhóm data SĐT / UID / Facebook với chia sẻ / đã xoá / thành viên đã gỡ, danh sách Zalo
+  ID, chiến dịch đã gửi với đủ trạng thái kết quả; dữ liệu cố tình sai (kiểu sai, số thực, âm, quá lớn, chuỗi, của người khác, trùng,
+  quá 20, chính nó) và dữ liệu đổi sau khi lưu (xoá danh sách / Nhóm data / chiến dịch / Zalo của khối / thành viên). So với bộ dự
+  đoán viết độc lập: lưu nhóm, kiểm cấu hình, snapshot cũ / mới, 'remote', quyết định cuối của bộ chạy thật
+  (`evaluateSendExclusionWithRemote`), engine v2 khớp bộ chạy cũ, API Web nhận / từ chối khớp DB, SĐT mọi cách viết chuẩn hoá như nhau.
+- **Kiểm chính bộ kiểm**: `--plant` cài lỗi giả vào hàm remote (bỏ trạng thái "đã xem", bỏ điều kiện thành viên đã gỡ, đảo thứ tự
+  người dùng Zalo trùng): cả ba đều bị bắt. Lúc đầu bộ sinh không tạo ca khớp Nhóm data / danh sách nào (dòng "Phủ" in số ca theo
+  từng loại khớp), đã sửa.
+
+Lỗi tìm ra và sửa bằng **[V655](../migrations/migration_v655_send_exclusion_input_guards.sql)** (sinh bằng `node scripts/build-v655-sql.cjs`,
+kiểm `scripts/send-exclusion-v655-smoke.cjs`; **đã apply akachat 18:25:36 VN 25/11**, sổ `20261125112536`, không apply lại,
+[biên nhận](../migrations/snapshots/send-exclusion-input-guards-v655/apply-receipt.json)):
+- `accountId` / `requestId` / `id` / `revision` / `excludeCampaignId` / `sortOrder` / `fieldId` sai kiểu làm hàm ném lỗi ép kiểu của
+  Postgres (API Web trả 500, Desktop hiện câu kỹ thuật) thay vì mã `send_exclusion_*`; API Web đã tự chặn trước, Desktop gọi thẳng
+  hàm nên DB phải tự chặn. Hàm phụ `private.aka_agent_send_exclusion_int(jsonb)`.
+- Kiểm cấu hình chiến dịch: khoá Zalo không phải số, `groupId` / id danh sách là số thực hoặc quá 18 chữ số.
+- Số "đã gửi" trong danh sách chiến dịch nay tính cả kết quả `operationState = committed` như bước loại trừ.
+
+Hành vi giữ nguyên, cần biết: xoá một Zalo mà danh sách Zalo ID của nó đang được chọn trong chiến dịch của Zalo khác thì lượt chạy
+dừng với "Danh sách Zalo ID loại trừ đã bị xoá" (như xoá chính danh sách: không gửi nhầm khách cần loại trừ), còn khối điều kiện của
+Zalo đã xoá thì bị bỏ qua. Liên hệ đã xoá mềm vẫn được tính nếu còn là thành viên Nhóm data (như hàm đối chiếu V519; production
+0 / 151.006 dòng như vậy).
+
+## 12. So khớp theo SĐT / Global ID và lọc ở bước nhận data (V657, anh duyệt 25/11/2026)
+
+Anh chốt 25/11: Zalo ID riêng chỉ đúng với một tài khoản, nên so khác tài khoản phải theo SĐT (nếu có) rồi tới Global ID; bước loại
+trừ phải là bước lọc đầu tiên, data bị loại không tính là một lần gửi; viết cho cả hai bộ chạy; ở bước lưu chỉ xem trước số lượng.
+Anh đồng ý theo đề xuất cho 5 câu: (1) "chiến dịch đã gửi" = đã nhận tin nhắn thành công; (2) Nhóm data SĐT với chiến dịch theo UID
+dùng bảng đối chiếu SĐT ↔ Global ID lấy từ lịch sử tra số; (3) không xác định được Global ID thì không gửi; (4) danh sách Zalo ID của
+chính Zalo đang gửi cũng so theo Global ID; (5) kiểm SĐT trước bước tra số.
+
+### 12.1 Số đo (production 25/11, chỉ đọc)
+
+- SĐT ↔ Global ID một-một và không đổi: 2.700 SĐT / ~7.400 lượt tra từ 04/09, 0 SĐT có 2 Global ID, 0 Global ID có 2 SĐT;
+  205 số tra lại cách nhau > 30 ngày vẫn cùng Global ID.
+- Zalo ID riêng khác theo nick (84/89 số được nhiều nick tra), trùng khi hai tài khoản akaAgent đăng nhập cùng một nick.
+- **Zalo ID riêng đổi theo thời gian ngay trên cùng một nick**: 44/251 cặp lần tra cùng số cùng nick ra UID khác (dưới 1 ngày 0%,
+  1–7 ngày 14%, trên 7 ngày 21%). `zalo_users` giữ cả UID cũ: 377/54.771 cặp (tài khoản, Global ID) có ≥ 2 UID; 54/1.571 người
+  trong danh sách Zalo ID loại trừ có UID khác trên chính tài khoản đó. V654 lấy một UID (`LIMIT 1`) khi đổi Global ID sang UID ⇒ sót.
+- Định danh theo nguồn: danh sách Zalo ID (71 danh sách) chỉ UID, Global ID 100%; Nhóm data Zalo UID (3.674 nhóm) Global ID 99,8%,
+  SĐT 0,1%; Nhóm data SĐT: Global ID biết qua lịch sử 56%, đã tra không có Zalo 24%, chưa ai tra 20%; chiến dịch theo SĐT, người đã
+  nhận tin: SĐT 100%, Global ID 99,3%; nhắn bạn bè: SĐT 26%, Global ID 96%; thành viên nhóm: SĐT 0%, Global ID 100%.
+- Người nhận theo UID không có SĐT (Zalo ẩn số), Global ID qua `zalo_users(tài khoản gửi, UID)` ~99,8%.
+- Hai hàm chuẩn hoá SĐT khớp với số di động, khác ở số bàn / `0084…`: so khớp dùng `aka_agent_internal_normalize_phone` (chỉ số
+  di động hợp lệ; số khác coi như không có SĐT).
+- **`zalo_users.global_id` ghi sai hàng loạt** (đo lại 25/11 chiều khi kiểm thử theo yêu cầu "kiểm thử và cải tiến"): ~19% dòng có
+  Global ID (701 / 4.218 tài khoản; 62% dòng quét thành viên nhóm, `raw_payload.source = 'profile'` có `zaloGroupId`) mang **Global ID
+  của chính nick đang đăng nhập** thay cho Global ID của thành viên (một tài khoản: 23.483 / 24.474 dòng cùng một Global ID, mỗi dòng
+  một người). Global ID của nick ghi ở `zalo_accounts.metadata.globalId` (Desktop) và / hoặc `chat_zalo_account.global_id` (Fly); hai
+  nơi trùng nhau chỉ 49 / 486 tài khoản có cả hai; 117 tài khoản không ghi ở đâu. Toàn bảng: cặp (tài khoản, Global ID) có từ 4 dòng
+  đều là ghi sai; người đổi Zalo ID thật có 2–3 dòng cùng tên, không từ quét nhóm. Kết quả gửi / tra số (`data.target.globalId`) không
+  bị: 0 / 91.109 lượt tra số, 0 / 117.555 lượt nhắn tin mang Global ID của nick. ⇒ con số "99,7% / 99,5% có Global ID" ở trên tính cả
+  dòng ghi sai.
+- Zalo ID riêng trùng chuỗi giữa hai nick khác nhau (người khác nhau) có thật (mẫu 1%: 380 cặp khác Global ID, phần lớn do dòng ghi
+  sai, còn lại là trùng thật).
+
+### 12.2 Quy tắc
+
+- Khoá của một người: SĐT đã chuẩn hoá và Global ID. Không so Zalo ID riêng; UID chỉ dùng để tra Global ID qua `zalo_users`, và một
+  Global ID đổi ra **mọi** UID đã ghi nhận ở tài khoản đó.
+- Global ID ở `zalo_users` chỉ dùng khi dùng được (`private.aka_agent_zalo_gid_ok(tài khoản, Global ID)`): không phải Global ID của
+  chính nick (`private.aka_agent_zalo_own_global_ids`), không quá 3 dòng cùng Global ID ở tài khoản đó, không phải 2–3 dòng mà mỗi
+  dòng một tên. Global ID người nhận gửi về (tra số / hồ sơ) là của chính nick đang gửi thì bỏ. Bảng đối chiếu bỏ lần tra số trả Global
+  ID của chính nick tra số.
+- Hai tài khoản cùng nick (`zalo_accounts.zalo_uid` / `chat_zalo_account.zalo_id` trùng, cùng tổ chức;
+  `private.aka_agent_zalo_same_nick_accounts`) so thẳng Zalo ID riêng: danh sách / Nhóm data Zalo UID / chiến dịch đã gửi của tài
+  khoản cùng nick khớp khi cùng Zalo ID, không cần Global ID (người trong Nhóm data quét từ nhóm mà Global ID ghi sai vẫn nhận ra).
+- Chiến dịch đã gửi theo Zalo ID: Zalo ID của data đã gửi phải thuộc đúng người ở chính tài khoản đã gửi (`zalo_users` của tài khoản
+  đó, Global ID dùng được), hoặc kết quả gửi ghi Global ID đó, hoặc tài khoản đã gửi cùng nick và cùng Zalo ID; không so Zalo ID khác
+  nick.
+- Cùng một người khi trùng SĐT hoặc trùng Global ID. Vì SĐT ↔ Global ID một-một (12.1), kết quả giống "cả hai có SĐT thì so SĐT,
+  thiếu thì so Global ID"; bộ kiểm đối chiếu tính cả hai cách và báo nếu khác.
+- Nguồn và khoá:
+  - Danh sách Zalo ID (mọi Zalo, kể cả Zalo đang gửi): thành viên → Global ID qua `zalo_users(tài khoản của danh sách, UID)`.
+  - Nhóm data SĐT: SĐT của thành viên; người nhận không có SĐT thì Global ID → SĐT qua bảng đối chiếu.
+  - Nhóm data Zalo UID: thành viên → Global ID qua `zalo_users(tài khoản của liên hệ, UID)`.
+  - Chiến dịch đã gửi: dòng kết quả nhắn tin (bạn bè / người lạ) thành công của chiến dịch đó; khoá = SĐT của data và Global ID
+    (qua mọi UID của Global ID ở các tài khoản Zalo của tổ chức).
+  - Điều kiện của Zalo khác: dữ kiện đọc theo mọi UID của Global ID ở Zalo đó (bạn bè nếu một UID là bạn bè, tag nếu một UID có tag,
+    "đã gửi N ngày" theo mọi UID và SĐT).
+- Bảng đối chiếu `private.auto_zalo_phone_identity` (SĐT → Global ID mới nhất) nạp từ kết quả Tìm SĐT thành công trong lịch sử, job
+  mỗi phút; Global ID của một SĐT đổi thì lấy bản mới và đếm số lần đổi để theo dõi.
+
+### 12.3 Hai bước lọc
+
+- **Bước A, bước lọc đầu tiên.** Engine v2: trong `aka_agent_engine_claim_target_v1`, cùng vòng với chống gửi lặp. Bộ chạy cũ: thao
+  tác `precheck` gọi trước bước kiểm từ chối nhận tin / chống gửi lặp. Khoá có sẵn: SĐT của data, Global ID từ UID của data
+  (`zalo_users` của tài khoản gửi), Global ID từ SĐT (bảng đối chiếu). So với danh sách Zalo ID, Nhóm data, chiến dịch đã gửi. Khớp:
+  data "tạm dừng" kèm lý do, lấy data kế tiếp ngay (không gọi Zalo, không tra số, không tính lượt, không nghỉ); lõi engine đang chạy
+  đã in sẵn dòng "⏸️ Bỏ qua …" cho danh sách `cooldownPaused`.
+- **Bước B, sau khi có Global ID thật** (sau tra số, hoặc sau khi đọc hồ sơ người nhận): thao tác `remote` so lại mọi nguồn với
+  Global ID vừa có, trả thêm dữ kiện điều kiện của Zalo khác; điều kiện của chính Zalo đang gửi đọc Zalo như hiện nay. Cần Global ID
+  mà không có thì không gửi (EXC02).
+- Bước A chỉ là đi sớm: mọi người bước A loại thì bước B cũng loại. Công tắc `campaign.send_exclusion_precheck` (`{"enabled":false}`
+  tắt bước A, bước B vẫn chạy).
+
+### 12.4 Xem trước ở bước lưu
+
+Thao tác `preview` của `aka_agent_send_exclusion_v2`: dùng cùng hàm so khớp, chỉ đọc, có trần thời gian; trả số data sẽ bị loại theo
+từng nguồn và số chưa xác định (sẽ kiểm lúc chạy). Không đổi dòng data nào. Điều kiện của từng Zalo không tính trong xem trước.
+
+### 12.5 Chưa làm / ghi nhận
+
+- "Chống gửi lặp N ngày" (tính năng khác) cũng đặt khoá theo UID nên có thể sót khi UID đổi; ngoài phạm vi, chưa sửa.
+- SĐT đổi chủ: bước A dùng Global ID của lần tra số gần nhất (bảng đối chiếu). SĐT đã sang chủ mới mà chưa ai tra lại thì bước A có
+  thể loại chủ mới theo danh sách / Nhóm data Zalo UID / chiến dịch theo Zalo ID của chủ cũ (bước B có Global ID thật thì không). Đo
+  25/11: 0 SĐT có 2 Global ID (2.700 SĐT từ 04/09; 83.980 SĐT / 91.013 lượt tra trong 1 ngày). Bộ kiểm có chế độ `--recycle 1` để đo.
+- Tài khoản không ghi Global ID của nick ở đâu mà chỉ có 1 dòng ghi sai (thành viên nhóm 1 người) thì không nhận ra dòng đó.
+- Khoá của một người: SĐT đã chuẩn hoá và Global ID. Không so Zalo ID riêng; UID chỉ dùng để tra Global ID qua `zalo_users`, và một
+  Global ID đổi ra **mọi** UID đã ghi nhận ở tài khoản đó.
+- Global ID ở `zalo_users` chỉ dùng khi dùng được (`private.aka_agent_zalo_gid_ok(tài khoản, Global ID)`): không phải Global ID của
+  chính nick (`private.aka_agent_zalo_own_global_ids`), không quá 3 dòng cùng Global ID ở tài khoản đó, không phải 2–3 dòng mà mỗi
+  dòng một tên. Global ID người nhận gửi về (tra số / hồ sơ) là của chính nick đang gửi thì bỏ. Bảng đối chiếu bỏ lần tra số trả Global
+  ID của chính nick tra số.
+- Hai tài khoản cùng nick (`zalo_accounts.zalo_uid` / `chat_zalo_account.zalo_id` trùng, cùng tổ chức;
+  `private.aka_agent_zalo_same_nick_accounts`) so thẳng Zalo ID riêng: danh sách / Nhóm data Zalo UID / chiến dịch đã gửi của tài
+  khoản cùng nick khớp khi cùng Zalo ID, không cần Global ID (người trong Nhóm data quét từ nhóm mà Global ID ghi sai vẫn nhận ra).
+- Chiến dịch đã gửi theo Zalo ID: Zalo ID của data đã gửi phải thuộc đúng người ở chính tài khoản đã gửi (`zalo_users` của tài khoản
+  đó, Global ID dùng được), hoặc kết quả gửi ghi Global ID đó, hoặc tài khoản đã gửi cùng nick và cùng Zalo ID; không so Zalo ID khác
+  nick. (`operationState = committed` mà trạng thái "thất bại": người nhận đã nhận
+  ảnh nhưng chưa nhận chữ, hoặc ngược lại; đo 25/11: ~0,5% lượt nhắn người lạ), vì khách đó đã nhận nội dung của chiến dịch. Lượt "không
+  rõ đã gửi" (UNK01, `unknown`) không tính.
+
+### 12.6 Kiểm thử và đo (25/11/2026)
+
+- Bộ kiểm ngẫu nhiên `scripts/send-exclusion-v657-fuzz.cjs` (PostgreSQL cục bộ có hàm nhận data / loại trừ đúng bản production):
+  dựng thế giới giả gồm người thật (SĐT / Global ID), nhiều nick Zalo với Zalo ID riêng đổi theo thời gian, hai tài khoản cùng một
+  nick, `zalo_users` thiếu dòng hoặc Global ID trống, lịch sử Tìm SĐT có lần tra cũ ra Global ID khác, danh sách / Nhóm data / chiến
+  dịch bị xoá sau khi lưu, nguồn của nhân viên / tổ chức khác làm mồi. So DB với một bản tính độc lập viết bằng JS ở 6 chỗ: bảng đối
+  chiếu, hàm so khớp bước A và bước B, `remote`, bước nhận data của engine (data bị loại tạm dừng đúng lý do, data khác được nhận đúng
+  thứ tự), `precheck` của bộ chạy cũ, xem trước (theo chiến dịch và theo danh sách data, nhiều trang). Đối chiếu thêm với "sự thật":
+  không bao giờ loại nhầm người; bước A loại thì bước B cũng loại.
+  `PG_MODULE_DIR=<thư mục có node_modules/pg> LC_ALL=C node scripts/send-exclusion-v657-fuzz.cjs --rounds 10 --seed N --rows 40`.
+  Lượt đầu tìm ra 2 lỗi, đã sửa: Nhóm data SĐT luôn được chọn trước Nhóm Zalo UID thay vì xếp theo tên; bước nạp bảng đối chiếu nhảy
+  mốc tới `max(id)` nên dòng Tìm SĐT commit muộn bị bỏ sót mãi (nay đọc lại 5.000 id đã qua mỗi lượt). Sau khi sửa: 3 lượt liền sạch
+  (seed 21–23, 30 thế giới, 1.200 data; độ phủ in ở cuối mỗi lượt). Smoke `scripts/send-exclusion-v657-smoke.cjs` 15 ca, 2 ca mới đỏ
+  trên bản trước.
+- Phát lại dữ liệu thật (production, chỉ đọc): người đã nhận tin ở 2 chiến dịch của cùng nhân viên; giả sử chiến dịch sau loại trừ
+  "đã gửi ở chiến dịch trước": 310/310 cặp (2 mẫu, 22 tổ chức, có cặp khác tài khoản) được nhận ra ở bước B; khớp theo SĐT không lần
+  nào trỏ sang Global ID khác (0 loại nhầm). Liên hệ của Nhóm data SĐT 18.228/18.228 lưu SĐT đã chuẩn hoá; Nhóm data Zalo UID
+  2.689/2.689 là liên hệ `person` gắn tài khoản, 99,6% có Global ID qua `zalo_users`. Mọi tài khoản có nhân viên cùng tổ chức (0 lệch / 12.045).
+- Tốc độ (EXPLAIN ANALYZE chỉ đọc trên production, tổ chức 194 tài khoản / 147 Zalo): Nhóm data (4 nhóm, SĐT + Global ID) ~3.500 khối,
+  dưới 10 ms khi nóng; chiến dịch đã gửi 10 chiến dịch 2,4 ms. Hai chỗ đã sửa sau khi đo: danh sách tài khoản của tổ chức quét cả
+  bảng `auto_accounts` (không có chỉ mục theo tổ chức, ~2.100 khối mỗi data) → đi qua nhân viên; chiến dịch đã gửi tra theo chỉ mục
+  chiến dịch (đọc mọi data và mọi kết quả gửi của chiến dịch, 0,5–2,2 giây) → ép tra theo chỉ mục SĐT / Zalo ID (`campaign_id+0`).
+  Bước nạp bảng đối chiếu: ~0,44 giây mỗi 10.000 id khi đọc đĩa; lần đầu ~18 triệu id (~5 GB đọc đĩa), ngân sách 8 giây mỗi phút
+  nên xong trong ~1,5–2 giờ: apply buổi tối.
+
+- **Kiểm thử lần hai, 25/11 chiều (anh: "Kiểm thử và cải tiến … lấy data nội bộ + data mẫu + mô phỏng hàng nghìn trường hợp + cố tình
+  tạo mẫu sai lệch … cho đến khi ít nhất 3 vòng không còn vấn đề")**:
+  - Đọc hình dạng dữ liệu thật (chỉ đọc) ⇒ tìm ra Global ID ghi sai trong `zalo_users` và Zalo ID trùng chuỗi giữa nick (12.1); bản
+    V657 trước loại nhầm hàng loạt. Đã sửa (12.2): `private.aka_agent_zalo_own_global_ids` (p1), `_gid_ok`, `_same_nick_accounts` (p2),
+    dùng ở so khớp, khoá "đã gửi N ngày", khối điều kiện Zalo khác, bảng đối chiếu. Các câu theo Global ID có `global_id<>''` để dùng
+    chỉ mục một phần của V654 (thiếu điều kiện này thì đọc mọi dòng của tài khoản); Global ID một nick có hàng chục nghìn dòng ghi sai
+    thì kiểm một lần mỗi tài khoản trước khi quét.
+  - Bộ kiểm ngẫu nhiên viết lại với dữ liệu sai lệch cố ý (đầu file `scripts/send-exclusion-v657-fuzz.cjs`), mặc định 8 thế giới × 120
+    data, chấm "sự thật" trên kết quả của DB; thêm `--recycle 1` (SĐT đổi chủ). Chạy trên bản trước khi sửa: 23 lần loại nhầm người /
+    180 data; bản sau khi sửa: 0.
+  - Phát lại dữ liệu thật: `scripts/send-exclusion-v657-realdata-export.cjs` (chỉ đọc qua REST, file ra ở ngoài repo) xuất 9 tổ chức
+    (tài khoản, nick, ~330.000 dòng `zalo_users`, ~290.000 thành viên Nhóm data / danh sách, ~120.000 data chiến dịch, kết quả gửi / tra
+    số); `scripts/send-exclusion-v657-realdata-replay.cjs` chạy bản trước (`838bb4f7`) và bản mới trên cùng data, mỗi data với từng nguồn
+    riêng lẻ (chiến dịch của chính nó, một Nhóm data, một danh sách, một chiến dịch khác), bước A và bước B (Global ID thật lấy từ kết
+    quả gửi của data), rồi phân loại mọi chỗ khác nhau. Lần đầu (3 tổ chức, 7.840 lần so): bản trước loại nhầm 79 lần do Global ID ghi
+    sai (danh sách Zalo ID: 29 / 31 lần khớp là sai); bản mới nhận lại 100% data đã nhận tin ở chính chiến dịch nguồn (bản trước 99,4%);
+    mọi chỗ khác nhau giải thích được (Global ID ghi sai ở tài khoản gửi hoặc tài khoản nguồn; so thẳng Zalo ID cùng nick; data là chính
+    nick đang gửi ⇒ không xác định ⇒ không gửi).
+  - Hiệu năng: tài khoản nguồn có 30.000 dòng ghi sai cùng Global ID của người nhận: ~5 ms mỗi lần so (smoke có ca này); production
+    dùng Index Only Scan trên `idx_zalo_users_account_global_id` cho bước kiểm mỗi tài khoản (tổ chức 617, 26 tài khoản).
+  - Vòng lặp (mỗi vòng: smoke + bộ kiểm ngẫu nhiên seed mới 8 thế giới × 300 data + phát lại 9 tổ chức thật với mẫu data ngẫu nhiên
+    mới, mọi chỗ khác nhau phải tự giải thích được):
+
+    | Vòng | Smoke | Bộ kiểm ngẫu nhiên | Phát lại 9 tổ chức thật | Bản trước loại nhầm (Global ID ghi sai) | Bản mới nhận ra thêm (Zalo ID cùng nick) | Nhận lại chính nó: mới / trước |
+    |---|---|---|---|---|---|---|
+    | 1 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 4 loại chỗ khác bộ phân loại chưa nhận ra (xem tay: đều là so thẳng Zalo ID cùng nick, đúng) | 225 | — | 777/777 / 755 |
+    | 2 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 222 | 32 | 822/822 / 802 |
+    | 3 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 234 | 39 | 781/781 / 758 |
+    | 4 | 21/21 | 2.400 data, 0 lỗi | 7.124 lần so, 0 chỗ chưa giải thích | 237 | 27 | 777/777 / 757 |
+
+    Vòng 1 tìm ra lỗi của bộ phát lại (kết quả gửi trỏ tới data không xuất; chưa nhận ra so thẳng Zalo ID cùng nick), không phải của
+    V657; đã sửa bộ phát lại rồi chạy 3 vòng mới (2–4), cả ba sạch. Số "lần so" tính cả bước A và bước B. Bản mới chậm hơn bản trước
+    ~5–15% trên dữ liệu thật (36 → 39–42 ms mỗi lần so, tổ chức 617 có 535 nhóm).
+
+### 12.7 Fly (ChatApi)
+
+Bước A chạy trong hàm nhận data nên có hiệu lực ở cả Fly khi apply V657. Bước B cần cổng Fly gửi `clientVersion` và có `remote`: đã
+làm ở ChatApi nhánh `claude/festive-rubin-5zi6qe` (đồng bộ lõi bằng `scripts/sync-campaign-engine.cjs`, lõi thêm export
+`SEND_EXCLUSION_CLIENT_VERSION`; `flyZaloPort.ts` thêm `sendExclusionRemote`; repository nhận thao tác `remote`). Chưa deploy: tới lúc
+đó cấu hình mới chạy trên Fly dừng an toàn bằng `send_exclusion_client_outdated` như trước. Lần đồng bộ này kéo theo phần lõi của quét
+data website (V618: kiểu `remainingDaily` / `remainingWindow`, `web/registry.ts`) đã có trên `dev_3` mà ChatApi chưa có; chỉ thêm kiểu
+và export, Fly không chạy loại chiến dịch web.

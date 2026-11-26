@@ -1,0 +1,31 @@
+{
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "apply V657 (26/11/2026 04:15 VN)",
+  "applied_at_vn": "2026-11-26 04:18:03 (p1), 04:18:30 (p2)",
+  "preflight": {
+    "ledger_latest_before": "migration_v653_zalo_received_marks_readers (20261125114244)",
+    "p2_expected_source_md5_7_functions": "khớp production",
+    "campaigns_with_zaloSendExclusionsByAccountId_lists": 15,
+    "live_campaigns_affected_by_stage_a": [56196, 57379, 61858],
+    "switch_campaign.send_exclusion_multi_zalo": "{\"audience\":\"off\"}",
+    "switch_campaign.send_exclusion_precheck": "chưa có dòng (= bật)"
+  },
+  "dry_run": "04:17 VN: thân p1 + p2 chạy trong một khối DO rồi RAISE để huỷ: p1 45 ms, p2 33 ms, postflight đạt; nạp thử 3 giây; bước lọc đầu tiên trên 20 data chờ của 3 chiến dịch đang chờ loại 2 data của 61858, kiểm tay đúng là UID có trong danh sách Zalo ID loại trừ của chính tài khoản gửi.",
+  "apply_method": "Nội dung tệp đưa vào dòng tạm auto_system_settings (is_active=false) qua REST, kiểm md5 = tệp, EXECUTE thân migration (bỏ BEGIN;/COMMIT;) và ghi sổ statements = nguyên văn tệp trong cùng giao dịch; dòng tạm đã xoá.",
+  "applied": [
+    {"version": "20261125211803", "name": "migration_v657_send_exclusion_global_match_p1", "ledger_md5": "247c138cdc5a8b5685f20f7362e10361", "file_md5": "247c138cdc5a8b5685f20f7362e10361"},
+    {"version": "20261125211830", "name": "migration_v657_send_exclusion_global_match_p2", "ledger_md5": "590ca313a6416c704a862509a99ef95a", "file_md5": "590ca313a6416c704a862509a99ef95a"}
+  ],
+  "function_source_md5_after": {
+    "private.aka_agent_send_exclusion_snapshot(public.auto_campaigns,bigint,boolean)": "b83447fc79f1a71c1a77d8a91c72c1e9",
+    "private.aka_agent_send_exclusion_block_facts(public.auto_campaigns,bigint,text,text,jsonb)": "907673fd7a7d58c594bdcae574fba6c2",
+    "private.aka_agent_send_exclusion_remote(public.auto_campaigns,bigint,bigint,jsonb)": "997ce9ab8547815a8f302dd518349fa7",
+    "public.aka_agent_campaign_send_exclusion_runtime(bigint,bigint,bigint,uuid,text,jsonb)": "b8fb3c31c939426a8e2ac2f9d60da7c7",
+    "public.aka_agent_engine_send_exclusion_v1(bigint,uuid,text,jsonb)": "3142ef991f8fe84ad2eb54c009bba444",
+    "public.aka_agent_send_exclusion_v2(bigint,bigint,text,jsonb,text,text)": "54721efc19e365fc2a4181e62a7f596a",
+    "public.aka_agent_engine_claim_target_v1(jsonb)": "8f574b0a75065ce562bc56f043f24967"
+  },
+  "cron": {"jobname": "aka-agent-zalo-phone-identity", "jobid": 134, "schedule": "* * * * *"},
+  "do_not_reapply": true,
+  "rollback": "migrations/rollback_v657_send_exclusion_global_match_p2.sql rồi rollback_v657_send_exclusion_global_match_p1.sql"
+}

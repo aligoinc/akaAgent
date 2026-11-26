@@ -28,6 +28,8 @@ import { formAiAvailable, FORM_AI_SECTIONS } from '../../../../shared/campaignFo
 import { GroupSharingBadge } from '../DataGroups/GroupSharingPanel'
 import { campaignEdit, resumeAfterCampaignSave, saveCampaignConfig, useCampaignEditSession, useCampaignSaveCompletion, savedCampaignCompletionError } from './campaignEdit'
 import CampaignSendExclusions from './CampaignAgentSendExclusions'
+import CampaignSendExclusionsCard, { verifySendExclusionsBeforeSave } from './CampaignSendExclusionsCard'
+import { sendExclusionMultiVisible } from '../../../../shared/campaignSendExclusionMulti'
 import { PENDING_BLOCKLIST_MESSAGE, restorePendingBlocklistAccount } from '../../../../shared/campaignSendExclusionDraft'
 import CampaignScheduleAi from './CampaignScheduleAi'
 import CampaignLimitsAi from './CampaignLimitsAi'
@@ -1748,6 +1750,8 @@ export default function CampaignAgentFormModal({
   // Công tắc "Lặp lại sau khi chạy xong" (campaign.repeat_after_completion, cùng công tắc với Web, đọc một lần khi đăng nhập).
   const campaignRepeatAudience = useDesktopPollingStore(state => state.settings.campaignRepeatAudience)
   const campaignRepeatFeatureVisible = campaignRepeatVisible(campaignRepeatAudience, authUser?.isAdminAkabiz === true)
+  const sendExclusionMultiAudience = useDesktopPollingStore(state => state.settings.sendExclusionMultiAudience)
+  const sendExclusionMultiFeatureVisible = sendExclusionMultiVisible(sendExclusionMultiAudience, authUser?.isAdminAkabiz === true)
   const formAiAvailability = useFormAiAvailability(`${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`)
   const { showAlert, showConfirm, alert: uiAlert, confirm: uiConfirm } = useUiStore()
   const entitlements = authUser?.entitlements
@@ -4008,6 +4012,8 @@ export default function CampaignAgentFormModal({
     status: 'chờ xử lý'
   }))
   const [details, setDetails] = useCampaignDraftField<Partial<CampaignInputData>[]>(draftPayload, draftValuesRef, 'details', () => normalizeInitialDetails(initialDetails))
+  // V657: data chưa lưu để xem trước loại trừ gửi (thẻ "Không gửi cho").
+  const sendExclusionPreviewTargets = useMemo(() => details.slice(0, 500).map(d => ({ phone: d.phone ?? null, uid: d.uid ?? null })), [details])
   // Chia đều data cho các tài khoản (src/shared/campaignDataSplit.ts): chưa tự chọn thì theo mặc định của loại
   // chiến dịch; loại data gắn với từng tài khoản thì ẩn ô và không chia.
   const canSplitDataAcrossAccounts = campaignDataSplitAvailable(formData.actionId)
@@ -6936,7 +6942,8 @@ export default function CampaignAgentFormModal({
         return
       }
       try {
-        for (const id of zaloTagAccountIds) {
+        if (sendExclusionMultiFeatureVisible) await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId)
+        else for (const id of zaloTagAccountIds) {
           const selection = zaloSendExclusionsByAccountId[String(id)]
           if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
           const page = await window.electronAPI.listSendExclusionGroups(id)
@@ -17697,7 +17704,23 @@ export default function CampaignAgentFormModal({
               </div>
             )}
 
-            {canUseSendExclusions && <CampaignSendExclusions
+            {canUseSendExclusions && sendExclusionMultiFeatureVisible && <CampaignSendExclusionsCard
+              agentDraft={agentExclusionDraft} onAgentDraftClosed={() => setAgentExclusionDraft(undefined)} onAgentAsk={() => { agent.setScope('exclusions'); agent.setOpen(true) }}
+              accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
+              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id ?? null}
+              previewTargets={sendExclusionPreviewTargets}
+              pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
+              onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}
+              ai={{
+                available: formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.exclusions, formData.actionId),
+                actionId: formData.actionId, enableMessage: formData.enableMessage === true,
+                authScope: `${authUser?.organizationId}:${authUser?.staffId}:${campaign?.id}:${draftIdRef.current}`,
+                disabled: saveBusy || facebookAiBusy || scheduleAiBusy || limitsAiBusy || contentAiBusy || loadingDetails || generalSettingsOpen,
+                zIndex: Math.max(3100, (modalZIndex || 3000) + 100), onBusyChange: setExclusionAiBusy
+              }}
+              onManage={onOpenGeneralSettings ? () => handleOpenGeneralSettings('zaloBlocklists') : undefined}
+            />}
+            {canUseSendExclusions && !sendExclusionMultiFeatureVisible && <CampaignSendExclusions
               agentDraft={agentExclusionDraft} onAgentDraftClosed={() => setAgentExclusionDraft(undefined)} onAgentAsk={() => { agent.setScope('exclusions'); agent.setOpen(true) }}
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
               value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId}
