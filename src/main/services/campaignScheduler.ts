@@ -6339,6 +6339,7 @@ export class CampaignScheduler {
     if (!campaign || !workflow) { clearFacebookIdentityMarker(account.id); return }
     const identity = new FacebookCampaignPageIdentity(campaign, workflow)
     identity.originalIdentityName = marker.originalIdentityName
+    identity.originalIdentityIsPage = marker.originalIdentityIsPage ?? null
     identity.switchAttempted = true
     identity.page = (await this.getAutomationPage(account, campaign.id)).page
     await identity.restore((wf, variables, page, context) => this.engineV2.run(wf, variables, page, context), {
@@ -6765,7 +6766,7 @@ export class CampaignScheduler {
             if (identity) {
               identity.observe(step)
               if (identity.switchAttempted) writeFacebookIdentityMarker(account.id, { campaignId: campaign.id, workflowId: identity.workflow.id,
-                originalIdentityName: identity.originalIdentityName })
+                originalIdentityName: identity.originalIdentityName, originalIdentityIsPage: identity.originalIdentityIsPage })
             }
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch { /* đóng */ }
           },

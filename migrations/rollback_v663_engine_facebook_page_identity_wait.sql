@@ -7,11 +7,11 @@ SET LOCAL statement_timeout = '60s';
 
 DO $pre$
 BEGIN
-  IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2879 AND md5(code) = 'd8ecb8593bc930a8c5461e802684d475')
-     OR NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2880 AND md5(code) = '4ada28c669fe48a8758a7ae55f016f44') THEN
+  IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2879 AND md5(code) = 'ad88ba5e6b3f56bc96e0ca9f79571cf6')
+     OR NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2880 AND md5(code) = '46a9e22dd09d5efc5953eece67451285') THEN
     RAISE EXCEPTION 'Gỡ V663: block 2879 / 2880 không phải bản V663, không ghi đè';
   END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.auto_engine_block_steps WHERE id = 24 AND block_id = 2880 AND reviewed_code_md5 = '4ada28c669fe48a8758a7ae55f016f44') THEN
+  IF NOT EXISTS (SELECT 1 FROM public.auto_engine_block_steps WHERE id = 24 AND block_id = 2880 AND reviewed_code_md5 = '46a9e22dd09d5efc5953eece67451285') THEN
     RAISE EXCEPTION 'Gỡ V663: danh mục bước 24 không phải bản V663';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE id = 284 AND log_template = 'Không chuyển được sang Page đã chọn' AND campaign_note_template = 'Không chuyển được sang Page đã chọn (FB06). Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.') THEN
@@ -92,7 +92,7 @@ vars.originalIdentityName = identityName
 helpers.log('Identity hiện tại: ' + identityName)
 return { ok: true, identityName }
 $v663_identity$, updated_at = now()
- WHERE id = 2879 AND md5(code) = 'd8ecb8593bc930a8c5461e802684d475';
+ WHERE id = 2879 AND md5(code) = 'ad88ba5e6b3f56bc96e0ca9f79571cf6';
 
 UPDATE public.auto_blocks SET code = $v663_identity$
 const stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)
@@ -194,10 +194,10 @@ try {
   return { ok: false, identityName, message: 'Có lỗi xảy ra khi chọn page/profile: ' + message }
 }
 $v663_identity$, updated_at = now()
- WHERE id = 2880 AND md5(code) = '4ada28c669fe48a8758a7ae55f016f44';
+ WHERE id = 2880 AND md5(code) = '46a9e22dd09d5efc5953eece67451285';
 
 UPDATE public.auto_engine_block_steps SET reviewed_code_md5 = 'aaf3d54ca1041881d67073359168647f', updated_at = now()
- WHERE id = 24 AND block_id = 2880 AND reviewed_code_md5 = '4ada28c669fe48a8758a7ae55f016f44';
+ WHERE id = 24 AND block_id = 2880 AND reviewed_code_md5 = '46a9e22dd09d5efc5953eece67451285';
 
 UPDATE public.auto_outcome_policies SET log_template = 'Không chuyển được sang Page để đăng bài', campaign_note_template = 'Không chuyển được sang Page để đăng bài (FB06). Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.', updated_at = now()
  WHERE id = 284 AND log_template = 'Không chuyển được sang Page đã chọn' AND campaign_note_template = 'Không chuyển được sang Page đã chọn (FB06). Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.';

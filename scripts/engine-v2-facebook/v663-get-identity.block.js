@@ -1,10 +1,16 @@
 
-// V663 (câu 605 / 632 / 609 / 610 của bộ kiểm lỗi, anh chốt 26/11/2026): menu tài khoản của Facebook tải nội dung sau khi mở (ảnh + DOM lỗi
-// 26/11: lúc 1,5 giây menu còn khung xám, khoảng một giây sau đã có link tên). Chờ phần tử hiện (tối đa WAIT_MS) thay cho ngủ cố định; chưa có
-// thì đóng / mở menu lại một lần. Câu lỗi giữ nguyên.
+// V663 (câu 605 / 632 / 609 / 610 của bộ kiểm lỗi, anh chốt 26/11/2026):
+//  - Menu tài khoản của Facebook tải nội dung sau khi mở (ảnh + DOM lỗi 26/11: lúc 1,5 giây menu còn khung xám, khoảng một giây sau đã có
+//    link tên). Chờ phần tử hiện (tối đa WAIT_MS) thay cho ngủ cố định; chưa có thì đóng / mở menu lại một lần. Câu lỗi giữ nguyên.
+//  - Thử thật 26/11: mở trang chưa tới 1 giây thì nút menu đã có nhưng cú bấm chưa được nhận (aria-expanded vẫn false): bấm lại sau
+//    RECLICK_MS khi menu chưa mở.
+//  - Trả và ghi vào vars danh tính ban đầu là Page hay trang cá nhân (cookie i_user chỉ có khi đang dùng Page; thử thật 26/11), để block chuyển
+//    danh tính biết loại cần chuyển về (tài khoản có trang cá nhân và Page cùng tên). Lượt chuyển về chạy riêng nhận lại qua bộ lập lịch
+//    Desktop (originalIdentityIsPage); không dùng localStorage vì Facebook tự xoá khoá lạ sau khi tải trang và khi đổi danh tính (thử thật 26/11).
 const stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)
 const WAIT_MS = 10000
 const POLL_MS = 250
+const RECLICK_MS = 1500
 const menuSelector = await helpers.element('FbIdentityMenuButton')
 const currentSelector = await helpers.element('FbCurrentIdentityLink')
 
@@ -70,6 +76,11 @@ async function menuState() {
   `, menuSelector)
 }
 
+// Đang dùng Page: Facebook đặt cookie i_user (mã Page) khi chuyển sang Page, bỏ khi về trang cá nhân (thử thật 26/11).
+async function usingPage() {
+  return await page.evaluate(`return /(?:^|; )i_user=/.test(document.cookie)`)
+}
+
 async function waitFor(read, timeoutMs) {
   const deadline = Date.now() + timeoutMs
   for (;;) {
@@ -80,15 +91,21 @@ async function waitFor(read, timeoutMs) {
   }
 }
 
-// Mở menu: chờ nút có mặt rồi bấm; menu đang mở thì không bấm (bấm nữa là đóng).
+// Mở menu: chờ nút có mặt rồi bấm; menu đang mở thì không bấm (bấm nữa là đóng); bấm rồi mà sau RECLICK_MS menu chưa mở thì bấm lại.
+// Trả 'open', 'clicked' (đã bấm, không xác nhận được là mở) hoặc 'missing' (không có nút).
 async function openMenu() {
-  return await waitFor(async () => {
+  let clickedAt = 0
+  const opened = await waitFor(async () => {
     const state = await menuState()
     if (state === 'missing') return false
     if (state === 'open') return true
+    if (clickedAt && state === 'unknown') return true
+    if (clickedAt && Date.now() - clickedAt < RECLICK_MS) return false
     const clicked = await rawClick(menuSelector)
-    return !!(clicked && clicked.clicked === true)
+    if (clicked && clicked.clicked === true) clickedAt = Date.now()
+    return false
   }, WAIT_MS)
+  return opened ? 'open' : clickedAt ? 'clicked' : 'missing'
 }
 
 // Đóng menu: chỉ bấm khi menu đang mở (hoặc không biết trạng thái, như trước).
@@ -101,18 +118,20 @@ const readName = async () => String(await rawText(currentSelector) || '').trim()
 
 helpers.log('Đang lấy tên Facebook identity hiện tại')
 await page.navigate('https://facebook.com')
-if (!(await openMenu())) throw new Error('Không tìm thấy nút mở menu profile/page hiện tại')
+if ((await openMenu()) === 'missing') throw new Error('Không tìm thấy nút mở menu profile/page hiện tại')
 
 let identityName = await waitFor(readName, WAIT_MS)
 if (!identityName) {
   await closeMenu()
   await helpers.sleep(stepMs + 500, signal)
-  if (await openMenu()) identityName = await waitFor(readName, WAIT_MS)
+  if ((await openMenu()) !== 'missing') identityName = await waitFor(readName, WAIT_MS)
 }
+const isPage = !!(await usingPage().catch(() => false))
 await closeMenu()
 await helpers.sleep(stepMs + 500, signal)
 
 if (!identityName) throw new Error('Không lấy được tên Facebook identity hiện tại')
 vars.originalIdentityName = identityName
-helpers.log('Identity hiện tại: ' + identityName)
-return { ok: true, identityName }
+vars.originalIdentityIsPage = isPage
+helpers.log('Identity hiện tại: ' + identityName + (isPage ? ' (Page)' : ''))
+return { ok: true, identityName, isPage }

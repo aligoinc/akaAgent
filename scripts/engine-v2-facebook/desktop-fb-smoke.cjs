@@ -196,6 +196,7 @@ class FakePage {
     if (code === 'identityError') return this.scenario.identityError ?? null
     // Câu 605: câu block chuyển Page trả khi không chuyển được (ok:false, không ném).
     if (code === 'switchError') return this.scenario.switchError ?? null
+    if (code === 'identityIsPage') return this.scenario.identityIsPage ?? false
     if (code === 'postLink') return this.scenario.postLink ?? ''
     // Bản đọc chữ trên trang để so dấu hiệu lỗi (errorSigns.ts PAGE_SIGN_TEXTS_SCRIPT).
     if (String(code).includes('aka:page-sign-texts')) { this.pageSignReads = (this.pageSignReads ?? 0) + 1; return this.scenario.pageTexts ?? [] }
@@ -1960,7 +1961,10 @@ COMMIT;`)
 await page.navigate('https://www.facebook.com/')
 if (fail) throw new Error(fail)
 vars.originalIdentityName = 'Tài khoản gốc'
-return { ok: true, identityName: 'Tài khoản gốc' }` },
+// V663: block đọc tên trả danh tính ban đầu là Page hay trang cá nhân (cookie i_user).
+const isPage = (await page.evaluate('identityIsPage')) === true
+vars.originalIdentityIsPage = isPage
+return { ok: true, identityName: 'Tài khoản gốc', isPage }` },
       // Như block 2880 production: không chuyển được thì trả ok:false kèm câu (không ném); block 2915 "ready" ném lại câu đó.
       { id: 9722, name: 'fb_switch_identity_by_name', code: `const identityName = input.useOriginalIdentity === true ? vars.originalIdentityName : vars.runAsPageName
 const fail = input.useOriginalIdentity === true ? null : await page.evaluate('switchError')
@@ -2087,6 +2091,26 @@ return { ok: true, operation: mode }` }
       assert.doesNotMatch(String(camp.note ?? ''), /FB06/)
       assert.equal(data[0].status, 'chờ xử lý')
     })
+
+    // V663 (thử thật 26/11 trên tài khoản có trang cá nhân và Page cùng tên): block chuyển về cần biết danh tính ban đầu là Page hay trang cá
+    // nhân; Facebook tự xoá localStorage nên bộ lập lịch truyền originalIdentityIsPage (kết quả bước đọc tên) vào lượt chuyển về và dấu khôi phục.
+    for (const isPage of [false, true]) {
+      await check(`FB06 V663: danh tính ban đầu là ${isPage ? 'Page' : 'trang cá nhân'} → lượt chuyển về chạy riêng và dấu khôi phục mang originalIdentityIsPage = ${isPage}`, async () => {
+        const before = globalThis.__fbTest.runs.length
+        const markers = []
+        const markerDir = path.join(userData, 'local-data', 'engine-facebook-identity')
+        const { out } = await identityRun(null, { identityIsPage: isPage, onEvaluate: code => {
+          if (code !== 'switchError' || !fs.existsSync(markerDir)) return
+          for (const f of fs.readdirSync(markerDir)) markers.push(JSON.parse(fs.readFileSync(path.join(markerDir, f), 'utf8')))
+        } })
+        assert.deepEqual(out.map(o => o.error_code), [null], JSON.stringify(out))
+        const restoreRuns = globalThis.__fbTest.runs.slice(before).filter(r => r.variables?.pageIdentityRestoreOnly === true)
+        assert.equal(restoreRuns.length, 1, 'đóng lượt có đúng một lượt chuyển về')
+        assert.equal(restoreRuns[0].variables.originalIdentityIsPage, isPage)
+        assert.equal(restoreRuns[0].variables.originalIdentityName, 'Tài khoản gốc')
+        assert.ok(markers.length >= 1 && markers.every(m => m.originalIdentityIsPage === isPage), JSON.stringify(markers))
+      })
+    }
 
     await check('FB06 câu 631: trang đăng nhập lúc đọc tên danh tính → FB43', async () => {
       const { out } = await identityRun('Không tìm thấy nút mở menu profile/page hiện tại', { redirectTo: 'https://www.facebook.com/login/?next=%2F' })

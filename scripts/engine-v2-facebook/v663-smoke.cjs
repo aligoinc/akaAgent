@@ -15,7 +15,7 @@ const fs = require('node:fs')
 const path = require('node:path')
 const vm = require('node:vm')
 const { createPageAdapter } = require('./fb-group-fake.cjs')
-const { homePage, CASES } = require('./v663-fake-home.cjs')
+const { homePage, STATE_SCRIPT, CASES } = require('./v663-fake-home.cjs')
 
 const ROOT = path.resolve(__dirname, '../..')
 const LIVE = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/fixtures/engine-v2-facebook/v663-live-20261126.json'), 'utf8'))
@@ -65,9 +65,7 @@ async function runBlock(browser, code, cfg, { vars = {}, input = {}, abortAfterM
   } catch (error) {
     out = { thrown: String(error && error.message || error) }
   }
-  const state = await pw.evaluate(() => ({ switched: window.__switched, typed: window.__typed, opens: window.__opens,
-    expanded: document.querySelector('[aria-label="Tài khoản, trang cá nhân của bạn"]')?.getAttribute('aria-expanded') ?? null }))
-    .catch(() => ({}))
+  const state = await pw.evaluate(body => new Function(body)(), STATE_SCRIPT).catch(() => ({}))
   await context.close()
   return { out, ops, logs, vars: JSON.parse(JSON.stringify(varsObj)), state, ms: Date.now() - started }
 }

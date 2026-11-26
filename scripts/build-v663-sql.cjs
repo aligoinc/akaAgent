@@ -13,10 +13,16 @@
 //   - Block 2879 / 2880: chờ phần tử hiện thay cho ngủ cố định (nút menu, link tên, nút xem tất cả tối đa 10 giây; mục tên Page 8 giây rồi mới
 //     gõ ô tìm kiếm, sau khi gõ lại chờ 8 giây); không thấy link tên / nút xem tất cả thì đóng / mở menu lại một lần. Mở / đóng menu theo
 //     aria-expanded của nút menu (đang mở thì không bấm nữa), không có thuộc tính đó thì bấm như cũ. Câu lỗi giữ nguyên.
-//   - Block 2880 (anh chốt "Chỉ khi không chọn được"): vẫn mở danh sách và bấm mục đúng tên như trước; chỉ khi danh sách đã mở mà không có mục
-//     nào để bấm (kể cả sau khi gõ ô tìm kiếm, hay không có ô tìm kiếm) và danh tính đang dùng trùng đúng tên cần chuyển thì trả ok (alreadyCurrent).
-//     Danh tính đang dùng: chuyển sang = tên 2879 vừa đọc; chuyển về = danh tính vừa chuyển sang cùng lượt (vars.currentIdentityName), không có thì
-//     runAsPageName.
+//   - Thử thật 26/11 trên tài khoản thử có trang cá nhân và Page cùng tên (anh cho thử): mục đầu tiên khớp tên là ô chuyển nhanh "Chuyển sang
+//     <tên>", trỏ tới danh tính KHÁC danh tính đang dùng, nên đang ở Page mà "chuyển sang Page" thì bị đưa về trang cá nhân (lỗi có từ bộ cũ);
+//     bấm nút menu khi trang mới mở chưa tới 1 giây thì menu không mở. Anh chốt "Sửa bằng i_user" (cookie chỉ có khi đang dùng Page, đọc được
+//     bằng JavaScript, không phụ thuộc ngôn ngữ giao diện):
+//       · 2879 trả và ghi vào vars originalIdentityIsPage; bấm nút menu mà menu chưa mở thì bấm lại sau 1,5 giây.
+//       · 2880 đọc danh tính đang dùng (tên trong menu + i_user). Đã ở đúng danh tính cần tới (đúng tên, đúng loại: chuyển sang là Page; chuyển về
+//         là loại 2879 ghi) thì không bấm gì (alreadyCurrent). Bấm chọn xong thì mở lại trang đọc lại danh tính; chưa đúng thì thử mục khác cùng
+//         tên (tối đa 3), hết mới báo "Đã chọn … nhưng chưa chuyển sang được đúng danh tính". Không biết loại (bản Desktop chưa truyền
+//         originalIdentityIsPage cho lượt chuyển về chạy riêng) thì chỉ so tên như trước.
+//       · Không dùng localStorage: Facebook tự xoá khoá lạ khoảng 20 giây sau khi tải trang và khi đổi danh tính (thử thật 26/11).
 //   - Danh mục bước của 2880 (dòng 24, session): reviewed_code_md5 theo code mới.
 //   - Câu FB06 cho khách bỏ "để đăng bài" (chiến dịch tham gia nhóm / bình luận cũng dùng): chính sách 284 (ghi chú chiến dịch, dòng tiến trình)
 //     và tên mã cho khách auto_error 65. Cách xử lý FB06 (tạm dừng chiến dịch ngay) giữ nguyên.
@@ -143,9 +149,9 @@ END $pre$;`
 
 const migration = `-- V663: engine v2 Facebook, nhóm FB06 chuyển sang Page (câu 605 / 2843 / 637 / 632 / 609 / 610 / 3186 của bộ kiểm lỗi, anh chốt 26/11/2026).
 -- Block "[engine] fb_get_current_identity_name" (${GET.id}) và "[engine] fb_switch_identity_by_name" (${SWITCH.id}): chờ menu tài khoản / danh sách trang
--- cá nhân tải xong thay cho ngủ cố định 1,5 giây (ảnh + DOM lỗi 26/11: menu còn khung xám lúc bấm), đóng / mở menu lại một lần; tài khoản đã ở
--- sẵn đúng Page mà danh sách không có mục để chọn lại thì coi là đang dùng sẵn (vẫn mở danh sách, bấm như cũ). Câu lỗi giữ nguyên. Danh mục bước của ${SWITCH.id} theo
--- code mới. Câu FB06 cho khách bỏ "để đăng bài" (chính sách ${POLICY.id}, auto_error ${ERROR.id}); cách xử lý FB06 giữ nguyên (tạm dừng chiến dịch).
+-- cá nhân tải xong thay cho ngủ cố định 1,5 giây (ảnh + DOM lỗi 26/11: menu còn khung xám lúc bấm), đóng / mở menu lại một lần; đọc danh tính
+-- đang dùng bằng tên + cookie i_user (chỉ có khi đang dùng Page; thử thật 26/11): đã đúng thì không bấm, bấm xong thì đọc lại, sai thì thử mục khác
+-- rồi mới báo lỗi. Câu lỗi cũ giữ nguyên. Danh mục bước của ${SWITCH.id} theo code mới. Câu FB06 cho khách bỏ "để đăng bài" (chính sách ${POLICY.id}, auto_error ${ERROR.id}); cách xử lý FB06 giữ nguyên (tạm dừng chiến dịch).
 -- Bộ cũ (${LIVE.sources.get.id} / ${LIVE.sources.switch.id}) và sổ chép block không đổi.
 -- SINH TỪ scripts/build-v663-sql.cjs (nguồn guard: scripts/fixtures/engine-v2-facebook/v663-live-20261126.json), không sửa tay.
 -- Chỉ dữ liệu, không DDL (không nạp lại schema PostgREST). Desktop đọc code block mỗi lượt. Gỡ: ${ROLLBACK_NAME}.sql.

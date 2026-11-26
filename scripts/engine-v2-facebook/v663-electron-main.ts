@@ -9,8 +9,9 @@ import path from 'node:path'
 import { PageController } from '../../src/main/v2/runtime/pageController'
 import { BlockExecutor } from '../../src/main/v2/runtime/blockExecutor'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const { homePage, CASES } = require('./v663-fake-home.cjs') as {
+const { homePage, STATE_SCRIPT, CASES } = require('./v663-fake-home.cjs') as {
   homePage: (cfg: unknown) => string
+  STATE_SCRIPT: string
   CASES: Array<{ key: string; why: string; block: 'get' | 'switch'; cfg: unknown; opts?: { vars?: Record<string, unknown>; input?: Record<string, unknown>; abortAfterMs?: number }
     old: ((r: RunOutcome) => void) | null; new: ((r: RunOutcome) => void) | null }>
 }
@@ -59,9 +60,7 @@ async function runCase(label: Label, c: (typeof CASES)[number], index: number): 
     const result = await new BlockExecutor().execute({ code: codes[c.block][label], blockName: BLOCK_NAMES[c.block], timeoutMs: 180_000 },
       { input: { ...(c.opts?.input ?? {}) }, page, vars, signal: controller.signal })
     const out = result.success ? JSON.parse(JSON.stringify(result.output ?? null)) : { thrown: String(result.error ?? '') }
-    const state = await real.evaluate<Record<string, unknown>>(`return { switched: window.__switched ?? null, typed: window.__typed ?? null,
-      opens: window.__opens ?? 0, expanded: document.querySelector('[aria-label="Tài khoản, trang cá nhân của bạn"]')?.getAttribute('aria-expanded') ?? null }`)
-      .catch(() => ({}))
+    const state = await real.evaluate<Record<string, unknown>>(STATE_SCRIPT).catch(() => ({}))
     return { out, ops, vars: JSON.parse(JSON.stringify(vars)), state }
   } finally {
     win.destroy()
