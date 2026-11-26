@@ -22,7 +22,9 @@ const formatTime = (value: string | null | undefined): string => {
   if (!value) return '—'
   const date = new Date(value)
   if (!Number.isFinite(date.getTime())) return '—'
-  return new Intl.DateTimeFormat('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }).format(date)
+  const parts = new Map(new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', day: '2-digit',
+    month: '2-digit', hourCycle: 'h23' }).formatToParts(date).map(part => [part.type, part.value]))
+  return `${parts.get('hour')}:${parts.get('minute')} ${parts.get('day')}/${parts.get('month')}`
 }
 const shortLink = (url: string): string => url.replace(/^https:\/\/docs\.google\.com\/spreadsheets\/d\/([A-Za-z0-9_-]{6})[A-Za-z0-9_-]*/, 'docs.google.com/…/$1…')
 const tone = (source: CampaignSheetSyncSource, active: boolean): '' | 'on' | 'warn' | 'danger' =>
@@ -93,7 +95,7 @@ export function CampaignSheetSyncCard({ campaignId, campaignName, onChanged }: P
   const saveSchedule = () => {
     const error = validateCampaignSheetSyncSchedule(hours, endDate)
     if (error) { showAlert(error, 'error'); return }
-    if (!active) {
+    if (!active || !source.isEnabled) {
       void run({ action: 'resume', syncId: source.id, campaignId, endDate }, 'Đã bật lại đồng bộ.')
       return
     }
@@ -168,14 +170,14 @@ export function CampaignSheetSyncCard({ campaignId, campaignName, onChanged }: P
       {reason && <div className="campaign-sheet-sync-reason">{reason}</div>}
       {editing && <div className="campaign-sheet-sync-note-edit">
         <label>Đồng bộ mỗi{' '}
-          <select className="stepper-input" value={hours} disabled={!active} onChange={event => setHours(Number(event.target.value))}>
+          <select className="stepper-input" value={hours} disabled={!active || !source.isEnabled} onChange={event => setHours(Number(event.target.value))}>
             {CAMPAIGN_SHEET_SYNC_HOUR_OPTIONS.map(value => <option key={value} value={value}>{value} giờ</option>)}
           </select>
         </label>
         <label>đến hết ngày{' '}
           <input className="stepper-input" type="date" min={minDate} max={maxDate} value={endDate} onChange={event => setEndDate(event.target.value)} />
         </label>
-        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={saveSchedule}>{active ? 'Lưu' : 'Bật lại'}</button>
+        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={saveSchedule}>{active && source.isEnabled ? 'Lưu' : 'Bật lại'}</button>
         <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={() => setEditing(false)}>Hủy</button>
       </div>}
       {!editing && <div className="campaign-sheet-sync-actions">
