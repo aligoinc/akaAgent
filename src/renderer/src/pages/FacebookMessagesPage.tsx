@@ -7,10 +7,12 @@ import {
   facebookMessagesSelectionKey,
   formatFacebookUnreadBadge,
   normalizeFacebookUnreadCount,
-  parseFacebookMessagesSelection
+  parseFacebookMessagesSelection,
+  summarizeFacebookUnread
 } from '../../../shared/facebookMessages'
 import { useAuthStore } from '../stores/authStore'
 import { useCampaignStore } from '../stores/campaignStore'
+import { useFacebookMessagesUnreadStore } from '../stores/facebookMessagesUnreadStore'
 import FacebookMessagesAccountPicker from '../components/FacebookMessages/FacebookMessagesAccountPicker'
 import {
   accountInitials,
@@ -24,8 +26,10 @@ const FACEBOOK_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebK
 // Chỉ hỏi tiến trình chính (không gọi DB) cho tài khoản chưa có phiên sẵn sàng.
 const SESSION_READY_POLL_MS = 3000
 // Đếm đoạn chat chưa đọc bằng cách đọc DOM của chính webview Messenger (không gọi DB,
-// không đụng webview của tab Trình duyệt). Chỉ đếm khi đang mở trang này.
+// không đụng webview của tab Trình duyệt). Đang mở trang này thì 5 giây một lần; ở trang
+// khác vẫn đếm 30 giây một lần để mục "Tin nhắn Facebook" trên menu hiện tổng.
 const UNREAD_POLL_MS = 5000
+const UNREAD_BACKGROUND_POLL_MS = 30000
 
 interface Props {
   isActive: boolean
@@ -192,12 +196,21 @@ export default function FacebookMessagesPage({ isActive, onOpenInBrowser }: Prop
   countUnreadRef.current = countUnread
 
   useEffect(() => {
-    if (!isActive) return
     const countAll = () => { webviews.current.forEach((_element, accountId) => { void countUnread(accountId) }) }
     countAll()
-    const timer = window.setInterval(countAll, UNREAD_POLL_MS)
+    const timer = window.setInterval(countAll, isActive ? UNREAD_POLL_MS : UNREAD_BACKGROUND_POLL_MS)
     return () => window.clearInterval(timer)
   }, [countUnread, isActive, mountedAccounts.length])
+
+  // Gửi tổng lên menu bên trái. Chỉ tính tài khoản đã chọn; chưa đăng nhập / chưa đếm xong
+  // thì không cộng vào tổng.
+  const setUnreadSummary = useFacebookMessagesUnreadStore(state => state.setSummary)
+  const unreadSummary = useMemo(() => summarizeFacebookUnread(
+    selectedAccounts.map(account => ({ id: account.id, name: account.name, loggedIn: isLoggedIn(account) })),
+    unreadById
+  ), [selectedAccounts, unreadById])
+  useEffect(() => { setUnreadSummary(unreadSummary) }, [setUnreadSummary, unreadSummary])
+  useEffect(() => () => setUnreadSummary(null), [setUnreadSummary])
 
   useEffect(() => () => {
     listenerCleanups.current.forEach(cleanup => cleanup())
@@ -235,7 +248,7 @@ export default function FacebookMessagesPage({ isActive, onOpenInBrowser }: Prop
     getActiveWebview()?.loadURL(FACEBOOK_MESSAGES_URL).catch(() => {})
   }
 
-  const totalUnread = liveAccounts.reduce((sum, account) => sum + (unreadById.get(account.id) ?? 0), 0)
+  const totalUnread = unreadSummary.total
   const activeMounted = Boolean(activeAccount && mountedAccounts.some(account => account.id === activeAccount.id))
 
   const rowStatus = (account: AutoAccount): { text: string; warning: boolean } => {
