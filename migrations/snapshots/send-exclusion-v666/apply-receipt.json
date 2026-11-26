@@ -1,0 +1,52 @@
+{
+  "migration": "migration_v666_send_exclusion_review_fixes",
+  "file": "migrations/migration_v666_send_exclusion_review_fixes.sql",
+  "file_md5": "fe87b2e4a3e74d1437bc5b8139b7f085",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh, 26/11/2026: \"apply bây giờ luôn\"",
+  "method": "supabase db query --linked -f, file bọc bằng scripts/make-migration-ledger-apply.cjs (dòng sổ cùng giao dịch)",
+  "ledger": { "version": "20261126104354", "statements_md5": "fe87b2e4a3e74d1437bc5b8139b7f085", "created_by": null },
+  "applied_at_vn": "2026-11-26 17:43:55",
+  "preflight_17_42_vn": {
+    "v666_number_free": true,
+    "v657_p2_present": true,
+    "old_md5_all_match": true,
+    "send_exclusion_runtime_setting_absent": true,
+    "campaigns_needing_v2": 0,
+    "campaigns_with_selection": 10083,
+    "old_switch": "campaign.send_exclusion_multi_zalo = {\"audience\":\"off\"}",
+    "active_backends": 2
+  },
+  "trial_rolled_back_17_43_vn": {
+    "new_md5_all_match_fixture": true,
+    "claim_check_on_20_pending_campaigns": "all NULL (không tạm dừng)"
+  },
+  "postflight": {
+    "new_md5": {
+      "match": "634462cc73b51aecc5a7aa80d3f989c3",
+      "v2": "eeda8e79ec7a1f1a7f5aa7f9765e1493",
+      "ingest": "7d18d5ded317c18d33859f38b713a47a",
+      "runtime": "f44cf7915dee1e822c15380714a42aa7",
+      "claim": "9dae5143fd5e8833e3c555e87bb14ea7",
+      "engineClaim": "2db540225a612d0e33111b1e8021b025",
+      "trigger": "947a1ecc44c16de9784e255e84206883"
+    },
+    "claim_check_execute": { "aka_agent_desktop": true, "aka_agent_chat_api": true, "service_role": true, "anon": false },
+    "runtime_ready_execute_desktop": false,
+    "settings": { "send_exclusion.runtime": "{\"server\":false,\"desktopMinVersion\":null}", "campaign.send_exclusion_multi_zalo_v2": "chưa có dòng (tắt)" },
+    "campaigns_paused_by_claim_check": 0
+  },
+  "impact": {
+    "postgrest_schema_reload": "nhận tin 17:43:55.6, truy vấn schema 5,5 s, nạp xong 17:44:03",
+    "rest_minute_17_43": "26.497 request, 205 quá 1 giây (trong lúc nạp lại schema), 1 lỗi 500, 0 lỗi 503, p50 45 ms",
+    "rest_minute_17_44": "24.455 request, 8 quá 1 giây, 0 lỗi 5xx, p50 46 ms",
+    "errors": "1 lượt rpc/aka_agent_claim_campaign_runtime_v2 hết giờ 3,9 s lúc 17:43:59 (đúng lúc nạp lại schema; giao dịch nhận lượt huỷ, không để lại claim); không lỗi nào khác ngoài permission denied của máy < 9.1.0",
+    "claims_after_apply": "aka_agent_claim_campaign_runtime_v2 61 lượt 200, aka_agent_engine_claim_target_v1 94 lượt 200 (tới 17:44)"
+  },
+  "not_done": [
+    "ChatApi worker, App Server, Desktop chưa có bản gửi x-aka-send-exclusion-runner / sendExclusionRunner: lúc này mọi bộ chạy đều là bản cũ, nhưng chưa chiến dịch nào có cấu hình cần bản mới nên không chiến dịch nào bị tạm dừng",
+    "send_exclusion.runtime còn server=false, desktopMinVersion=null: chưa ai lưu được cấu hình mới",
+    "công tắc campaign.send_exclusion_multi_zalo_v2 chưa có dòng"
+  ],
+  "rollback": "migrations/rollback_v666_send_exclusion_review_fixes.sql"
+}
