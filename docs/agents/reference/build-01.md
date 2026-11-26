@@ -138,7 +138,7 @@ thêm lời gọi / hằng mới vào hàm được dựng (10.6.0: `handleRecur
 `EMAIL_PROMPT_UI_CHROMIUM` / `SX_UI_CHROMIUM` là Chrome của máy; `zalo-received-marks/fuzz-loop.cjs` cần `--pgbin <PG17>`;
 `zalo-tag-sync/v660-smoke.sh` hỏng trên bash 3.2 (mảng `RUN` rỗng dưới `set -u`): dùng bản chép `bash32/v660-smoke.sh`;
 `zalo-tag-sync/fly-tag-sync-fuzz.cjs` cần `CHAT_REPO` là bản ChatApi có `packages/zalo-zca-adapter/src/tagSync.ts` (checkout ChatApi chính
-có thể đang ở nhánh cũ). `staff-email-prompt/run-email-prompt-ui-smoke.cjs` hỏng ở bước 7 (gợi ý tên miền do DB trả) ngay ở commit merge #789.
+có thể đang ở nhánh cũ). `staff-email-prompt/run-email-prompt-ui-smoke.cjs` hỏng ở bước 7 từ #789 là lỗi bài kiểm (điền vào form cũ đang bị gỡ khi đổi scope), sửa ở #800.
 `WEBAPP_REPO` = `git archive origin/dev_1 packages apps` (đủ `apps/web`) thì `campaign-result-groups-desktop-smoke` đạt.
 
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
