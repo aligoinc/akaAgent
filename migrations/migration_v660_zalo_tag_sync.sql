@@ -38,6 +38,12 @@ BEGIN
   IF EXISTS (SELECT 1 FROM auto_system_settings WHERE key LIKE 'zalo.tag_sync.%') THEN
     RAISE EXCEPTION 'v660 settings already exist';
   END IF;
+  IF EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_engine_zalo_tag_not_friend' OR public_code = 'EXC04') THEN
+    RAISE EXCEPTION 'v660 error code EXC04 already exists';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM public.auto_status WHERE code = 'campaign_detail_skipped') THEN
+    RAISE EXCEPTION 'v660 needs auto_status campaign_detail_skipped';
+  END IF;
 END
 $preflight$;
 
@@ -739,6 +745,33 @@ BEGIN
   RETURN v_deleted;
 END;
 $function$;
+
+-- ---------------------------------------------------------------------------------------------------------------------
+-- Mã kết quả EXC04: người vừa được gắn tag mà chưa là bạn bè (engine v2; bộ chạy cũ ghi cùng trạng thái "Bỏ qua")
+-- ---------------------------------------------------------------------------------------------------------------------
+
+INSERT INTO public.auto_error (error_type, error_code, error_name, error_desc, noti_running_process, noti_campaign,
+  disable_action_codes, counts_toward_limit, counts_toward_bad_target, disable_action_mode, zalo_error_codes, zalo_action_codes,
+  is_active, is_delete, public_code, error_class, customer_title, customer_help, detail_status)
+VALUES ('engine v2', 'err_engine_zalo_tag_not_friend', 'Người được gắn tag chưa là bạn bè',
+  'V660: chiến dịch nhắn tin bạn bè tự thêm người vừa được gắn tag; người đó chưa là bạn bè nên không gửi (anh chốt 26/11/2026).',
+  NULL, NULL, '{}', false, false, 'fixed_minutes', '{}', '{}', true, false, 'EXC04', 'target_permanent',
+  'Chưa là bạn bè nên không gửi', NULL, 'bỏ qua');
+
+-- Như EXC03 (danh sách không gửi tin) nhưng ghi dòng lịch sử "Bỏ qua" (status 51).
+INSERT INTO public.auto_outcome_policies (error_code, error_class, status_id, action_code, campaign_action_id, runtime_target, detail_mode,
+  detail_status_id, sub_status_id, log_template, campaign_note_template, quota_effect, target_streak_effect, streak_threshold, target_effect,
+  requeue_after_minutes, remaining_steps, lock_action_codes, lock_mode, lock_minutes, lock_days, lock_time, run_effect, pace_mode, pace_seconds,
+  campaign_effect, campaign_hold_minutes, account_effect, login_effect, description, source)
+SELECT 'err_engine_zalo_tag_not_friend', NULL, NULL, NULL, NULL, NULL, 'write',
+  (SELECT id FROM public.auto_status WHERE code = 'campaign_detail_skipped'), NULL,
+  'Chưa là bạn bè nên không gửi', NULL, 'no_count', 'ignore', NULL, 'complete',
+  NULL, 'skip', '{}', NULL, NULL, NULL, NULL, 'continue', 'none', NULL,
+  'none', NULL, 'none', 'none', '[V660] Người vừa được gắn tag chưa là bạn bè: Bỏ qua, không tính lượt, không cộng chuỗi, không nghỉ.', 'v660';
+
+INSERT INTO public.auto_outcome_signal_rules (platform, action_code, phase, signal_kind, pattern, priority, error_code, source, note)
+VALUES ('system', NULL, NULL, 'engine', 'zalo_tag_not_friend', 50, 'err_engine_zalo_tag_not_friend', 'v660',
+  '[V660] Người vừa được gắn tag chưa là bạn bè.');
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Quyền

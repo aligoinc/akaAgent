@@ -118,4 +118,8 @@ SELECT pg_temp.ok(has_function_privilege('aka_agent_chat_api', 'public.aka_agent
 SELECT pg_temp.ok(NOT has_table_privilege('service_role', 'public.auto_zalo_tag_members', 'SELECT'), 'bảng không đọc thẳng được');
 
 SELECT pg_temp.ok(private.aka_agent_zalo_tag_sync_retention() = 0, 'dọn nhật ký chạy được');
+SELECT pg_temp.ok((SELECT public_code FROM auto_error WHERE error_code = 'err_engine_zalo_tag_not_friend') = 'EXC04', 'có mã EXC04');
+SELECT pg_temp.ok((SELECT quota_effect = 'no_count' AND target_streak_effect = 'ignore' AND detail_mode = 'write' AND detail_status_id = 51 AND campaign_effect = 'none'
+  FROM auto_outcome_policies WHERE error_code = 'err_engine_zalo_tag_not_friend'), 'EXC04: Bỏ qua, không tính lượt, không cộng chuỗi');
+SELECT pg_temp.ok((SELECT error_code FROM auto_outcome_signal_rules WHERE pattern = 'zalo_tag_not_friend') = 'err_engine_zalo_tag_not_friend', 'luật tín hiệu engine');
 \echo ALL PASS

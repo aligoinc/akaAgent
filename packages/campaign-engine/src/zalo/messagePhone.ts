@@ -12,6 +12,7 @@
  */
 import type { ClaimContext, RawOutcome, TargetRow } from '../contracts.js'
 import type { EngineStep, StepContext } from '../runUnit.js'
+import { checkZaloTagAutoAddFriend } from './tagAutoAdd.js'
 import { CancelledError, DeadlineError, errorMessage, withDeadline } from '../boundary.js'
 import { beginZaloEngagement, type ZaloEngagementPort } from './engagement.js'
 import { prepareCampaignContent } from '../content/campaignContentPreparation.js'
@@ -552,6 +553,11 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
       if (blocklistOn) {
         const listed = await checkZaloFriendBlocklist(port, ctx, campaign, uid)
         if (listed.kind === 'blocked') return listed.outcome
+      }
+      // Người vừa được gắn tag (V660): chỉ gửi khi đã là bạn bè.
+      if (campaign.actionId === ZALO_MESSAGE_FRIEND) {
+        const friend = await checkZaloTagAutoAddFriend(port, ctx, ctx.target)
+        if (friend.kind === 'blocked') return friend.outcome
       }
       if (!uid) {
         return { ok: false, phase: 'before_send',

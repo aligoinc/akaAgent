@@ -999,6 +999,8 @@ export interface CampaignInputData {
   createdAt?: string
   /** Per-campaign immutable delivery identity. Information can be enriched without changing the target. */
   canonicalTargetKey?: string | null
+  /** Khoá chống thêm trùng của dòng thêm tự động; `zalotag:` = DB thêm vì người đó vừa được gắn tag Zalo (V660). */
+  controlAppendIdempotencyKey?: string | null
   /** Immutable semantic type snapshot. Legacy rows may intentionally remain NULL. */
   dataTypeCategoryItemId?: number | null
   dataTypeCode?: DataTypeCategoryCode | null

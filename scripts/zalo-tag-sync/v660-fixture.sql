@@ -22,3 +22,18 @@ CREATE FUNCTION private.aka_agent_desktop_data_context() RETURNS TABLE(staff_id 
 LANGUAGE sql STABLE AS $$
   SELECT s.id, s.organization_id, false FROM public.org_staff s
   WHERE s.id = NULLIF(current_setting('test.staff', true), '')::bigint $$;
+-- Bảng danh mục kết quả (chỉ các cột V660 ghi).
+CREATE TABLE public.auto_status (id bigint PRIMARY KEY, code text, name text);
+INSERT INTO public.auto_status VALUES (51, 'campaign_detail_skipped', 'Bỏ qua');
+CREATE TABLE public.auto_error (id bigserial PRIMARY KEY, error_type text, error_code text UNIQUE, error_name text, error_desc text,
+  noti_running_process text, noti_campaign text, disable_action_codes text[], counts_toward_limit boolean, counts_toward_bad_target boolean,
+  disable_action_mode text, zalo_error_codes text[], zalo_action_codes text[], is_active boolean, is_delete boolean, public_code text,
+  error_class text, customer_title text, customer_help text, detail_status text);
+CREATE TABLE public.auto_outcome_policies (id bigserial PRIMARY KEY, error_code text, error_class text, status_id bigint, action_code text,
+  campaign_action_id text, runtime_target text, detail_mode text, detail_status_id bigint, sub_status_id bigint, log_template text,
+  campaign_note_template text, quota_effect text, target_streak_effect text, streak_threshold integer, target_effect text,
+  requeue_after_minutes integer, remaining_steps text, lock_action_codes text[], lock_mode text, lock_minutes integer, lock_days integer,
+  lock_time text, run_effect text, pace_mode text, pace_seconds integer, campaign_effect text, campaign_hold_minutes integer,
+  account_effect text, login_effect text, description text, source text, is_active boolean DEFAULT true, is_delete boolean DEFAULT false);
+CREATE TABLE public.auto_outcome_signal_rules (id bigserial PRIMARY KEY, platform text, action_code text, phase text, signal_kind text,
+  pattern text, priority integer, error_code text, source text, note text, is_active boolean DEFAULT true);

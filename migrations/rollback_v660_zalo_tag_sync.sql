@@ -29,4 +29,7 @@ DROP FUNCTION IF EXISTS private.aka_agent_zalo_tag_sync_config();
 DROP TABLE IF EXISTS public.auto_zalo_tag_sync_resets, public.auto_campaign_zalo_tag_adds, public.auto_zalo_tag_sync_campaigns,
   public.auto_zalo_tag_member_events, public.auto_zalo_tag_members, public.auto_zalo_tag_sync_accounts;
 DELETE FROM public.auto_system_settings WHERE key LIKE 'zalo.tag_sync.%';
+DELETE FROM public.auto_outcome_signal_rules WHERE source = 'v660';
+DELETE FROM public.auto_outcome_policies WHERE source = 'v660';
+UPDATE public.auto_error SET is_active = false, is_delete = true WHERE error_code = 'err_engine_zalo_tag_not_friend';
 COMMIT;
