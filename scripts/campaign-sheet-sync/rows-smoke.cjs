@@ -117,4 +117,10 @@ ok('bản đóng gói Edge khớp mã nguồn', () => {
   const r = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, 'build-edge-core.cjs'), '--check'], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stderr)
 })
+if (process.env.WEBAPP_REPO) ok('bản chép WebApp packages/control-api giống từng byte', () => {
+  const fs = require('node:fs')
+  const mine = fs.readFileSync(path.join(ROOT, 'src/shared/campaignSheetSync.ts'))
+  const theirs = fs.readFileSync(path.join(process.env.WEBAPP_REPO, 'packages/control-api/src/campaignSheetSync.ts'))
+  assert.ok(mine.equals(theirs), 'Chép lại src/shared/campaignSheetSync.ts sang WebApp packages/control-api/src/campaignSheetSync.ts')
+})
 console.log(`\n${passed} PASS`)
