@@ -1,0 +1,32 @@
+{
+  "migration": "migration_v661_engine_error_watch_spike_per_data",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply rồi mở PR (26/11/2026, sau khi chọn \"Đếm theo data, mọi mã\" qua hộp chọn)",
+  "applied_at_vn": "2026-11-26 10:59:34",
+  "ledger_version": "20261126035934",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>, vào phút lẻ (tick chạy giây :00 phút chẵn); chạy 2 giây, rc 0",
+  "file_md5": "5746a4ebea9c025e278cfde8b4dee269",
+  "ledger_statements_md5": "5746a4ebea9c025e278cfde8b4dee269",
+  "preflight_live_10_58_54": {
+    "ledger_v661_rows": 0,
+    "ledger_last": "migration_v658_engine_facebook_seeding_checkpoint (20261126032120)",
+    "tick_body_md5": "ca0aa05adb6ef6eb4ea73116db7335fd",
+    "index_auto_engine_outcomes_run_v495": true,
+    "tick_runs": "10:52–10:58 VN thành công, 0,12–0,25 giây"
+  },
+  "dry_run_rollback": "10:59:22 VN: nguyên file, COMMIT cuối thay bằng SELECT + ROLLBACK: trong giao dịch thân tick = e66db55a…; sau ROLLBACK đọc lại: ca0aa05a…, sổ không có V661",
+  "postflight_live_11_02_23": {
+    "tick_body_md5": "e66db55ae0f5d789ab757d4ed9e0220e",
+    "security_definer": true,
+    "comment": "V574 + V588 + V593 + V594 + V599 + V602 + V661: …",
+    "tick_runs_after_apply": "11:00:00 (0,30 s) và 11:02:00 (0,23 s) thành công; state.last_error null; cursor_at 11:01:45",
+    "hourly_current_hour": "giờ 11h: số theo giờ đã ghi bằng số lượt data (mỗi data giờ này chỉ có 1 dòng nên số dòng = số data)"
+  },
+  "schema_reload": "có (CREATE OR REPLACE FUNCTION); apply phút lẻ ngoài lúc tick chạy",
+  "smoke_before_apply": "LC_ALL=C node scripts/engine-v2-facebook/error-watch-v661-smoke.cjs: 6/6; error-watch-smoke 17/17, error-watch-v599-smoke 10/10, error-watch-v602-smoke 7/7",
+  "rollback": "migrations/rollback_v661_engine_error_watch_spike_per_data.sql (chỉ chạy khi thân tick còn đúng bản V661)",
+  "not_verified": [
+    "Chưa có giờ nào sau apply có data nhiều dòng cùng mã (như đăng nhóm 20 comment bị bỏ qua) để thấy số mới khác số cũ trên production.",
+    "Không đo lỗi 5xx của PostgREST lúc nạp lại schema."
+  ]
+}
