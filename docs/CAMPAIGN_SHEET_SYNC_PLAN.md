@@ -336,3 +336,5 @@ Chạy thử trên production 26/11 (khối DO tự huỷ bằng RAISE nên khô
 `56abfd2a…`, preflight đạt, khoá trên chiến dịch 63019 (8.685 dòng) 1.261 → 110 ms giữa giờ chiều, cùng 8.685 khoá; thân sau
 apply: khoá `dacc0179…`, `unmatched_keys` `4336e127…`, `finish` `ee0f2515…`. Chưa apply: `CREATE OR REPLACE FUNCTION` nạp lại
 schema PostgREST (V662 giữa giờ chiều 9,1 s), nên apply buổi tối.
+Bộ thử vòng lặp với V664 (`fuzz-loop.cjs` + `WITH_V664=1 fuzz_db.py`, mẫu data thật ngoài repo, hạt giống 21–23): 3 vòng sạch
+liền, mỗi vòng ~600 ca / ~800 lượt đồng bộ, ~300 kịch bản DB (sửa, xoá mềm, xoá, chạy song song, lượt cũ, khoá nhân viên).
