@@ -88,6 +88,47 @@ BEGIN
 END $f$;
 REVOKE ALL ON FUNCTION private.zalo_users_gid_repair_batch_20261126(bigint, bigint, integer, integer) FROM PUBLIC;`
 
+// Procedure (gọi bằng CALL, ngoài giao dịch): COMMIT sau mỗi câu ≤ p_stmt_rows dòng ⇒ khoá dòng chỉ giữ trong một câu ngắn. Đo
+// production 26/11: hàm một giao dịch giữ khoá tới hết lô (~20 s) làm upsert zalo_users của Desktop (statement_timeout 3 s) bị hủy.
+const procedureSql = `CREATE OR REPLACE PROCEDURE private.zalo_users_gid_repair_run_20261126(p_from bigint, p_hi bigint, p_budget_ms integer,
+  p_stmt_rows integer, INOUT p_result jsonb DEFAULT NULL)
+ LANGUAGE plpgsql AS $p$
+-- (Không có SET search_path: procedure có mệnh đề SET thì không COMMIT được; mọi tên đã ghi đủ schema.)
+-- Tài khoản Zalo id ∈ [p_from, p_hi) theo thứ tự id; mỗi tài khoản lặp câu ≤ p_stmt_rows dòng, COMMIT sau mỗi câu; dừng sau tài khoản
+-- làm xong khi quá p_budget_ms. Trả {updated, byReason, nextFrom, accounts, ms}.
+DECLARE a record; v_acc bigint; v_own text[]; v_self text[]; v_left integer; v_n integer; v_r jsonb; v_total integer := 0;
+  v_by jsonb := '{}'::jsonb; v_next bigint := p_hi; v_accounts integer := 0; v_t0 timestamptz := clock_timestamp();
+BEGIN
+ FOR a IN SELECT id FROM public.auto_accounts WHERE id >= p_from AND id < p_hi AND flatform_type = 'zalo' ORDER BY id LOOP
+  v_acc := a.id; v_accounts := v_accounts + 1;
+  v_own := private.aka_agent_zalo_own_global_ids(v_acc);
+  v_self := ARRAY(SELECT x FROM (
+    SELECT NULLIF(btrim(za.zalo_uid),'') x FROM public.auto_accounts aa JOIN public.zalo_accounts za ON za.id = aa.zalo_account_id WHERE aa.id = v_acc
+    UNION
+    SELECT NULLIF(btrim(ca.zalo_id),'') FROM public.chat_zalo_account_organization ao JOIN public.chat_zalo_account ca ON ca.id = ao.chat_zalo_account_id
+     WHERE ao.auto_account_id = v_acc) s WHERE x IS NOT NULL);
+  LOOP
+   v_left := p_stmt_rows;
+   ${accountStatement}
+   INTO v_n, v_r;
+   SELECT COALESCE(jsonb_object_agg(k, COALESCE((v_by->>k)::int, 0) + COALESCE((v_r->>k)::int, 0)), '{}'::jsonb) INTO v_by
+    FROM (SELECT jsonb_object_keys(v_by) k UNION SELECT jsonb_object_keys(v_r)) kk;
+   v_total := v_total + v_n;
+   COMMIT;
+   EXIT WHEN v_n < p_stmt_rows;
+  END LOOP;
+  IF clock_timestamp() - v_t0 > make_interval(secs => p_budget_ms / 1000.0) THEN v_next := v_acc + 1; EXIT; END IF;
+ END LOOP;
+ p_result := jsonb_build_object('updated', v_total, 'byReason', v_by, 'nextFrom', LEAST(v_next, p_hi), 'accounts', v_accounts,
+  'ms', round(extract(epoch FROM clock_timestamp() - v_t0) * 1000));
+END $p$;
+REVOKE ALL ON PROCEDURE private.zalo_users_gid_repair_run_20261126(bigint, bigint, integer, integer, jsonb) FROM PUBLIC;`
+
+function runSql(from, hi, budgetMs = 60000, stmtRows = 1000) {
+  from = int(from, 'from'); hi = int(hi, 'hi'); budgetMs = int(budgetMs, 'budgetMs'); stmtRows = int(stmtRows, 'stmtRows')
+  if (stmtRows < 1) throw new Error('stmtRows phải ≥ 1')
+  return `CALL private.zalo_users_gid_repair_run_20261126(${from}, ${hi}, ${budgetMs}, ${stmtRows}, NULL);`
+}
 function batchSql(from, hi, limit = 5000, budgetMs = 20000) {
   from = int(from, 'from'); hi = int(hi, 'hi'); limit = int(limit, 'limit'); budgetMs = int(budgetMs, 'budgetMs')
   if (limit < 1) throw new Error('limit phải ≥ 1')
@@ -107,12 +148,14 @@ const setupSql = `CREATE TABLE IF NOT EXISTS ${TABLE} (
 CREATE INDEX IF NOT EXISTS zalo_users_gid_repair_20261126_account ON ${TABLE} (account_id);
 REVOKE ALL ON ${TABLE} FROM PUBLIC;
 ${functionSql}
+${procedureSql}
 DO $r$ BEGIN
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN EXECUTE 'REVOKE ALL ON ${TABLE} FROM anon'; END IF;
   IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN EXECUTE 'REVOKE ALL ON ${TABLE} FROM authenticated'; END IF;
 END $r$;`
 
-const teardownSql = `DROP FUNCTION IF EXISTS private.zalo_users_gid_repair_batch_20261126(bigint, bigint, integer, integer);`
+const teardownSql = `DROP FUNCTION IF EXISTS private.zalo_users_gid_repair_batch_20261126(bigint, bigint, integer, integer);
+DROP PROCEDURE IF EXISTS private.zalo_users_gid_repair_run_20261126(bigint, bigint, integer, integer, jsonb);`
 
 // Hoàn tác theo khoảng tài khoản: chỉ trả dòng vẫn đang giữ giá trị lần sửa đặt (không đè giá trị app ghi sau đó).
 function rollbackSql(lo, hi) {
@@ -128,11 +171,12 @@ RETURNING zu.id;`
 const reportSql = `SELECT reason, count(*) n, count(*) FILTER (WHERE new_global_id IS NOT NULL) restored, count(DISTINCT account_id) accounts,
   min(repaired_at) first_at, max(repaired_at) last_at FROM ${TABLE} GROUP BY 1 ORDER BY 1;`
 
-module.exports = { setupSql, batchSql, accountStatementSql, teardownSql, rollbackSql, reportSql, TABLE }
+module.exports = { setupSql, procedureSql, batchSql, runSql, accountStatementSql, teardownSql, rollbackSql, reportSql, TABLE }
 if (require.main === module) {
   const [cmd, a, b, c] = process.argv.slice(2)
-  const out = cmd === 'setup' ? setupSql : cmd === 'batch' ? batchSql(a, b, c ?? 5000, process.argv[6] ?? 20000) : cmd === 'rollback' ? rollbackSql(a, b) : cmd === 'report' ? reportSql
+  const out = cmd === 'setup' ? setupSql : cmd === 'batch' ? batchSql(a, b, c ?? 5000, process.argv[6] ?? 20000) : cmd === 'run' ? runSql(a, b, c ?? 60000, process.argv[6] ?? 1000)
+    : cmd === 'procedure' ? procedureSql : cmd === 'rollback' ? rollbackSql(a, b) : cmd === 'report' ? reportSql
     : cmd === 'teardown' ? teardownSql : null
-  if (!out) { console.error('dùng: setup | batch <từ tài khoản> <đến> [limit] [budget_ms] | rollback <lo> <hi> | report | teardown'); process.exit(2) }
+  if (!out) { console.error('dùng: setup | procedure | run <từ> <đến> [budget_ms] [dòng mỗi câu] | batch <từ> <đến> [limit] [budget_ms] | rollback <lo> <hi> | report | teardown'); process.exit(2) }
   process.stdout.write(out + '\n')
 }

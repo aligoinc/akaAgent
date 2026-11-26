@@ -213,6 +213,34 @@ async function main() {
         assert.equal(s.get(rid).global_id ?? null, e.gid ?? null, e.uid)
       }
     })
+    await check('procedure (CALL, COMMIT sau mỗi câu ≤ 700 dòng): cùng kết quả như hàm', async () => {
+      await db.query(R.rollbackSql(0, 100000))
+      let from = 9001, calls = 0
+      while (from < 9200 && calls < 100) { const r = (await one(R.runSql(from, 9200, 60000, 700))).p_result; from = Number(r.nextFrom); calls++ }
+      const s = await state()
+      for (const [rid, e] of expect) {
+        if (e.uid === 'a1-s1') continue
+        assert.equal(s.get(rid).global_id ?? null, e.gid ?? null, e.uid)
+      }
+    })
+    await check('trong lúc procedure sửa tài khoản 12.000 dòng, app upsert đúng các dòng đó với statement_timeout 3s không bị hủy', async () => {
+      await db.query(R.rollbackSql(9006, 9007))
+      const other = new Client({ host: db.host, port: db.port, user: db.user, database: db.database })
+      await other.connect()
+      try {
+        await other.query(`SET statement_timeout = '3s'`)
+        const run = one(R.runSql(9006, 9007, 60000, 1000))
+        let ok = 0
+        for (let k = 0; k < 40; k++) {
+          await other.query(`INSERT INTO public.zalo_users (id, account_id, zalo_uid, global_id, raw_payload, staff_id, organization_id) VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (account_id, zalo_uid) DO UPDATE SET display_name = 'app ' || $3`, [9900000 + k, A7, 'a7-s' + (k * 300), null, {}, 880101, 8801])
+          ok++
+        }
+        const r = (await run).p_result
+        assert.equal(ok, 40)
+        assert.ok(r.updated >= 11000, 'procedure phải sửa tài khoản: ' + r.updated)
+      } finally { await other.end() }
+    })
     await check('kế hoạch lô: đi chỉ mục một phần idx_zalo_users_account_global_id (không quét bảng)', async () => {
       // trả 12.000 dòng về trạng thái sai để có việc; dữ liệu nền 120.000 dòng / 300 tài khoản (ít tài khoản thì planner quét cả bảng)
       await db.query(`UPDATE public.zalo_users SET global_id=$1 WHERE account_id=$2 AND zalo_uid LIKE 'a7-s%'`, [G('ownA7'), A7])
