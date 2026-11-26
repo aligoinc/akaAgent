@@ -1,6 +1,7 @@
 # Tự gửi tin khi một người được gắn tag Zalo — phương án
 
-Viết 26/11/2026. **Chưa code, chưa migration, chưa đổi gì trên production.** Chờ anh duyệt.
+Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8), chưa apply V660, chưa deploy, chưa build,
+chưa merge, chưa đổi gì trên production.**
 
 Tính năng: chiến dịch "Nhắn tin bạn bè" ở chế độ "Gửi cho bạn bè thuộc danh sách tag" có thêm ô chọn. Bật ô này thì mỗi khi
 một người được gắn một trong các tag đã chọn trên Zalo, hệ thống tự thêm người đó vào chiến dịch và gửi tin. Chiến dịch đang
@@ -242,3 +243,45 @@ Server trên Fly.
 - **Gắn tag hàng loạt** (khách gắn 500 người một lúc): cả 500 vào chiến dịch và gửi theo hạn mức, nghỉ giữa hai lần gửi như
   bình thường.
 - **Số migration**: lấy số ngay trước khi apply, kiểm sổ production (số lớn nhất trong repo lúc viết là V657).
+
+## 8. Tình trạng làm (26/11/2026)
+
+Nhánh `claude/loving-mendel-zig1jb` ở akaAgent, akaAgentChatApi, akaAgentWebApp; chưa merge, chưa mở PR.
+
+Khác bản thiết kế ở mục 4:
+- Thêm bảng `auto_zalo_tag_sync_campaigns` (danh sách chiến dịch đang bật, trigger trên `auto_campaigns` chỉ khi
+  `action_id = 'zalo_message_friend'`) để khỏi đọc `extra_settings` (TOAST) mỗi nhịp, và `auto_zalo_tag_sync_resets`
+  (tài khoản vừa đổi trạng thái theo dõi thì lần báo sau chỉ lấy mốc; tránh khoá chéo giữa trigger và hàm nhận lô).
+- Fly không báo mỗi phút: runtime chỉ gửi sự kiện `account_tag_sync` khi phiên bản tag đổi, kèm `previousVersion` (`p`) và
+  cờ đọc liền mạch `continuous` (`c`, cửa sổ 3 nhịp). DB chỉ tính người mới khi `c = true` và `p` trùng phiên bản đã lưu,
+  không thì chỉ lấy mốc. Desktop / App Server vẫn báo mỗi nhịp và quá `stale_minutes` (30) thì chỉ lấy mốc.
+- Mã EXC04 `err_engine_zalo_tag_not_friend` "Chưa là bạn bè nên không gửi" (Bỏ qua, không tính lượt, không cộng chuỗi).
+  Bộ chạy cũ không ghi dòng lịch sử, chỉ đóng data kèm ghi chú và dòng tiến trình "🚫 Bỏ qua".
+
+Đã làm:
+- DB: [V660](../migrations/migration_v660_zalo_tag_sync.sql) + [gỡ](../migrations/rollback_v660_zalo_tag_sync.sql).
+  Cấu hình `zalo.tag_sync.enabled` mặc định `false`, `organization_ids` = `all`, `poll_seconds` 60, `stale_minutes` 30,
+  `event_retention_days` 30. Job dọn `aka-agent-zalo-tag-sync-retention` (`17 20 * * *`).
+- Lõi engine `packages/campaign-engine/src/zalo/tagAutoAdd.ts` (gửi thường và gửi chia sẻ), bộ chạy cũ
+  `campaignScheduler.ts` `checkZaloTagAutoAddFriend`.
+- Desktop / App Server: `src/main/services/zaloTagSyncRuntime.ts` + `zaloTagSync.ts`, chạy theo vòng đời của
+  `zaloRealtimeGroupCampaignManager` (chỉ dùng phiên đã có, không đăng nhập thêm, Zalo trình duyệt không làm).
+- Desktop UI: ô chọn ở hai form, dải Dừng / Tiếp tục `ZaloTagAutoAddBanner` trong chi tiết chiến dịch, IPC
+  `campaign:zalo-tag-auto-add:set`.
+- ChatApi (commit `2beac84`): capability `tag_sync`, `packages/zalo-zca-adapter/src/tagSync.ts`, `accountSupervisor` hỏi tag,
+  worker gọi `aka_agent_sync_zalo_tags('fly', …)`, `api` gắn `tagSync` cho tài khoản có chiến dịch bật; lõi engine đã chép.
+- Web: ô chọn trong `CampaignRuntimeOptions.tsx`, `campaignFormLogic.ts` (chỉ ghi khoá khi gửi theo tag và đang bật), route
+  `POST /campaigns/:id/zalo-tag-auto-add`, dải Dừng / Tiếp tục trong tab Thông tin. iOS chỉ hiện một dòng ở bước Xem lại
+  (lưu từ iOS vẫn giữ khoá).
+
+Kiểm (đều đạt): `bash scripts/zalo-tag-sync/v660-smoke.sh` (PG16, gồm gỡ và apply lại), `node
+scripts/zalo-tag-sync/engine-friend-check-smoke.cjs`, `node scripts/zalo-tag-sync/runtime-smoke.cjs`, hai typecheck Desktop;
+ChatApi typecheck + vitest (3.250); WebApp typecheck 8 gói, vitest campaign-core 570, web 1.711, route API 98. Mobile có 1 bài
+`Results.test.tsx` hỏng sẵn trước thay đổi này.
+
+Chưa làm / chưa thử: bước 0 (Zalo có tín hiệu gắn tag không) cần tài khoản thật; chưa chạy Electron, App Server, runtime Fly
+thật; chưa thử với Zalo thật.
+
+Thứ tự đưa lên: apply V660 (buổi tối, kiểm sổ trước: lúc viết sổ production tới V658, V659 đã có nhánh khác giữ) → ChatApi
+deploy `api` rồi `zalo_runtime` rồi `worker` → deploy Web → build Desktop / App Server → đặt `zalo.tag_sync.enabled` = `true`
+(có thể giới hạn `organization_ids` cho tổ chức 1 trước).

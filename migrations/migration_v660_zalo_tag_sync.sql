@@ -441,8 +441,8 @@ $function$;
 -- Nhận lô từ chương trình giữ kết nối Zalo
 -- ---------------------------------------------------------------------------------------------------------------------
 
--- p_items: [{a: mã tài khoản, v: phiên bản tag, tags?: [{id, name, m: [mã hội thoại]}]}], tối đa 200 tài khoản, chỉ một
--- tài khoản được kèm `tags` mỗi lần gọi. Trả {enabled, pollSeconds, staleMinutes, needTags[], rejected[], baselined[],
+-- p_items: [{a: mã tài khoản, v: phiên bản tag, tags?: [{id, name, m: [mã hội thoại]}], p?, c?}], tối đa 200 tài khoản, chỉ một
+-- tài khoản được kèm `tags` mỗi lần gọi. Fly gửi thêm `p` (phiên bản đã báo trước đó) và `c` (runtime đọc liền mạch từ đó). Trả {enabled, pollSeconds, staleMinutes, needTags[], rejected[], baselined[],
 -- added (số người mới gắn), removed, campaignRows (số dòng data đã thêm)}.
 CREATE FUNCTION private.aka_agent_zalo_tag_sync_core(p_source text, p_staff_id bigint, p_items jsonb)
 RETURNS jsonb
@@ -531,7 +531,12 @@ BEGIN
     WHERE COALESCE(btrim(t->>'id'), '') ~ '^[0-9A-Za-z_-]{1,40}$'
       AND COALESCE(btrim(m #>> '{}'), '') ~ '^g?[0-9]{1,40}$';
 
-    IF st.baseline_at IS NULL OR st.last_seen_at IS NULL OR st.last_seen_at < v_now - v_stale THEN
+    -- Fly chỉ báo khi tag đổi, không có nhịp mỗi phút: runtime tự tính cờ liền mạch `c` và phiên bản đã báo trước đó `p`.
+    -- Desktop / App Server: lần báo trước cách quá `stale_minutes` thì chỉ lấy mốc.
+    IF st.baseline_at IS NULL
+       OR (p_source = 'fly' AND NOT (COALESCE(v_item->>'c', '') = 'true'
+                                     AND st.tag_version IS NOT DISTINCT FROM left(v_item->>'p', 64)))
+       OR (p_source <> 'fly' AND (st.last_seen_at IS NULL OR st.last_seen_at < v_now - v_stale)) THEN
       -- Lần đầu, hoặc mất kết nối quá lâu: chỉ lấy mốc.
       DELETE FROM public.auto_zalo_tag_members WHERE account_id = v_account;
       INSERT INTO public.auto_zalo_tag_members (account_id, tag_id, member_uid, first_seen_at)

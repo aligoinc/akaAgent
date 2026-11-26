@@ -81,6 +81,15 @@ SELECT aka_agent_sync_zalo_tags('server', '[{"a":"200","v":"1","tags":[{"id":"9"
 SELECT pg_temp.ok((aka_agent_sync_zalo_tags('server', '[{"a":"200","v":"2","tags":[{"id":"9","m":["1","2"]}]}]')->>'campaignRows')::int = 1, 'Server: thêm người mới');
 SELECT pg_temp.ok((SELECT status FROM auto_campaigns WHERE id = 3) = 'tạm dừng', 'chiến dịch tạm dừng giữ nguyên');
 
+-- Fly: không có nhịp mỗi phút; dựa vào cờ liền mạch và phiên bản trước.
+UPDATE auto_zalo_tag_sync_accounts SET source = 'fly' WHERE account_id = 200;
+SELECT pg_temp.ok(aka_agent_sync_zalo_tags('fly', '[{"a":"200","v":"3","p":"2","c":true,"tags":[{"id":"9","m":["1","2","3"]}]}]')->>'campaignRows' = '1', 'Fly liền mạch: thêm người mới');
+UPDATE auto_zalo_tag_sync_accounts SET last_seen_at = now() - interval '5 hours' WHERE account_id = 200;
+SELECT pg_temp.ok(aka_agent_sync_zalo_tags('fly', '[{"a":"200","v":"4","p":"3","c":true,"tags":[{"id":"9","m":["1","2","3","4"]}]}]')->>'campaignRows' = '1', 'Fly: lâu không đổi vẫn so được (không dựa giờ)');
+SELECT pg_temp.ok(aka_agent_sync_zalo_tags('fly', '[{"a":"200","v":"5","p":"4","c":false,"tags":[{"id":"9","m":["1","2","3","4","5"]}]}]')->'baselined' = '["200"]', 'Fly mất liền mạch: chỉ lấy mốc');
+SELECT pg_temp.ok(aka_agent_sync_zalo_tags('fly', '[{"a":"200","v":"6","p":"1","c":true,"tags":[{"id":"9","m":["1","2","3","4","5","6"]}]}]')->'baselined' = '["200"]', 'Fly phiên bản trước không khớp: chỉ lấy mốc');
+SELECT pg_temp.ok((SELECT count(*) FROM auto_campaign_input_data WHERE campaign_id = 3 AND uid IN ('5','6')) = 0, 'Fly: người gắn lúc mất liền mạch không được thêm');
+
 -- Hai danh sách trong một lần gọi: từ chối.
 DO $$ BEGIN
   PERFORM aka_agent_sync_zalo_tags('server', '[{"a":"200","v":"3","tags":[]},{"a":"100","v":"3","tags":[]}]');
