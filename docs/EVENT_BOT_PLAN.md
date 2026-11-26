@@ -1,12 +1,14 @@
 # Bot sự kiện cho akaAgent (Web + Desktop)
 
-> **Trạng thái:** phương án bản 2, ngày 26/11/2026. Chưa code, chưa có migration.
-> Bản 1 phủ sáu sự kiện của akaChat. Anh chốt: **tập trung ba sự kiện: Sinh nhật, Thêm/gỡ tag Zalo, Vào/ra nhóm điều
-> kiện.** Bản này viết lại theo phạm vi đó, và đổi đề xuất kiến trúc (mục 3) vì ba sự kiện này không cần bộ nghe tin
-> nhắn.
+> **Trạng thái:** phương án bản 3, ngày 26/11/2026. Chưa code, chưa có migration.
+> Anh đã chốt hai điều:
+> 1. **Tập trung ba sự kiện:** Sinh nhật, Thêm/gỡ tag Zalo, Vào/ra nhóm điều kiện.
+> 2. **Bot gửi độc lập:** "hoạt động gửi tin của bot không bị ràng buộc bởi giới hạn của tài khoản hay hành động,
+>    không tác động đến bộ đếm hay chiến dịch chạy, nó độc lập". Bản 2 đề xuất gửi bằng chiến dịch do bot quản lý
+>    (chung hạn mức); bản này bỏ cách đó và dùng bộ máy gửi riêng của bot (mục 3).
 > Số liệu lấy bằng truy vấn chỉ đọc trên `akachat` ngày 26/11/2026 (chỉ đếm, đọc cấu trúc bảng và mã hàm SQL).
 > Tính năng gốc: akaAgentChatApi `docs/ZALO_EVENT_CHATBOT.md`; giao diện gốc: akaAgentChatWeb `app/settings/chatbot/`.
-> Các câu cần anh chốt ở mục 12, mỗi câu có đề xuất sẵn.
+> Các câu còn cần anh chốt ở mục 12, mỗi câu có đề xuất sẵn.
 
 ## 1. Mục tiêu và phạm vi
 
@@ -65,101 +67,134 @@ Chi tiết quan trọng đọc được từ mã hàm trên production:
 - Ngày sinh trong bảng `zalo_users` không dùng được để tự tính sinh nhật trong DB: mẫu 1% cho thấy chỉ một nửa bạn
   bè có ngày sinh và 14% được cập nhật trong 7 ngày. Phải đọc danh sách bạn bè trực tiếp như chiến dịch đang làm.
 
-## 3. Kiến trúc: đổi đề xuất so với bản 1
+## 3. Kiến trúc: bộ máy gửi riêng của bot
 
-Bản 1 đề xuất một bộ máy gửi riêng cho bot, vì "Hội thoại mới" và "Tin nhắn theo khung giờ" cần đồng ý kết bạn, cần
-trả lời trong một hai phút, và cần biết nhân viên đã nhắn hay chưa. Ba sự kiện anh chọn không cần cả ba điều đó, nên
-hai cách gửi cân lại như sau:
+Theo điều anh chốt, bot có đường gửi riêng, tách hẳn khỏi hệ chiến dịch:
 
-| | B. Gửi bằng chiến dịch do bot quản lý (đề xuất) | C. Bộ máy gửi riêng của bot |
-|---|---|---|
-| Cách làm | Bot tạo sẵn một chiến dịch `[Bot sự kiện] …` cho mỗi quy tắc. Có sự kiện thì DB thêm người đó vào chiến dịch; bộ chạy chiến dịch gửi | Bảng việc riêng, RPC nhận bước và báo kết quả riêng, mã chạy bước mới ở Desktop, App Server, Fly |
-| Mã gửi mới | Không có | Có, ở ba nơi chạy; phải phát hành Desktop, cài App Server, deploy ChatApi |
-| Hạn mức, khoá, chính sách lỗi, loại trừ gửi | Dùng chung với chiến dịch: tin của bot được đếm vào hạn mức ngày / giờ của tài khoản | Riêng của bot, chỉ đọc khoá của chiến dịch; tin của bot cộng thêm ngoài hạn mức |
-| Thời điểm gửi | Xếp hàng với chiến dịch khác của tài khoản. Tài khoản đang chạy sát hạn mức thì tin của bot phải chờ | Gửi trong một hai phút |
-| Lịch sử | Có sẵn: Lịch sử hành động, Kết quả chạy, Báo cáo của chiến dịch | Phải làm nhật ký riêng |
-| Tiền lệ trong akaAgent | Quy trình tự động (`[Quy trình] …`), tự gửi theo tag V660, group thời gian thực | Chưa có |
-| Đụng hệ đang chạy | Không sửa hàm engine. Thêm chỗ móc vào hàm sổ tag và hàm lọc động | Không sửa hàm engine |
+| Bot **không** làm | Nghĩa là |
+|---|---|
+| Không tính hạn mức | Không đọc, không cộng bộ đếm ngày (`auto_account_action_status.count_action_in_day`) và không ghi `auto_campaign_details` (nguồn đếm hạn mức giờ) |
+| Không dùng chiến dịch | Không tạo chiến dịch, không thêm dòng data, không hiện trong Lịch sử hành động hay báo cáo chiến dịch |
+| Không giữ tài khoản | Không lấy lượt chạy (`auto_engine_leases`), không đổi trạng thái tài khoản hay chiến dịch sang "đang chạy"; chiến dịch của tài khoản chạy như không có bot |
+| Không ghi khoá của chiến dịch | Zalo báo lỗi cho bot thì bot chỉ tự tạm dừng chính nó (mục 7), không khoá thao tác của chiến dịch |
+| Không sửa hàm engine | `aka_agent_engine_claim_target_v1`, `report_v1` và bộ lập lịch giữ nguyên |
 
-**Đề xuất B.** Lý do: không phải viết mã gửi mới ở ba nơi chạy, nên hai trên ba sự kiện chạy được ngay trên các bản
-app khách đang dùng; và tin của bot nằm trong hạn mức của tài khoản. Điểm thứ hai quan trọng với akaAgent: tài khoản
-ở đây chạy chiến dịch sát giới hạn của Zalo, một chiến dịch gắn tag cho vài trăm người rồi bot gửi thêm ngần ấy tin
-ngoài hạn mức là đường dẫn tới khoá tài khoản.
-
-Cái giá của B: tin của bot không đi ngay khi tài khoản đang bận chiến dịch khác hoặc đã hết hạn mức giờ. Bộ lập lịch
-xếp chiến dịch chờ theo giờ hẹn (`campaignRepository.ts:3608`), bot không được ưu tiên. Mục 7 đặt hạn cho từng tin để
-tin quá cũ không bị gửi muộn.
+Mô hình giữ nguyên tắc của engine v2: **DB quyết định, nơi chạy chỉ thực hiện.** Sửa luật bằng migration có hiệu lực
+cho mọi bản app đã cài.
 
 ```mermaid
 flowchart LR
-  F[Danh sách bạn bè Zalo] -->|bộ chạy đọc đầu lượt mỗi ngày| C1[Chiến dịch sinh nhật của bot]
-  T[Sổ tag V660: gắn / gỡ] --> M[DB: khớp quy tắc, chống trùng, đặt hạn]
+  F[Danh sách bạn bè Zalo] -->|nơi chạy đọc mỗi ngày một lần, báo người sinh nhật hôm nay| M
+  T[Sổ tag V660: gắn / gỡ] --> M[DB: khớp quy tắc, chống trùng, đặt giờ gửi và hạn]
   G[Bộ lọc động Nhóm data: vào / ra] --> M
-  M -->|thêm một dòng data| C2[Chiến dịch của quy tắc]
-  C1 --> E[Bộ chạy chiến dịch: Desktop, App Server, Fly]
-  C2 --> E
-  E --> Z[Zalo]
-  M --> W[Trang Bot sự kiện: Web, Desktop nhúng]
-  E -->|kết quả gửi| W
+  M --> J[Việc của bot]
+  J -->|RPC nhận việc đến hạn| X[Phần gửi của bot trong lõi dùng chung]
+  X -->|gửi tin văn bản| Z[Zalo]
+  X -->|RPC báo kết quả| J
+  J --> W[Trang Bot sự kiện: Web, Desktop nhúng]
 ```
+
+### 3.1. Phần gửi
+
+- `aka_agent_event_bot_claim_v1`: nơi chạy hỏi việc đến hạn của các tài khoản nó đang giữ. Ngay trước khi giao một
+  việc, DB kiểm lại: bot và quy tắc còn bật, quy tắc chưa sửa từ lúc tạo việc, người nhận không bị loại trừ, việc chưa
+  quá hạn, bot không đang tự tạm dừng, tài khoản không có tin nào của bot đang gửi dở. Qua thì đánh dấu "đang gửi" kèm
+  khoá idempotency và trả mẫu tin.
+- Phần gửi viết **một lần** trong `packages/campaign-engine/src/eventBot/` (dựng nội dung bằng các module nội dung
+  của lõi: biến, spin), mỗi nơi chạy cấp cho nó một cổng nhỏ chỉ có "gửi tin văn bản tới UID" và "đọc hồ sơ":
+  Desktop và App Server gọi thẳng `zaloRuntimeService.sendMessageToUser` (:1710) và `getUserProfile` (:1672); Fly gửi
+  lệnh `send_text` tới runtime. Không đi qua `desktopZaloPort.ts` của chiến dịch (cổng đó bắt buộc có mã chiến dịch).
+- `aka_agent_event_bot_report_v1` ghi kết quả. Kết quả không rõ (app tắt giữa lúc gửi) thì **không gửi lại**.
+- Mỗi tài khoản một tin của bot đang gửi tại một thời điểm; việc kế chờ tin trước có kết quả.
+
+### 3.2. Ba nơi chạy
+
+| Nơi chạy | Tài khoản | Việc phải làm |
+|---|---|---|
+| Desktop | Zalo QR, Zalo trình duyệt | `EventBotRuntime` trong tiến trình chính: 30 giây một lần hỏi việc đến hạn (chỉ khi nhân viên có tài khoản bật bot), gửi, báo kết quả; mỗi ngày đọc danh sách bạn bè cho quy tắc sinh nhật. Chạy khi app mở và máy không ngủ |
+| App Server (VPS) | Zalo Server chưa sang Fly | Cùng mã với Desktop. Một lượt hỏi cho cả tiến trình, như `serverEngineGate.ts` |
+| Fly | Zalo Server của tổ chức bật `use_new_zalo_runtime` | ChatApi `system-worker`: vòng mới hỏi việc và gửi qua runtime; lõi chép bằng `scripts/sync-campaign-engine.cjs` |
+
+Gửi song song với chiến dịch: trên Desktop và App Server tin của bot đi cùng lúc với tin chiến dịch qua cùng phiên
+Zalo. Trên Fly runtime chạy lệnh của một tài khoản lần lượt, nên lệnh của bot xếp chung hàng lệnh với lệnh chiến
+dịch (chờ vài giây); đây là cách runtime hoạt động, bot không đổi.
+
+### 3.3. Điều bot không tách được
+
+Bot độc lập trong hệ thống của mình, nhưng **giới hạn phía Zalo tính chung cho cả tài khoản**, không phân biệt tin
+của bot hay của chiến dịch. Hai hệ quả anh cần biết trước:
+
+- Zalo chỉ nhận 30 tin văn bản 1-1 trong 30 phút mỗi tài khoản, tin vượt bị bỏ im lặng (đo 20/11). Bot gửi nhiều thì
+  tin chiến dịch của cùng tài khoản dễ rơi vào phần bị bỏ, và ngược lại.
+- Zalo cấm nhắn người lạ (mã 120, 802) theo tài khoản. Bot nhắn nhiều người lạ làm tài khoản bị cấm thì chiến dịch
+  cũng dừng theo.
+
+Mục 7 có ba chốt để hạn chế việc này mà không đặt trần số tin.
 
 ## 4. Ba sự kiện
 
 ### 4.1. Sinh nhật
 
 - **Cài:** một quy tắc mỗi tài khoản: nội dung tin, giờ gửi trong ngày (mặc định 08:30).
-- **Cách chạy:** thẻ Sinh nhật tạo và giữ một chiến dịch `zalo_message_birthday` lịch hằng ngày, tên
-  `[Bot sự kiện] Sinh nhật · <tài khoản>`. Sửa thẻ là sửa chiến dịch đó; tắt thẻ là tạm dừng nó.
+- **Phát hiện:** mỗi ngày một lần cho mỗi tài khoản bật quy tắc, nơi chạy đọc danh sách bạn bè (dùng lại đoạn đọc và
+  lọc ngày sinh của chiến dịch sinh nhật, `packages/campaign-engine/src/zalo/materialize.ts:391`) rồi báo DB danh
+  sách người có sinh nhật hôm nay. DB tạo cho mỗi người một việc, giờ gửi là giờ đã đặt (đã qua giờ thì gửi ngay).
 - **Ai nhận:** bạn bè Zalo có sinh nhật hôm nay. Zalo chỉ cho biết ngày sinh của bạn bè.
-- **Mỗi người một lần mỗi năm:** chiến dịch đánh dấu ngày đã lấy danh sách, mỗi ngày lấy một lần.
-- **App Desktop tắt lúc tới giờ (Zalo QR):** mở app trong ngày thì gửi lúc mở. Qua ngày thì không gửi bù.
-- **Khác akaChat:** akaChat chờ thông báo sinh nhật của Zalo gửi vào hội thoại; akaAgent đọc danh sách bạn bè, không
-  phụ thuộc thông báo đó.
-- **Trùng:** tài khoản đã có chiến dịch sinh nhật khác đang chạy thì khách nhận hai lời chúc. Thẻ cảnh báo và nêu tên
-  chiến dịch đó.
-- **Việc phải làm:** không có ở bộ chạy. Chỉ có phần trang và hàm lưu (mục 6).
+- **Mỗi người một lần mỗi năm:** khoá chống trùng `birthday:<tài khoản>:<uid>:<năm>`.
+- **App Desktop tắt lúc tới giờ (Zalo QR):** mở app trong ngày thì đọc và gửi lúc mở. Qua ngày thì việc hết hạn,
+  không gửi bù.
+- **Khác akaChat:** akaChat chờ thông báo sinh nhật Zalo gửi vào hội thoại; akaAgent đọc danh sách bạn bè.
+- **Chiến dịch sinh nhật đang có:** bot không đọc và không đụng chiến dịch. Tài khoản vừa bật quy tắc sinh nhật vừa
+  chạy chiến dịch `zalo_message_birthday` thì khách nhận hai lời chúc; thẻ cảnh báo và nêu tên chiến dịch (câu 5 mục
+  12).
 
 ### 4.2. Thêm/gỡ tag Zalo
 
 - **Cài:** nhiều quy tắc mỗi tài khoản. Mỗi quy tắc: chiều (được gắn / bị gỡ), một hay nhiều tag, nội dung tin,
-  khoảng cách tối thiểu giữa hai lần gửi cho cùng một người (mặc định 12 giờ).
+  khoảng cách tối thiểu giữa hai lần gửi cho cùng một người (mặc định 12 giờ), thời gian chờ ngẫu nhiên trước khi
+  gửi (mặc định 20–60 giây).
 - **Phát hiện:** sổ tag V660. Bot thêm tài khoản có quy tắc tag đang bật vào danh sách tài khoản cần hỏi tag; phần
   hỏi `getLabels`, so sánh, ghi gắn / gỡ đã có sẵn.
 - **Khớp:** mỗi dòng gắn / gỡ mới của sổ tag được so với quy tắc của tài khoản. Nhiều quy tắc cùng khớp thì chỉ chạy
-  quy tắc đứng đầu (như akaChat). Khớp thì thêm người đó vào chiến dịch của quy tắc.
+  quy tắc đứng đầu (như akaChat). Khớp thì tạo một việc, khoá chống trùng `tag_change:<quy tắc>:<uid>:<tag>:<chiều>:
+  <dòng sổ tag>`.
 - **Không gửi khi:**
   - bật quy tắc lần đầu, hoặc đổi tag của quy tắc: người đang có tag sẵn không nhận tin (sổ tag chỉ lấy mốc);
   - tài khoản mất kết nối quá 30 phút rồi nối lại: lần so đầu chỉ lấy mốc (đã có trong V660);
   - tag bị xoá hẳn trên Zalo (mọi người "bị gỡ" cùng lúc);
   - đối tượng gắn tag là nhóm Zalo;
-  - người đó vừa nhận tin của chính quy tắc này trong khoảng cách tối thiểu.
+  - người đó vừa nhận tin của chính quy tắc này trong khoảng cách tối thiểu;
+  - lúc tới lượt gửi, người đó đã không còn (hoặc đã có lại) tag: gắn rồi gỡ ngay thì bot không gửi nhầm.
 - **Độ trễ:** Desktop và App Server hỏi tag 60 giây một lần, nên tag gắn trên điện thoại được thấy sau một hai phút.
   akaChat chỉ thấy khi runtime đồng bộ nhãn, có thể sau nhiều giờ.
-- **Phụ thuộc:** chỉ chạy ở nơi đã có mã sổ tag: bản Desktop và App Server build sau PR #812, và ChatApi sau khi
-  deploy phần `tag_sync`. Zalo trình duyệt chưa có (sổ tag đang loại loại tài khoản này).
-- **Liên quan tới "tự gửi cho người được gắn tag" (V660):** hai tính năng dùng chung sổ tag và chạy độc lập. Cùng một
-  tag vừa có quy tắc "được gắn" của bot vừa có chiến dịch tự thêm thì khách nhận hai tin; thẻ cảnh báo trường hợp này.
-- **Việc phải làm:** sửa hàm `aka_agent_zalo_tag_sync_watched` (thêm tài khoản của bot); chỗ móc sau khi sổ tag ghi
+- **Tag do chiến dịch gắn cũng tính** (như akaChat): chiến dịch akaAgent có bước gắn tag sau khi gửi, quy tắc "được
+  gắn tag thì gửi" sẽ gửi thêm một tin cho từng người chiến dịch vừa gắn. Xem câu 4 mục 12.
+- **Phụ thuộc:** chỉ chạy ở nơi đã có mã sổ tag: bản Desktop và App Server build sau PR #812, ChatApi sau khi deploy
+  phần `tag_sync`. Zalo trình duyệt chưa có (sổ tag đang loại loại tài khoản này).
+- **Liên quan tới "tự gửi cho người được gắn tag" (V660):** dùng chung sổ tag, chạy độc lập. Cùng một tag vừa có quy
+  tắc "được gắn" của bot vừa có chiến dịch tự thêm thì khách nhận hai tin; thẻ cảnh báo.
+- **Việc phải làm ở DB:** sửa `aka_agent_zalo_tag_sync_watched` (thêm tài khoản của bot); chỗ móc sau khi sổ tag ghi
   gắn / gỡ; nhận ra tag bị xoá hẳn.
 
 ### 4.3. Vào/ra nhóm điều kiện
 
 - **Cài:** nhiều nhóm mỗi tài khoản. Mỗi nhóm là một Nhóm data loại Zalo cá nhân có Bộ lọc động: chọn nhóm có sẵn,
   hoặc tạo mới ngay trong thẻ bằng form điều kiện hiện có. Hai tin tuỳ chọn: gửi khi vào nhóm, gửi khi ra nhóm; ít
-  nhất một tin bật.
+  nhất một tin bật. Thời gian chờ ngẫu nhiên trước khi gửi (mặc định 20–60 giây).
 - **Điều kiện:** Tag Zalo, Tag akaBiz, Trạng thái kết bạn, Thành viên group Zalo (trường cuối akaChat không có).
   Công thức như akaChat: ở trong nhóm khi khớp khối vào và không khớp khối ra; khối ra trống nghĩa là ra khi hết
   khớp khối vào.
 - **Phát hiện:** job lọc động 30 giây đang chạy. Bot móc vào đúng hai chỗ hàm lọc ghi nhận một người vào và ra.
-- **Khớp:** người vừa vào (hoặc ra) nhóm mà liên hệ thuộc tài khoản đang cài bot thì được thêm vào chiến dịch "khi
-  vào" (hoặc "khi ra") của nhóm đó. Các nhóm độc lập: một người vào hai nhóm thì nhận tin của cả hai (như akaChat).
-- **Không gửi khi:** bật nhóm lần đầu hoặc đổi điều kiện (bộ lọc động vốn chỉ tính thay đổi sau lúc lưu); người vào
-  nhóm do thêm tay hay nhập file (đợt 1 chỉ tính vào / ra do điều kiện, xem câu 7 mục 12).
+- **Khớp:** người vừa vào (hoặc ra) nhóm mà liên hệ thuộc tài khoản đang cài bot thì có một việc với tin "khi vào"
+  (hoặc "khi ra"). Các nhóm độc lập: một người vào hai nhóm thì nhận tin của cả hai (như akaChat). Khoảng cách tối
+  thiểu mặc định 0 và tính riêng từng chiều (như akaChat).
+- **Không gửi khi:** bật nhóm lần đầu hoặc đổi điều kiện (bộ lọc động chỉ tính thay đổi sau lúc lưu, V252); người
+  vào nhóm do thêm tay hay nhập file (đợt 1 chỉ tính vào / ra do điều kiện, câu 6 mục 12).
 - **Khác akaChat:**
   - chỉ xét người **đã có trong danh bạ của tài khoản trên hệ thống** (đã quét bạn bè, thành viên group, hoặc nhập
     data); akaChat xét mọi hội thoại;
   - không có điều kiện theo "tin gần nhất".
-- **Việc phải làm:**
+- **Việc phải làm ở DB:**
   - chỗ móc vào / ra trong `aka_agent_process_data_group_dynamic_filters_core`;
   - cho trường Tag Zalo đọc thêm sổ tag V660 và cho sổ tag đẩy người vừa đổi tag vào hàng chờ lọc, để tài khoản
     không akaChat có tag tươi. Thiếu việc này, điều kiện theo tag chỉ đổi khi khách quét lại danh bạ;
@@ -171,24 +206,26 @@ flowchart LR
 
 | Bảng | Nội dung |
 |---|---|
-| `auto_event_bot_settings` | Mỗi tài khoản một dòng: công tắc chung, công tắc từng sự kiện, lựa chọn loại trừ, `revision`, người sửa, giờ sửa |
-| `auto_event_bot_rules` | Quy tắc: loại sự kiện, tên, bật / tắt, thứ tự, `revision`, điều kiện và nội dung dạng JSON cùng khuôn với akaChat (`ChatbotEventRuleStored`), khoảng cách tối thiểu, mã Nhóm data (nhóm điều kiện), mã chiến dịch bot đã tạo cho quy tắc |
-| `auto_event_bot_jobs` | Mỗi lần sự kiện khớp quy tắc một dòng, **kể cả lần bot không gửi**: quy tắc, người nhận, sự kiện gốc, chiều, khoá chống trùng, mã dòng data đã thêm vào chiến dịch, hạn, kết quả, lý do không gửi. Nguồn của "Nhật ký và báo cáo" |
+| `auto_event_bot_settings` | Mỗi tài khoản một dòng: công tắc chung, công tắc từng sự kiện, lựa chọn loại trừ, mốc tự tạm dừng và lý do, `revision`, người sửa, giờ sửa |
+| `auto_event_bot_rules` | Quy tắc: loại sự kiện, tên, bật / tắt, thứ tự, `revision`, điều kiện, nội dung và thời gian chờ dạng JSON cùng khuôn với akaChat (`ChatbotEventRuleStored`), khoảng cách tối thiểu, mã Nhóm data (nhóm điều kiện) |
+| `auto_event_bot_jobs` | Mỗi lần sự kiện khớp quy tắc một việc, **kể cả lần bot không gửi**: quy tắc và `revision`, người nhận, sự kiện gốc, chiều, khoá chống trùng duy nhất, trạng thái, mẫu tin, giờ gửi, hạn, lý do không gửi, mã lỗi Zalo. Không lưu câu khách đã nhận |
+| `auto_event_bot_exclusions` | Người bot không nhắn của riêng từng tài khoản (UID hoặc SĐT) |
 
-- Chiến dịch của bot dùng loại `zalo_message_group_member` (gửi theo UID, loại Quy trình tự động đang dùng) cho tag
-  và nhóm điều kiện; `zalo_message_birthday` cho sinh nhật. Thêm người vào chiến dịch bằng đúng cách Quy trình tự
-  động đang làm: khoá chống trùng `control_append_idempotency_key = 'evbot:<việc>'`, chiến dịch "hoàn thành" thì mở
-  lại. Không sửa cấu trúc bảng chiến dịch, bảng data.
-- RLS bật, thu hồi quyền bảng. Trang đọc và ghi qua một RPC `aka_agent_control_event_bot(staff, org, action,
-  payload)` chỉ `service_role` (API Web gọi), lưu có kiểm `revision`.
-- Hàm sổ tag và hàm lọc động được thêm chỗ móc bằng bộ sinh có kiểm md5 thân hàm trước và sau, như các migration
-  sửa hàm khác. Bot tắt hoặc tài khoản không cài bot thì chỗ móc thoát ngay.
-- Job pg_cron mỗi phút: đóng dòng data của bot đã quá hạn mà chưa gửi (mục 7), đọc kết quả gửi về bảng việc, dọn
-  việc cũ hơn 90 ngày.
-- Công tắc `auto_system_settings` `event_bot`: `{"audience":"off|admin_akabiz|orgs|all","organizationIds":[]}`,
-  migration đặt `off`.
-- Hợp đồng dùng chung `eventBot.ts` đặt ở WebApp `packages/control-api`. Hàm kiểm quy tắc và khuôn báo cáo chép từ
-  ChatApi `packages/chat-domain/src/chatbotEvent.ts`, `chatbotEventReport.ts`.
+- RLS bật, thu hồi quyền bảng; mọi truy cập qua RPC.
+- RPC cho trang: `aka_agent_control_event_bot(staff, org, action, payload)`, chỉ `service_role`, API Web gọi
+  (`accounts`, `get`, `save`, `stop`, `log`, `log_detail`, `report`). Lưu có kiểm `revision`.
+- RPC cho nơi chạy: `aka_agent_event_bot_sync_v1` (tài khoản nào bật bot, tài khoản nào cần đọc sinh nhật hôm nay),
+  `…_birthdays_v1` (báo người sinh nhật hôm nay), `…_claim_v1`, `…_report_v1`. Desktop gọi theo phiên
+  (`aka_agent_desktop`, chỉ tài khoản của chính nhân viên), App Server bằng `service_role`, Fly bằng
+  `aka_agent_chat_api`.
+- Hàm sổ tag và hàm lọc động được thêm chỗ móc bằng bộ sinh có kiểm md5 thân hàm trước và sau. Bot tắt hoặc tài khoản
+  không cài bot thì chỗ móc thoát ngay.
+- Job pg_cron: đóng việc quá hạn, dọn việc cũ hơn 90 ngày.
+- Công tắc `auto_system_settings` `event_bot`: `{"audience":"off|admin_akabiz|orgs|all","organizationIds":[],
+  "runtimes":{"desktopMinVersion":"…","server":false,"fly":false}}`, migration đặt `off`.
+- Hợp đồng dùng chung `eventBot.ts` đặt ở WebApp `packages/control-api`, chép nguyên văn sang akaAgent `src/shared`.
+  Hàm kiểm quy tắc, khoá chống trùng, khuôn báo cáo chép từ ChatApi `packages/chat-domain/src/chatbotEvent.ts`,
+  `chatbotEventReport.ts`.
 
 ## 6. Giao diện
 
@@ -200,21 +237,24 @@ flowchart LR
 - Bố cục theo ảnh anh gửi:
   1. Cột trái: tài khoản Zalo của nhân viên, ô tìm, trạng thái (Đang bật, Đang tắt, Cài ở akaChat).
   2. Dải trạng thái của tài khoản đang chọn: bot có đang chạy không và vì sao (tài khoản chưa đăng nhập, app Desktop
-     đang tắt, app chưa có phần hỏi tag, tài khoản đang hết hạn mức tới giờ nào, tính năng chưa mở); nút "Nhật ký và
-     báo cáo", "Dừng bot ngay".
+     đang tắt, app cần cập nhật mới chạy được bot, bot đang tự tạm dừng tới giờ nào, tính năng chưa mở); nút "Nhật ký
+     và báo cáo", "Dừng bot ngay".
   3. Tab "Sự kiện": công tắc chung, khối quy tắc luôn áp dụng (mục 7), ba thẻ Sinh nhật, Thêm/gỡ tag Zalo, Vào/ra
      nhóm điều kiện. Thẻ nhóm điều kiện dùng lại `DataGroupDynamicFilterPanel.tsx`, hiện số người đang trong nhóm, số
      vào / ra 24 giờ qua, số tin đã gửi 7 ngày.
-  4. Tab "Loại trừ": thẻ "Không gửi cho" của chiến dịch (nhóm loại trừ, danh sách không gửi), áp cho mọi chiến dịch
-     của bot trên tài khoản đó.
+  4. Tab "Loại trừ": danh sách người bot không nhắn của tài khoản (thêm bằng UID, SĐT, hoặc từ một dòng nhật ký), và
+     chọn danh sách không gửi có sẵn của nhân viên.
   5. Thanh lưu: "Đang bật N sự kiện cho <tài khoản>. Sửa lần cuối lúc …", Bỏ thay đổi, Lưu thay đổi.
+- Trạng thái "bot có đang chạy không" của tài khoản chạy trên Desktop lấy từ `auto_staff_device_presence.runtime_state`
+  (thêm khối `eventBot` vào ảnh chụp bộ chạy Desktop đã gửi mỗi 30 giây); của Zalo Server lấy từ lần hỏi việc gần
+  nhất của App Server hoặc Fly.
 - Ô soạn tin: chỉ văn bản, biến và spin như chiến dịch, dùng `ContentVariants` của form Quy trình và bộ kiểm
-  `contentSyntax.ts`.
-- "Nhật ký và báo cáo": theo tài khoản, tối đa 90 ngày; số lần khớp, đã gửi, chưa gửi, không gửi kèm lý do; danh
-  sách từng lần, bấm vào xem dòng lịch sử của chiến dịch.
-- Lần đầu bật có hộp xác nhận: bot không có chạy thử, có sự kiện khớp là gửi thật.
-- Chiến dịch `[Bot sự kiện] …` hiện trong danh sách chiến dịch như chiến dịch `[Quy trình] …`; nội dung và lịch sửa
-  ở trang bot.
+  `contentSyntax.ts` (biến cột file `#{INPUT_…}` không điền được nên bị chặn).
+- "Nhật ký và báo cáo": theo tài khoản, tối đa 90 ngày; số lần khớp, đã gửi, bỏ qua, hết hạn, lỗi; lý do theo từng
+  mã; danh sách từng việc và chi tiết. Cùng khuôn với akaChat. Đây là nơi duy nhất ghi tin của bot: chúng không có
+  trong Lịch sử hành động và báo cáo chiến dịch.
+- Lần đầu bật có hộp xác nhận: bot không có chạy thử, có sự kiện khớp là gửi thật, và tin của bot không tính vào hạn
+  mức của tài khoản.
 
 ### 6.2. Desktop
 
@@ -222,8 +262,8 @@ flowchart LR
   trình. Việc phải làm: tách `JourneyWebService` (`src/main/services/journeyWebService.ts`, đang viết cứng đường
   `/automation` và chữ "Tự động hóa") thành dịch vụ nhúng nhận đường mặc định và tiêu đề; thêm trang vào `TopBar.tsx`,
   `App.tsx`.
-- Desktop không cần mã chạy mới cho bot. Bản Desktop cũ không có mục menu thì khách cài trên Web; sinh nhật và nhóm
-  điều kiện vẫn chạy trên bản cũ.
+- Bot của tài khoản chạy trên Desktop (Zalo QR, Zalo trình duyệt) chỉ gửi khi máy đã lên bản Desktop có
+  `EventBotRuntime`. Khách cài trên Web với bản Desktop cũ thì dải trạng thái báo "cần cập nhật app".
 
 ### 6.3. iOS
 
@@ -234,100 +274,124 @@ flowchart LR
 | Quy tắc | Cách thực hiện |
 |---|---|
 | Chỉ gửi cho cá nhân | Nhóm Zalo gắn tag bị bỏ; nhóm điều kiện chỉ có liên hệ cá nhân |
-| Bỏ qua người bị loại trừ | Thẻ "Không gửi cho" của chiến dịch, kiểm lúc nhận data và trước khi gửi |
+| Bỏ qua người bị loại trừ | Tab "Loại trừ", kiểm lúc tạo việc và ngay trước khi gửi |
 | Bật bot không gửi cho người cũ | Sổ tag lấy mốc; bộ lọc động chỉ tính thay đổi sau lúc lưu |
-| Không gửi tin quá cũ | Mỗi dòng bot thêm vào chiến dịch có hạn: tag và nhóm điều kiện 6 giờ, sinh nhật hết ngày. Quá hạn mà chưa gửi thì dòng bị đóng "Quá hạn, không gửi" |
-| Chung hạn mức và khoá với chiến dịch | Tin của bot do bộ chạy chiến dịch gửi, đếm vào hạn mức ngày / giờ, dừng khi thao tác bị khoá |
-| Một người không nhận dồn | Khoảng cách tối thiểu của quy tắc; chống trùng theo khoá của từng sự kiện |
+| Không làm dồn sự kiện cũ | Việc có hạn: tag và nhóm điều kiện 30 phút kể từ lúc phát hiện (như akaChat), sinh nhật hết ngày. App tắt quá hạn thì việc đóng "hết hạn", không gửi muộn |
+| Một người không nhận dồn | Khoảng cách tối thiểu của quy tắc; chống trùng theo khoá của từng sự kiện; mỗi tài khoản một tin của bot đang gửi |
 
-Khác akaChat: **không có** quy tắc "nhân viên đã nhắn thì bot dừng". Quy tắc đó cần bộ nghe tin nhắn để biết nhân
-viên vừa nhắn; ba sự kiện này không dùng bộ nghe. Khối quy tắc trên trang không ghi dòng đó.
+**Không có** các ràng buộc sau (theo điều anh chốt): hạn mức ngày và giờ của tài khoản, hạn mức theo thao tác, bộ
+đếm của chiến dịch, việc tài khoản đang chạy chiến dịch.
+
+**Ba chốt của riêng bot**, không phải trần số tin, chỉ phản ứng khi Zalo báo lỗi (như akaChat đang làm):
+
+- Zalo trả lỗi thuộc về tài khoản (120, 802: bị cấm nhắn người lạ) thì bot tự tạm dừng gửi của tài khoản đó 24 giờ,
+  ghi lý do lên dải trạng thái. Lỗi của riêng một người nhận (122, 119, 126, 127, 114…) không dừng.
+- Zalo trả thành công mà không có mã tin (tin bị bỏ im lặng vì vượt 30 tin trong 30 phút): việc ghi "không gửi
+  được", bot tạm dừng gửi của tài khoản 30 phút.
+- Mã 221 "vượt quá số request": bot tạm dừng 60 phút.
+
+Bot không ghi các lần tạm dừng này vào khoá thao tác của chiến dịch.
+
+Khác akaChat: **không có** quy tắc "nhân viên đã nhắn thì bot dừng". Quy tắc đó cần bộ nghe tin nhắn; ba sự kiện này
+không dùng bộ nghe.
 
 ## 8. Tài khoản nào dùng được
 
 | Loại tài khoản | Sinh nhật | Thêm/gỡ tag Zalo | Vào/ra nhóm điều kiện |
 |---|---|---|---|
-| Zalo QR (Desktop) | Có, khi app mở | Có, cần bản Desktop có sổ tag | Có |
-| Zalo Server trên VPS | Có | Có, cần App Server có sổ tag | Có |
-| Zalo Server trên Fly | Có | Có, cần deploy ChatApi phần `tag_sync` | Có |
-| Zalo trình duyệt | Cần kiểm chiến dịch sinh nhật trên loại này | Chưa | Có; điều kiện theo tag chỉ đổi khi quét lại danh bạ |
-| Tài khoản tổ chức có akaChat | Câu 3 mục 12 | | |
+| Zalo QR (Desktop) | Có, khi app mở | Có, khi app mở | Có, khi app mở |
+| Zalo Server trên VPS | Có | Có | Có |
+| Zalo Server trên Fly | Có | Có | Có |
+| Zalo trình duyệt (Desktop) | Cần kiểm đọc danh sách bạn bè trên loại này | Chưa (sổ tag chưa hỗ trợ) | Có, khi app mở; điều kiện theo tag chỉ đổi khi quét lại danh bạ |
+| Tài khoản tổ chức có akaChat | Câu 2 mục 12 | | |
+
+Mọi ô "Có" đều cần bản app có phần gửi của bot: Desktop và App Server bản mới, ChatApi deploy vòng gửi. Không sự kiện
+nào chạy trên bản app hiện tại.
 
 ## 9. Tài nguyên
 
-- Không thêm request từ app: bot không có mã chạy trên Desktop hay App Server.
+- Nhân viên không có tài khoản bật bot: không thêm request nào. Desktop biết có tài khoản bật bot hay không bằng
+  lượt đọc cài đặt lúc đăng nhập và 2 phút một lần khi `event_bot` đã mở cho tổ chức.
+- Có tài khoản bật bot: một lượt hỏi việc mỗi 30 giây cho cả tiến trình (không theo từng tài khoản); mỗi tin gửi
+  thêm một lượt báo kết quả; mỗi ngày một lượt đọc danh sách bạn bè cho mỗi tài khoản bật sinh nhật.
+- App Server gom mọi tài khoản bật bot trên VPS vào một lượt hỏi.
 - Thêm tài khoản vào danh sách hỏi tag: mỗi tài khoản một lượt gọi Zalo mỗi phút, DB chỉ nhận dữ liệu khi tag đổi
   (như V660).
 - Chỗ móc trong hàm sổ tag và hàm lọc động: một lượt tra theo tài khoản cho mỗi lần có người đổi tag hoặc vào / ra
   nhóm; không có quy tắc thì không tra.
-- Job mỗi phút chỉ đọc dòng việc đang mở của bot theo chỉ mục riêng.
-- Số chiến dịch tăng: mỗi quy tắc một chiến dịch (nhóm điều kiện tối đa hai). Đề xuất trần 10 quy tắc tag và 10 nhóm
-  điều kiện mỗi tài khoản.
+- Trần số quy tắc: 50 quy tắc tag và 30 nhóm điều kiện mỗi tài khoản (như akaChat).
 
 ## 10. Việc phải làm và các đợt
 
 | Repo | Việc |
 |---|---|
-| akaAgent (DB) | Migration: ba bảng, RPC trang, chỗ móc sổ tag và lọc động, mở rộng danh sách hỏi tag, nối sổ tag vào điều kiện Tag Zalo, job hết hạn và dọn, công tắc; bản gỡ; bộ sinh SQL; bài kiểm PG17 |
-| akaAgentWebApp | Hợp đồng `eventBot.ts`; route API `/event-bot/*`; trang, hai tab, ba thẻ, nhật ký và báo cáo; tạo và sửa chiến dịch của bot; mục menu; chế độ nhúng |
-| akaAgent (Desktop) | Dịch vụ nhúng dùng chung, mục menu, trang |
-| akaAgentChatApi, akaAgentChatWeb | Không đổi. Sự kiện tag trên Fly cần deploy phần `tag_sync` đã merge |
+| akaAgent (DB) | Migration: bốn bảng, RPC trang, bốn RPC nơi chạy, chỗ móc sổ tag và lọc động, mở rộng danh sách hỏi tag, nối sổ tag vào điều kiện Tag Zalo, job hết hạn và dọn, công tắc; bản gỡ; bộ sinh SQL; bài kiểm PG17 |
+| akaAgent (lõi) | `packages/campaign-engine/src/eventBot/`: nhận việc, dựng nội dung, gửi, xếp loại lỗi Zalo, báo kết quả; đọc sinh nhật dùng lại đoạn của chiến dịch sinh nhật |
+| akaAgent (Desktop, App Server) | `EventBotRuntime`, cổng gửi của bot, khối `eventBot` trong ảnh chụp bộ chạy; dịch vụ nhúng dùng chung, mục menu, trang |
+| akaAgentWebApp | Hợp đồng `eventBot.ts`; route API `/event-bot/*`; trang, hai tab, ba thẻ, nhật ký và báo cáo; mục menu; chế độ nhúng |
+| akaAgentChatApi | Vòng gửi của bot trong `system-worker` (lõi chép từ akaAgent); deploy phần `tag_sync` đã merge. Không đổi bot của akaChat |
+| akaAgentChatWeb | Không đổi |
 
-| Đợt | Nội dung |
-|---|---|
-| 0 | Anh chốt mục 12; em làm bản thiết kế giao diện để anh duyệt |
-| 1 | DB + API + trang Web với cả ba sự kiện; nhật ký và báo cáo. Sinh nhật và nhóm điều kiện chạy ngay trên các bản app hiện có; tag chạy ở nơi đã có sổ tag |
-| 2 | Mục menu và khung nhúng trên Desktop (đi cùng bản Desktop kế tiếp, bản này cũng mang sổ tag) |
-| 3 | iOS; sổ tag cho Zalo trình duyệt nếu đọc tag được trên loại này |
+| Đợt | Nội dung | Tài khoản phủ |
+|---|---|---|
+| 0 | Anh chốt mục 12; em làm bản thiết kế giao diện để anh duyệt | |
+| 1 | DB + lõi + Desktop + App Server + trang Web + khung nhúng Desktop; cả ba sự kiện; nhật ký và báo cáo | Zalo QR 874, Zalo Server trên VPS 1.321, Zalo trình duyệt 390 (trừ sự kiện tag) |
+| 2 | Vòng gửi trên Fly (ChatApi) | Thêm Zalo Server trên Fly 273 (420 nếu tính cả tổ chức có akaChat) |
+| 3 | iOS; sổ tag cho Zalo trình duyệt nếu đọc tag được trên loại này | |
 
 ## 11. Kiểm thử, triển khai, rủi ro
 
 **Kiểm thử**
 
 - SQL (PG17 cục bộ, nạp thân hàm production của sổ tag và lọc động): từng sự kiện, chống trùng, khoảng cách tối
-  thiểu, lấy mốc lúc bật, tag bị xoá hẳn, hết hạn, hai lượt chạy đồng thời, bản gỡ; so kết quả hai hàm được móc với
-  bản trước khi không có quy tắc bot nào (phải giống hệt).
-- Mô phỏng trọn đường: sổ tag giả phát chuỗi gắn / gỡ, bộ lọc động thật, bộ chạy engine v2 thật với Zalo giả; bất
-  biến: không ai nhận hai tin cho một sự kiện, không gửi cho người bị loại trừ, không gửi dòng quá hạn, không gửi cho
-  người có tag từ trước khi bật.
+  thiểu, lấy mốc lúc bật, tag bị xoá hẳn, hết hạn, hai lượt nhận việc đồng thời, mất câu trả lời của DB rồi gọi lại,
+  bản gỡ; so kết quả hai hàm được móc với bản trước khi không có quy tắc bot nào (phải giống hệt).
+- **Kiểm tính độc lập:** chạy bot song song với một chiến dịch engine v2 trên cùng tài khoản; sau lượt chạy, bộ đếm
+  ngày, `auto_campaign_details`, `auto_engine_leases`, trạng thái tài khoản và chiến dịch phải giống hệt lượt chạy
+  không có bot.
+- Lõi: phần gửi với Zalo giả (lỗi từng mã, tin không có mã tin, app tắt giữa lúc gửi).
+- Mô phỏng trọn đường: sổ tag giả phát chuỗi gắn / gỡ, bộ lọc động thật, `EventBotRuntime` thật; bất biến: không ai
+  nhận hai tin cho một sự kiện, không gửi cho người bị loại trừ, không gửi việc quá hạn, không gửi cho người có tag
+  từ trước khi bật.
 - Phát lại dữ liệu thật (chỉ đọc): 1.536 lượt vào nhóm 30 ngày qua của ba tổ chức đang dùng bộ lọc động, xem bot sẽ
   tạo bao nhiêu việc.
 - Giao diện: bài kiểm trang với API giả; khung nhúng trên Electron.
-- Thử thật: tài khoản thử của tổ chức 1 trên Zalo QR, Zalo Server VPS, Fly.
+- Thử thật: tài khoản thử của tổ chức 1 trên Zalo QR, Zalo Server VPS, rồi Fly.
 
-**Triển khai:** apply migration (công tắc tắt) → deploy API và Web → mở `event_bot` cho admin akaBiz → vài tổ chức →
-mọi khách. Desktop theo bản phát hành kế.
+**Triển khai:** apply migration (công tắc tắt) → deploy API và Web → phát hành Desktop, cài App Server → mở
+`event_bot` cho admin akaBiz → vài tổ chức → mọi khách. Đợt 2: deploy ChatApi `api` → `zalo_runtime` → `worker`.
 
-**Gỡ theo mức:** tắt một sự kiện → "Dừng bot ngay" (tạm dừng mọi chiến dịch của bot trên tài khoản, đóng dòng đang
-chờ) → `event_bot` về `off` (chỗ móc thoát ngay) → bản gỡ migration.
+**Gỡ theo mức:** tắt một sự kiện → "Dừng bot ngay" (tắt bot của tài khoản, đóng việc đang chờ) → `event_bot` về `off`
+(hàm nhận việc từ chối ngay, chỗ móc thoát ngay) → bản gỡ migration.
 
 | Rủi ro | Cách xử lý |
 |---|---|
-| Tin của bot tới muộn vì tài khoản bận hoặc hết hạn mức | Hạn 6 giờ; dải trạng thái báo tài khoản đang hết hạn mức; nhật ký ghi rõ "quá hạn" |
-| Chiến dịch gắn tag hàng loạt làm bot gửi hàng loạt | Tin của bot nằm trong hạn mức của tài khoản nên không vượt giới hạn Zalo; phần không kịp gửi trong hạn thì bỏ |
+| Bot gửi không trần làm tài khoản chạm giới hạn của Zalo, kéo theo chiến dịch (mục 3.3) | Ba chốt ở mục 7; hộp xác nhận lần đầu bật nói rõ tin của bot không tính hạn mức; dải trạng thái báo khi bot tự tạm dừng |
+| Chiến dịch gắn tag hàng loạt làm bot gửi hàng loạt | Câu 4 mục 12: giữ ngưỡng hàng loạt hay không |
 | Trùng với chiến dịch sinh nhật, chiến dịch tự thêm theo tag, Quy trình tự động | Cảnh báo trên từng thẻ, nêu tên chiến dịch hoặc quy trình trùng |
+| Bot của tài khoản Desktop không chạy khi app tắt, khách tưởng bot hỏng | Dải trạng thái nói rõ; việc quá hạn không gửi muộn; nhật ký ghi "hết hạn" kèm lý do app tắt |
 | Điều kiện theo tag của nhóm điều kiện bị cũ | Nối sổ tag V660 vào bộ lọc động (mục 4.3) |
 | Sửa hàm sổ tag và hàm lọc động đang chạy | Bộ sinh kiểm md5; chỗ móc thoát ngay khi không có quy tắc; bài kiểm so kết quả trước và sau |
-| Khách sửa hoặc xoá chiến dịch `[Bot sự kiện]` từ danh sách chiến dịch | Trang bot phát hiện chiến dịch bị xoá hoặc tạm dừng tay và báo ở dải trạng thái; lưu lại thì tạo lại |
-| Sự kiện tag chưa chạy vì app chưa có sổ tag | Dải trạng thái nói rõ tài khoản cần bản app nào |
+| Thêm request từ đàn Desktop | Mục 9; không ai bật thì không thêm gì |
 
 ## 12. Cần anh chốt
 
+Đã chốt: ba sự kiện; bot gửi độc lập với hạn mức, bộ đếm và chiến dịch.
+
 | # | Câu hỏi | Đề xuất |
 |---|---|---|
-| 1 | Cách gửi | **B**: gửi bằng chiến dịch do bot quản lý, chung hạn mức với chiến dịch (mục 3). Chọn C nếu anh muốn tin của bot đi ngay và không tính vào hạn mức |
-| 2 | Vị trí trang | Mục menu riêng "Bot sự kiện" dưới "Tự động hóa" trên Web và Desktop; Desktop nhúng trang Web |
-| 3 | Tổ chức có akaChat | Tài khoản đã có trong akaChat dùng bot của akaChat; trang akaAgent hiện "Cài ở akaChat" kèm link, để khách không nhận hai tin |
-| 4 | Sinh nhật | Theo danh sách bạn bè có sinh nhật hôm nay, giờ gửi mặc định 08:30, không gửi bù khi qua ngày |
-| 5 | Hạn của tin | Tag và nhóm điều kiện: quá 6 giờ chưa gửi thì bỏ |
-| 6 | Nhiều quy tắc tag cùng khớp | Chỉ chạy quy tắc đứng đầu (như akaChat) |
-| 7 | Nhóm điều kiện: tính vào / ra nào | Chỉ vào / ra do điều kiện. Người được thêm tay hoặc nhập file vào nhóm không nhận tin |
-| 8 | Nhóm điều kiện: nhóm nào | Chọn Nhóm data có sẵn có Bộ lọc động, hoặc tạo mới trong thẻ; nhóm tạo từ thẻ cũng hiện ở trang Nhóm data |
+| 1 | Vị trí trang | Mục menu riêng "Bot sự kiện" dưới "Tự động hóa" trên Web và Desktop; Desktop nhúng trang Web |
+| 2 | Tổ chức có akaChat | Tài khoản đã có trong akaChat dùng bot của akaChat; trang akaAgent hiện "Cài ở akaChat" kèm link, để khách không nhận hai tin |
+| 3 | Khoá thao tác của chiến dịch | Bot **không đọc** khoá của chiến dịch (đúng nghĩa độc lập), chỉ dựa vào ba chốt của riêng nó. akaChat thì đang đọc khoá này; nếu anh muốn giống akaChat, bot sẽ ngừng gửi khi chiến dịch đã bị Zalo cấm nhắn người lạ |
+| 4 | Gắn tag hàng loạt | Giữ ngưỡng: hơn 20 người đổi cùng một tag trong một lượt so thì không gửi cho lượt đó (akaChat đã bỏ ngưỡng này ngày 19/11). Lý do: chiến dịch akaAgent gắn tag cho từng người nó vừa gửi |
+| 5 | Sinh nhật | Theo danh sách bạn bè có sinh nhật hôm nay, giờ gửi mặc định 08:30, không gửi bù khi qua ngày; không tự bỏ qua người đã nhận tin của chiến dịch sinh nhật, chỉ cảnh báo trên thẻ |
+| 6 | Nhóm điều kiện: tính vào / ra nào | Chỉ vào / ra do điều kiện. Người được thêm tay hoặc nhập file vào nhóm không nhận tin |
+| 7 | Nhóm điều kiện: nhóm nào | Chọn Nhóm data có sẵn có Bộ lọc động, hoặc tạo mới trong thẻ; nhóm tạo từ thẻ cũng hiện ở trang Nhóm data |
+| 8 | Hạn của việc | Tag và nhóm điều kiện 30 phút, sinh nhật hết ngày (như akaChat) |
 | 9 | "Nhân viên đã nhắn thì bot dừng" | Không có trong ba sự kiện này (mục 7) |
-| 10 | Chiến dịch của bot | Hiện trong danh sách chiến dịch với tiền tố `[Bot sự kiện]`, như `[Quy trình]` |
-| 11 | Quyền | Nhân viên cài bot cho tài khoản Zalo của chính mình |
-| 12 | Đối tượng | Mọi khách có gói Zalo; mở dần bằng công tắc `event_bot` |
+| 10 | Quyền | Nhân viên cài bot cho tài khoản Zalo của chính mình |
+| 11 | Đối tượng | Mọi khách có gói Zalo; mở dần bằng công tắc `event_bot` |
 
-Chưa xác minh, sẽ kiểm ở bước thiết kế kỹ thuật: chiến dịch sinh nhật có chạy trên Zalo trình duyệt không; Zalo
-trình duyệt có đọc được danh sách tag không; chiến dịch sinh nhật xử lý thế nào với dòng của hôm trước chưa gửi
-(để chắc không gửi bù qua ngày); hàm thêm người vào chiến dịch của Quy trình tự động tách ra dùng chung được tới đâu.
+Chưa xác minh, sẽ kiểm ở bước thiết kế kỹ thuật: Zalo trình duyệt có đọc được danh sách bạn bè (kèm ngày sinh) và
+danh sách tag không; trên Fly gửi tin của bot bằng lớp gửi sẵn có của chatbot akaChat hay bằng lệnh riêng; danh sách
+không gửi có sẵn tách khỏi chiến dịch để bot dùng được tới đâu.
