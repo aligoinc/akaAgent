@@ -79,6 +79,24 @@ function importCsvSeparator(text: string): string {
 }
 
 /** Keep CSV text intact, including long identifiers and scientific notation evidence. */
+/** RFC 4180: giữ nguyên chuỗi (số 0 đầu, ID dài); dòng / ô trong ngoặc kép giữ xuống dòng và dấu phân tách. */
+function splitCsvText(text: string, separator: string): string[][] {
+  const rows: string[][] = []
+  let row: string[] = [], cell = '', quoted = false
+  const source = text.replace(/^\uFEFF/, '')
+  for (let i = 0; i < source.length; i++) {
+    const c = source[i]
+    if (quoted) {
+      if (c === '"') { if (source[i + 1] === '"') { cell += '"'; i++ } else quoted = false } else cell += c
+    } else if (c === '"' && cell === '') quoted = true
+    else if (c === separator) { row.push(cell); cell = '' }
+    else if (c === '\n' || c === '\r') { if (c === '\r' && source[i + 1] === '\n') i++; row.push(cell); rows.push(row); row = []; cell = '' }
+    else cell += c
+  }
+  if (cell || row.length) { row.push(cell); rows.push(row) }
+  return rows
+}
+
 export function readImportWorkbook(bytes: Uint8Array, fileName = '', options: { csvSeparator?: ',' | ';' | '\t' } = {}): WorkBook {
   const binary = (bytes[0] === 0x50 && bytes[1] === 0x4b) || (bytes[0] === 0xd0 && bytes[1] === 0xcf)
     || (bytes[0] === 0x09 && [0x00, 0x02, 0x04, 0x08].includes(bytes[1]))
@@ -87,7 +105,14 @@ export function readImportWorkbook(bytes: Uint8Array, fileName = '', options: { 
       : bytes[0] === 0xfe && bytes[1] === 0xff ? 'utf-16be' : 'utf-8'
     const text = new TextDecoder(encoding).decode(bytes)
     // Sheet links may return SpreadsheetML without a filename. Let XLSX read its structure.
-    if (!fileName && text.trimStart().startsWith('<')) return read(bytes, { type: 'array' })
+    // Chỉ đoán khi chưa biết định dạng. CSV của Google (csvSeparator đã cho) có ô A1 bắt đầu bằng "<" vẫn là CSV, nhưng
+    // SheetJS tự đọc chuỗi bắt đầu bằng "<" thành HTML rồi báo lỗi: tách CSV tại đây và dựng bảng chữ.
+    if (!fileName && text.trimStart().startsWith('<')) {
+      if (!options.csvSeparator) return read(bytes, { type: 'array' })
+      const book = utils.book_new()
+      utils.book_append_sheet(book, utils.aoa_to_sheet(splitCsvText(text, options.csvSeparator)), 'Sheet1')
+      return book
+    }
     // Google exports a known comma-separated structure. Semicolons inside its
     // cells belong to the data; only local files/unknown exports need guessing.
     return read(text, { type: 'string', raw: true, codepage: 65001, FS: options.csvSeparator ?? importCsvSeparator(text) })
