@@ -1,7 +1,7 @@
 -- V663: engine v2 Facebook, nhóm FB06 chuyển sang Page (câu 605 / 2843 / 637 / 632 / 609 / 610 / 3186 của bộ kiểm lỗi, anh chốt 26/11/2026).
 -- Block "[engine] fb_get_current_identity_name" (2879) và "[engine] fb_switch_identity_by_name" (2880): chờ menu tài khoản / danh sách trang
 -- cá nhân tải xong thay cho ngủ cố định 1,5 giây (ảnh + DOM lỗi 26/11: menu còn khung xám lúc bấm), đóng / mở menu lại một lần; tài khoản đã ở
--- sẵn đúng Page thì không chuyển (và không chuyển về khi danh tính ban đầu chính là Page đó). Câu lỗi giữ nguyên. Danh mục bước của 2880 theo
+-- sẵn đúng Page mà danh sách không có mục để chọn lại thì coi là đang dùng sẵn (vẫn mở danh sách, bấm như cũ). Câu lỗi giữ nguyên. Danh mục bước của 2880 theo
 -- code mới. Câu FB06 cho khách bỏ "để đăng bài" (chính sách 284, auto_error 65); cách xử lý FB06 giữ nguyên (tạm dừng chiến dịch).
 -- Bộ cũ (2670 / 2671) và sổ chép block không đổi.
 -- SINH TỪ scripts/build-v663-sql.cjs (nguồn guard: scripts/fixtures/engine-v2-facebook/v663-live-20261126.json), không sửa tay.
@@ -178,8 +178,9 @@ UPDATE public.auto_blocks SET code = $v663_identity$
 //  - Menu tài khoản và danh sách trang cá nhân của Facebook tải sau khi mở (ảnh + DOM lỗi 26/11: lúc 1,5 giây menu còn khung xám, khoảng một
 //    giây sau đã có nút xem tất cả). Chờ phần tử hiện (tối đa WAIT_MS, mục tên Page SELECT_WAIT_MS) thay cho ngủ cố định; không thấy nút xem tất
 //    cả thì đóng / mở menu lại một lần. Câu lỗi giữ nguyên.
-//  - Tên danh tính hiện tại (block đọc tên vừa đọc) trùng tên cần chuyển: đang dùng sẵn, không mở danh sách chọn lại chính nó. Chuyển về danh
-//    tính ban đầu mà danh tính ban đầu chính là Page của chiến dịch (lượt đó không chuyển): cũng không cần chuyển.
+//  - Vẫn mở danh sách và bấm mục đúng tên như trước (anh chốt "Chỉ khi không chọn được": trang cá nhân có thể đặt trùng tên Page, 261/352 lần
+//    chuyển 7 ngày có tên hiện tại trùng tên Page). Chỉ khi danh sách đã mở mà không có mục nào để bấm (kể cả sau khi gõ ô tìm kiếm, hay không có
+//    ô tìm kiếm) và danh tính đang dùng trùng đúng tên cần chuyển thì coi là đang dùng sẵn (câu 3186: Facebook không liệt kê chính Page đang dùng).
 const stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)
 const WAIT_MS = 10000
 const SELECT_WAIT_MS = 8000
@@ -203,14 +204,24 @@ if (!identityName) {
 }
 
 const sameName = (a, b) => String(a || '').trim().normalize('NFC') === String(b || '').trim().normalize('NFC')
-if (!useOriginalIdentity && vars.originalIdentityName && sameName(vars.originalIdentityName, identityName)) {
-  vars.identitySwitchSkipped = true
-  helpers.log('Đang dùng sẵn "' + identityName + '", không cần chuyển')
-  return { ok: true, identityName, alreadyCurrent: true }
+// Danh tính đang dùng: chuyển sang → tên block đọc tên vừa đọc; chuyển về → danh tính vừa chuyển sang trong cùng lượt, không có thì Page của
+// chiến dịch (lượt chuyển về chạy riêng sau khi đã chuyển sang Page).
+const currentIdentityName = String(useOriginalIdentity ? (vars.currentIdentityName || vars.runAsPageName || '') : (vars.originalIdentityName || '')).trim()
+const alreadyCurrent = !!currentIdentityName && sameName(currentIdentityName, identityName)
+let listOpened = false
+
+function switched(result) {
+  vars.currentIdentityName = identityName
+  return result
 }
-if (useOriginalIdentity && (vars.identitySwitchSkipped === true || (vars.runAsPageName && sameName(identityName, vars.runAsPageName)))) {
-  helpers.log('Danh tính ban đầu "' + identityName + '" đang dùng sẵn, không cần chuyển về')
-  return { ok: true, identityName, alreadyCurrent: true }
+
+// Không chọn được mục đúng tên: lỗi như trước, trừ khi danh sách đã mở và đang dùng sẵn đúng danh tính đó.
+function notSelectable(message) {
+  if (listOpened && alreadyCurrent) {
+    helpers.log('Đang dùng sẵn "' + identityName + '" (danh sách không có mục để chọn lại), không cần chuyển')
+    return switched({ ok: true, identityName, alreadyCurrent: true })
+  }
+  return { ok: false, identityName, message }
 }
 
 const menuSelector = await helpers.element('FbIdentityMenuButton')
@@ -316,12 +327,13 @@ try {
     if (await openMenu()) seeAll = await clickWhenPresent(seeAllSelector, WAIT_MS)
   }
   if (!seeAll) return { ok: false, identityName, message: 'Không tìm thấy nút xem tất cả profile/page' }
+  listOpened = true
 
   let selected = await clickWhenPresent(selectSelector, SELECT_WAIT_MS)
   if (selected) {
     await helpers.sleep(stepMs + 7000, signal)
     helpers.log('Đã chuyển identity sang "' + identityName + '"')
-    return { ok: true, identityName }
+    return switched({ ok: true, identityName })
   }
 
   await page.type(searchSelector, identityName, { clearFirst: true })
@@ -330,19 +342,19 @@ try {
   if (selected) {
     await helpers.sleep(stepMs + 7000, signal)
     helpers.log('Đã chuyển identity sang "' + identityName + '"')
-    return { ok: true, identityName }
+    return switched({ ok: true, identityName })
   }
 
-  return { ok: false, identityName, message: 'Không tìm thấy page/profile "' + identityName + '"' }
+  return notSelectable('Không tìm thấy page/profile "' + identityName + '"')
 } catch (e) {
   if (signal && signal.aborted) throw e
   const message = e && e.message ? String(e.message) : String(e)
-  return { ok: false, identityName, message: 'Có lỗi xảy ra khi chọn page/profile: ' + message }
+  return notSelectable('Có lỗi xảy ra khi chọn page/profile: ' + message)
 }
 $v663_identity$, updated_at = now()
  WHERE id = 2880 AND md5(code) = 'aaf3d54ca1041881d67073359168647f';
 
-UPDATE public.auto_engine_block_steps SET reviewed_code_md5 = '49bcae521ce17db4733cfbb664a03521', updated_at = now()
+UPDATE public.auto_engine_block_steps SET reviewed_code_md5 = '4ada28c669fe48a8758a7ae55f016f44', updated_at = now()
  WHERE id = 24 AND block_id = 2880 AND reviewed_code_md5 = 'aaf3d54ca1041881d67073359168647f';
 
 UPDATE public.auto_outcome_policies SET log_template = 'Không chuyển được sang Page đã chọn', campaign_note_template = 'Không chuyển được sang Page đã chọn (FB06). Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.', updated_at = now()
@@ -354,13 +366,13 @@ UPDATE public.auto_error SET customer_title = 'Không chuyển được sang Pag
 DO $post$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2879 AND md5(code) = 'd8ecb8593bc930a8c5461e802684d475')
-     OR NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2880 AND md5(code) = '49bcae521ce17db4733cfbb664a03521') THEN
-    RAISE EXCEPTION 'V663 postflight: code block 2879 / 2880 không phải bản mới (md5 d8ecb8593bc930a8c5461e802684d475 / 49bcae521ce17db4733cfbb664a03521)';
+     OR NOT EXISTS (SELECT 1 FROM public.auto_blocks WHERE id = 2880 AND md5(code) = '4ada28c669fe48a8758a7ae55f016f44') THEN
+    RAISE EXCEPTION 'V663 postflight: code block 2879 / 2880 không phải bản mới (md5 d8ecb8593bc930a8c5461e802684d475 / 4ada28c669fe48a8758a7ae55f016f44)';
   END IF;
   IF (SELECT count(*) FROM public.auto_blocks WHERE (id, md5(code)) IN ((2670, 'dfc2ad1c4bf6a6831968cedf206807ed'), (2671, 'aaf3d54ca1041881d67073359168647f'))) <> 2 THEN
     RAISE EXCEPTION 'V663 postflight: block bộ cũ đã đổi (V663 không được đụng bộ cũ)';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.auto_engine_block_steps WHERE block_id = 2880 AND reviewed_code_md5 IS DISTINCT FROM '49bcae521ce17db4733cfbb664a03521') THEN
+  IF EXISTS (SELECT 1 FROM public.auto_engine_block_steps WHERE block_id = 2880 AND reviewed_code_md5 IS DISTINCT FROM '4ada28c669fe48a8758a7ae55f016f44') THEN
     RAISE EXCEPTION 'V663 postflight: danh mục bước của block 2880 chưa theo code mới';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.auto_outcome_policies WHERE id = 284 AND is_active AND campaign_effect = 'pause' AND target_effect = 'requeue'

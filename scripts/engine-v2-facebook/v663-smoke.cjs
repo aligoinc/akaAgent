@@ -2,8 +2,8 @@
 //   1. Bộ sinh: code mới dựng được, chữ NFC, câu lỗi giữ nguyên, code cũ = block 2879 / 2880 production (= bộ cũ 2670 / 2671, đọc 26/11).
 //   2. Chạy đúng code block (bản production và bản V663) trong Chromium trên trang chủ Facebook giả có menu tài khoản tải chậm như ảnh + DOM lỗi
 //      26/11 (menu mở ra còn khung xám, nội dung tới sau), nút menu có sau khi trang tải, danh sách trang cá nhân tải sau khi bấm xem tất cả, ô tìm
-//      kiếm trang. Bản production hỏng đúng các câu FB06 của ca (tái hiện); bản V663 chạy được, vẫn ra đúng câu cũ khi phần tử không bao giờ có,
-//      không mở menu khi đã ở sẵn Page (câu 3186), không chuyển về khi danh tính ban đầu chính là Page.
+//      kiếm trang. Bản production hỏng đúng các câu FB06 của ca (tái hiện); bản V663 chạy được, vẫn ra đúng câu cũ khi phần tử không bao giờ có;
+//      đang ở sẵn Page mà danh sách không có mục để chọn lại thì coi là đang dùng sẵn (câu 3186), còn trang cá nhân trùng tên Page vẫn bấm Page.
 //   3. SQL trên PG17: preflight từ chối khi block / bộ cũ / danh mục bước / element / chính sách / mã / sổ lệch; apply đổi đúng 2 block, dòng danh
 //      mục bước 24, câu chính sách 284 và tên mã FB06, cách xử lý FB06 không đổi; apply lại bị từ chối; gỡ về đúng bản production.
 // Chạy: CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/engine-v2-facebook/v663-smoke.cjs
@@ -169,7 +169,8 @@ const CASES = [
   { key: 'switch_instant', why: 'menu, danh sách tải ngay: chuyển sang Page như hôm nay', block: 'switch', cfg: { loadMs: [0], current: ME, profiles: [ME, PAGE] },
     opts: { vars: { runAsPageName: PAGE, originalIdentityName: ME }, input: SWITCH_INPUT },
     old: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE) },
-    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE); assert.ok(!r.ops.some(o => o.op === 'type'), 'không gõ ô tìm kiếm') } },
+    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE); assert.ok(!r.ops.some(o => o.op === 'type'), 'không gõ ô tìm kiếm')
+      assert.equal(r.vars.currentIdentityName, PAGE) } },
   { key: 'switch_slow_menu', why: 'câu 605 / 2843 / 637: menu còn khung xám lúc 1,5 giây, nút xem tất cả tới sau 2,5 giây', block: 'switch',
     cfg: { loadMs: [2500], current: ME, profiles: [ME, PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: ME }, input: SWITCH_INPUT },
     old: r => assert.deepEqual(r.out, { ok: false, identityName: PAGE, message: 'Không tìm thấy nút xem tất cả profile/page' }),
@@ -177,20 +178,37 @@ const CASES = [
   { key: 'switch_slow_list', why: 'danh sách trang cá nhân tải sau 3 giây: chờ mục tên Page, không phải gõ tìm', block: 'switch',
     cfg: { loadMs: [0], listMs: 3000, current: ME, profiles: [ME, PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: ME }, input: SWITCH_INPUT },
     old: null, new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.ok(!r.ops.some(o => o.op === 'type'), 'không gõ ô tìm kiếm') } },
-  { key: 'switch_already_page', why: 'câu 3186: đang ở sẵn đúng Page (danh sách không có chính nó, không có ô tìm kiếm): không mở menu', block: 'switch',
+  { key: 'switch_already_page', why: 'câu 3186: đang ở sẵn đúng Page, danh sách không có chính nó, không có ô tìm kiếm: mở danh sách rồi coi là đang dùng sẵn', block: 'switch',
     cfg: { loadMs: [0], current: PAGE, profiles: [ME], search: false }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: PAGE }, input: SWITCH_INPUT },
     old: r => { assert.equal(r.out.ok, false); assert.match(r.out.message, /^Có lỗi xảy ra khi chọn page\/profile: waitForSelector timeout/) },
-    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }); assert.ok(!navigated(r.ops), 'không mở trang'); assert.equal(r.vars.identitySwitchSkipped, true) } },
+    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }); assert.ok(navigated(r.ops), 'vẫn mở trang, mở danh sách')
+      assert.equal(r.state.switched, null); assert.equal(r.vars.currentIdentityName, PAGE) } },
+  { key: 'switch_already_page_listed', why: 'đang ở sẵn đúng Page mà danh sách có Page đó: bấm lại như hôm nay (không bỏ qua)', block: 'switch',
+    cfg: { loadMs: [0], current: PAGE, profiles: [ME, PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: PAGE }, input: SWITCH_INPUT },
+    old: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE) },
+    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE) } },
+  { key: 'switch_same_name_profile', why: 'trang cá nhân đặt trùng tên Page (tên đọc được = tên Page), danh sách có Page: vẫn bấm Page, không chạy bằng trang cá nhân', block: 'switch',
+    cfg: { loadMs: [2500], current: PAGE, profiles: [PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: PAGE }, input: SWITCH_INPUT },
+    old: r => assert.deepEqual(r.out, { ok: false, identityName: PAGE, message: 'Không tìm thấy nút xem tất cả profile/page' }),
+    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE, 'đã bấm Page') } },
+  { key: 'switch_already_page_no_see_all', why: 'đang ở sẵn đúng Page mà không mở được danh sách (không có nút xem tất cả): vẫn lỗi như cũ, không coi là đang dùng sẵn', block: 'switch',
+    cfg: { loadMs: [0], seeAll: false, current: PAGE, profiles: [ME] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: PAGE }, input: SWITCH_INPUT },
+    old: r => assert.deepEqual(r.out, { ok: false, identityName: PAGE, message: 'Không tìm thấy nút xem tất cả profile/page' }),
+    new: r => assert.deepEqual(r.out, { ok: false, identityName: PAGE, message: 'Không tìm thấy nút xem tất cả profile/page' }) },
   { key: 'switch_no_original', why: 'không có tên danh tính hiện tại (workflow không đọc tên): vẫn chuyển', block: 'switch',
     cfg: { loadMs: [0], current: ME, profiles: [ME, PAGE] }, opts: { vars: { runAsPageName: PAGE }, input: SWITCH_INPUT },
     old: r => assert.deepEqual(r.out, { ok: true, identityName: PAGE }), new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE }); assert.equal(r.state.switched, PAGE) } },
-  { key: 'restore_original_is_page', why: 'chuyển về danh tính ban đầu mà danh tính ban đầu chính là Page của chiến dịch: không chuyển', block: 'switch',
+  { key: 'restore_original_is_page', why: 'chuyển về danh tính ban đầu mà danh tính ban đầu chính là Page đang dùng, danh sách không có Page đó: coi là đang dùng sẵn', block: 'switch',
     cfg: { loadMs: [0], current: PAGE, profiles: [ME], search: false }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: PAGE }, input: RESTORE_INPUT },
     old: r => assert.equal(r.out.ok, false),
-    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }); assert.ok(!navigated(r.ops)) } },
-  { key: 'restore_same_run_skipped', why: 'cùng lượt vừa bỏ qua bước chuyển (workflow đăng Page 326): không chuyển về', block: 'switch',
-    cfg: { loadMs: [0], current: PAGE, profiles: [ME], search: false }, opts: { vars: { pageName: PAGE, originalIdentityName: PAGE, identitySwitchSkipped: true }, input: RESTORE_INPUT },
-    old: r => assert.equal(r.out.ok, false), new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }); assert.ok(!navigated(r.ops)) } },
+    new: r => { assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }); assert.ok(navigated(r.ops)); assert.equal(r.state.switched, null) } },
+  { key: 'restore_same_run_current', why: 'cùng lượt vừa chuyển sang Page (workflow đăng Page 326), danh tính ban đầu cũng là Page đó: coi là đang dùng sẵn', block: 'switch',
+    cfg: { loadMs: [0], current: PAGE, profiles: [ME], search: false }, opts: { vars: { pageName: PAGE, originalIdentityName: PAGE, currentIdentityName: PAGE }, input: RESTORE_INPUT },
+    old: r => assert.equal(r.out.ok, false), new: r => assert.deepEqual(r.out, { ok: true, identityName: PAGE, alreadyCurrent: true }) },
+  { key: 'restore_page_missing_other', why: 'chuyển về trang cá nhân ban đầu (khác Page đang dùng) mà danh sách không có: vẫn lỗi như cũ', block: 'switch',
+    cfg: { loadMs: [0], current: PAGE, profiles: [PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: ME }, input: RESTORE_INPUT },
+    old: r => assert.deepEqual(r.out, { ok: false, identityName: ME, message: `Không tìm thấy page/profile "${ME}"` }),
+    new: r => assert.deepEqual(r.out, { ok: false, identityName: ME, message: `Không tìm thấy page/profile "${ME}"` }) },
   { key: 'restore_normal', why: 'chuyển về trang cá nhân ban đầu (khác Page): chuyển như hôm nay', block: 'switch',
     cfg: { loadMs: [0], current: PAGE, profiles: [ME, PAGE] }, opts: { vars: { runAsPageName: PAGE, originalIdentityName: ME }, input: RESTORE_INPUT },
     old: r => { assert.deepEqual(r.out, { ok: true, identityName: ME }); assert.equal(r.state.switched, ME) },

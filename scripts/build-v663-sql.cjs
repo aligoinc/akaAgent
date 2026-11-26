@@ -5,15 +5,18 @@
 // fb_get_current_identity_name" (2879) và "[engine] fb_switch_identity_by_name" (2880), chép nguyên từ bộ cũ 2670 / 2671, bấm nút menu ngay sau
 // khi mở trang rồi ngủ cố định stepMs + 500 (1,5 giây) và đọc / bấm đúng một lần: "không lấy được tên" 16 lượt, "không thấy nút xem tất cả" 15,
 // "ô tìm kiếm trang hết giờ" 4. Ảnh + DOM lỗi xin 26/11 (yêu cầu 35–38, app 10.6.0): menu tài khoản đã mở nhưng còn khung xám đang tải; DOM chụp
-// khoảng một giây sau ở bước kế đã có đủ nút xem tất cả và link tên, XPath 1536–1540 khớp. 8 lượt tài khoản đã đứng sẵn ở đúng Page cần dùng mà
-// block vẫn mở danh sách chọn lại chính nó (3/4 lượt "ô tìm kiếm trang hết giờ").
+// khoảng một giây sau ở bước kế đã có đủ nút xem tất cả và link tên, XPath 1536–1540 khớp. 3/4 lượt "ô tìm kiếm trang hết giờ" tài khoản đã
+// đứng sẵn ở đúng Page cần dùng, danh sách không có chính Page đó để bấm. 7 ngày 261/352 lần chuyển có tên hiện tại trùng tên Page (đa phần chọn
+// lại được), 16 chiến dịch có tên tài khoản trùng tên Page: không bỏ qua bước chuyển chỉ vì trùng tên (trang cá nhân có thể đặt trùng tên Page).
 //
 // Sửa (anh chốt từng việc 26/11):
 //   - Block 2879 / 2880: chờ phần tử hiện thay cho ngủ cố định (nút menu, link tên, nút xem tất cả tối đa 10 giây; mục tên Page 8 giây rồi mới
 //     gõ ô tìm kiếm, sau khi gõ lại chờ 8 giây); không thấy link tên / nút xem tất cả thì đóng / mở menu lại một lần. Mở / đóng menu theo
 //     aria-expanded của nút menu (đang mở thì không bấm nữa), không có thuộc tính đó thì bấm như cũ. Câu lỗi giữ nguyên.
-//   - Block 2880: tên danh tính hiện tại (2879 vừa đọc) trùng tên cần chuyển thì trả ok ngay, không mở menu; chuyển về danh tính ban đầu mà
-//     danh tính ban đầu chính là Page của chiến dịch (runAsPageName), hoặc cùng lượt vừa bỏ qua bước chuyển, thì cũng trả ok ngay.
+//   - Block 2880 (anh chốt "Chỉ khi không chọn được"): vẫn mở danh sách và bấm mục đúng tên như trước; chỉ khi danh sách đã mở mà không có mục
+//     nào để bấm (kể cả sau khi gõ ô tìm kiếm, hay không có ô tìm kiếm) và danh tính đang dùng trùng đúng tên cần chuyển thì trả ok (alreadyCurrent).
+//     Danh tính đang dùng: chuyển sang = tên 2879 vừa đọc; chuyển về = danh tính vừa chuyển sang cùng lượt (vars.currentIdentityName), không có thì
+//     runAsPageName.
 //   - Danh mục bước của 2880 (dòng 24, session): reviewed_code_md5 theo code mới.
 //   - Câu FB06 cho khách bỏ "để đăng bài" (chiến dịch tham gia nhóm / bình luận cũng dùng): chính sách 284 (ghi chú chiến dịch, dòng tiến trình)
 //     và tên mã cho khách auto_error 65. Cách xử lý FB06 (tạm dừng chiến dịch ngay) giữ nguyên.
@@ -141,7 +144,7 @@ END $pre$;`
 const migration = `-- V663: engine v2 Facebook, nhóm FB06 chuyển sang Page (câu 605 / 2843 / 637 / 632 / 609 / 610 / 3186 của bộ kiểm lỗi, anh chốt 26/11/2026).
 -- Block "[engine] fb_get_current_identity_name" (${GET.id}) và "[engine] fb_switch_identity_by_name" (${SWITCH.id}): chờ menu tài khoản / danh sách trang
 -- cá nhân tải xong thay cho ngủ cố định 1,5 giây (ảnh + DOM lỗi 26/11: menu còn khung xám lúc bấm), đóng / mở menu lại một lần; tài khoản đã ở
--- sẵn đúng Page thì không chuyển (và không chuyển về khi danh tính ban đầu chính là Page đó). Câu lỗi giữ nguyên. Danh mục bước của ${SWITCH.id} theo
+-- sẵn đúng Page mà danh sách không có mục để chọn lại thì coi là đang dùng sẵn (vẫn mở danh sách, bấm như cũ). Câu lỗi giữ nguyên. Danh mục bước của ${SWITCH.id} theo
 -- code mới. Câu FB06 cho khách bỏ "để đăng bài" (chính sách ${POLICY.id}, auto_error ${ERROR.id}); cách xử lý FB06 giữ nguyên (tạm dừng chiến dịch).
 -- Bộ cũ (${LIVE.sources.get.id} / ${LIVE.sources.switch.id}) và sổ chép block không đổi.
 -- SINH TỪ scripts/build-v663-sql.cjs (nguồn guard: scripts/fixtures/engine-v2-facebook/v663-live-20261126.json), không sửa tay.
