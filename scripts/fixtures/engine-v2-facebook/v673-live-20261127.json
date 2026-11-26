@@ -1,0 +1,111 @@
+{
+  "_readAt": "2026-11-27 06:25 VN",
+  "_how": "Đọc chỉ đọc production akachat 27/11/2026 (supabase db query --linked): code block 2871 \"[engine] fb_verify_group_post_form_closed\" (= bản V597, md5 f981cac7…), md5 block bộ cũ 2624, sổ chép và dòng danh mục bước của block, các element GroupPost*, node dùng block 2871, migration lớn nhất trong sổ. Dùng cho scripts/build-v673-sql.cjs và scripts/engine-v2-facebook/v673-smoke.cjs.",
+  "block": {
+    "id": 2871,
+    "name": "[engine] fb_verify_group_post_form_closed",
+    "md5": "f981cac703a91dc6c9f8a49176a61bba",
+    "code": "\nconst submitButton = await helpers.element('GroupPostSubmitButtonAfterClick');\nconst frequencyLimitError = await helpers.element('GroupPostFrequencyLimitError');\nconst requestFailedNotice = await helpers.element('GroupPostRequestFailedNotice');\nconst uploadFailedNotice = await helpers.element('GroupPostUploadFailedNotice');\nconst accountAccessLimitedNotice = await helpers.element('GroupPostAccountAccessLimitedNotice');\nconst publishMedia = Array.isArray(vars.images) ? vars.images : []\nconst publishHasVideo = publishMedia.some(path => /^data:video\\//i.test(String(path || '')) || /\\.(3g2|3gp|avi|m2ts|m4v|mkv|mov|mp4|mpeg|mpg|ogv|webm|wmv)(?:[?#].*)?$/i.test(String(path || '')))\nconst publishTimeoutMs = publishHasVideo ? 180000 : 60000\nconst publishStarted = Number(vars.facebookPostPublishStartedAt) || Date.now();\nlet posted = false;\nlet message = '';\n\nasync function hasVisibleElement(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n\n    function isVisible(el) {\n      if (!el) return false;\n      const style = window.getComputedStyle(el);\n      if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') return false;\n      const rect = el.getBoundingClientRect();\n      return rect.width > 0 && rect.height > 0;\n    }\n\n    function xpathAll(xpath) {\n      const out = [];\n      if (!xpath) return out;\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n\n    return xpathAll(selector).some(isVisible);\n  `, selector);\n}\n\nwhile (true) {\n  if (signal.aborted) throw new Error('Đã dừng chờ xác nhận đăng bài');\n  if (!await hasVisibleElement(submitButton)) {\n    posted = true;\n    message = 'Form đăng bài đã đóng';\n    break;\n  }\n  const remainingMs = publishTimeoutMs - (Date.now() - publishStarted);\n  if (remainingMs <= 0) break;\n  await helpers.sleep(Math.min(500, remainingMs), signal);\n}\nif (!posted) {\n  const hasFrequencyLimitError = await hasVisibleElement(frequencyLimitError);\n  if (hasFrequencyLimitError) {\n    message = 'Facebook báo giới hạn tần suất bạn đăng bài';\n    vars.groupPostSubmitted = false;\n    vars.groupPostFrequencyLimitError = true;\n    helpers.log(message);\n    throw new Error(message);\n  }\n  // V597: Facebook ghi lý do bằng chữ đỏ trong hộp Tạo bài viết. Nhận theo chữ có mặt (element ở auto_elements), không thấy thì như cũ.\n  if (await hasVisibleElement(accountAccessLimitedNotice)) {\n    message = 'Facebook đang giới hạn quyền truy cập của tài khoản';\n  } else if (await hasVisibleElement(uploadFailedNotice)) {\n    message = 'Facebook không tải được ảnh hoặc video lên';\n  } else if (await hasVisibleElement(requestFailedNotice)) {\n    message = 'Facebook báo gặp sự cố khi đăng bài';\n  } else {\n    message = 'Form đăng bài chưa đóng sau ' + (publishTimeoutMs / 1000) + ' giây';\n  }\n}\n\nvars.groupPostSubmitted = posted;\nif (!posted) helpers.log(message);\n\nreturn {\n  ok: posted,\n  posted,\n  submitClosed: posted,\n  publishTimeoutMs,\n  message\n};\n"
+  },
+  "sourceBlock": {
+    "id": 2624,
+    "md5": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "name": "fb_verify_group_post_form_closed"
+  },
+  "copy": {
+    "copied_at": "2026-11-17T09:32:47.201372+00:00",
+    "engine_block_id": 2871,
+    "engine_md5_at_copy": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "source_block_id": 2624,
+    "source_md5_at_copy": "e433ac1a58ac08535c53010fdc5e9ba7"
+  },
+  "step": {
+    "action_code": null,
+    "action_code_from": null,
+    "block_id": 2871,
+    "commit_level": 1,
+    "id": 4,
+    "is_active": true,
+    "legacy_milestone": null,
+    "node_id": null,
+    "note": "V560: Chờ form đăng bài đóng sau cú bấm Đăng.",
+    "result_mode": "action_result",
+    "reviewed_code_md5": "f981cac703a91dc6c9f8a49176a61bba",
+    "send_ops": [],
+    "step_kind": "result",
+    "workflow_id": null
+  },
+  "elements": [
+    {
+      "category": "facebook",
+      "description": "Nút Post/Đăng trong form group sau khi click đăng; biến mất nghĩa là form đã đóng",
+      "id": 1526,
+      "is_builtin": true,
+      "name": "GroupPostSubmitButtonAfterClick",
+      "xpath": "//*[not(@aria-hidden)]/form//*[@role='button' and (contains(.,'Post') or .='Đăng')]"
+    },
+    {
+      "category": "facebook",
+      "description": "Raw link đầu tiên của bài vừa đăng trong group trước khi Facebook render permalink thật",
+      "id": 1527,
+      "is_builtin": true,
+      "name": "GroupPostRawPostLink",
+      "xpath": "//*[@role='main']//a[not(ancestor::*[@role='feed']) and @target='_blank' and contains(@href, '?__cft__[0]=')]"
+    },
+    {
+      "category": "facebook",
+      "description": "Permalink bài vừa đăng trong group sau khi focusin raw link",
+      "id": 1528,
+      "is_builtin": true,
+      "name": "GroupPostPostLink",
+      "xpath": "//*[@role='main']//a[not(ancestor::*[@role='feed']) and (contains(@href, '/pending_posts/') or contains(@href, '/posts/') or contains(@href, 'story_fbid='))]"
+    },
+    {
+      "category": "facebook",
+      "description": "Popup/CTA cần đóng hoặc chọn Dùng Trang trong luồng đăng bài group",
+      "id": 1529,
+      "is_builtin": true,
+      "name": "GroupPostDismissDialogOrUsePageButton",
+      "xpath": "//*[@role='dialog']//*[@role='button' and @aria-label='Đóng']|//*[@role='button' and .='Dùng Trang']"
+    },
+    {
+      "category": "facebook",
+      "description": "Thông báo Facebook giới hạn tần suất đăng bài/comment",
+      "id": 1710,
+      "is_builtin": true,
+      "name": "GroupPostFrequencyLimitError",
+      "xpath": "//*[contains(.,'giới hạn tần suất bạn đăng bài')]"
+    },
+    {
+      "category": "facebook",
+      "description": "V597: chữ đỏ Facebook ghi trong hộp Tạo bài viết khi không hoàn tất được yêu cầu đăng bài (FB48). Thêm bản tiếng Anh bằng | khi có mẫu.",
+      "id": 1808,
+      "is_builtin": true,
+      "name": "GroupPostRequestFailedNotice",
+      "xpath": "//*[@role='dialog' or self::form]//text()[contains(., 'gặp sự cố khi hoàn tất yêu cầu')][not(ancestor::*[@contenteditable='true'])]/.."
+    },
+    {
+      "category": "facebook",
+      "description": "V597: chữ đỏ Facebook ghi trong hộp Tạo bài viết khi không tải được tệp của bài lên (FB49). Thêm bản tiếng Anh bằng | khi có mẫu.",
+      "id": 1809,
+      "is_builtin": true,
+      "name": "GroupPostUploadFailedNotice",
+      "xpath": "//*[@role='dialog' or self::form]//text()[contains(., 'Không thể tải file của bạn lên')][not(ancestor::*[@contenteditable='true'])]/.."
+    },
+    {
+      "category": "facebook",
+      "description": "V597: chữ đỏ Facebook ghi trong hộp Tạo bài viết khi tài khoản bị giới hạn quyền truy cập vì lý do bảo mật (FB50). Thêm bản tiếng Anh bằng | khi có mẫu.",
+      "id": 1810,
+      "is_builtin": true,
+      "name": "GroupPostAccountAccessLimitedNotice",
+      "xpath": "//*[@role='dialog' or self::form]//text()[contains(., 'tài khoản của bạn đã giới hạn quyền truy cập')][not(ancestor::*[@contenteditable='true'])]/.."
+    }
+  ],
+  "nodes": [
+    {
+      "node": "verify_submit",
+      "wf": 321
+    }
+  ],
+  "maxMigration": "migration_v671_engine_action_lock_keep_longer"
+}
