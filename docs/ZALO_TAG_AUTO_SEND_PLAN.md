@@ -457,7 +457,7 @@ Kết quả: vòng seed 411, 412, 413 sạch liền (không phải sửa gì). P
 | --- | --- | --- | --- | --- |
 | 7 ngày tới 26/11 | 6.541 (609 tài khoản) | 0 | 0 | 0 |
 | 30 ngày tới 26/11 | 10.313 (764 tài khoản) | 2 | 0 | 1 (thực tế gặp lại 127) |
-| 7 ngày + 3.000 lỗi mạng chèn | 9.541 | 511 | 0 | 12 |
+| 7 ngày + 3.000 lỗi mạng chèn | 9.541 | 511 | 0 | 12 (đều là lượt lỗi mạng chèn thêm) |
 
 Ghi nhận khi rà (không sửa):
 
