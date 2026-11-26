@@ -167,6 +167,59 @@ async function main() {
       assert.equal(r.disabled_error_code, 'err_zalo_802_message_stranger')
       assert.equal(r.date_enable.toISOString(), '2026-11-28T02:45:00.000Z')
     })
+    // Ghi đồng thời: nhiều phiên (như nhiều lượt report_v1 song song) cùng ghi khoá một tài khoản, thứ tự ngẫu nhiên. Có V671 thì kết quả
+    // cuối không phụ thuộc thứ tự: có khoá không thời hạn thì là nó, không thì khoá còn hiệu lực dài nhất; mọi khoá đã hết hạn thì là một
+    // trong số đó. Mã lỗi phải đi đúng với giờ mở khoá (cả dòng giữ nguyên hoặc thay cả dòng). Bản trước vá: lần ghi sau cùng thắng.
+    await check('ghi đồng thời 8 phiên: kết quả cuối = khoá dài nhất, không phụ thuộc thứ tự', async () => {
+      await db.query('TRUNCATE public.auto_account_action_status')
+      const now = NOW
+      const ACC = 400
+      const writes = []
+      const want = new Map()
+      for (let a = 1; a <= ACC; a++) {
+        const n = 2 + Math.floor(rnd() * 5)
+        const list = []
+        for (let k = 0; k < n; k++) {
+          const r = rnd()
+          const until = r < 0.1 ? null : r < 0.3 ? now - Math.floor(rnd() * 86400e3) - 1 : now + 1 + Math.floor(rnd() * 3 * 86400e3)
+          list.push({ account: 100000 + a, until, code: `c${a}_${k}` })
+        }
+        if (rnd() < 0.3) {
+          // Khoá đang có trước khi ghi (còn hiệu lực / đã hết / không thời hạn).
+          const r = rnd(); const d = r < 0.15 ? null : r < 0.5 ? now - 60e3 : now + Math.floor(rnd() * 2 * 86400e3)
+          await db.query(`INSERT INTO public.auto_account_action_status (account_id, action_code, is_disable, date_enable, disabled_error_code, disabled_at)
+            VALUES ($1, 'zalo_message_stranger', true, $2, $3, $4)`, [100000 + a, iso(d), `seed${a}`, iso(now - 3600e3)])
+          list.push({ account: 100000 + a, until: d, code: `seed${a}`, seeded: true })
+        }
+        want.set(100000 + a, list)
+        for (const w of list) if (!w.seeded) writes.push(w)
+      }
+      for (let i = writes.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [writes[i], writes[j]] = [writes[j], writes[i]] }
+      const conns = await Promise.all(Array.from({ length: 8 }, () => connect()))
+      try {
+        await Promise.all(conns.map((c, ci) => (async () => {
+          for (let i = ci; i < writes.length; i += conns.length) {
+            const w = writes[i]
+            await c.query(`SELECT public.zz_lock_new($1, 'zalo_message_stranger', $2, $3, $3, $4)`, [w.account, iso(w.until), w.code, iso(now)])
+          }
+        })()))
+      } finally { await Promise.all(conns.map(c => c.end().catch(() => {}))) }
+      const { rows } = await db.query(`SELECT account_id, extract(epoch FROM date_enable) * 1000 AS d, disabled_error_code FROM public.auto_account_action_status WHERE account_id > 100000`)
+      assert.equal(rows.length, ACC)
+      const bad = []
+      for (const r of rows) {
+        const list = want.get(Number(r.account_id))
+        const got = r.d == null ? null : Math.round(Number(r.d))
+        const owner = list.find(w => w.code === r.disabled_error_code)
+        if (!owner || owner.until !== got) { bad.push({ r, list, why: 'mã lệch giờ' }); continue }
+        const hasNull = list.some(w => w.until == null)
+        const live = list.filter(w => w.until != null && w.until > now).map(w => w.until)
+        if (hasNull) { if (got !== null) bad.push({ r, list, why: 'mất khoá không thời hạn' }) } else if (live.length) {
+          if (got !== Math.max(...live)) bad.push({ r, list, why: 'không phải khoá dài nhất' })
+        } else if (!list.some(w => w.until === got)) bad.push({ r, list, why: 'giá trị lạ' })
+      }
+      assert.equal(bad.length, 0, JSON.stringify(bad.slice(0, 2)))
+    })
     console.log('Thống kê:', JSON.stringify(stats))
     console.log(`migration md5 ${md5(V671.migration)}, rollback md5 ${md5(V671.rollback)}`)
   } finally {

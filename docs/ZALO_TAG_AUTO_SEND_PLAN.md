@@ -438,3 +438,31 @@ production; câu ghi khoá chép nguyên văn trước / sau vá so với mô h�
 hết, bằng giờ, khoá mới không thời hạn); bộ kiểm engine Cách A có bất biến A8 (bộ chạy Desktop thật, khoá do `report_v1` ghi, đếm bằng
 trigger; mặc định có V671, `--no-v671` để đối chứng). Cùng seed 301: không V671 rút ngắn 14 khoá đang còn hiệu lực, có V671 0 lần,
 mọi kết quả khác y hệt. Vòng seed 311, 312, 313 (data thật ẩn danh, 80 kịch bản + 30.000 ca mỗi vòng) sạch liền.
+
+### 10.3 Kiểm thử lặp lần 2 (26/11/2026, anh yêu cầu lại "Kiểm thử và cải tiến … ít nhất 3 vòng không còn vấn đề")
+
+Thêm hai bài kiểm cho V671, mỗi vòng lấy mẫu thật mới (data nhắn bạn bè, tín hiệu engine của 2 ngày khác, tag của 60 tài khoản khác,
+chuỗi khoá thật; đều chỉ đọc, ngoài repo):
+
+- `scripts/engine-v2-lock-keep/v671-replay.cjs <seq.json> [--inject N --seed S]`: phát lại mọi lần khoá thật của engine v2 (cùng khoá
+  không thời hạn đang có) theo thứ tự thời gian qua đúng câu ghi khoá trước / sau V671, khoá nào bị ghi lấy theo chính sách production;
+  trước mỗi lượt thật đọc khoá như claim. Đếm khoá bị rút ngắn và lượt thật lẽ ra bị chặn, so DB với mô hình JS. `--inject` cố ý chèn
+  lỗi mạng (NET01, khoá mọi thao tác Zalo 5 phút) vào lúc ngẫu nhiên trên tài khoản thật. Có trong `fuzz-round.sh` khi đặt `V671_SEQ`.
+- `v671-smoke.cjs` thêm ca ghi đồng thời: 8 phiên ghi khoá cho 400 tài khoản, thứ tự ngẫu nhiên, có khoá cũ còn / hết / không thời hạn.
+  Có V671 thì kết quả cuối luôn là khoá dài nhất (không thời hạn thắng) và mã lỗi đi đúng giờ mở khoá; câu trước vá trượt ca này.
+
+Kết quả: vòng seed 411, 412, 413 sạch liền (không phải sửa gì). Phát lại thật:
+
+| Khoảng | Lần khoá thật | Bản cũ rút ngắn | V671 rút ngắn | Lượt thật V671 chặn thêm |
+| --- | --- | --- | --- | --- |
+| 7 ngày tới 26/11 | 6.541 (609 tài khoản) | 0 | 0 | 0 |
+| 30 ngày tới 26/11 | 10.313 (764 tài khoản) | 2 | 0 | 1 (thực tế gặp lại 127) |
+| 7 ngày + 3.000 lỗi mạng chèn | 9.541 | 511 | 0 | 12 |
+
+Ghi nhận khi rà (không sửa):
+
+- 7 lượt thật đã gửi trong lúc khoá 120 / 802 / 127 còn hiệu lực đều do nhân viên bấm "Chạy lại ngay" (Web / Desktop gỡ khoá bằng
+  REST, ví dụ tài khoản 12591 lúc 16:55:50 VN 26/11), lượt sau gặp lại đúng lỗi đó. Không phải lỗi của engine hay V671.
+- Khoá không thời hạn đang có: 13 dòng, đều `err_zalo_224_add_friend_full` (danh sách bạn bè đầy) của "Kết bạn". Trước V671 một lỗi mạng
+  sau đó sẽ đổi khoá này thành 5 phút (vô tình mở lại kết bạn); sau V671 khoá giữ tới khi nhân viên bấm "Chạy lại ngay". 14 ngày qua
+  chỉ 2 lần 224, không lần nào bị lỗi mạng đè.
