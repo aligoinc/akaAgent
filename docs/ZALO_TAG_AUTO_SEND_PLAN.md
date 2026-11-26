@@ -1,7 +1,7 @@
 # Tự gửi tin khi một người được gắn tag Zalo — phương án
 
 Viết 26/11/2026. Anh duyệt và bảo "Thực thi theo phương án" cùng ngày. **Đã code (mục 8). V660 đã apply 12:30 VN 26/11, công tắc
-bật. Chiều 26/11 anh chốt "Cách A": gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè (mục 10; V669 chưa apply). Chưa
+bật. Chiều 26/11 anh chốt "Cách A": gửi cho mọi người được gắn tag, kể cả người chưa là bạn bè (mục 10; V669 đã apply 21:46:19 VN 26/11). Chưa
 deploy, chưa build, chưa merge.**
 
 Tính năng: chiến dịch "Nhắn tin bạn bè" ở chế độ "Gửi cho bạn bè thuộc danh sách tag" có thêm ô chọn. Bật ô này thì mỗi khi
@@ -424,7 +424,7 @@ sau vì 120 bị NET01 (rớt mạng, khoá mọi thao tác Zalo 5 phút) đè t
 (2,7%) bị lỗi sau đè, 1 lần tài khoản nhắn người lạ lại trong thời gian lẽ ra còn khoá và gặp 120 / 802 lần nữa. Cách A làm tăng khả năng
 gặp (chiến dịch bạn bè chạy tiếp sau 120).
 
-### 10.2 V671: giữ khoá dài hơn (26/11/2026, anh đồng ý "Ok"; CHƯA apply)
+### 10.2 V671: giữ khoá dài hơn (26/11/2026, anh đồng ý "Ok"; đã apply akachat 21:46:45 VN 26/11, sổ `20261126144645`)
 
 [V671](../migrations/migration_v671_engine_action_lock_keep_longer.sql) (sinh bằng `node scripts/build-v671-sql.cjs` từ thân production
 đọc 26/11, md5 `b39e1e9d…` = bản sau V659 → `014a3d03…`; có bản gỡ) chỉ thêm một mệnh đề `WHERE` vào câu ghi khoá: khoá đang có còn
@@ -466,3 +466,8 @@ Ghi nhận khi rà (không sửa):
 - Khoá không thời hạn đang có: 13 dòng, đều `err_zalo_224_add_friend_full` (danh sách bạn bè đầy) của "Kết bạn". Trước V671 một lỗi mạng
   sau đó sẽ đổi khoá này thành 5 phút (vô tình mở lại kết bạn); sau V671 khoá giữ tới khi nhân viên bấm "Chạy lại ngay". 14 ngày qua
   chỉ 2 lần 224, không lần nào bị lỗi mạng đè.
+
+
+### 10.4 Apply V669 + V671 (26/11/2026 21:46 VN, anh: "apply")
+
+Kiểm trước: `report_v1` vẫn md5 `b39e1e9d…` (V667 / V670 apply chiều cùng ngày không đụng), hai dòng chính sách 120 / 802 × nhắn tin bạn bè đúng bản V500 Q4, số 669 / 671 còn trống. V669 sổ `20261126144619`, V671 sổ `20261126144645`; md5 sổ = file (kiểm ngay trong giao dịch). Sau apply: `report_v1` md5 `014a3d03…`; chính sách 802 × nhắn bạn bè (Fly) = hẹn data 2880 phút, không cộng chuỗi, không dừng chiến dịch, khoá `zalo_message_stranger`; hai dòng `auto_error` Z120 / Z802 bật. PostgREST nạp lại schema 3,6 s, 0 lỗi 5xx; 10 lượt `report_v1` đầu tiên sau apply HTTP 200. Biên nhận: `migrations/snapshots/zalo-friend-stranger-v669/`, `migrations/snapshots/engine-action-lock-keep-v671/`. Gỡ: `rollback_v669_…`, `rollback_v671_…`.

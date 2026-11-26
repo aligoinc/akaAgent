@@ -1,0 +1,19 @@
+{
+  "migration": "migration_v669_zalo_friend_stranger_restricted",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-26 21:46:19",
+  "ledger_version": "20261126144619",
+  "file_md5": "23213f133e6cb650770db72a59919b26",
+  "ledger_md5": "23213f133e6cb650770db72a59919b26",
+  "requested_by_user": "apply",
+  "method": "Supabase MCP execute_sql, một giao dịch, dòng sổ chèn trước COMMIT kèm kiểm md5",
+  "preflight": "2 dòng chính sách 120/802 x zalo_message_friend đúng bản V500 Q4; chưa có auto_error err_zalo_message_friend_stranger_restricted(_802); bộ cũ chưa có chính sách 120/802 x zalo_message_friend",
+  "postflight": {
+    "resolve_policy_802_friend_fly": "requeue_after 2880, streak ignore, campaign none, run continue, no_count, khoá zalo_message_stranger",
+    "auto_error": ["err_zalo_message_friend_stranger_restricted Z120 active", "err_zalo_message_friend_stranger_restricted_802 Z802 active"],
+    "other_pairs_changed": 0
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "errors_5xx": "0 liên quan (phút 14:45 UTC có 1 lỗi 500 /rest/v1/contacts của gateway chat cũ, trước lúc apply)",
+  "rollback": "migrations/rollback_v669_zalo_friend_stranger_restricted.sql (không apply lại V669)"
+}
