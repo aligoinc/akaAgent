@@ -1,8 +1,10 @@
 # Engine v2 cho tài khoản Zalo Server chạy trên VPS (App Server): phương án
 
 26/11/2026. **Anh đã chốt các điểm ở mục 9 (26/11, qua hộp chọn) rồi "Code luôn", sau đó "Làm luôn" cho tài khoản Zalo QR / trình duyệt
-của cùng tổ chức (mục 3.5). Đã code trên nhánh `claude/engine-v2-vps-server`, đã merge `dev_3` qua [PR #805](https://github.com/aligoinc/akaAgent/pull/805) ngày 26/11; migration V667 đã apply akachat 20:57:21–20:58:13 VN 26/11 (trước V670 của "Chạy cùng lúc"; [biên nhận](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json)), App Server
-và Desktop chưa build bộ cài / chưa phát hành; chưa đổi gì trên production. Tình trạng ở mục 10.** Số liệu ở đây đọc từ production bằng truy
+của cùng tổ chức (mục 3.5). Đã code trên nhánh `claude/engine-v2-vps-server`, đã merge `dev_3` qua [PR #805](https://github.com/aligoinc/akaAgent/pull/805) ngày 26/11; migration V667 đã apply akachat 20:57:21–20:58:13 VN 26/11 (trước V670 của "Chạy cùng lúc"; [biên nhận](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json)), Desktop + App
+Server 10.8.0 đã build 26/11; công tắc bật cho mọi tổ chức lúc 21:40:33 VN 26/11 theo yêu cầu ("cứ bật hết đi, để xem thử luôn có ok
+ko"; [biên nhận](../migrations/snapshots/engine-v2-server-vps-switch-20261126/receipt.json)); App Server 10.8.0 lên VPS khoảng 21:45 VN;
+Desktop 10.8.0 chưa phát hành. Tình trạng ở mục 10.** Số liệu ở đây đọc từ production bằng truy
 vấn chỉ đọc ngày 26/11.
 
 ## 1. Bối cảnh
@@ -188,6 +190,9 @@ Giống những gì tổ chức Fly / Desktop đã có sau khi lên engine v2:
    - request REST từ IP VPS, CPU / RAM của App Server.
 5. Mở dần theo lô (vd 20 tổ chức → 100 → `all`).
 
+**Đã làm 26/11/2026:** V667 apply 20:57–20:58 VN; Desktop + App Server 10.8.0 build; anh bỏ bước 3–5 ("cứ bật hết đi, để xem thử luôn có
+ok ko"): công tắc `{"mode":"all","organizationIds":[]}` lúc 21:40:33 VN, App Server 10.8.0 lên VPS khoảng 21:45 VN (mục 10.1).
+
 Không cần deploy ChatApi / Web / iOS cho V667: Fly chạy nơi chạy `fly`, các nhánh `fly` của hàm DB không đổi; Web / iOS không đọc các bảng
 engine (trường `runtimeTarget` của Web tính từ loại tài khoản, không phải nơi chạy của engine). Thứ tự bắt buộc chỉ có V666 trước V667 và bật
 công tắc khi đã có cả V667 lẫn App Server mới trên VPS; apply V667 và cài App Server làm bên nào trước cũng được (App Server mới gặp DB chưa có
@@ -213,7 +218,7 @@ còn lượt `server` nào mở.
    biệt được VPS với Desktop. Lựa chọn "phải sửa bộ kiểm lỗi" cũng sai: bộ kiểm lỗi chỉ xét tài khoản Facebook, nên tên mới không tốn gì thêm.
 3. **Tắt công tắc giữa chừng:** chiến dịch về bộ cũ 5 phút rồi xét lại.
 4. **Tổ chức thử đầu tiên:** em đề xuất 2–3 tổ chức trên VPS ít tài khoản, đang chạy đều, lập danh sách theo dữ liệu lúc sắp bật (sau khi đã
-   cài App Server mới), anh duyệt rồi mới bật.
+   cài App Server mới), anh duyệt rồi mới bật. 26/11 21:40 VN anh bỏ bước này ("cứ bật hết đi, để xem thử luôn có ok ko") khi em đã đề xuất 2135, 1863, 1392.
 5. **Tài khoản Zalo QR / trình duyệt của tổ chức trong công tắc** (anh: "Làm luôn", 26/11): cũng chạy engine v2 trên Desktop theo cùng công
    tắc (mục 3.5). Cách làm khác dự định ban đầu (vá V513) vì V513 còn chọn nơi chạy tài khoản Server.
 
@@ -318,12 +323,29 @@ không có trong công tắc: Desktop không đổi hành vi.
 **Chưa làm / chưa kiểm:**
 - Bộ kịch bản sự cố (`scripts/engine-v2-scenarios/run.cjs`) chưa có nơi chạy `'server'` (mục 6.2): DB của bộ kịch bản dựng tới V532, không có
   thân claim của production nên không apply nguyên V667 được. Ca App Server dừng / chết giữa lượt nay có ở bài kiểm bộ lập lịch (ca 7, 8).
-- Chưa chạy App Server thật (Electron + zca-js thật) với tài khoản Zalo Server; chưa hậu kiểm bộ cài App Server.
+- App Server thật: chạy trên VPS từ khoảng 21:45 VN 26/11 (mục 10.1). Bộ cài 10.8.0: phiên build kiểm dấu của #805 trong bản đóng gói,
+  `out-server/main/index.js` có `aka_agent_engine_server_enabled_orgs_v1`.
 - Chưa chạy Desktop thật với tổ chức trong công tắc (đăng nhập, chiến dịch Zalo QR chạy engine v2, tài khoản Server vẫn quét QR qua App
   Server).
-- Danh sách tổ chức thử (mục 9.4): lập lúc sắp bật.
+- Danh sách tổ chức thử (mục 9.4): không dùng, anh bật cho mọi tổ chức.
 
 **Tra cứu sau khi bật:** lượt chạy trên VPS là `auto_engine_target_runs.runtime_target = 'server'` (mã bộ chạy `server:…`); lượt App Server dọn
 khi khởi động / dừng runtime là sự kiện `auto_engine_target_events` kind `interrupted` có `data->>'via' = 'server_reset'`. Bật thử:
 `UPDATE public.auto_system_settings SET value = '{"mode":"orgs","organizationIds":[<mã tổ chức>]}' WHERE key = 'engine.zalo_server_vps'`;
 tắt khẩn: `{"mode":"off","organizationIds":[]}`.
+
+### 10.1 Bật trên production (26/11/2026)
+
+- 21:40:33 VN: `engine.zalo_server_vps` từ `{"mode":"off","organizationIds":[]}` sang `{"mode":"all","organizationIds":[]}` (câu UPDATE chỉ ghi khi giá
+  trị đang là bản off). Lúc đó VPS còn App Server bản cũ, không đọc công tắc, chưa có lượt `server` nào.
+- Khoảng 21:45 VN anh cài App Server 10.8.0. Lượt gọi `aka_agent_engine_server_enabled_orgs_v1` đầu tiên từ IP VPS lúc 21:45, lượt engine
+  `server` đầu tiên 21:45:46.
+- Kiểm 21:51 VN: 93 lượt ở 29 tài khoản / 22 tổ chức, 87 chốt "hoàn thành", 4 về hàng đợi, 0 lượt mở quá 3 phút, 0 hiệu ứng tạm dừng chiến dịch;
+  217 bước, 170 thành công, lỗi là Z216 / Z122 (gồm bỏ qua theo kiểm người nhận V571) / Z119 / Z127 / Z120, 1 UNK01, 1 NET01. 0 chiến dịch tài
+  khoản Server bị tạm dừng sau lúc cài. Tài khoản Server đăng nhập 1.323 (21:33) → 1.320. Hành động / phút của tài khoản Server VPS: ~33 trước, ~37 sau.
+  Request REST từ IP VPS: ~6.300 / phút trước, 16.039 phút khởi động, ~4.200 / phút lúc 21:48–21:49. Phút khởi động: 59 request > 1 giây,
+  1 lỗi 500 của gateway chat cũ; từ 21:47 p50 46–49 ms.
+- Phạm vi phía Desktop: `aka_agent_engine_desktop_vps_enabled_v1` chỉ xét công tắc. 21:47 VN: 449 tổ chức tắt cờ `use_new_zalo_runtime` còn gói Zalo,
+  437 có tài khoản Server (393 đang đăng nhập), 12 còn lại không có tài khoản QR / trình duyệt nào đăng nhập; 17 tổ chức có Server dùng thêm QR /
+  trình duyệt, chạy engine v2 trên Desktop khi lên Desktop 10.8.0 và đăng nhập lại.
+- Mốc cần xem tiếp: 00:00 VN (lần sang ngày đầu tiên của engine trên VPS) và 06:00–09:00 VN (chiến dịch bắt đầu lại).

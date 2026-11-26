@@ -1,0 +1,39 @@
+{
+  "what": "Bật engine v2 cho tài khoản Zalo Server trên VPS (App Server) với mọi tổ chức: auto_system_settings engine.zalo_server_vps (V667)",
+  "requested_by_user": "cứ bật hết đi, để xem thử luôn có ok ko",
+  "note": "Anh bỏ bước bật thử 2–3 tổ chức (em đã đề xuất 2135, 1863, 1392) và bật cho mọi tổ chức.",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "applied_at_vn": "2026-11-26 21:40:33",
+  "method": "supabase db query --linked: UPDATE public.auto_system_settings ... WHERE key = 'engine.zalo_server_vps' AND is_active AND value = <bản off> RETURNING",
+  "setting_id": 228,
+  "before": { "mode": "off", "organizationIds": [] },
+  "after": { "mode": "all", "organizationIds": [] },
+  "verified_at_vn": "2026-11-26 21:40:47",
+  "verification": {
+    "aka_agent_engine_server_enabled_orgs_v1()": { "mode": "all", "organizationIds": [] },
+    "aka_agent_engine_server_org_enabled(2135)": true,
+    "auto_engine_target_runs runtime_target = 'server'": 0,
+    "auto_engine_leases runtime_target = 'server'": 0,
+    "edge_logs gọi aka_agent_engine_server_enabled_orgs_v1 / aka_agent_engine_desktop_vps_enabled_v1 từ 21:20 VN": 0
+  },
+  "scope_at_switch": "Đếm chỉ đọc 21:33 VN: 556 tổ chức có tài khoản Zalo Server đang đăng nhập, cờ use_new_zalo_runtime tắt, không có gói Chat (1.323 tài khoản); chưa lọc gói còn hạn. Tổ chức bật cờ use_new_zalo_runtime chạy Server trên Fly, không đổi.",
+  "scope_check_desktop_vn_2147": "Desktop chỉ đọc công tắc khi cờ use_new_zalo_runtime của tổ chức tắt (aka_agent_engine_desktop_vps_enabled_v1 không xét tài khoản Server). 449 tổ chức tắt cờ còn gói Zalo 16/18: 437 có tài khoản Zalo Server (393 đang đăng nhập); 12 tổ chức không có tài khoản Server thì không có tài khoản QR / trình duyệt nào đang đăng nhập; 17 tổ chức có Server dùng thêm QR / trình duyệt.",
+  "effect": [
+    "App Server đang chạy trên VPS là bản cũ, không đọc công tắc: chưa đổi gì cho tới khi cài App Server 10.8.0 (bộ cài dist-server/akaAgent-Zalo-Server-Internal-Setup-10.8.0.exe, sha256 8e142c3924092221a0846d2d3259a1e999de136b3a469a5c7781c80376aaf65b).",
+    "Sau khi App Server 10.8.0 chạy: chiến dịch của mọi tài khoản Zalo Server trên VPS chạy bằng engine v2 (nơi chạy 'server') từ lượt quét đầu; App Server đọc công tắc 60 giây một lần.",
+    "Desktop 10.8.0 (chưa phát hành): tài khoản Zalo QR / trình duyệt của tổ chức chưa bật cờ use_new_zalo_runtime chạy engine v2 từ lần đăng nhập sau."
+  ],
+  "after_app_server_install": {
+    "app_server_10_8_0_started_vn": "2026-11-26 ~21:45 (lượt gọi aka_agent_engine_server_enabled_orgs_v1 đầu tiên từ IP VPS lúc 21:45; lượt engine 'server' đầu tiên 21:45:46)",
+    "checked_at_vn": "2026-11-26 21:51:33",
+    "engine_runs": { "runs": 93, "accounts": 29, "orgs": 22, "done": 87, "requeued": 4, "open": 2, "open_over_3_minutes": 0, "campaign_pause_effects": 0 },
+    "engine_steps": { "steps": 217, "ok": 170, "errors": "Z216 23, Z122 16 (gồm bỏ qua theo kiểm người nhận), Z119 3, Z127 2, Z120 1, UNK01 1, NET01 1" },
+    "campaigns_paused_since_install": 0,
+    "server_accounts_logged_in": "1.320 (21:33 VN trước khi cài: 1.323)",
+    "actions_per_minute_vps_accounts": "21:25–21:44 VN trung bình ~33 / phút; 21:46–21:50 VN ~37 / phút",
+    "rest_requests_from_vps_per_minute": "~6.300 trước khi cài; 16.039 phút khởi động 21:46; ~4.200 lúc 21:48–21:49",
+    "rest_health": "phút 21:45: 59 request > 1 giây, p99 738 ms, 1 lỗi 500 (gateway chat cũ, contacts 3 giây); từ 21:47 p50 46–49 ms, p99 112–129 ms; 2 lỗi 500 lúc 21:50:14 của API Web đọc auto_campaign_details (8 giây), đã gặp 2 lần mỗi vài giờ trong 24 giờ trước"
+  },
+  "rollback": "update public.auto_system_settings set value = '{\"mode\":\"off\",\"organizationIds\":[]}', updated_at = now() where key = 'engine.zalo_server_vps';",
+  "rollback_effect": "App Server đọc lại trong 60 giây; chiến dịch đang chạy engine 'server' về bộ cũ 5 phút rồi xét lại. Desktop đọc công tắc lúc đăng nhập."
+}
