@@ -132,6 +132,15 @@ thêm lời gọi / hằng mới vào hàm được dựng (10.6.0: `handleRecur
 `PGUSER=postgres`. `WEBAPP_REPO` nên là bản `git archive origin/dev_1 packages apps` (đủ `apps/web`). Tệp phát lại dữ liệu thật ở scratchpad
 (`replay-inputs/`) có thể bị dọn giữa hai lần build (25/11 00:04 VN): mất thì ba bài phát lại không chạy được, ghi rõ trong biên nhận.
 
+**Build 10.7.0 (26/11/2026, Desktop + App Server).** `dist/build-10.7.0-work/` của repo chính, script sinh từ 10.6.0 (đổi worktree, số bản,
+`(10<<16)+7`, `server-graph.cjs` so với `dc3ca157`); đối chứng là main / renderer giải nén từ bộ cài 10.6.0 đang trên feed. Bài mới của
+#789–#797 trên Mac cần môi trường riêng (chạy lại trong `run-reruns.sh`): bài giao diện dùng Chromium riêng của Playwright nên phải đặt
+`EMAIL_PROMPT_UI_CHROMIUM` / `SX_UI_CHROMIUM` là Chrome của máy; `zalo-received-marks/fuzz-loop.cjs` cần `--pgbin <PG17>`;
+`zalo-tag-sync/v660-smoke.sh` hỏng trên bash 3.2 (mảng `RUN` rỗng dưới `set -u`): dùng bản chép `bash32/v660-smoke.sh`;
+`zalo-tag-sync/fly-tag-sync-fuzz.cjs` cần `CHAT_REPO` là bản ChatApi có `packages/zalo-zca-adapter/src/tagSync.ts` (checkout ChatApi chính
+có thể đang ở nhánh cũ). `staff-email-prompt/run-email-prompt-ui-smoke.cjs` hỏng ở bước 7 (gợi ý tên miền do DB trả) ngay ở commit merge #789.
+`WEBAPP_REPO` = `git archive origin/dev_1 packages apps` (đủ `apps/web`) thì `campaign-result-groups-desktop-smoke` đạt.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
