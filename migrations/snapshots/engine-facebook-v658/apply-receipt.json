@@ -1,0 +1,35 @@
+{
+  "migration": "migration_v658_engine_facebook_seeding_checkpoint",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply rồi mở PR (26/11/2026, sau khi chọn \"Cả hai\" qua hộp chọn và chạy phát lại 12.401 lượt thật)",
+  "applied_at_vn": "2026-11-26 10:21:20",
+  "ledger_version": "20261126032120",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 1 giây, rc 0",
+  "file_md5": "498ee62341acfaea277fc3a211952529",
+  "ledger_statements_md5": "498ee62341acfaea277fc3a211952529",
+  "preflight_live_10_20_59": {
+    "ledger_v658_rows": 0,
+    "ledger_last": "migration_v657_send_exclusion_global_match_p2 (20261125211830), V657 p1 (20261125211803)",
+    "block_2859_md5": "81f1dd79e70bbafcb85cf98b2d672210",
+    "block_2554_md5": "091f57483369c8b03fea65e9eba0390c",
+    "copy": { "source": 2554, "source_md5_at_copy": "091f57483369c8b03fea65e9eba0390c", "engine_md5_at_copy": "81f1dd79e70bbafcb85cf98b2d672210" },
+    "step_rows_for_2859": 0,
+    "fb04_fb43_codes_active": 2
+  },
+  "dry_run_rollback": "nguyên file, COMMIT cuối thay bằng SELECT + ROLLBACK: trong giao dịch block 2859 = d234dec1…, 2554 = 091f5748…; sau ROLLBACK đọc lại: 2859 = 81f1dd79…, sổ không có V658",
+  "postflight_live_10_21_32": {
+    "block_2859_md5": "d234dec16049d1e365a188152c91deeb",
+    "legacy_block_2554_md5_unchanged": "091f57483369c8b03fea65e9eba0390c",
+    "copy_unchanged": true,
+    "classify_direct": { "err_fb_checkpoint": "direct", "err_engine_fb_logged_out": "direct" },
+    "policies_unchanged": { "281": "FB04 requeue, login checkpoint", "341": "FB43 requeue, login logged_out", "343": "FB45 complete" }
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "v658-smoke.cjs 28/28; desktop-fb-smoke.cjs 66/66; phát lại v658-replay.cjs trên 12.401 lượt workflow 316 thật 18–26/11: 0 lượt thành công bị bắt, 5.134 lượt FB45 ở /checkpoint/ → FB04, luật block và luật bộ lập lịch khớp 100%",
+  "rollback": "migrations/rollback_v658_engine_facebook_seeding_checkpoint.sql (chỉ chạy khi block 2859 còn đúng bản V658)",
+  "not_verified": [
+    "Lúc 10:21 VN chưa có lượt seeding nào chạy trên trang xác minh sau apply (chiến dịch 60581 đã hết data 20:22 VN 25/11).",
+    "Chưa thử thật trên Facebook bằng tài khoản đang bị xác minh.",
+    "Phần mục 6a của bộ lập lịch Desktop (cùng nhánh) chưa build, chưa phát hành."
+  ]
+}

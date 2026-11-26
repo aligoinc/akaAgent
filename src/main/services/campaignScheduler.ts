@@ -121,6 +121,7 @@ import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/fa
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
+import { parseNavigationError } from '../engineAdapters/facebook/navigationError'
 import { cleanupScreenshots, findErrorScreenshots, gzipErrorDom, PAGE_DOM_MAX_CHARS, PAGE_DOM_SCRIPT, PAGE_DOM_TIMEOUT_MS, readErrorScreenshotDataUrl,
   saveErrorEvidence, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
@@ -6791,8 +6792,13 @@ export class CampaignScheduler {
           return state.stopped ?? { done: true }
         }
         const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 6282 / 633 / 3484 của bộ kiểm lỗi (anh chốt 26/11/2026): bước đọc / chuyển danh tính hỏng ngay lúc mở trang (lỗi mạng / proxy
+        // của trình duyệt, chưa tới phần tìm nút) báo như bước mở trang, không gắn sẵn mã, để DB phân loại theo luật mạng / proxy (NET01 /
+        // NET02, V659) như mọi bước mở trang. Lỗi trên trang (không thấy nút menu, không đọc được tên, chọn Page hết giờ) vẫn FB06.
+        const navigation = parseNavigationError(message)
         await report('__identity', firstAction, { ok: false, phase: 'before_send',
-          signal: { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+          signal: navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
+            : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
         return state.stopped ?? { done: true }
       }
       if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {
@@ -6875,9 +6881,16 @@ export class CampaignScheduler {
       }
       // 6a. Workflow chạy xong mà bộ dựng cũ không ghi dòng nào cho data (comment seeding không có bài hợp điều kiện…): bộ cũ đóng data, không
       //     ghi lịch sử, không cộng chuỗi data lỗi (phát lại lịch sử thật 16/11). Báo FB45 để lõi không coi là "không có kết quả" (SYS07).
+      //     Câu 639 / 3300 / 6279 của bộ kiểm lỗi (26/11/2026, Q6): trang chạy ngầm đang ở trang xác minh / đăng nhập (mở nhóm bị Facebook chuyển
+      //     hướng, trang vẫn có vùng chính nên không bước nào lỗi, quét ra 0 bài) thì đó là trạng thái đăng nhập, không phải "không có bài": báo
+      //     FB04 / FB43 trước khi gửi (data về hàng đợi, đổi trạng thái đăng nhập) thay cho FB45. Trang khác vẫn FB45 như bộ cũ.
       if (!state.stopped && result.status === 'completed' && state.reportCount === 0 && marks.size === 0) {
-        await report('__no_history', firstAction, { ok: false, phase: 'before_send',
-          signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Chạy xong, không có kết quả nào để ghi (như bộ cũ)' } })
+        const pageState = page?.isConnected() ? facebookPageStateSignal(safePageUrl(page)) : null
+        if (pageState) await report('__page_state', firstAction, { ok: false, phase: 'before_send', signal: pageState })
+        else {
+          await report('__no_history', firstAction, { ok: false, phase: 'before_send',
+            signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Chạy xong, không có kết quả nào để ghi (như bộ cũ)' } })
+        }
       }
       // 6. Nhóm chia sẻ chưa có kết quả: theo kết quả cú bấm Đăng của data chính. Đã đăng: ghi như bộ cũ (bộ dựng thường đã ghi); không rõ:
       //    không gửi lại; chưa bấm: về hàng đợi. Không biết kết quả cú bấm (hiếm) thì coi như không rõ, không đăng lại.
