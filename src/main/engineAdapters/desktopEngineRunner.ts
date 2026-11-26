@@ -6,9 +6,10 @@
  * Loại chiến dịch đã tách sang lõi và không dùng tính năng chưa tách thì chạy bằng bộ mới; còn lại bộ lập lịch chạy bộ cũ như trước,
  * trong cùng bản cài.
  *
- * Mỗi tài khoản một lượt tại một thời điểm (bộ lập lịch đã giữ chỗ tài khoản trong hàng đợi). Dòng tiến trình ghi
- * tuần tự đúng thứ tự lõi phát ra. Yêu cầu tạm dừng còn trong RAM (DB trả runtime_busy cho chiến dịch đang chạy)
- * được hoàn tất sau data đang xử lý, như bộ cũ.
+ * Mỗi tài khoản một lượt tại một thời điểm ở mỗi làn (bộ lập lịch đã giữ chỗ tài khoản trong hàng đợi của làn). Làn chính là
+ * mọi chiến dịch như trước; chiến dịch có tích "Chạy cùng lúc" (V670) mà loại được akaBiz bật chạy ở làn riêng của loại, cạnh làn
+ * chính, với nhật ký khôi phục riêng của làn. Dòng tiến trình ghi tuần tự đúng thứ tự lõi phát ra. Yêu cầu tạm dừng còn trong RAM
+ * (DB trả runtime_busy cho chiến dịch đang chạy) được hoàn tất sau data đang xử lý, như bộ cũ.
  */
 import { randomUUID } from 'node:crypto'
 import type { AutoAccount, Campaign } from '../../shared/types'
@@ -16,7 +17,7 @@ import { monotonicNow } from '../../shared/monotonicNow'
 import type { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { campaignEngagementEnabled } from '../services/zaloCampaignEngagement'
 import {
-  DEFAULT_RETRY, advancedContentItems, hasDeclaredMediaSource, runUnit, sleepBetweenActionsSeconds, systemClock, zaloCampaignType,
+  DEFAULT_RETRY, PARALLEL_RUN_MAIN_LANE, advancedContentItems, hasDeclaredMediaSource, runUnit, sleepBetweenActionsSeconds, systemClock, zaloCampaignType,
   zaloCampaignV2Support, type UnitResult, type V2Support, type ZaloCampaign, type ZaloFoundUser, type ZaloJoinGroupLinkResult, type ZaloResolvedTarget
 } from '../../../packages/campaign-engine/src/index'
 import { desktopEngineData, finishEngineCampaign } from './desktopEngineData'
@@ -107,8 +108,18 @@ function formatVietnamTime(iso: string): string {
 
 const isFacebookAccount = (account: AutoAccount): boolean => String(account.flatformType || '').trim().toLowerCase() === 'facebook'
 
+/** Khoá lượt đang chạy trong tiến trình: làn chính giữ khoá theo tài khoản như trước, làn riêng thêm mã loại. */
+function runKey(accountId: number, lane: string): string {
+  return lane === PARALLEL_RUN_MAIN_LANE ? String(accountId) : `${accountId}:${lane}`
+}
+
+/** Nhật ký khôi phục: làn chính giữ phạm vi cũ (nhân viên + tài khoản) để kết quả của bản cài trước vẫn được gửi bù. */
+function journalScope(staffId: number, accountId: number, lane: string): string {
+  return lane === PARALLEL_RUN_MAIN_LANE ? `${staffId}:${accountId}` : `${staffId}:${accountId}:${lane}`
+}
+
 export class DesktopEngineRunner {
-  private readonly runs = new Map<number, AbortController>()
+  private readonly runs = new Map<string, AbortController>()
   /** Nơi chạy: 'desktop' (Desktop) hoặc 'server' (App Server trên VPS, V667). */
   private readonly target: 'desktop' | 'server'
   /** Một mã cho tiến trình app này: lease của lần chạy trước (app đã tắt) tự hết hạn, không bị nhận nhầm. */
@@ -171,20 +182,30 @@ export class DesktopEngineRunner {
     return this.runs.size
   }
 
+  /** Làn này của tài khoản đang có lượt chạy trong tiến trình. */
+  isRunning(accountId: number, lane: string = PARALLEL_RUN_MAIN_LANE): boolean {
+    return this.runs.has(runKey(accountId, lane))
+  }
+
   /** Dừng ngay mọi lượt (thoát app, đăng xuất): lõi báo "đã dừng" cho bước sắp chạy, nhật ký giữ kết quả chưa gửi. */
   abortAll(): void {
     for (const controller of this.runs.values()) controller.abort()
   }
 
-  async run(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
-    if (isFacebookAccount(account)) return this.runFacebook(account, campaign)
-    if (isWebAccount(account)) return this.runWeb(account, campaign)
+  /**
+   * lane: làn của chiến dịch (campaignRunLane); mặc định làn chính như trước. Chỉ tài khoản Zalo có làn riêng (DB cũng chỉ cấp làn riêng cho
+   * tài khoản Zalo), nên Facebook / Website luôn chạy làn chính.
+   */
+  async run(account: AutoAccount, campaign: Campaign, lane: string = PARALLEL_RUN_MAIN_LANE): Promise<UnitResult | null> {
+    if (isFacebookAccount(account)) return lane === PARALLEL_RUN_MAIN_LANE ? this.runFacebook(account, campaign) : null
+    if (isWebAccount(account)) return lane === PARALLEL_RUN_MAIN_LANE ? this.runWeb(account, campaign) : null
     const zaloRuntime = this.host.zaloRuntime()
     const staffId = this.host.staffId()
-    if (!zaloRuntime || !staffId || this.host.zaloRuntimeBlocked() || this.runs.has(account.id)) return null
+    const key = runKey(account.id, lane)
+    if (!zaloRuntime || !staffId || this.host.zaloRuntimeBlocked() || this.runs.has(key)) return null
 
     const controller = new AbortController()
-    this.runs.set(account.id, controller)
+    this.runs.set(key, controller)
     let progress: Promise<void> = Promise.resolve()
     const log = (text: string): void => {
       progress = progress.then(() => this.host.logProgress(campaign, text)).catch(error => {
@@ -232,7 +253,7 @@ export class DesktopEngineRunner {
     try {
       result = await runUnit({
         data: desktopEngineData,
-        journal: new SqliteEngineJournal(`${staffId}:${account.id}`),
+        journal: new SqliteEngineJournal(journalScope(staffId, account.id, lane)),
         clock: systemClock,
         events: { progress: line => log(line.text), trace }
       }, {
@@ -271,7 +292,7 @@ export class DesktopEngineRunner {
       }
       return result
     } finally {
-      this.runs.delete(account.id)
+      this.runs.delete(key)
       await progress
       if (result && this.host.isPauseRequested(campaign.id)) {
         await this.host.completeReleasedPause(campaign).catch(error => {
@@ -280,7 +301,7 @@ export class DesktopEngineRunner {
       }
       await this.host.broadcastCampaign(campaign.id).catch(() => undefined)
       this.host.broadcastAccounts()
-      if (result) console.info('[CampaignEngine] unit ended', { campaignId: campaign.id, accountId: account.id, reason: result.reason, targets: result.targets })
+      if (result) console.info('[CampaignEngine] unit ended', { campaignId: campaign.id, accountId: account.id, lane, reason: result.reason, targets: result.targets })
     }
   }
 
@@ -305,9 +326,10 @@ export class DesktopEngineRunner {
   private async runFacebook(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
     const facebook = this.host.facebook
     const staffId = this.host.staffId()
-    if (!facebook || !staffId || this.runs.has(account.id)) return null
+    const key = runKey(account.id, PARALLEL_RUN_MAIN_LANE)
+    if (!facebook || !staffId || this.runs.has(key)) return null
     const controller = new AbortController()
-    this.runs.set(account.id, controller)
+    this.runs.set(key, controller)
     let progress: Promise<void> = Promise.resolve()
     const log = (text: string): void => {
       progress = progress.then(() => this.host.logProgress(campaign, text)).catch(error => {
@@ -331,7 +353,7 @@ export class DesktopEngineRunner {
       const fbConfig = await facebookUnitConfig({ host: facebook, account, campaign, signal: controller.signal }, session)
       result = await runUnit({
         data: desktopEngineData,
-        journal: new SqliteEngineJournal(`${staffId}:${account.id}`),
+        journal: new SqliteEngineJournal(journalScope(staffId, account.id, PARALLEL_RUN_MAIN_LANE)),
         clock: systemClock,
         events: { progress: line => log(line.text), trace }
       }, {
@@ -357,7 +379,7 @@ export class DesktopEngineRunner {
       if (result.reason === 'not_enabled') this.facebookDisabled.add(campaign.id)
       return result
     } finally {
-      this.runs.delete(account.id)
+      this.runs.delete(key)
       if (session) {
         await session.close(result).catch(error => console.error('[CampaignEngine] failed to close Facebook unit', { campaignId: campaign.id, error }))
       }
@@ -380,9 +402,10 @@ export class DesktopEngineRunner {
   private async runWeb(account: AutoAccount, campaign: Campaign): Promise<UnitResult | null> {
     const web = this.host.web
     const staffId = this.host.staffId()
-    if (!web || !staffId || this.runs.has(account.id)) return null
+    const key = runKey(account.id, PARALLEL_RUN_MAIN_LANE)
+    if (!web || !staffId || this.runs.has(key)) return null
     const controller = new AbortController()
-    this.runs.set(account.id, controller)
+    this.runs.set(key, controller)
     let progress: Promise<void> = Promise.resolve()
     const log = (text: string): void => {
       progress = progress.then(() => this.host.logProgress(campaign, text)).catch(error => {
@@ -405,7 +428,7 @@ export class DesktopEngineRunner {
       session = await web.openUnit(account, campaign, controller.signal)
       result = await runUnit({
         data: desktopEngineData,
-        journal: new SqliteEngineJournal(`${staffId}:${account.id}`),
+        journal: new SqliteEngineJournal(journalScope(staffId, account.id, PARALLEL_RUN_MAIN_LANE)),
         clock: systemClock,
         events: { progress: line => log(line.text), trace }
       }, {
@@ -430,7 +453,7 @@ export class DesktopEngineRunner {
       if (result.reason === 'not_enabled') this.webDisabled.add(campaign.id)
       return result
     } finally {
-      this.runs.delete(account.id)
+      this.runs.delete(key)
       if (session) await session.close().catch(error => console.error('[CampaignEngine] failed to close web unit', { campaignId: campaign.id, error }))
       await progress
       if (result && this.host.isPauseRequested(campaign.id)) {

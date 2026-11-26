@@ -139,6 +139,17 @@ async function bootstrap(db, notes) {
     await db.query(require('../build-v581-sql.cjs').migration)
     notes.push('V581 (tách Z114 thành 4 mã): đã apply')
   }
+  // "Chạy cùng lúc" (V670): SCENARIO_PARALLEL_RUN=live cài 6 hàm V670 vá ở bản V670 dựng trên (claim sau V667: V666 loại trừ gửi + V667 nơi
+  // chạy 'server'; release, close_stale, health, create_control_campaign_v2, update_control_campaign_atomic production 26/11); =1 cài rồi
+  // apply V670 p1–p3. Chạy bộ kịch bản hai lần (live, 1) để chứng minh chiến dịch không tích chạy y như trước V670. Cần SCENARIO_ORPHAN_RUNS=1
+  // (các hàm production 26/11 dựng trên V576). Đặt cuối.
+  const parallelRun = process.env.SCENARIO_PARALLEL_RUN
+  if (parallelRun === 'live' || parallelRun === '1') {
+    if (process.env.SCENARIO_ORPHAN_RUNS !== '1') throw new Error('SCENARIO_PARALLEL_RUN cần SCENARIO_ORPHAN_RUNS=1 (hàm production 26/11 dựng trên V576)')
+    const setup = require('../fixtures/campaign-parallel-run/setup.cjs')
+    await setup.installLive(db, notes)
+    if (parallelRun === '1') await setup.applyV670(db, notes)
+  }
 }
 
 module.exports = { bootstrap }

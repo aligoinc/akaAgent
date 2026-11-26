@@ -1,6 +1,8 @@
 // Nút "Lý do đang chờ" / tab Chẩn đoán hiểu trạng thái engine v2 (R17, anh chốt Q21 16/11/2026). Chỉ đọc RAM: kết quả lần nhận lượt
 // gần nhất của bộ chạy trên máy này (claim của DB đã xét lease, token bộ cũ, khoá / hạn mức, gói, số tài khoản chạy cùng lúc…).
 // Không gọi DB, không nhận lượt. Dùng cho cả Facebook lẫn Zalo chạy bằng engine trên Desktop.
+import { campaignParallelWaitReasonText } from '../../shared/campaignParallelRun'
+import { getAccountActionName } from '../../shared/campaignActionDescriptors'
 
 export interface EngineClaimObservation {
   accountId: number
@@ -18,7 +20,7 @@ export const ENGINE_OBSERVATION_TTL_MS = 10 * 60_000
 /** Lý do kết thúc lượt mà chiến dịch vẫn đứng chờ: nhớ để giải thích. Lý do khác (chạy được, hết data…) thì quên quan sát cũ. */
 const WAITING_REASONS = new Set([
   'wait', 'busy', 'legacy_busy', 'entitlement_denied', 'concurrency_limit', 'account_logged_out', 'account_paused', 'staff_time_blocked',
-  'gate_unavailable', 'daily_boundary', 'maintenance_required', 'campaign_not_ready', 'data_group_waiting', 'error'
+  'gate_unavailable', 'daily_boundary', 'maintenance_required', 'campaign_not_ready', 'data_group_waiting', 'error', 'parallel_wait'
 ])
 
 export function isEngineWaitingReason(reason: string | null | undefined): boolean {
@@ -88,6 +90,13 @@ export function engineWaitMessage(observation: EngineClaimObservation | null | u
       return text(claim.note) || 'Đang chờ data mới từ Nhóm data.'
     case 'error':
       return 'Lần chạy gần nhất bị gián đoạn (lỗi kết nối hoặc lỗi hệ thống). Ứng dụng sẽ tự thử lại ở lượt sau.'
+    case 'parallel_wait':
+      // "Chạy cùng lúc" (V670): chiến dịch đang chạy ở làn khác cùng loại / chung thao tác; câu anh duyệt 26/11.
+      return campaignParallelWaitReasonText({
+        reason: claim.reason === 'same_action' ? 'same_action' : 'same_type',
+        campaignName: text(claim.campaignName) || null,
+        actionNames: Array.isArray(claim.actionCodes) ? claim.actionCodes.map(code => getAccountActionName(String(code || '').trim())) : []
+      })
     default:
       return null
   }

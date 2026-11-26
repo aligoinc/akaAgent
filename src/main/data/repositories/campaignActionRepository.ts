@@ -110,6 +110,19 @@ export async function getAllCampaignActions(): Promise<CampaignAction[]> {
   return attachActionDataTypes((data || []).map(row => mapCampaignActionFromDB(row)))
 }
 
+/**
+ * "Chạy cùng lúc" (V670): mã các loại chiến dịch akaBiz bật allow_parallel_run. Bộ lập lịch chỉ gọi khi có chiến dịch đến hạn đã tích ô
+ * (tức DB đã có V670); DB chưa có cột thì báo lỗi, nơi gọi coi như không loại nào được chạy cùng lúc.
+ */
+export async function listParallelRunActionIds(): Promise<string[]> {
+  const { data, error } = await client()
+    .from('auto_campaign_actions')
+    .select('id')
+    .eq('allow_parallel_run', true)
+  if (error) throw new Error(`Failed to list parallel-run campaign actions: ${error.message}`)
+  return (data || []).map(row => String(row.id || '')).filter(Boolean)
+}
+
 export async function getCampaignAction(actionId: string): Promise<CampaignAction | null> {
   const { data, error } = await client()
     .from('auto_campaign_actions')

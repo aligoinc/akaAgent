@@ -164,6 +164,16 @@ const CAMPAIGN_CONFIG_SELECT = [
   'creation_bundle_child_index',
   CAMPAIGN_RELATIONS
 ].join(', ')
+/**
+ * "Chạy cùng lúc" (V670): form sửa đọc kèm auto_campaigns.parallel_run_enabled. DB chưa có cột (hoặc đã gỡ V670) thì PostgREST báo 42703:
+ * đọc lại như cũ và không thử cột này trong 10 phút, để form vẫn mở được. Đường chạy chiến dịch đọc bằng CAMPAIGN_SELECT (`*`) nên không cần.
+ */
+const CAMPAIGN_CONFIG_PARALLEL_SELECT = `${CAMPAIGN_CONFIG_SELECT}, parallel_run_enabled`
+const PARALLEL_RUN_COLUMN_RECHECK_MS = 10 * 60_000
+let parallelRunColumnMissingUntil = 0
+function isMissingParallelRunColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && error.code === '42703' && /parallel_run_enabled/.test(String(error.message || ''))
+}
 const CAMPAIGN_LIST_ITEM_SELECT = [
   'id',
   'name',
@@ -290,6 +300,7 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'scheduleWeekDays',
   'continueNextDay',
   'refreshData',
+  'parallelRunEnabled',
   'content',
   'extraSettings',
   'images'
@@ -1243,13 +1254,19 @@ export async function getCampaign(id: number): Promise<Campaign | null> {
 
 export async function getCampaignConfig(id: number): Promise<CampaignConfig | null> {
   const u = requireCurrentUser()
-  const { data, error } = await client()
+  const readConfig = (select: string) => client()
     .from('auto_campaigns')
-    .select(CAMPAIGN_CONFIG_SELECT)
+    .select(select)
     .eq('id', id)
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .maybeSingle()
+  const withParallelRun = Date.now() >= parallelRunColumnMissingUntil
+  let { data, error } = await readConfig(withParallelRun ? CAMPAIGN_CONFIG_PARALLEL_SELECT : CAMPAIGN_CONFIG_SELECT)
+  if (withParallelRun && isMissingParallelRunColumn(error)) {
+    parallelRunColumnMissingUntil = Date.now() + PARALLEL_RUN_COLUMN_RECHECK_MS
+    ;({ data, error } = await readConfig(CAMPAIGN_CONFIG_SELECT))
+  }
 
   if (error) throw new Error(`Failed to load campaign configuration: ${error.message}`)
   if (!data) return null
@@ -2189,6 +2206,8 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     schedule_week_days: isSmsCampaign ? null : (campaign.scheduleWeekDays || null),
     continue_next_day: isSmsCampaign ? true : (campaign.continueNextDay ?? false),
     refresh_data: isSmsCampaign ? true : (campaign.refreshData ?? false),
+    // "Chạy cùng lúc" (V670): chỉ gửi khi khách tích (form chỉ hiện ô khi loại được bật, tức DB đã có cột); không tích thì để mặc định false.
+    ...(campaign.parallelRunEnabled === true ? { parallel_run_enabled: true } : {}),
     content: campaign.content || '',
     extra_settings: extraSettings,
     images: campaign.images || [],
@@ -2481,6 +2500,8 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
   if (updates.scheduleWeekDays !== undefined) payload.schedule_week_days = isSmsCampaign ? null : updates.scheduleWeekDays
   if (updates.continueNextDay !== undefined) payload.continue_next_day = isSmsCampaign ? true : updates.continueNextDay
   if (updates.refreshData !== undefined) payload.refresh_data = isSmsCampaign ? true : updates.refreshData
+  // "Chạy cùng lúc" (V670): form chỉ gửi khi ô đang hiện (loại được bật, DB đã có cột).
+  if (updates.parallelRunEnabled !== undefined) payload.parallel_run_enabled = updates.parallelRunEnabled === true
   if (updates.content !== undefined) payload.content = updates.content
   if (updates.extraSettings !== undefined) {
     const entitlements = await loadCurrentUserEffectiveEntitlements()
@@ -2825,6 +2846,8 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       schedule_week_days: origCamp.schedule_week_days,
       continue_next_day: origCamp.continue_next_day,
       refresh_data: origCamp.refresh_data,
+      // "Chạy cùng lúc" (V670): bản gốc đọc bằng `*`; chỉ chép khi đã tích, để DB chưa có cột vẫn nhân bản được.
+      ...(origCamp.parallel_run_enabled === true ? { parallel_run_enabled: true } : {}),
       content: origCamp.content,
       extra_settings: sanitizeClonedCampaignExtraSettings(origCamp.action_id, origCamp.extra_settings),
       images: origCamp.images,

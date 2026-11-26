@@ -178,6 +178,7 @@ import {
   CAMPAIGN_REPEAT_DEFAULTS, CAMPAIGN_REPEAT_EVERY_LIMITS, CAMPAIGN_REPEAT_MAX_RUNS, CAMPAIGN_REPEAT_MIN_RUNS, CAMPAIGN_REPEAT_UNIT_LABELS,
   campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
 } from '../../../../shared/campaignRepeat'
+import { CAMPAIGN_PARALLEL_RUN_HINT, CAMPAIGN_PARALLEL_RUN_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
 import { campaignRepeatFromLegacyRerun } from '../../../../shared/campaignRepeatDesktop'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
@@ -1945,6 +1946,8 @@ export default function CampaignAgentFormModal({
       ? false
       : (campaign?.continueNextDay ?? true),
     refreshData: campaign?.refreshData ?? true,
+    // "Chạy cùng lúc" (V670): ô chỉ hiện khi loại được akaBiz bật và tổ chức bật engine v2 (canShowCampaignParallelRun).
+    parallelRunEnabled: campaign?.parallelRunEnabled === true,
     sleepBetweenActions: initialSleepBetweenActions,
     multiDailyTimeSlotsEnabled: campaign?.extraSettings?.multiDailyTimeSlotsEnabled ?? false,
     multiDailyTimeSlots: normalizeDailyTimeSlotsText(campaign?.extraSettings?.multiDailyTimeSlots),
@@ -2949,6 +2952,8 @@ export default function CampaignAgentFormModal({
   const runsAsPage = supportsRunAsPage && formData.runAsPage === true
   const requiresSingleAccount = selectedCampaignAction?.allowMultipleAccounts === false || runsAsPage
   const allowsSecondaryAccount = selectedCampaignAction?.allowSecondaryAccount === true && !runsAsPage
+  // "Chạy cùng lúc" (V670): ô ở phần Lịch chạy; không hiện thì không gửi gì (chiến dịch chạy lần lượt như trước).
+  const showParallelRun = canShowCampaignParallelRun({ allowParallelRun: selectedCampaignAction?.allowParallelRun, engineV2: authUser?.campaignEngineV2 })
   const previousPageAccountIds = useRef(formData.accountIds.join(','))
   useEffect(() => {
     const accountKey = formData.accountIds.join(',')
@@ -6585,6 +6590,7 @@ export default function CampaignAgentFormModal({
             : (isZaloMessageBirthdayCampaign || isZaloMessageFriendRecommendationCampaign || isZaloCancelSentFriendRequestCampaign)
             ? true
             : (isMobileManagedSmsCampaign ? true : (isZaloMessageGroupRealtimeCampaign ? false : formData.refreshData)),
+          ...(showParallelRun ? { parallelRunEnabled: formData.parallelRunEnabled === true } : {}),
           content: contentForSave,
           extraSettings: {
             facebookRestBrowse: canUseFacebookRestBrowse ? { ...formData.facebookRestBrowse } : undefined,
@@ -18135,6 +18141,20 @@ export default function CampaignAgentFormModal({
                         />
                         <span>Dữ liệu sẽ được làm mới lại khi chạy hết data <span className="schedule-hint-inline">(Mặc định là chạy hết sẽ hoàn thành chiến dịch)</span></span>
                       </label>
+                    </div>
+                  )}
+
+                  {showParallelRun && (
+                    <div className="stepper-form-group">
+                      <label className="schedule-checkbox-label schedule-option-label">
+                        <input
+                          type="checkbox"
+                          checked={formData.parallelRunEnabled === true}
+                          onChange={e => setFormData(p => ({ ...p, parallelRunEnabled: e.target.checked }))}
+                        />
+                        <span>{CAMPAIGN_PARALLEL_RUN_LABEL}</span>
+                      </label>
+                      <p className="schedule-hint">{CAMPAIGN_PARALLEL_RUN_HINT}</p>
                     </div>
                   )}
 

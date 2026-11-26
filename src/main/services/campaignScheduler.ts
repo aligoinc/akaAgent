@@ -130,6 +130,11 @@ import { mapCampaignInputDataFromDB } from '../data/mappers'
 import type { ConfigIssue, DeliveryState, Phase, PrepareTargetsApi, PrepareTargetsResult, RawOutcome, ReportSuccess, Signal, UnitResult, WorkflowStop,
   WorkflowTargetApi, WorkflowTargetEnd } from '../../../packages/campaign-engine/src/index'
 import { FACEBOOK_FIND_DATA_RESULT_NAME, facebookDefaultActionCodes, facebookResultName } from '../../../packages/campaign-engine/src/facebook/registry'
+import { PARALLEL_RUN_MAIN_LANE, campaignRunLane } from '../../../packages/campaign-engine/src/parallelRun'
+import { zaloClaimActionCodes } from '../../../packages/campaign-engine/src/zalo/registry'
+import { campaignParallelWaitReasonText } from '../../shared/campaignParallelRun'
+import { getAccountActionName } from '../../shared/campaignActionDescriptors'
+import { readCampaignParallelWait } from '../data/repositories/campaignPendingReasonRepository'
 import {
   CampaignMediaResolveError, campaignMediaErrorCode, cleanupCampaignMediaTempFiles, downloadCampaignMediaUrl, getCampaignMediaName,
   getMediaDownloadExtension, hasDeclaredMediaSource, resolveCampaignMediaSource
@@ -914,6 +919,9 @@ const SERVER_ZALO_SLEEP_CONTROL_POLL_MS = 15_000
 // retryAfter elapses, at most this long later. Editing the campaign or its
 // account group settings invalidates the skip at the next tick.
 const PRECLAIM_LIMIT_RECHECK_MAX_MS = 5 * 60_000
+/** "Chạy cùng lúc" (V670): danh sách loại chiến dịch akaBiz bật, nhớ 5 phút; đọc lỗi thì thử lại sau 1 phút. */
+const PARALLEL_RUN_ACTIONS_TTL_MS = 5 * 60_000
+const PARALLEL_RUN_ACTIONS_RETRY_MS = 60_000
 // enable_due_auto_account_actions() is a global UPDATE (no staff filter; the
 // Server runs it as service_role). One call per process per 30s is enough: the
 // limit check already treats a past date_enable as enabled.
@@ -1028,6 +1036,18 @@ export class CampaignScheduler {
   private runtimeCampaignByAccount = new Map<number, number>()
   private lastTickAccounts: AutoAccount[] = []
   private activeZaloAccountRuns = new Set<number>()
+  /**
+   * "Chạy cùng lúc" (V670): hàng đợi làn riêng đang chạy, khoá `${accountId}:${lane}` (lane = mã loại chiến dịch). Làn chính của tài khoản
+   * vẫn là activeAccountRuns như trước; chỉ chiến dịch có tích mà loại được akaBiz bật mới vào làn riêng. Không ai tích thì luôn rỗng.
+   */
+  private readonly activeLaneRuns = new Map<string, { accountId: number; lane: string; campaignId: number | null }>()
+  /** "Chạy cùng lúc": tài khoản đang chạy một chiến dịch bằng bộ cũ ở hàng đợi chính (claim của làn riêng sẽ trả legacy_busy). */
+  private readonly legacyRunAccounts = new Set<number>()
+  /** Chiến dịch được chia vào làn riêng ở lượt quét gần nhất (nút "Lý do đang chờ" không coi lượt ở làn khác là bận). */
+  private readonly parallelLaneCampaigns = new Map<number, { accountId: number; lane: string; at: number }>()
+  /** Loại chiến dịch akaBiz bật "Chạy cùng lúc": chỉ đọc khi có chiến dịch đến hạn đã tích ô. */
+  private parallelRunActions: { ids: ReadonlySet<string>; until: number } | null = null
+  private parallelRunActionsRead: Promise<ReadonlySet<string>> | null = null
   private externalAccountRuns = new Map<number, string>()
   private activeV2Aborts = new Map<number, AbortController>()
   private activeFacebookRestBrowses = new Set<number>()
@@ -1262,7 +1282,7 @@ export class CampaignScheduler {
     const isRemote = (account: AutoAccount) => account.flatformType === 'sms'
       || account.flatformType === 'zalo' && account.isZaloServer
     return {
-      busyReason: account => {
+      busyReason: (account, options) => {
         if (this.isAccountStartupPending?.(account)) return 'Đang chờ kiểm tra hoặc khôi phục đăng nhập cho tài khoản.'
         if (this.hasFailedAccountRun(account.id)) return 'Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.'
         const operation = accountOperationRegistry.peek(account.id, getCurrentUser()?.staffId ?? 0)
@@ -1275,8 +1295,37 @@ export class CampaignScheduler {
         if (account.flatformType === 'facebook' && this.webEnrichment?.isActive(account.id)) {
           return 'Tài khoản đang bận làm giàu lịch sử Web. Chiến dịch này đang chờ đến lượt.'
         }
-        return this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)
+        // "Chạy cùng lúc" (V670): chiến dịch ở làn riêng không chờ hàng đợi chính của tài khoản (chỉ chờ cùng loại / chung thao tác).
+        const mainBusy = options?.parallelLane === true ? false : this.activeAccountRuns.has(account.id)
+        return mainBusy || this.externalAccountRuns.has(account.id)
           ? 'Tài khoản đang bận, chưa thể chạy chiến dịch.' : null
+      },
+      parallelRun: (account, campaign) => {
+        const lane = this.parallelLaneCampaigns.get(campaign.id)
+        const laneCampaignIds: number[] = []
+        for (const run of this.activeLaneRuns.values()) {
+          if (run.accountId === account.id && run.campaignId != null && run.campaignId !== campaign.id) laneCampaignIds.push(run.campaignId)
+        }
+        return {
+          lane: !!lane && lane.accountId === account.id && Date.now() - lane.at <= ENGINE_OBSERVATION_TTL_MS,
+          accountHasLaneRun: this.hasActiveLaneRun(account.id),
+          laneCampaignIds
+        }
+      },
+      parallelRunReason: async (account, campaign, readSignal) => {
+        // Chỉ hỏi DB khi tài khoản có làn riêng đang chạy trên máy này hoặc chính chiến dịch ở làn riêng: không ai tích thì không đổi gì.
+        const lane = this.parallelLaneCampaigns.get(campaign.id)
+        if (!this.hasActiveLaneRun(account.id) && !(lane && lane.accountId === account.id)) return null
+        // Mã thao tác đúng như claim của lõi (ví dụ "Thêm thành viên" khai thêm Tìm SĐT), để DB giải thích được lần chờ chung thao tác.
+        const actionCodes = account.flatformType === 'zalo' ? zaloClaimActionCodes({
+          id: campaign.id, actionId: campaign.actionId, accountId: campaign.accountId, content: campaign.content ?? '',
+          extraSettings: (campaign.extraSettings ?? {}) as Record<string, unknown>, images: (campaign.images ?? []) as readonly unknown[],
+          dataTargetSourceMode: campaign.dataTargetSourceMode ?? null
+        }) : []
+        const wait = await readCampaignParallelWait(campaign.id, readSignal, actionCodes)
+        if (!wait) return null
+        return campaignParallelWaitReasonText({ reason: wait.reason, campaignName: wait.campaignName,
+          actionNames: wait.actionCodes.map(code => getAccountActionName(code)) })
       },
       readinessReason: (account, campaign) => {
         if (isRemote(account)) return null
@@ -1442,11 +1491,18 @@ export class CampaignScheduler {
 
   /** Ảnh chụp chỉ đọc RAM cho heartbeat Desktop (v461); không đọc DB. */
   getRuntimeSnapshotSource(): DesktopRuntimeSnapshotSource {
+    const activeAccountIds = [...this.activeAccountRuns]
+    const runningCampaigns = new Map(this.runtimeCampaignByAccount)
+    // "Chạy cùng lúc" (V670): tài khoản chỉ có làn riêng đang chạy vẫn là "đang chạy"; chiến dịch của hàng đợi chính được ưu tiên hiển thị.
+    for (const run of this.activeLaneRuns.values()) {
+      if (!activeAccountIds.includes(run.accountId)) activeAccountIds.push(run.accountId)
+      if (run.campaignId != null && !runningCampaigns.has(run.accountId)) runningCampaigns.set(run.accountId, run.campaignId)
+    }
     return {
       running: this.running,
       accounts: this.lastTickAccounts,
-      activeAccountIds: [...this.activeAccountRuns],
-      runningCampaigns: new Map(this.runtimeCampaignByAccount),
+      activeAccountIds,
+      runningCampaigns,
       isBrowserTabOpen: accountId => this.webviewRegistry.isRegistered(accountId)
     }
   }
@@ -1641,7 +1697,7 @@ export class CampaignScheduler {
 
   async waitForZaloIdle(timeoutMs = 30_000): Promise<boolean> {
     const deadline = Date.now() + Math.max(0, timeoutMs)
-    while (this.activeZaloAccountRuns.size > 0 || this.externalAccountRuns.size > 0) {
+    while (this.activeZaloAccountRuns.size > 0 || this.externalAccountRuns.size > 0 || this.activeLaneRuns.size > 0) {
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, 50))
     }
@@ -1650,7 +1706,8 @@ export class CampaignScheduler {
 
   tryReserveExternalAccount(accountId: number, reservationToken = randomUUID()): boolean {
     this.webEnrichment?.preempt(accountId)
-    if (accountOperationRegistry.has(accountId) || this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)) return false
+    if (accountOperationRegistry.has(accountId) || this.activeAccountRuns.has(accountId) || this.externalAccountRuns.has(accountId) || this.hasFailedAccountRun(accountId)
+      || this.hasActiveLaneRun(accountId)) return false
     this.externalAccountRuns.set(accountId, reservationToken)
     return true
   }
@@ -1661,7 +1718,7 @@ export class CampaignScheduler {
 
   async waitForIdle(timeoutMs = 30_000): Promise<boolean> {
     const deadline = Date.now() + Math.max(0, timeoutMs)
-    while (this.dispatching || this.activeAccountRuns.size > 0) {
+    while (this.dispatching || this.activeAccountRuns.size > 0 || this.activeLaneRuns.size > 0) {
       if (Date.now() >= deadline) return false
       await new Promise(resolve => setTimeout(resolve, 50))
     }
@@ -2027,16 +2084,25 @@ export class CampaignScheduler {
         }
         if (!this.running) break
 
+        // "Chạy cùng lúc" (V670): chiến dịch có tích mà loại được bật chạy ở làn riêng, cạnh hàng đợi chính. Không chiến dịch nào tích thì
+        // không đọc gì và `campaigns` giữ nguyên, hàng đợi chính chạy đúng như trước.
+        const parallelLanes = await this.takeParallelRunLanes(account, campaigns)
+        if (parallelLanes.size > 0) await this.dispatchParallelRunLanes(account, parallelLanes, accountClock.dbNow)
+        if (!this.running) break
+
         if (this.isAccountStartupPending?.(account) || accountOperationRegistry.has(account.id)
           || this.activeAccountRuns.has(account.id) || this.externalAccountRuns.has(account.id)
           || this.webEnrichment?.isActive(account.id)) {
           continue
         }
 
-        if (account.status !== 'chờ xử lý' || account.loginStatus !== 'đã đăng nhập') {
+        // "Chạy cùng lúc" (V670): tài khoản "đang chạy" vì làn riêng của chính máy này vẫn nhận chiến dịch cho hàng đợi chính.
+        // Không có làn riêng thì statusReady = "chờ xử lý" như trước.
+        const statusReady = account.status === 'chờ xử lý' || account.status === 'đang chạy' && this.hasActiveLaneRun(account.id)
+        if (!statusReady || account.loginStatus !== 'đã đăng nhập') {
           // Q21: đến lịch quá lâu mà chưa chạy được thì nói ra (bộ cũ bỏ qua im lặng).
           const waitReason = account.status === 'tạm dừng' ? 'Tài khoản đang tạm dừng'
-            : account.status !== 'chờ xử lý' ? null
+            : !statusReady ? null
               : account.loginStatus === 'checkpoint' ? 'Tài khoản đang bị Facebook yêu cầu xác minh (checkpoint)'
                 : 'Tài khoản chưa đăng nhập'
           if (waitReason) await this.noteOverdueCampaignWaits(campaigns, waitReason, accountClock.dbNow)
@@ -2130,6 +2196,146 @@ export class CampaignScheduler {
         this.boundaryStoppedAccountQueues.delete(account.id)
         if (isZaloAccount) this.activeZaloAccountRuns.delete(account.id)
       })
+  }
+
+  /** "Chạy cùng lúc" (V670): tài khoản có hàng đợi làn riêng đang chạy trên máy này. */
+  private hasActiveLaneRun(accountId: number): boolean {
+    if (this.activeLaneRuns.size === 0) return false
+    for (const run of this.activeLaneRuns.values()) if (run.accountId === accountId) return true
+    return false
+  }
+
+  /** "Chạy cùng lúc": loại chiến dịch akaBiz bật allow_parallel_run (DB chưa có cột / đọc lỗi thì không loại nào). */
+  private loadParallelRunActionIds(): Promise<ReadonlySet<string>> {
+    const cached = this.parallelRunActions
+    if (cached && Date.now() < cached.until) return Promise.resolve(cached.ids)
+    if (!this.parallelRunActionsRead) {
+      this.parallelRunActionsRead = Promise.resolve()
+        .then(() => this.supabase.listParallelRunActionIds())
+        .then(ids => {
+          const set: ReadonlySet<string> = new Set(ids)
+          this.parallelRunActions = { ids: set, until: Date.now() + PARALLEL_RUN_ACTIONS_TTL_MS }
+          return set
+        }, error => {
+          console.warn('[Scheduler] parallel-run campaign types unavailable:', error)
+          const empty: ReadonlySet<string> = new Set()
+          this.parallelRunActions = { ids: empty, until: Date.now() + PARALLEL_RUN_ACTIONS_RETRY_MS }
+          return empty
+        })
+        .finally(() => { this.parallelRunActionsRead = null })
+    }
+    return this.parallelRunActionsRead
+  }
+
+  /**
+   * "Chạy cùng lúc" (V670): tách khỏi hàng đợi chính các chiến dịch có tích mà loại được akaBiz bật và chạy bằng engine v2 trên máy này (tài
+   * khoản Zalo QR / trình duyệt). Không có chiến dịch nào tích thì không đọc gì, trả Map rỗng và `campaigns` giữ nguyên như trước.
+   * Hàm nhận lượt của DB mới quyết định làn thật; chia ở đây chỉ để các làn chạy song song.
+   */
+  private async takeParallelRunLanes(account: AutoAccount, campaigns: Campaign[]): Promise<Map<string, Campaign[]>> {
+    const lanes = new Map<string, Campaign[]>()
+    if (this.runtimeTarget !== 'desktop' || !this.engineRunner || !campaigns.some(campaign => campaign.parallelRunEnabled === true)) return lanes
+    if (String(account.flatformType || '').trim().toLowerCase() !== 'zalo' || account.isZaloServer === true) return lanes
+    const allowed = await this.loadParallelRunActionIds()
+    if (this.parallelLaneCampaigns.size > 500) {
+      const cutoff = Date.now() - ENGINE_OBSERVATION_TTL_MS
+      for (const [id, entry] of this.parallelLaneCampaigns) if (entry.at < cutoff) this.parallelLaneCampaigns.delete(id)
+    }
+    const main: Campaign[] = []
+    for (const campaign of campaigns) {
+      const lane = campaignRunLane(campaign, allowed.has(campaign.actionId))
+      if (lane === PARALLEL_RUN_MAIN_LANE || !this.engineRunner.support(account, campaign).ok) {
+        this.parallelLaneCampaigns.delete(campaign.id)
+        main.push(campaign)
+        continue
+      }
+      this.parallelLaneCampaigns.set(campaign.id, { accountId: account.id, lane, at: Date.now() })
+      const list = lanes.get(lane)
+      if (list) list.push(campaign)
+      else lanes.set(lane, [campaign])
+    }
+    if (lanes.size > 0) campaigns.splice(0, campaigns.length, ...main)
+    return lanes
+  }
+
+  /** "Chạy cùng lúc": cùng điều kiện tài khoản như hàng đợi chính, rồi mở hàng đợi cho từng làn chưa chạy. */
+  private async dispatchParallelRunLanes(account: AutoAccount, lanes: Map<string, Campaign[]>, dbNow: string): Promise<void> {
+    if (!this.running || this.startWorkGate?.() === false || !this.shouldProcessAccountForRuntime(account)) return
+    if (this.isAccountStartupPending?.(account) || accountOperationRegistry.has(account.id) || this.externalAccountRuns.has(account.id)
+      || this.hasFailedAccountRun(account.id) || this.webEnrichment?.isActive(account.id)) return
+    // Bộ cũ đang chạy trên tài khoản: claim của làn riêng trả legacy_busy, chờ lượt quét sau (không hỏi DB).
+    if (this.legacyRunAccounts.has(account.id)) return
+    const laneCampaigns = [...lanes.values()].flat()
+    // Tài khoản "đang chạy" vì chính máy này đang chạy hàng đợi chính hoặc làn khác thì làn mới vẫn nhận được (DB xét chồng thao tác).
+    const statusReady = account.status === 'chờ xử lý'
+      || account.status === 'đang chạy' && (this.activeAccountRuns.has(account.id) || this.hasActiveLaneRun(account.id))
+    if (!statusReady || account.loginStatus !== 'đã đăng nhập') {
+      const waitReason = account.status === 'tạm dừng' ? 'Tài khoản đang tạm dừng' : !statusReady ? null : 'Tài khoản chưa đăng nhập'
+      if (waitReason) await this.noteOverdueCampaignWaits(laneCampaigns, waitReason, dbNow)
+      return
+    }
+    if (account.isZaloShowWeb && this.zaloRuntime && !this.zaloRuntime.hasVerifiedWebSession(account.id)) return
+    if (account.isZaloShowWeb === true && !this.webviewRegistry.isRegistered(account.id)) {
+      await this.noteOverdueCampaignWaits(laneCampaigns, 'Tài khoản chưa mở tab trình duyệt', dbNow)
+      return
+    }
+    for (const [lane, list] of lanes) this.startParallelLaneQueue(account, lane, list)
+  }
+
+  private startParallelLaneQueue(account: AutoAccount, lane: string, campaigns: Campaign[]): void {
+    const key = `${account.id}:${lane}`
+    if (this.activeLaneRuns.has(key)) return
+    this.activeLaneRuns.set(key, { accountId: account.id, lane, campaignId: null })
+    void this.runParallelLaneQueue(account, lane, campaigns, key)
+      .catch(err => {
+        console.error(`Scheduler parallel lane error for account ${account.id} (${lane}):`, err)
+        this.sendLog(`❌ Lỗi hàng đợi tài khoản "${account.name}": ${err instanceof Error ? err.message : String(err)}`)
+      })
+      .finally(() => {
+        this.activeLaneRuns.delete(key)
+      })
+  }
+
+  /** "Chạy cùng lúc": hàng đợi của một làn riêng, theo thứ tự lịch; chỉ engine v2 (chiến dịch không chạy được bằng engine ở hàng đợi chính). */
+  private async runParallelLaneQueue(account: AutoAccount, lane: string, campaigns: Campaign[], key: string): Promise<void> {
+    const engineRunner = this.engineRunner
+    if (!engineRunner) return
+    for (const campaign of campaigns) {
+      if (!this.running || this.startWorkGate?.() === false) break
+      const runtimeClock = await this.getReadyRuntimeClock()
+      if (!this.running || !this.shouldProcessAccountForRuntime(account)) break
+      if (this.shouldSkipPreclaimLimitedCampaign(account, campaign)) continue
+      const current = await this.supabase.getCampaign(campaign.id)
+      if (!this.running) break
+      const businessNow = new Date(runtimeClock.dbNow)
+      if (!Number.isFinite(businessNow.getTime())) throw new Error('DB runtime clock is invalid')
+      // Khách bỏ tích giữa chừng thì chiến dịch về hàng đợi chính ở lượt quét sau.
+      if (!current || current.parallelRunEnabled !== true || current.status !== 'chờ xử lý' || current.isDelete
+        || this.isRealtimeCampaignDisabledForRuntime(account, current) || !this.isWithinCampaignDispatchSchedule(current, businessNow)
+        || !engineRunner.support(account, current).ok) continue
+      const entry = this.activeLaneRuns.get(key)
+      if (entry) entry.campaignId = current.id
+      let result: Awaited<ReturnType<DesktopEngineRunner['run']>> = null
+      try {
+        result = await engineRunner.run(account, current, lane)
+        if (result?.reason === 'maintenance_required' && this.running) {
+          const retried = await this.retryEngineAfterMaintenance(account, current, businessNow, lane)
+          if (retried) result = retried
+        }
+      } finally {
+        if (entry && entry.campaignId === current.id) entry.campaignId = null
+      }
+      if (result) this.observeEngineResult(account, current, result)
+      if (result?.reason === 'wait') await this.rememberEngineWait(account, current, result)
+      if (result?.reason === 'concurrency_limit') {
+        const note = browserRunLimitWaitNote(account)
+        if (note && current.note !== note) await this.updateUnclaimedCampaignPreflightNote(current, note)
+        break
+      }
+      // Cùng loại / chung thao tác với chiến dịch đang chạy ở làn khác: chờ lượt quét sau, giữ thứ tự lịch của làn.
+      if (result?.reason === 'parallel_wait') break
+      if (!this.running) break
+    }
   }
 
   private readonly facebookRandomTurns = new Map<number, FacebookRandomTurn>()
@@ -2397,14 +2603,22 @@ export class CampaignScheduler {
           if (note && currentCampaign.note !== note) await this.updateUnclaimedCampaignPreflightNote(currentCampaign, note)
           break
         }
+        // "Chạy cùng lúc" (V670): chiến dịch phải chờ chiến dịch đang chạy ở làn riêng (cùng loại / chung thao tác): hàng đợi chính giữ thứ
+        // tự lịch, chờ lượt quét sau (anh chốt 26/11). Chỉ xảy ra khi có chiến dịch tích "Chạy cùng lúc" đang chạy.
+        if (engineResult?.reason === 'parallel_wait') break
         if (!this.running) break
         continue
       }
+      // "Chạy cùng lúc" (V670): làn riêng đang giữ tài khoản ("đang chạy") thì claim của bộ cũ từ chối (aka_agent_claim_campaign_runtime_checked
+      // đòi tài khoản "chờ xử lý"): bỏ qua, khỏi đọc DB; bộ cũ chạy khi các làn riêng xong. Không ai tích thì không có làn riêng nào.
+      if (this.hasActiveLaneRun(account.id)) continue
       this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
+      this.legacyRunAccounts.add(account.id)
       let outcome: Awaited<ReturnType<typeof this.executeCampaign>>
       try {
         outcome = await this.executeCampaign(account, currentCampaign)
       } finally {
+        this.legacyRunAccounts.delete(account.id)
         if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
       }
       if (outcome === 'concurrency_wait') break
@@ -4019,7 +4233,7 @@ export class CampaignScheduler {
   }
 
   /** Engine v2 trả maintenance_required: chạy lại bảo trì lịch ngày mới, đọc lại chiến dịch, còn đến lượt thì chạy lại một lần. */
-  private async retryEngineAfterMaintenance(account: AutoAccount, campaign: Campaign, businessNow: Date):
+  private async retryEngineAfterMaintenance(account: AutoAccount, campaign: Campaign, businessNow: Date, lane: string = PARALLEL_RUN_MAIN_LANE):
     Promise<Awaited<ReturnType<DesktopEngineRunner['run']>>> {
     const coordinator = this.maintenanceCoordinator
     if (!coordinator || !this.engineRunner) {
@@ -4038,7 +4252,7 @@ export class CampaignScheduler {
     const refreshed = await this.supabase.getCampaign(campaign.id)
     if (!refreshed || refreshed.isDelete || refreshed.status !== 'chờ xử lý' || !this.isWithinCampaignDispatchSchedule(refreshed, businessNow)
       || !this.engineRunner.support(account, refreshed).ok) return null
-    return this.engineRunner.run(account, refreshed)
+    return this.engineRunner.run(account, refreshed, lane)
   }
 
   /** campaign is this tick's pending row; any edit changes updated_at and ends the skip. */

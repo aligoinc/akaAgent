@@ -235,6 +235,11 @@ export type ClaimResponse =
   | { status: 'entitlement_denied' }
   /** Đã đủ số tài khoản Zalo (trình duyệt) chạy đồng thời của nhân viên. */
   | { status: 'concurrency_limit'; max?: number }
+  /**
+   * V670 "Chạy cùng lúc": làn khác của tài khoản đang chạy chiến dịch cùng loại (same_type) hoặc dùng chung thao tác (same_action).
+   * Không giữ lease, không ghi gì; nơi chạy bỏ qua như busy, lượt quét sau hỏi lại.
+   */
+  | { status: 'parallel_wait'; campaignId: number; campaignName?: string | null; reason: 'same_type' | 'same_action'; actionCodes?: string[] }
   | { status: 'app_access_denied'; reason: string }
 
 /** Một data của lô nhận cùng lúc (gửi dạng chia sẻ, aka_agent_engine_claim_batch_v1). */
