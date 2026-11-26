@@ -4,6 +4,9 @@
 DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
 **chưa merge, V654 đã apply akachat 17:54–17:59 VN 25/11 ([biên nhận](../migrations/snapshots/send-exclusion-multi-zalo-v654/apply-receipt.json), không apply lại), chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V654 đặt `off`**.
 **V657 (mục 12) đã apply akachat 04:18 VN 26/11** (p1 sổ `20261125211803`, p2 `20261125211830`, không apply lại; [biên nhận](../migrations/snapshots/send-exclusion-global-match-v657/apply-receipt.json)).
+**Sửa lỗi review 26/11 (mục 13, V666; viết là V663, đổi số chiều 26/11 vì phiên khác đã apply `migration_v663_engine_facebook_page_identity_wait`; sổ lúc đổi tới V665, không nhánh nào giữ V666) trên nhánh `claude/send-exclusion-review-fixes` của cả ba repo: chưa apply V666, chưa merge / deploy / build.**
+Review lần 2 cùng ngày (anh: "review lại, giả lập test hoặc test thêm", mục 13.6) đổi công tắc sang `campaign.send_exclusion_multi_zalo_v2`
+và thêm bước chặn lúc nhận lượt. Trước khi bật công tắc phải có V666 và đặt `send_exclusion.runtime` (mục 13.5).
 Chi tiết ở mục 10.
 Thiết kế: https://claude.ai/artifact/UztLQqYHAPrd4zwJxiG5tB (anh duyệt 25/11, dạng 2 tầng xếp chồng).
 Anh đồng ý các đề xuất ở vòng thiết kế 2 và yêu cầu thêm hai loại loại trừ: theo Nhóm data, theo chiến dịch đã gửi.
@@ -433,3 +436,114 @@ làm ở ChatApi nhánh `claude/festive-rubin-5zi6qe` (đồng bộ lõi bằng 
 đó cấu hình mới chạy trên Fly dừng an toàn bằng `send_exclusion_client_outdated` như trước. Lần đồng bộ này kéo theo phần lõi của quét
 data website (V618: kiểu `remainingDaily` / `remainingWindow`, `web/registry.ts`) đã có trên `dev_3` mà ChatApi chưa có; chỉ thêm kiểu
 và export, Fly không chạy loại chiến dịch web.
+
+## 13. Sửa lỗi review (V666, 26/11/2026; anh bảo "Sửa hết một lượt")
+
+Review 26/11 (3 hướng: SQL, Desktop / engine / Fly, Web / API / iOS; đối chiếu dữ liệu thật chỉ đọc) tìm ra 4 lỗi có thể gửi tin cho khách lẽ ra
+bị loại trừ và một loạt lỗi nhỏ. Bước A của V657 đang chạy thật thì đúng (86/86 data trong danh sách nhận ra, 0/160 loại nhầm, 617/617 người
+đã nhận tin ở chiến dịch trước nhận ra). Sửa trên nhánh `claude/send-exclusion-review-fixes` của akaAgent, akaAgentWebApp (nền `dev_1`) và
+akaAgentChatApi (nền `dev`); **V666 chưa apply, chưa merge / deploy / build**.
+
+### 13.1 Lỗi có thể gửi nhầm và cách sửa
+
+| Lỗi | Sửa |
+|---|---|
+| Bộ chạy cũ (Desktop / App Server ≤ 10.6, bộ cũ ChatApi) chỉ kiểm loại trừ khi có `groupId` / `blocklistIds`: cấu hình chỉ có Nhóm data / chiến dịch đã gửi thì không hỏi DB, gửi như không có loại trừ | Trigger lưu chiến dịch (V666) chỉ cho lưu cấu hình cần bản mới (`aka_agent_send_exclusion_needs_v2`) khi công tắc mở cho nhân viên VÀ phần mềm chạy tài khoản đủ bản mới: thiết lập mới `send_exclusion.runtime` (như `proxies.shared_runtime` của V511): `server` = true sau khi cài App Server mới và deploy ChatApi worker; `desktopMinVersion` = bản Desktop đầu tiên có bản sửa: máy đang gắn với tài khoản (`org_staff.aka_agent_device_fingerprint_hash`, phiên mới nhất) và máy khác đang mở app (phiên chưa kết thúc, thấy trong 1 ngày) phải từ bản đó. Không xét mọi phiên trong 30 ngày như V511: mỗi lần mở app là một dòng presence, 440 / 610 nhân viên còn phiên bản cũ trong 30 ngày sau khi cập nhật (đo 26/11); 7 ngày qua chỉ 2 nhân viên chạy 2 máy cùng lúc. V666 đặt `{"server":false,"desktopMinVersion":null}` = chưa ai lưu được cấu hình mới. Bộ cũ ChatApi chép lại luật mới nên luôn hỏi DB và dừng chiến dịch khi DB báo `send_exclusion_client_outdated` |
+| iOS / tab Web bản cũ lưu chiến dịch là mất `dataGroupIds` / `sentCampaignIds` (`projectSendExclusions` cũ chỉ giữ hai khoá cũ) | Trigger giữ giá trị đang lưu khi lựa chọn của một Zalo THIẾU hai khoá này; client mới luôn ghi đủ (mảng rỗng = bỏ chọn): `normalizeSelection` (Desktop / control-api), `projectSendExclusions` (campaign-core) |
+| Thẻ mới ở chế độ dùng chung chép lựa chọn của Zalo đứng đầu sang mọi Zalo: thêm Zalo mới vào đầu danh sách là mất sạch loại trừ | `sharedSelectionSource`: lựa chọn chung đã nhớ ngay trước khi đổi (chỉ khi cấu hình còn giữ nó), không có thì lựa chọn có loại trừ đầu tiên; chạy cả khi chỉ còn 1 Zalo (đổi hẳn Zalo) |
+| Chế độ riêng từng Zalo: chọn danh sách cho Zalo B gỡ luôn yêu cầu "chờ chọn danh sách" của Zalo A | Chỉ gỡ khi Zalo vừa chọn danh sách là Zalo đang chờ (chế độ dùng chung: Zalo đang chờ thuộc chiến dịch); cảnh báo hiện theo cùng điều kiện |
+
+### 13.2 Lỗi nhỏ đã sửa
+
+- Bộ chạy cũ bản mới: lỗi tạm thời của thao tác `remote` / `facts` giữ data ở hàng đợi, dừng lượt (chiến dịch về "chờ xử lý"), lượt sau thử lại; không dừng / hỏng cả chiến dịch, không tạm dừng data (review lần 2, mục 13.6).
+- Công tắc tắt mà chiến dịch đã có cấu hình mới: form kiểm lại bằng danh sách mới trước khi báo "không còn tồn tại".
+- Lưu nhóm gặp 409: đóng trình sửa, tải lại danh sách nhóm, báo. Form nhân bản (id 0) chọn được chiến dịch đã gửi. Xem trước nhận tới 1.000 danh sách.
+- `lists`: Nhóm data đã xoá của nhân viên khác trả `Nhóm data #<id>` / 0 (trước lộ tên, số thành viên); lọc trạng thái chiến dịch ở DB;
+  "đã gửi" đếm theo trạng thái thành công trên chỉ mục `idx_auto_campaign_details_automation_status` (index only; lệch 1 / 29.583 lượt so với
+  cách đếm theo `policy_snapshot`, đo 26/11 trên 200 chiến dịch), tới 100.001, 4 giây cho cả danh sách, quá thì `null` (cách cũ đọc bảng:
+  40 chiến dịch × ~180 kết quả đọc nguội 6,8 giây; cách mới ~1,7 giây).
+- `preview` với data tự nhập không dùng bảng đối chiếu SĐT ↔ Global ID (gộp lượt tra số của mọi tổ chức: dò được SĐT của người trong Nhóm data /
+  danh sách của mình). Data của chiến dịch đã lưu vẫn dùng như lúc chạy.
+- `save` (nhóm nhiều Zalo) kiểm công tắc ở DB; route Web v2 kiểm công tắc + loại tài khoản theo gói (WebApp).
+- Bước A: chiến dịch đã gửi tra một lượt cho mọi chiến dịch (trước: từng chiến dịch). (Bản đầu còn bỏ Nhóm data bị gỡ chia sẻ ngay giữa lượt; review lần 2 trả lại cách V657, mục 13.6.)
+- Job nạp bảng đối chiếu: chỉ upsert dòng mới hơn (trước: khoá lại ~5.000 dòng cũ mỗi phút, ~1,8 MB WAL / lượt), `_state.changes` đếm đúng.
+- `aka_agent_campaign_send_exclusion_runtime` khoá dòng chiến dịch `FOR KEY SHARE` (trước `FOR UPDATE`, chặn ghi log / nút tạm dừng).
+- `facts` gửi kèm Global ID (Desktop, engine) để "đã gửi trong N ngày" tính cả các Zalo ID cũ của cùng người.
+- Bản gỡ V657 p2 kiểm thân V657 trước khi thay (và từ chối khi còn V666); bản gỡ V654 từ chối khi còn V657 / V666.
+- Tóm tắt Web / iOS / Quy trình tính cả Nhóm data, chiến dịch đã gửi; iOS đọc danh sách của Zalo khác từ trang mới (WebApp).
+
+### 13.2a Câu cho khách (anh duyệt 26/11 qua hộp chọn)
+
+- Lưu bị chặn: "Máy tính đang đăng nhập tài khoản của bạn còn dùng akaAgent bản cũ nên chưa lưu được loại trừ này. Hãy cập nhật akaAgent trên
+  máy đó rồi lưu lại." / "Loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo chưa dùng được với tài khoản Zalo Server." / "Tài khoản
+  của bạn chưa dùng được loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo."
+- Bộ cũ ChatApi tạm dừng chiến dịch: "Loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo chưa chạy được với tài khoản này nên chiến
+  dịch đã tạm dừng."
+- Data không kiểm được: "Chưa kiểm tra được loại trừ gửi nên chưa gửi cho data này."
+- Lưu nhóm 409: "Chưa lưu được vì nhóm vừa được sửa ở nơi khác. Đã tải lại nhóm, hãy mở lại để sửa." / "Nhóm có thể đã được tạo ở lần lưu
+  trước nên đã tải lại danh sách nhóm. Hãy kiểm tra trước khi tạo lại."
+- Số khách đã gửi: "Đã gửi N khách", "100.000+", chưa đếm kịp: "Chưa đếm được số khách đã gửi" (hộp chọn) / "chưa đếm được số khách" (thẻ).
+- Web / iOS: "N mục loại trừ"; bước Xem lại iOS theo tên ("Chiến dịch đã gửi: <tên>, …", "Nhóm data: <tên>, …"); danh sách của Zalo khác
+  "<tên> (<tên Zalo>)"; lỗi tạm thời / quá giờ / nhóm có Zalo chưa quản lý được trên Web giữ câu WebApp đã viết.
+
+### 13.3 Không đổi (theo quyết định đã chốt)
+
+- Danh sách Zalo ID của chính Zalo đang gửi vẫn so theo Global ID (quyết định 3, 4 ở mục 12): người không có Global ID dùng được vẫn ra EXC02
+  (không gửi). Ghi nhận: ~19% dòng `zalo_users` có Global ID ghi sai (session [Tìm nguồn Global ID sai trong zalo_users] đang điều tra nguồn ghi
+  sai và đề xuất sửa `gid_ok`); số này quyết định bao nhiêu khách của chiến dịch "nhắn bạn bè + danh sách" kiểu cũ sẽ ngừng được gửi khi chạy
+  bản Desktop mới.
+- `page` (`syncedAt`) và `same_nick_accounts` không chậm: production có `idx_zalo_users_account_updated_at`, `idx_auto_accounts_zalo_account_id`.
+
+### 13.4 Kiểm thử
+
+- `PG_MODULE_DIR=<akaAgentChatApi> LC_ALL=C node scripts/send-exclusion-v666-smoke.cjs [--write-md5]`: 24/24 sau review lần 2 (cổng lưu, giữ khoá thiếu,
+  so khớp, xem trước, lists, save, job nạp không khoá lại dòng cũ, khoá FOR KEY SHARE, gỡ rồi apply lại). `--write-md5` ghi md5 thân V666 cho
+  bản gỡ, rồi `node scripts/build-v666-sql.cjs`.
+- Bộ V657 chạy trên V666: `SX_WITH_V666=1 … send-exclusion-v657-smoke.cjs` 21/21, `… send-exclusion-v657-fuzz.cjs --rounds 6 --seed 11..14` sạch.
+- Desktop: `send-exclusion-runtime-smoke.cjs` (thêm ca lỗi `remote`), `run-send-exclusion-card-ui-smoke.cjs` 13 nhóm (thêm: Zalo mới đứng đầu,
+  đổi hẳn Zalo, chờ chọn danh sách, 409, số "đã gửi" chưa đếm được / 100.000+), `campaign-outcome-engine-v504-smoke.cjs`, hai typecheck.
+
+### 13.5 Thứ tự đưa lên
+
+1. Apply V666 (ngoài giờ cao điểm; PostgREST nạp lại schema; file ~125 KB vì chép nguyên hai hàm nhận lượt: apply bằng
+   `supabase db query --linked -f` + dòng sổ, không qua công cụ apply của MCP). Không đổi gì cho khách: công tắc mới
+   `campaign.send_exclusion_multi_zalo_v2` chưa có dòng (= tắt), production chưa có cấu hình nào cần bản mới (đo 26/11: 0 / 14.294 lựa chọn).
+2. Deploy ChatApi `worker` có bản sửa (lõi gửi `ctx.sendExclusionRunner`); build + cài App Server mới; build + phát hành Desktop mới
+   (cả hai gửi header `x-aka-send-exclusion-runner`).
+3. Deploy API / Web (trường `sendExclusionMultiV2Audience`); phát hành iOS (anh chốt 26/11: không chờ iOS, xem 13.6).
+4. Đặt `send_exclusion.runtime`: `server` = true (sau bước 2), `desktopMinVersion` = bản Desktop đầu tiên có nhánh này. **Không đặt 10.7.0**:
+   10.7.0 đã lên máy khách (26/11: máy gắn với tài khoản của 17 nhân viên) nhưng chưa có các bản sửa bộ chạy ở đây.
+5. Bật công tắc mới `campaign.send_exclusion_multi_zalo_v2` `admin_akabiz` rồi `all`. Khoá cũ `campaign.send_exclusion_multi_zalo` giữ `off` mãi.
+
+### 13.6 Review lần 2 (26/11/2026; anh: "review lại, giả lập test hoặc test thêm để chắc chắn hơn đi")
+
+Ba agent review độc lập (SQL; Desktop / engine; Web / API / iOS / ChatApi) và thử trên dữ liệu thật bằng bản chép hàm (`pg_temp`, giao dịch
+rồi huỷ, không đổi gì production):
+
+- Cổng "máy đủ bản mới" chạy trên 610 nhân viên thật: khớp công thức đối chiếu viết riêng ở mọi nhân viên (3 nhân viên chưa gắn máy = chặn).
+  Cách cũ kiểu V511 (mọi phiên trong 30 ngày) sẽ chặn 592 / 610 với bản 10.6.0. 1 nhân viên có phiên bản `45.2.2` (bản chạy thử, số phiên bản
+  là của Electron): coi như đủ bản.
+- Hàm so khớp mới so với bản đang chạy: 769 lần so trên data thật của 18 nhân viên (data đã gửi, thành viên Nhóm data, data của chính chiến
+  dịch, SĐT lạ; tới 50 chiến dịch đã gửi), giống hệt từng kết quả; p95 17 ms so với 62 ms, chậm nhất 36 ms so với 88 ms (cả hai đã nạp bộ nhớ
+  đệm). Nhóm data riêng tư của người khác: bản đang chạy vẫn loại theo nhóm đó (14 / 18 ca), đúng là chỗ cần chặn ở bước lưu. SĐT có trong
+  nhiều data nhất toàn hệ thống: 316 dòng.
+- 14.294 lựa chọn loại trừ thật (10.016 chiến dịch) chỉ có hai dạng `{groupId, blocklistIds}`; không lựa chọn nào V666 chặn lưu.
+- Fuzz 10 hạt giống mới (20.000 data) + 1 hạt giống sau review lần 2 trên đúng thân hai hàm nhận lượt production: sạch.
+
+Phát hiện và cách sửa (cả ba repo, cùng nhánh):
+
+| Phát hiện | Mức | Sửa |
+|---|---|---|
+| Đổi máy sang bản cũ (<= 10.7.0) sau khi đã lưu cấu hình mới: bản cũ không kiểm lúc chạy, gửi không loại trừ | gửi nhầm | Anh chốt "Chặn lúc nhận lượt": `private.aka_agent_send_exclusion_claim_check` gọi từ hai hàm nhận lượt (bộ cũ: header `x-aka-send-exclusion-runner`; engine: `ctx.sendExclusionRunner`). Không báo mà lựa chọn cần bản mới thì chiến dịch tạm dừng, ghi chú anh duyệt: "akaAgent trên máy này là bản cũ nên chưa chạy được loại trừ theo Nhóm data, chiến dịch đã gửi hoặc nhiều Zalo. Hãy cập nhật akaAgent rồi bấm Tiếp tục." (Zalo Server: câu Server đã duyệt). Mọi bản app coi lý do lạ / `campaign_paused` là không nhận được lượt |
+| Desktop 10.7.0 / Web v144 đã có thẻ mới nhưng bỏ mảng rỗng khi lưu (trigger giữ lại giá trị cũ: khách bỏ chọn không được) và chưa có câu cho mã lỗi mới | khách không bỏ được loại trừ | Công tắc mới `campaign.send_exclusion_multi_zalo_v2` (bản cũ đọc khoá cũ, giữ tắt); API trả trường mới `sendExclusionMultiV2Audience`, không trả trường cũ |
+| Bộ chạy cũ: lỗi tạm thời của `remote` (bản đầu V666) đưa data về "tạm dừng" mãi; DB chậm cả lượt thì cả danh sách đứng | data đứng | Anh duyệt câu "Không thể kiểm tra loại trừ gửi; chiến dịch sẽ tự thử lại.": `SendExclusionCheckUnavailableError` (cả `facts`): data chưa nhận giữ nguyên, nhả lượt như bước kiểm gửi lặp; theo SĐT (đã tìm số) thì data về hàng đợi + dừng sau data (`resetInputToPending` + `stopAfterTarget`) |
+| Công tắc thiếu dòng / không phải object / thiếu audience: hàm trả NULL nên cổng coi như bật | cổng hở | `COALESCE(…, false)` |
+| Client mới luôn ghi `[]`, trigger so nguyên văn nên coi lựa chọn đã lưu kiểu cũ (không có hai khoá) là "đã đổi" và chạy lại cổng | chặn lưu oan | So bằng `aka_agent_send_exclusion_entry_norm` / `map_norm` (khoá thiếu = mảng rỗng) |
+| Nhóm data bị gỡ chia sẻ giữa lượt: bản đầu V666 thôi loại trừ ngay, lượt sau mới dừng chiến dịch | gửi nhầm (trong lượt) | Trả lại cách V657: vẫn loại trừ tới khi snapshot lượt sau báo `send_exclusion_data_group_not_found` |
+| Câu 409 trên thẻ (Desktop, Web) không tắt; mã lỗi lưu chưa có câu (`send_exclusion_group_not_found`, `blocklist_not_found`, `account_configuration_missing`) rơi vào câu chung; API không ghi log mã chưa có câu; tên ở màn duyệt iOS lỗi khi gộp quá 20 id; ghi chú tạm dừng trên Fly thêm "Lượt chiến dịch gặp lỗi:" | nhỏ | Câu 409 tắt khi mở lại hộp thoại hoặc tải lỗi; thêm câu đã có (bộ chạy) cho ba mã; API báo `replaced` để ghi log; iOS chia lượt 20 id; ChatApi dùng `customerNote` |
+
+Anh chốt không xử lý: app iOS bản đang có trên App Store (trước tính năng) nhân bản chiến dịch có loại trừ theo Nhóm data / chiến dịch đã gửi
+thì bản sao mất hai loại trừ đó (DB không biết lượt tạo nào là nhân bản); "cứ bật công tắc thôi, iOS rất ít người dùng".
+
+Còn lại (đã xét, không sửa): bộ cũ ChatApi (Fly) không chạy được cấu hình mới, chỉ tạm dừng (bộ cũ trên Fly 13/11: 0 / 4.079 chiến dịch);
+nhóm điều kiện sửa thành nhiều Zalo sau khi chiến dịch đã dùng nó thì bản cũ dừng ở bước nhận lượt (không gửi nhầm).
