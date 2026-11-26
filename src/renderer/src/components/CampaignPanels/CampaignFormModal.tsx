@@ -7042,16 +7042,22 @@ export default function CampaignFormModal({
       }
       try {
         if (sendExclusionMultiFeatureVisible) await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId)
-        else for (const id of zaloTagAccountIds) {
-          const selection = zaloSendExclusionsByAccountId[String(id)]
-          if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
-          const page = await window.electronAPI.listSendExclusionGroups(id)
-          if (selection.groupId) {
-            const group = page.groups.find(g => g.id === selection.groupId)
-            if (!group) throw new Error('Nhóm loại trừ không còn tồn tại. Hãy chọn lại.')
-            validateExclusionGroup(page.catalog, group)
+        else try {
+          for (const id of zaloTagAccountIds) {
+            const selection = zaloSendExclusionsByAccountId[String(id)]
+            if (!selection || (!selection.groupId && !selection.blocklistIds.length)) continue
+            const page = await window.electronAPI.listSendExclusionGroups(id)
+            if (selection.groupId) {
+              const group = page.groups.find(g => g.id === selection.groupId)
+              if (!group) throw new Error('Nhóm loại trừ không còn tồn tại. Hãy chọn lại.')
+              validateExclusionGroup(page.catalog, group)
+            }
+            if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
           }
-          if (selection.blocklistIds.some(listId => !page.blocklists.some(list => list.id === listId))) throw new Error('Danh sách loại trừ không còn tồn tại. Hãy chọn lại.')
+        } catch (legacyError) {
+          // V666: công tắc tắt mà chiến dịch đã có cấu hình mới (nhóm nhiều Zalo, danh sách của Zalo khác): danh sách bản cũ chỉ có nhóm /
+          // danh sách của đúng Zalo nên báo "không còn tồn tại" sai. Kiểm lại bằng danh sách mới (mọi Zalo của nhân viên) trước khi báo lỗi.
+          try { await verifySendExclusionsBeforeSave(zaloTagAccountIds, zaloSendExclusionsByAccountId) } catch { throw legacyError }
         }
       } catch (error) { showAlert(error instanceof Error ? error.message : 'Không thể xác minh loại trừ gửi.', 'error'); return }
     }
@@ -17653,7 +17659,7 @@ export default function CampaignFormModal({
 
             {canUseSendExclusions && sendExclusionMultiFeatureVisible && <CampaignSendExclusionsCard
               accounts={zaloTagAccountIds.map(id => ({id, name: accounts.find(a => a.id === id)?.name || String(id)}))}
-              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id ?? null}
+              value={zaloSendExclusionsByAccountId} onChange={setZaloSendExclusionsByAccountId} campaignId={campaign?.id || null}
               previewTargets={sendExclusionPreviewTargets}
               pendingBlocklistAccountId={zaloPendingBlocklistAccountId} onResolvePendingBlocklist={() => setZaloPendingBlocklistAccountId(null)}
               onEditing={setExclusionEditing} refreshKey={zaloFriendBlocklistsRevision}

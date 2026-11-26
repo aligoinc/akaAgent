@@ -14,6 +14,12 @@ function runtimeFixture(api,web=false){
  runtime.ensureApi=async id=>runtime.apiCache.get(id)?.api??webRuntime.entries.get(id)?.api
  return runtime
 }
+// Lớp lỗi / câu cấp module của bộ lập lịch (V666) lấy nguyên văn từ mã nguồn.
+{
+ const schedSrc=fs.readFileSync(path.join(root,'src/main/services/campaignScheduler.ts'),'utf8'),ast=ts.createSourceFile('s.ts',schedSrc,ts.ScriptTarget.Latest,true)
+ const pick=n=>ast.statements.find(st=>(ts.isClassDeclaration(st)&&st.name?.text===n)||(ts.isVariableStatement(st)&&st.declarationList.declarations.some(d=>d.name.getText(ast)===n))).getText(ast)
+ Object.assign(constants,new Function('getErrorMessage',compile(['ZaloSendExclusionError','SendExclusionCheckUnavailableError','SEND_EXCLUSION_RETRY_NOTE'].map(pick).join('\n'))+';return {ZaloSendExclusionError,SendExclusionCheckUnavailableError,SEND_EXCLUSION_RETRY_NOTE}')(e=>e instanceof Error?e.message:String(e)))
+}
 const Scheduler=harness('src/main/services/campaignScheduler.ts','CampaignScheduler',['gateSendExclusion','getSendExclusionLabels','preflightZaloMessageOptOut','gateResolvedPhoneMessageTarget'])
 const page=require('./fixtures/send-exclusion-ui-page.json')
 async function main(){
@@ -67,6 +73,44 @@ async function main(){
   }
  }
  console.log('PASS deleted tags: 35 real Desktop/Server preflight cases; existing matches still pause, missing/malformed reads stay unknown, one label read per target.')
+ // V666: lỗi tạm thời của thao tác 'remote' / 'facts': không tạm dừng data; data chưa nhận thì ném SendExclusionCheckUnavailableError (vòng
+ // chạy nhả lượt, lượt sau thử lại), data đã tìm SĐT thì đánh dấu sendExclusionRetry (về hàng đợi, dừng lượt). Đang dừng bộ chạy / mất lượt thì ném như cũ.
+ const delivery={id:0,accountId:100,name:'Đã gửi 7 ngày',matchMode:'or',revision:1,rules:[{fieldId:4,operatorId:5,value:7,isEnabled:true,sortOrder:0}]}
+ for(const actionId of contract.SEND_EXCLUSION_ACTIONS){
+  for(const scenario of [{name:'remote network error',stopping:false,claim:true,retry:true},{name:'facts network error',facts:true,stopping:false,claim:true,retry:true},
+   {name:'runtime stopping',stopping:true,claim:true,throws:/dừng/},{name:'claim lost',stopping:false,claim:false,throws:/fetch failed/}]){
+   const campaign={id:10,actionId,extraSettings:{enableMessage:true}},account={id:100},input={id:11,uid:'u1',phone:'0901234567',status:actionId==='zalo_message_phone'?'đang chạy':'chờ xử lý'},target={uid:'u1',globalId:'g1',raw:{isFr:1}},pauses=[]
+   const scheduler=new Scheduler()
+   let remoteCalls=0
+   Object.assign(scheduler,{
+    sendExclusionProfileErrors:new WeakMap(),sendExclusionLabels:new Map(),zaloRuntime:{},
+    sendExclusionRuns:new Map([[10,scenario.facts?{catalog:page.catalog,group:delivery,blocklistUids:[]}:{catalog:page.catalog,group:null,blocklistUids:[],version:2,remote:{groupName:null,blocks:[],blocklistIds:[9],dataGroups:[],campaigns:[]}}]]),
+    campaignRunBoundaries:new Map(scenario.claim?[[10,{runtimeClaimToken:'tok'}]]:[]),
+    supabase:{checkZaloMessageOptOut:async()=>({isOptedOut:false})},
+    sendExclusionRpc:async(_a,_c,operation,payload)=>{if(operation==='remote'||operation==='facts'){remoteCalls++;throw new Error('fetch failed')}assert.equal(operation,'pause');pauses.push(payload);return{changed:true}},
+    firstNonEmptyString:x=>x,normalizeZaloTargetFromInputData:()=>target,resolveZaloFriendMessageTarget:async()=>target,
+    recordZaloMessageOptOutWarnings:async()=>{},logZaloMessageOptOutBlocked:async()=>{},
+    throwIfZaloRuntimeStopping:()=>{if(scenario.stopping&&remoteCalls>0)throw new Error('Bộ chạy đang dừng')},
+    getZaloErrorCode:()=>undefined,getZaloErrorMessage:error=>error.message,getZaloPolicyByErrorCode:async()=>null,applyZaloPolicySideEffects:async()=>({stopAfterTarget:false}),
+    prepareZaloMessageOptOutLink:async()=>({})
+   })
+   const run=async()=>{let context=await scheduler.preflightZaloMessageOptOut(account,campaign,input);if(actionId==='zalo_message_phone')context=await scheduler.gateResolvedPhoneMessageTarget(account,campaign,input,target,context);return context}
+   const origWarn=console.warn;console.warn=()=>{}
+   try{
+    // Nhắn theo SĐT: mất lượt thì bọc thành ZaloSendExclusionError (vòng chạy ném sau khi ghi lượt tìm SĐT); đang dừng bộ chạy thì ném ngay.
+    if(scenario.throws&&(actionId!=='zalo_message_phone'||scenario.stopping)){await assert.rejects(run(),scenario.throws,`${actionId}: ${scenario.name}`);continue}
+    if(scenario.throws){const context=await run();assert.ok(context.sendExclusionError instanceof constants.ZaloSendExclusionError&&/fetch failed/.test(context.sendExclusionError.message),`${actionId}: ${scenario.name}`);assert.equal(context.sendExclusionRetry,undefined);continue}
+    if(actionId!=='zalo_message_phone'){
+     await assert.rejects(run(),e=>e instanceof constants.SendExclusionCheckUnavailableError&&e.message==='fetch failed',`${actionId}: ${scenario.name}`)
+     assert.equal(pauses.length,0,'không tạm dừng data');assert.equal(input.status,'chờ xử lý');continue
+    }
+    const context=await run()
+    assert.equal(context.blocked,true,`${actionId}: ${scenario.name}`);assert.equal(context.sendExclusionRetry,'Không thể kiểm tra loại trừ gửi; chiến dịch sẽ tự thử lại.',`${actionId}: ${scenario.name} ${JSON.stringify({blocked:context.blocked,err:context.sendExclusionError?.message,pauses})}`)
+    assert.equal(context.sendExclusionError,undefined);assert.equal(pauses.length,0,'không tạm dừng data')
+   }finally{console.warn=origWarn}
+  }
+ }
+ console.log('PASS remote / facts errors (V666): no data paused for all 7 actions; unclaimed data throws SendExclusionCheckUnavailableError (run released), phone path marks retry; stopping runtime / lost claim still throw.')
  let reads=0,writes=0
  const api={getLabels:async()=>{reads++;return{version:1,labelData:[{id:7,text:'VIP',conversations:['u1']},{id:8,text:'Mới',conversations:[]}]}},updateLabels:async payload=>{writes++;return{...payload,version:payload.version+1}}}
  const runtime=runtimeFixture(api)

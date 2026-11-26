@@ -809,9 +809,28 @@ END $post$;
 COMMIT;
 `
 
+/** md5(pg_get_functiondef) của 7 thân V657 đọc trên production 26/11/2026 (sau khi apply V657, trước V666). Bản gỡ kiểm trước khi thay:
+ * migration sau vá các hàm này (V666…) thì phải gỡ migration đó trước, không thì bản gỡ xoá mất bản vá mà không báo. */
+const V657_MD5 = {
+  snapshot: 'b83447fc79f1a71c1a77d8a91c72c1e9', facts: '907673fd7a7d58c594bdcae574fba6c2', remote: '997ce9ab8547815a8f302dd518349fa7',
+  runtime: 'b8fb3c31c939426a8e2ac2f9d60da7c7', engine: '3142ef991f8fe84ad2eb54c009bba444', v2: '54721efc19e365fc2a4181e62a7f596a',
+  claim: '8f574b0a75065ce562bc56f043f24967',
+}
 const P2_ROLLBACK = `-- Gỡ V657 phần 2: trả 7 hàm về đúng thân production 25/11 (kiểm md5), xoá 6 hàm private mới.
 BEGIN;
 SET LOCAL lock_timeout = '3s';
+DO $pre$
+DECLARE r record; v_md5 text;
+BEGIN
+ IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name='migration_v666_send_exclusion_review_fixes') THEN
+  RAISE EXCEPTION 'Gỡ V657 p2: gỡ V666 trước (rollback_v666_send_exclusion_review_fixes.sql)';
+ END IF;
+ FOR r IN SELECT * FROM (VALUES
+   ${REPLACED.map(k => `('${LIVE_MD5[k][0]}','${V657_MD5[k]}')`).join(',\n   ')}) v(sig, md5) LOOP
+  SELECT md5(pg_get_functiondef(to_regprocedure(r.sig))) INTO v_md5;
+  IF v_md5 IS DISTINCT FROM r.md5 THEN RAISE EXCEPTION 'Gỡ V657 p2: % không phải bản V657 (md5 %): gỡ migration sau đã vá hàm này trước', r.sig, v_md5; END IF;
+ END LOOP;
+END $pre$;
 ${REPLACED.map(k => OLD[k]).join('\n\n')}
 
 DROP FUNCTION private.aka_agent_send_exclusion_precheck(public.auto_campaigns,bigint,text,text);

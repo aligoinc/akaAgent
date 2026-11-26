@@ -7,7 +7,7 @@ const dir=mkdtempSync(join(tmpdir(),'send-exclusion-'))
 async function main(){
  buildSync({entryPoints:[resolve(__dirname,'../src/shared/campaignSendExclusion.ts')],outfile:join(dir,'core.cjs'),bundle:true,platform:'node',format:'cjs'})
  const core=require(join(dir,'core.cjs')), page=require('./fixtures/send-exclusion-ui-page.json')
- assert.equal(readFileSync(resolve(__dirname,'../src/shared/campaignSendExclusion.ts'),'utf8'),readFileSync(resolve(__dirname,'../../akaAgentChatApi/packages/runtime-protocol/src/campaignSendExclusion.ts'),'utf8'),'Both runtimes use the same contract')
+ assert.equal(readFileSync(resolve(__dirname,'../src/shared/campaignSendExclusion.ts'),'utf8'),readFileSync(resolve(process.env.CHAT_REPO||resolve(__dirname,'../../akaAgentChatApi'),'packages/runtime-protocol/src/campaignSendExclusion.ts'),'utf8'),'Both runtimes use the same contract')
  const {catalog}=page
  const field=code=>catalog.fields.find(f=>f.code===code),op=code=>catalog.operators.find(o=>o.code===code)
  const rule=(code,operator,value)=>({fieldId:field(code).id,operatorId:op(operator).id,value,isEnabled:true,sortOrder:0})
