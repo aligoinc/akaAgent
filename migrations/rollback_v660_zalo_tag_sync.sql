@@ -11,6 +11,8 @@ BEGIN
 END
 $cron$;
 DROP TRIGGER IF EXISTS trg_aka_agent_zalo_tag_sync_campaign ON public.auto_campaigns;
+DROP TRIGGER IF EXISTS trg_aka_agent_zalo_tag_sync_campaign_update ON public.auto_campaigns;
+DROP TRIGGER IF EXISTS trg_aka_agent_zalo_tag_sync_campaign_delete ON public.auto_campaigns;
 DROP FUNCTION IF EXISTS public.aka_agent_control_set_campaign_zalo_tag_auto_add(bigint, bigint, bigint, boolean);
 DROP FUNCTION IF EXISTS public.aka_agent_desktop_set_campaign_zalo_tag_auto_add(bigint, boolean);
 DROP FUNCTION IF EXISTS public.aka_agent_desktop_sync_zalo_tags(jsonb);
@@ -31,5 +33,5 @@ DROP TABLE IF EXISTS public.auto_zalo_tag_sync_resets, public.auto_campaign_zalo
 DELETE FROM public.auto_system_settings WHERE key LIKE 'zalo.tag_sync.%';
 DELETE FROM public.auto_outcome_signal_rules WHERE source = 'v660';
 DELETE FROM public.auto_outcome_policies WHERE source = 'v660';
-UPDATE public.auto_error SET is_active = false, is_delete = true WHERE error_code = 'err_engine_zalo_tag_not_friend';
+UPDATE public.auto_error SET is_active = false, is_delete = true WHERE error_code IN ('err_engine_zalo_tag_not_friend', 'err_engine_zalo_tag_friend_unavailable');
 COMMIT;

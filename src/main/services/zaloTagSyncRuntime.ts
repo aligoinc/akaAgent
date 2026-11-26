@@ -137,6 +137,7 @@ export class ZaloTagSyncRuntime {
       if (!snapshot) continue
       const result = await this.call([{ a: String(accountId), v: snapshot.version, tags: zaloTagSnapshotFromLabels(snapshot.labels) }])
       if (!result) continue
+      if (!result.enabled) { this.accounts = { ...this.accounts, enabled: false }; return }
       this.metrics.snapshots += 1
       this.metrics.added += result.added
       this.metrics.campaignRows += result.campaignRows

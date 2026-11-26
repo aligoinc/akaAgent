@@ -131,4 +131,9 @@ SELECT pg_temp.ok((SELECT public_code FROM auto_error WHERE error_code = 'err_en
 SELECT pg_temp.ok((SELECT quota_effect = 'no_count' AND target_streak_effect = 'ignore' AND detail_mode = 'write' AND detail_status_id = 51 AND campaign_effect = 'none'
   FROM auto_outcome_policies WHERE error_code = 'err_engine_zalo_tag_not_friend'), 'EXC04: Bỏ qua, không tính lượt, không cộng chuỗi');
 SELECT pg_temp.ok((SELECT error_code FROM auto_outcome_signal_rules WHERE pattern = 'zalo_tag_not_friend') = 'err_engine_zalo_tag_not_friend', 'luật tín hiệu engine');
+SELECT pg_temp.ok((SELECT public_code FROM auto_error WHERE error_code = 'err_engine_zalo_tag_friend_unavailable') = 'EXC05', 'có mã EXC05');
+SELECT pg_temp.ok((SELECT target_effect = 'requeue_after' AND requeue_after_minutes = 30 AND run_effect = 'continue' AND quota_effect = 'no_count'
+  AND target_streak_effect = 'ignore' FROM auto_outcome_policies WHERE error_code = 'err_engine_zalo_tag_friend_unavailable'),
+  'EXC05: hẹn chạy lại 30 phút, lượt chạy tiếp, không tính lượt, không cộng chuỗi');
+SELECT pg_temp.ok((SELECT error_code FROM auto_outcome_signal_rules WHERE pattern = 'zalo_tag_friend_unavailable') = 'err_engine_zalo_tag_friend_unavailable', 'luật tín hiệu EXC05');
 \echo ALL PASS

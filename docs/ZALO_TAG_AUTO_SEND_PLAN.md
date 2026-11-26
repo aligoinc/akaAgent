@@ -286,3 +286,51 @@ thật; chưa thử với Zalo thật.
 Thứ tự đưa lên: apply V660 (buổi tối, kiểm sổ trước: lúc viết sổ production tới V658, V659 đã có nhánh khác giữ) → ChatApi
 deploy `api` rồi `zalo_runtime` rồi `worker` → deploy Web → build Desktop / App Server → đặt `zalo.tag_sync.enabled` = `true`
 (có thể giới hạn `organization_ids` cho tổ chức 1 trước).
+
+## 9. Kiểm thử lặp và sửa (26/11/2026)
+
+Anh yêu cầu: "Kiểm thử và cải tiến … lặp cho đến khi ít nhất 3 vòng không còn vấn đề". Vẫn chưa apply / deploy / build gì.
+
+**Bộ kiểm** (`scripts/zalo-tag-sync/`, một vòng: `CHAT_REPO=<akaAgentChatApi> bash scripts/zalo-tag-sync/fuzz-round.sh <seed> [<pool.json>]`):
+
+| Bộ | Kiểm gì |
+| --- | --- |
+| `fuzz-loop.cjs` | V660 trên Postgres cục bộ, so từng câu trả lời và trạng thái DB với một mô hình JS viết lại theo đặc tả. 80 kịch bản × 140 bước mỗi vòng. Thao tác ngẫu nhiên: gắn / gỡ / tạo / xoá tag, Desktop / App Server / Fly báo, công tắc, sửa / xoá / đổi loại chiến dịch, tua thời gian, cài đặt, tài khoản đổi. Dữ liệu sai lệch cố ý: mã sai kiểu, trùng, rỗng, quá dài, lô quá 200 mục, hai danh sách một lần, chiến dịch của nhân viên khác, nhân viên hết quyền. Có trigger chép từ production (`fuzz-fixture.sql`: quyền truy cập, chủ sở hữu Desktop, `completed_at`). Đếm độ phủ 21 nhánh, thiếu nhánh nào thì tính là lỗi. Thêm một lượt chạy đồng thời: 2 tiến trình cùng báo một tài khoản 6.000 cặp tag-người, sửa chiến dịch, giữ khoá như bộ chạy. |
+| `fly-tag-sync-fuzz.cjs` | Phần đọc tag trên Fly (ChatApi `tagSync.ts`) ghép với luật nhận của DB. So với "sự thật": được so khi và chỉ khi mọi lần tag đổi đều được thấy ở lần đọc cách lần trước không quá cửa sổ. 3.000 kết nối mỗi vòng. |
+| `runtime-fuzz.cjs` | Bộ hỏi tag của Desktop / App Server (`zaloTagSyncRuntime.ts`) với Zalo và DB giả lỗi ngẫu nhiên. 7 tính chất: không ném lỗi, ≤ 200 mục mỗi lần, danh sách khớp lần đọc, chỉ gửi khi DB xin, ngừng khi DB tắt hoặc từ chối, không lỗi thì không chỉ lấy mốc. |
+| `engine-friend-check-smoke.cjs` | Bước kiểm bạn bè của lõi engine. Thêm 3.000 tổ hợp ngẫu nhiên (khoá dòng, UID, Zalo trả đúng / sai / rỗng / lỗi / treo, lượt bị huỷ). |
+| WebApp `campaign-core/src/zaloTagAutoAdd.test.ts` | Form Web: 2.000 tổ hợp cài đặt. |
+
+**Dữ liệu:** tag thật trên production lấy chỉ đọc. Mã người được băm thành số, giữ tiền tố "g" của nhóm, tên tag bỏ.
+- Lượt đầu: 85 tài khoản đang có chiến dịch theo tag (832 tag, 98.406 người trong tag, lớn nhất 3.264 người một tag).
+- Mỗi vòng thêm 60 tài khoản có tag, chọn ngẫu nhiên khác nhau (vòng 2: 30.343 người; vòng 3: 23.248; vòng 4: 52.020).
+- Tệp nằm ngoài repo, không commit.
+
+**Tìm ra và đã sửa:**
+
+1. DB coi ô bật là bật cả khi giá trị là chữ `"true"` / `"TRUE"`, còn Desktop / Web / iOS chỉ nhận `true`. Khi đó DB vẫn tự thêm người nhưng giao diện hiện ô tắt và không có công tắc Dừng. Nay DB chỉ nhận giá trị JSON `true`, ở cả trigger lẫn công tắc.
+2. Một chiến dịch lỗi làm hỏng cả lượt báo của tài khoản. Trigger quyền production chặn mở lại chiến dịch "hoàn thành" khi nhân viên hết gói, nên cả lượt rollback. Sổ tag của tài khoản đứng yên mãi, và mọi chiến dịch khác của tài khoản không nhận ai. Nay mỗi chiến dịch chạy trong một khối riêng: lỗi cố định chỉ bỏ qua chiến dịch đó. Lỗi tạm thời (chờ khoá, khoá chéo, bị huỷ) vẫn dừng cả lượt, để lượt sau so lại và thêm đủ.
+3. Chiến dịch của nhân viên / tổ chức khác trỏ vào tài khoản (dữ liệu sai lệch, tài khoản đã chuyển người) vẫn được thêm người từ tag của tài khoản. Trên Desktop, trường hợp này còn làm cả lượt lỗi vì trigger chủ sở hữu chặn. Nay chỉ thêm vào chiến dịch của đúng nhân viên và tổ chức đang sở hữu tài khoản.
+4. Đổi loại chiến dịch khỏi "Nhắn tin bạn bè", hoặc xoá hẳn dòng chiến dịch, thì trigger không chạy. Dòng "đang tự thêm" còn treo và tài khoản vẫn bị hỏi tag mãi. Nay có 3 trigger: thêm mới, sửa (kể cả trước đó là nhắn tin bạn bè), xoá hẳn. Bản gỡ xoá cả 3.
+5. Fly bỏ sót người được gắn tag. Một lần đọc tag bị trễ quá cửa sổ (3 nhịp) trong lúc tag không đổi gì cũng làm mất cờ liền mạch, nên lần đổi tag kế tiếp (đọc đúng nhịp) bị DB chỉ lấy mốc. Mô phỏng: 2.357 / 23.992 sự kiện bị bỏ sót, không lần nào thêm nhầm. Nay cờ chỉ mất khi tag đổi trong khoảng đọc trễ, và nối lại khi đọc thấy đúng phiên bản đã báo. ChatApi `tagSync.ts` và bài kiểm của nó đã sửa theo luật mới. Desktop / App Server không bị, vì nhịp báo phiên bản tự nối lại.
+6. Không kiểm được trạng thái bạn bè thì luật `gate_unavailable` cũ kết thúc lượt và trả data về hàng đợi. Bộ chạy mới nhận data theo id, nên một người mà Zalo luôn lỗi sẽ chặn cả chiến dịch. Nay có mã mới **EXC05** `err_engine_zalo_tag_friend_unavailable` "Chưa kiểm tra được trạng thái bạn bè, sẽ thử lại sau": hẹn data chạy lại sau 30 phút, lượt chạy tiếp data khác, không tính lượt, không cộng chuỗi. Lõi đã chép sang ChatApi. Bộ chạy cũ vẫn bỏ qua data đó ở lượt này rồi thử lại lượt sau.
+7. Bộ hỏi tag Desktop / App Server không ngừng khi DB báo tắt ở lượt gửi danh sách (chỉ ngừng khi báo ở lượt gửi phiên bản). Nay ngừng ở cả hai lượt.
+
+**Kiểm chéo bộ kiểm:** cố ý làm hỏng 3 điều kiện trong V660 (bỏ kiểm "đã lấy danh sách lần đầu", bỏ lọc nhóm, bỏ luật quá hạn 30 phút) và 1 điều kiện ở Fly (luôn báo liền mạch). Bộ kiểm bắt cả 4: 148, 55, 56 và 503 sai lệch.
+
+**Kết quả các vòng** (mỗi vòng một hạt giống và một mẫu production mới):
+
+| Vòng | Hạt giống | DB (lần so / dòng tự thêm) | Fly (sự kiện) | Desktop (lần so) | Kết quả |
+| --- | --- | --- | --- | --- | --- |
+| trước vòng | 1–6 | | | | tìm ra và sửa 1–7 ở trên |
+| 1 | 101 | 50.153 / 698 | 36.376 | 173.936 | sạch |
+| 2 | 202 | 48.174 / 423 | 36.252 | 213.048 | sạch, có thêm phép so danh sách tài khoản giao đi hỏi tag |
+| 3 | 303 | 53.506 / 564 | 36.328 | 131.525 | sạch |
+| 4 | 404 | 47.266 / 343 | 36.284 | 154.502 | sạch |
+
+Chạy đồng thời ở mọi vòng: 0 trùng, 0 khoá chéo, 0 lần chờ khoá quá hạn. Mỗi lần báo 6.000 cặp tag-người mất trung vị 111–126 ms, chậm nhất 181 ms; lần lấy mốc khoảng 50 ms.
+
+**Còn chưa kiểm được:**
+- Zalo thật (bước 0 ở mục 5): phiên bản tag có đổi mỗi lần gắn / gỡ không. zca-js `updateLabels` gửi kèm phiên bản nên nhiều khả năng có, nhưng chưa thử trên Zalo thật.
+- Electron thật, runtime Fly thật.
+- Hàm chọn chính sách của engine trên DB thật với EXC05. Dòng chính sách viết giống EXC04 / lớp `target_temporary` sẵn có.

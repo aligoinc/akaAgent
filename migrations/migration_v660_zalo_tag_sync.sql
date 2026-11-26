@@ -38,8 +38,9 @@ BEGIN
   IF EXISTS (SELECT 1 FROM auto_system_settings WHERE key LIKE 'zalo.tag_sync.%') THEN
     RAISE EXCEPTION 'v660 settings already exist';
   END IF;
-  IF EXISTS (SELECT 1 FROM public.auto_error WHERE error_code = 'err_engine_zalo_tag_not_friend' OR public_code = 'EXC04') THEN
-    RAISE EXCEPTION 'v660 error code EXC04 already exists';
+  IF EXISTS (SELECT 1 FROM public.auto_error WHERE error_code IN ('err_engine_zalo_tag_not_friend', 'err_engine_zalo_tag_friend_unavailable')
+             OR public_code IN ('EXC04', 'EXC05')) THEN
+    RAISE EXCEPTION 'v660 error code EXC04 / EXC05 already exists';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.auto_status WHERE code = 'campaign_detail_skipped') THEN
     RAISE EXCEPTION 'v660 needs auto_status campaign_detail_skipped';
@@ -184,7 +185,8 @@ AS $function$
   SELECT CASE
     WHEN p_action_id IS DISTINCT FROM 'zalo_message_friend' OR COALESCE(p_is_delete, false) THEN NULL
     WHEN COALESCE(p_extra->>'zaloFriendTargetMode', '') <> 'tagged_friends' THEN NULL
-    WHEN lower(COALESCE(p_extra->>'zaloFriendTagAutoAddEnabled', 'false')) <> 'true' THEN NULL
+    -- Chỉ giá trị JSON true (giao diện Desktop / Web / iOS cũng chỉ nhận true: chữ "true" thì ô hiện tắt, không có công tắc Dừng).
+    WHEN (p_extra->'zaloFriendTagAutoAddEnabled') IS DISTINCT FROM 'true'::jsonb THEN NULL
     WHEN jsonb_typeof(p_extra->'zaloFriendSourceTagIds') <> 'array' THEN NULL
     ELSE NULLIF(ARRAY(
       SELECT DISTINCT btrim(t.value #>> '{}')
@@ -202,16 +204,26 @@ SECURITY DEFINER
 SET search_path TO 'pg_catalog', 'pg_temp'
 AS $function$
 DECLARE
-  v_tags text[] := private.aka_agent_zalo_tag_sync_campaign_tags(NEW.action_id, NEW.is_delete, NEW.extra_settings);
-  v_accounts bigint[] := ARRAY(SELECT DISTINCT x FROM unnest(ARRAY[NEW.account_id,
-    CASE WHEN TG_OP = 'UPDATE' THEN OLD.account_id END]::bigint[]) AS x WHERE x IS NOT NULL);
+  v_tags text[];
+  v_accounts bigint[];
   v_before bigint[];
   v_after bigint[];
 BEGIN
+  -- Xoá hẳn dòng chiến dịch, hoặc đổi loại khỏi "Nhắn tin bạn bè": bỏ khỏi bảng (trigger riêng cho từng trường hợp).
+  IF TG_OP = 'DELETE' THEN
+    v_tags := NULL;
+    v_accounts := ARRAY(SELECT x FROM unnest(ARRAY[OLD.account_id]::bigint[]) AS x WHERE x IS NOT NULL);
+  ELSE
+    v_tags := private.aka_agent_zalo_tag_sync_campaign_tags(NEW.action_id, NEW.is_delete, NEW.extra_settings);
+    v_accounts := ARRAY(SELECT DISTINCT x FROM unnest(ARRAY[NEW.account_id,
+      CASE WHEN TG_OP = 'UPDATE' THEN OLD.account_id END]::bigint[]) AS x WHERE x IS NOT NULL);
+  END IF;
   -- Tài khoản nào đang có chiến dịch tự thêm, trước và sau thay đổi.
   v_before := ARRAY(SELECT DISTINCT sc.account_id FROM public.auto_zalo_tag_sync_campaigns sc WHERE sc.account_id = ANY (v_accounts));
 
-  IF v_tags IS NULL OR NEW.account_id IS NULL OR NEW.staff_id IS NULL OR NEW.organization_id IS NULL THEN
+  IF TG_OP = 'DELETE' THEN
+    DELETE FROM public.auto_zalo_tag_sync_campaigns WHERE campaign_id = OLD.id;
+  ELSIF v_tags IS NULL OR NEW.account_id IS NULL OR NEW.staff_id IS NULL OR NEW.organization_id IS NULL THEN
     DELETE FROM public.auto_zalo_tag_sync_campaigns WHERE campaign_id = NEW.id;
   ELSE
     INSERT INTO public.auto_zalo_tag_sync_campaigns (campaign_id, account_id, staff_id, organization_id, tag_ids, updated_at)
@@ -237,12 +249,22 @@ BEGIN
 END;
 $function$;
 
--- Chỉ chiến dịch nhắn tin bạn bè (WHEN rẻ: không đọc extra_settings với loại khác).
+-- Chỉ chiến dịch nhắn tin bạn bè (WHEN rẻ: không đọc extra_settings với loại khác). Ba trigger vì WHEN của INSERT không được
+-- nhắc OLD, của DELETE không được nhắc NEW: thêm mới; sửa (cả đổi loại khỏi nhắn tin bạn bè); xoá hẳn dòng.
 CREATE TRIGGER trg_aka_agent_zalo_tag_sync_campaign
-AFTER INSERT OR UPDATE OF extra_settings, is_delete, account_id, staff_id, organization_id, action_id
-ON public.auto_campaigns
+AFTER INSERT ON public.auto_campaigns
 FOR EACH ROW
 WHEN (NEW.action_id = 'zalo_message_friend')
+EXECUTE FUNCTION private.aka_agent_zalo_tag_sync_campaign_trigger();
+CREATE TRIGGER trg_aka_agent_zalo_tag_sync_campaign_update
+AFTER UPDATE OF extra_settings, is_delete, account_id, staff_id, organization_id, action_id ON public.auto_campaigns
+FOR EACH ROW
+WHEN (NEW.action_id = 'zalo_message_friend' OR OLD.action_id = 'zalo_message_friend')
+EXECUTE FUNCTION private.aka_agent_zalo_tag_sync_campaign_trigger();
+CREATE TRIGGER trg_aka_agent_zalo_tag_sync_campaign_delete
+AFTER DELETE ON public.auto_campaigns
+FOR EACH ROW
+WHEN (OLD.action_id = 'zalo_message_friend')
 EXECUTE FUNCTION private.aka_agent_zalo_tag_sync_campaign_trigger();
 
 -- Nạp sẵn chiến dịch cũ (bản này ra đời thì chưa chiến dịch nào bật ô, nên thường 0 dòng).
@@ -351,6 +373,8 @@ DECLARE
   v_vn_today date := (clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date;
   v_stamp text := to_char(clock_timestamp() AT TIME ZONE 'Asia/Ho_Chi_Minh', 'HH24:MI:SS DD/MM/YYYY');
   v_account_name text;
+  v_account_staff bigint;
+  v_account_org bigint;
   r record;
   c public.auto_campaigns%ROWTYPE;
   v_rows jsonb;
@@ -359,18 +383,26 @@ DECLARE
   v_line text;
 BEGIN
   IF p_added IS NULL OR jsonb_typeof(p_added) <> 'array' OR jsonb_array_length(p_added) = 0 THEN RETURN 0; END IF;
-  SELECT NULLIF(btrim(a.name), '') INTO v_account_name FROM public.auto_accounts a WHERE a.id = p_account_id;
+  SELECT NULLIF(btrim(a.name), ''), a.staff_id, a.organization_id INTO v_account_name, v_account_staff, v_account_org
+  FROM public.auto_accounts a WHERE a.id = p_account_id;
 
+  -- Chỉ chiến dịch của đúng nhân viên / tổ chức đang sở hữu tài khoản (tag là dữ liệu của tài khoản đó).
   FOR r IN
     SELECT sc.campaign_id, sc.tag_ids FROM public.auto_zalo_tag_sync_campaigns sc
-    WHERE sc.account_id = p_account_id
+    WHERE sc.account_id = p_account_id AND sc.staff_id = v_account_staff AND sc.organization_id = v_account_org
       AND EXISTS (SELECT 1 FROM jsonb_array_elements(p_added) x WHERE x->>'t' = ANY (sc.tag_ids))
     ORDER BY sc.campaign_id
   LOOP
+  -- Mỗi chiến dịch một khối riêng: lỗi cố định của một chiến dịch (trigger quyền chặn mở lại chiến dịch của nhân viên hết gói…)
+  -- chỉ bỏ qua chiến dịch đó; không thì cả lượt báo lỗi mãi, sổ tag của tài khoản đứng yên và mọi chiến dịch khác không nhận ai.
+  -- Lỗi tạm thời (chờ khoá, khoá chéo, bị huỷ) vẫn dừng cả lượt: chưa ghi gì, lượt sau so lại và thêm đủ.
+  BEGIN
+    v_count := 0;
     -- Thứ tự khoá như luồng nạp data và engine: khoá nạp data của chiến dịch, rồi dòng chiến dịch.
     PERFORM pg_advisory_xact_lock(hashtextextended('aka-agent-campaign-input-serialization:' || r.campaign_id::text, 0));
     SELECT * INTO c FROM public.auto_campaigns WHERE id = r.campaign_id FOR UPDATE;
     IF c.id IS NULL OR COALESCE(c.is_delete, false) OR c.account_id IS DISTINCT FROM p_account_id
+       OR c.staff_id IS DISTINCT FROM v_account_staff OR c.organization_id IS DISTINCT FROM v_account_org
        OR private.aka_agent_zalo_tag_sync_campaign_tags(c.action_id, c.is_delete, c.extra_settings) IS NULL
        -- Chưa lấy danh sách lần đầu: lượt đầu sẽ đọc tag và thấy người này (thêm trước thì lượt đầu bị bỏ qua).
        OR NULLIF(btrim(COALESCE(c.extra_settings->>'zaloFriendDataMaterializedAt', '')), '') IS NULL
@@ -432,6 +464,12 @@ BEGIN
       VALUES (c.id, concat_ws(' - ', v_stamp, v_account_name, NULLIF(btrim(c.name), ''),
         format('🏷️ Đã thêm %s người vừa được gắn tag vào chiến dịch', v_count)));
     END IF;
+  EXCEPTION
+    WHEN lock_not_available OR deadlock_detected OR serialization_failure OR query_canceled THEN RAISE;
+    WHEN OTHERS THEN
+      v_total := v_total - COALESCE(v_count, 0);
+      RAISE WARNING 'zalo_tag_auto_add_campaign_skipped campaign=% sqlstate=% %', r.campaign_id, SQLSTATE, SQLERRM;
+  END;
   END LOOP;
   RETURN v_total;
 END;
@@ -668,7 +706,7 @@ BEGIN
   IF c.action_id <> 'zalo_message_friend' OR COALESCE(c.extra_settings->>'zaloFriendTargetMode', '') <> 'tagged_friends' THEN
     RETURN jsonb_build_object('ok', false, 'code', 'campaign_not_tagged_friends');
   END IF;
-  v_current := lower(COALESCE(c.extra_settings->>'zaloFriendTagAutoAddEnabled', 'false')) = 'true';
+  v_current := (c.extra_settings->'zaloFriendTagAutoAddEnabled') IS NOT DISTINCT FROM 'true'::jsonb;
   IF v_current = p_enabled THEN
     RETURN jsonb_build_object('ok', true, 'enabled', p_enabled, 'changed', false);
   END IF;
@@ -777,6 +815,29 @@ SELECT 'err_engine_zalo_tag_not_friend', NULL, NULL, NULL, NULL, NULL, 'write',
 INSERT INTO public.auto_outcome_signal_rules (platform, action_code, phase, signal_kind, pattern, priority, error_code, source, note)
 VALUES ('system', NULL, NULL, 'engine', 'zalo_tag_not_friend', 50, 'err_engine_zalo_tag_not_friend', 'v660',
   '[V660] Người vừa được gắn tag chưa là bạn bè.');
+
+-- EXC05: Zalo không trả lời rõ người vừa được gắn tag có là bạn bè không. Hẹn data chạy lại sau 30 phút, lượt chạy tiếp data
+-- khác (không dùng gate_unavailable vì luật đó kết thúc lượt: một người Zalo luôn lỗi sẽ chặn cả chiến dịch; bộ kiểm 26/11).
+INSERT INTO public.auto_error (error_type, error_code, error_name, error_desc, noti_running_process, noti_campaign,
+  disable_action_codes, counts_toward_limit, counts_toward_bad_target, disable_action_mode, zalo_error_codes, zalo_action_codes,
+  is_active, is_delete, public_code, error_class, customer_title, customer_help, detail_status)
+VALUES ('engine v2', 'err_engine_zalo_tag_friend_unavailable', 'Chưa kiểm tra được trạng thái bạn bè của người được gắn tag',
+  'V660: không đọc được trạng thái bạn bè của người vừa được gắn tag; hẹn chạy lại, không chặn các data khác.',
+  NULL, NULL, '{}', false, false, 'fixed_minutes', '{}', '{}', true, false, 'EXC05', 'target_temporary',
+  'Chưa kiểm tra được trạng thái bạn bè, sẽ thử lại sau', NULL, NULL);
+
+INSERT INTO public.auto_outcome_policies (error_code, error_class, status_id, action_code, campaign_action_id, runtime_target, detail_mode,
+  detail_status_id, sub_status_id, log_template, campaign_note_template, quota_effect, target_streak_effect, streak_threshold, target_effect,
+  requeue_after_minutes, remaining_steps, lock_action_codes, lock_mode, lock_minutes, lock_days, lock_time, run_effect, pace_mode, pace_seconds,
+  campaign_effect, campaign_hold_minutes, account_effect, login_effect, description, source)
+VALUES ('err_engine_zalo_tag_friend_unavailable', NULL, NULL, NULL, NULL, NULL, 'suppress',
+  NULL, NULL, NULL, NULL, 'no_count', 'ignore', NULL, 'requeue_after',
+  30, 'skip', '{}', NULL, NULL, NULL, NULL, 'continue', 'none', NULL,
+  'none', NULL, 'none', 'none', '[V660] Không đọc được trạng thái bạn bè: hẹn data chạy lại sau 30 phút, chạy tiếp data khác.', 'v660');
+
+INSERT INTO public.auto_outcome_signal_rules (platform, action_code, phase, signal_kind, pattern, priority, error_code, source, note)
+VALUES ('system', NULL, NULL, 'engine', 'zalo_tag_friend_unavailable', 50, 'err_engine_zalo_tag_friend_unavailable', 'v660',
+  '[V660] Không đọc được trạng thái bạn bè của người vừa được gắn tag.');
 
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Quyền
