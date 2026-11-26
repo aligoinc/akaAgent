@@ -6,6 +6,9 @@ import { CampaignSheetSyncError, GoogleSheetError, campaignSheetSyncRows, campai
 
 const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const BUDGET_MS = 90_000
+// Supabase cắt lượt gọi dùng quá 2 giây CPU; đọc + chuẩn hoá 10.000 dòng tốn ~0,2-0,3 giây CPU.
+// Đọc đủ số dòng này thì dừng, lượt 30 giây sau làm tiếp.
+const ROW_BUDGET = 20_000
 
 Deno.serve(async (req: Request) => {
   if (req.method !== 'POST') return json(405, { error: 'Method not allowed' })
@@ -23,15 +26,19 @@ Deno.serve(async (req: Request) => {
   const db = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } })
   const started = Date.now()
   const done: Array<{ syncId: number; ok: boolean; added?: number; errorCode?: string }> = []
+  let rowsRead = 0
 
-  while (Date.now() - started < BUDGET_MS) {
+  while (Date.now() - started < BUDGET_MS && rowsRead < ROW_BUDGET) {
     const { data: job, error: claimError } = await db.rpc('aka_agent_campaign_sheet_claim').abortSignal(AbortSignal.timeout(30_000))
     if (claimError) return json(503, { error: 'Cannot claim', processed: done })
     if (!job) break
     let result: Record<string, unknown>
     try {
-      const document = await readGoogleSheet(job.config.url, false)
-      result = campaignSheetSyncRows(campaignSheetTable(document.rows), job.config, job.actionId)
+      // Tách dòng tiêu đề khi đọc để giới hạn 10.000 dòng chỉ tính dòng data, như cửa sổ Upload.
+      const hasHeader = job.config.hasHeader === true
+      const document = await readGoogleSheet(job.config.url, hasHeader)
+      rowsRead += document.rows.length
+      result = campaignSheetSyncRows(campaignSheetTable(hasHeader ? [document.headers, ...document.rows] : document.rows), job.config, job.actionId)
     } catch (error) {
       const code = error instanceof CampaignSheetSyncError ? error.code
         : error instanceof GoogleSheetError ? (error.permanent ? 'sheet_read_blocked' : 'sheet_read_failed') : 'sheet_read_failed'

@@ -370,6 +370,9 @@ def main():
     try:
         pg.psql(FIXTURE)
         pg.psql(MIGRATION)
+        if os.environ.get('WITH_V664'):  # chạy lại mọi ca trên thân hàm V664
+            pg.psql("INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES ('20261126080442', 'migration_v662_campaign_sheet_sync')")
+            pg.psql(open(os.path.join(ROOT, 'migrations/migration_v664_campaign_sheet_sync_key_speed.sql'), encoding='utf-8').read())
         pg.psql("UPDATE auto_system_settings SET value = '{\"audience\":\"all\",\"worker\":true,\"maxSourcesPerStaff\":20,\"minEveryHours\":1}' WHERE key='campaign.sheet_sync'")
         db = Db(pg)
         t0 = time.time()

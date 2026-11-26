@@ -1,6 +1,6 @@
 # Đồng bộ định kỳ từ Google Sheet vào data của chiến dịch — phương án
 
-Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); V662 CHƯA apply, Edge CHƯA deploy, chưa đổi gì trên production.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
+Trạng thái (26/11/2026): **đã code đợt 1 trên nhánh `claude/pensive-sagan-4kz4zp` (anh: "Bắt đầu code phương án này"); đã merge `dev_3` / WebApp `dev_1` 26/11 ("Pr và mege"); V662 đã apply akachat 15:04:42 VN 26/11 ("Áp 662 đi"; sổ `20261126080442`, md5 sổ = file, không apply lại; [biên nhận](../migrations/snapshots/campaign-sheet-sync-v662/apply-receipt.json)); Edge đã deploy bản 1 lúc 15:09:47 VN 26/11, bản 2 lúc 15:27:48 VN (giới hạn 20.000 dòng / lượt gọi vì trần 2 giây CPU, tách dòng tiêu đề khi đọc; gọi thử từ DB ra 200 `processed: 0`), `campaign.sheet_sync` = `audience: all`, `worker: true` từ 15:33:43 VN 26/11 (anh: "bật cho tất cả các khách hàng"); API/Web chưa deploy, Desktop chưa build.** Tình trạng từng phần ở mục 11; mục 9 lấy theo đề xuất vì anh chưa chốt khác.
 
 ## 1. Yêu cầu
 
@@ -260,7 +260,7 @@ Câu ở mục 9 dùng đúng cột "Đề xuất" (anh chưa chốt khác). M�
 | Desktop | IPC `campaign-sheet-sync:call` ([repository](../src/main/data/repositories/campaignSheetSyncRepository.ts)); ô trong tab Link sheet; dòng tóm tắt trong form thường + form Agent (chỉ giữ trong phiên mở form, không vào nháp); thẻ đầu tab Data của chiến dịch (Sửa, Tắt, Bật lại, Gia hạn, Kết nối lại khi cột đổi, Lịch sử); biểu tượng cạnh tên + mục "Tắt đồng bộ Google Sheet" trong menu Hành động | `node scripts/run-campaign-sheet-sync-ui-smoke.cjs` (10 PASS, Chromium + IPC giả); hai typecheck sạch |
 | Web / API / iOS | akaAgentWebApp cùng tên nhánh (`docs/CAMPAIGN_SHEET_SYNC.md`): `POST /api/aka-agent/control/v1/campaigns/sheet-sync` → `aka_agent_control_campaign_sheet_sync`; Web: ô ở tab Link Google Sheet, dòng tóm tắt trong form, thẻ ở tab Data (Kết nối lại trên Web chỉ cho Zalo); iOS: thẻ chỉ xem + Tắt đồng bộ. "Thêm thành viên nhóm" trên Web nhận SĐT hoặc UID nên không có ô đồng bộ | API `npx vitest run src/modules/campaign-sheet-sync` (7), Web `src/test/CampaignSheetSyncUpload.test.tsx` (3), iOS `SheetSyncCard.test.tsx` (3); `WEBAPP_REPO=… node scripts/campaign-sheet-sync/rows-smoke.cjs` so bản chép hợp đồng |
 
-Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần apply + deploy). Thứ tự đưa lên như mục 8.
+V662 đã apply 15:04:42 VN 26/11 (hàm tick sau apply md5 `49b92818…`, lượt tick đầu 169 ms đạt). Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần deploy Edge + bật `worker`). Thứ tự đưa lên như mục 8.
 
 ## 12. Kiểm thử vòng lặp (26/11/2026)
 
@@ -308,3 +308,33 @@ có / không tham số theo dõi vẫn là hai giá trị, như Upload hôm nay)
 **Kết quả các vòng:** vòng 1–3 tìm ra lỗi 1–6; vòng 4, 5 sạch; vòng 6 tìm ra lỗi 7 (đếm lại); **vòng 7, 8, 9 sạch liền**
 (mỗi vòng 600 Sheet, ~750 lượt đồng bộ ở tầng JS; ~300 kịch bản, ~600 lượt, ~5.500 dòng thêm, ~120 lượt nhận việc song song và
 ~130 lượt `finish` song song ở tầng DB).
+
+## 13. V664: lọc trùng rẻ hơn (26/11/2026)
+
+Anh hỏi "Edge làm việc này có tốn tài nguyên của Supabase không", rồi "Ok" làm bản sửa. Edge chạy trên máy riêng của Supabase,
+tính vào số lượt gọi Edge của gói (tối đa ~2 lượt / phút); phần tốn là CPU của DB trong `finish`: mỗi lượt tính khoá lọc trùng
+cho mọi data đang có của các chiến dịch thuộc nguồn. Đo production (chiến dịch 63019, 8.685 dòng, chỉ đọc): hàm khoá V662
+565 ms / lượt tính (riêng `aka_agent_internal_normalize_phone` 137 ms) vì đi qua 5–6 hàm SQL có `SET search_path` (mỗi lần gọi
+đặt lại GUC), và câu `LATERAL (SELECT khoá) k WHERE k.key IS NOT NULL` bị planner gộp nên tính khoá hai lần ⇒ ~1,2 s CPU DB
+mỗi chiến dịch mỗi lượt.
+
+[V664](../migrations/migration_v664_campaign_sheet_sync_key_speed.sql) (sinh bằng `node scripts/build-v664-sql.cjs` từ nguyên
+văn V662, chỉ thay thân 3 hàm, không đổi bảng / quyền; V663 đã có nhánh khác giữ):
+- `private.aka_agent_campaign_sheet_key` viết lại bằng plpgsql, không `SET search_path`, gọi thẳng `public.normalize_phone` một
+  lần (đúng thân `aka_agent_internal_normalize_phone` = `normalize_phone` + kiểm dạng số; preflight khoá md5 hai hàm này), lớp
+  khoảng trắng kiểu JS chép từ hàm trim của V662.
+- `unmatched_keys` và `finish`: `LATERAL ... OFFSET 0` để mỗi dòng tính khoá một lần; `finish` tính khoá dòng Sheet một lần vào
+  bảng tạm `campaign_sheet_incoming` rồi đếm dòng sai / trùng (V662 tính ba lần), cột `phone` của dòng thêm lấy luôn khoá.
+- Bản gỡ [rollback_v664](../migrations/rollback_v664_campaign_sheet_sync_key_speed.sql) trả 3 hàm về nguyên văn V662.
+
+Kiểm: `python3 scripts/campaign-sheet-sync/test_v664.py` (19 PASS: khoá V662 = V664 trên 540.081 cặp trường × loại chiến dịch
+× giá trị sinh ngẫu nhiên; 5 kịch bản `finish` cùng kết quả, cùng dòng thêm; khoá 20.000 dòng 759 → 65 ms; `finish` 9.000 dòng
+Sheet + 20.000 data 1.792 → 293 ms; bản gỡ trả đúng md5), `WITH_V664=1 python3 scripts/campaign-sheet-sync/test_v662.py`
+(82 PASS), bộ thử vòng lặp với `WITH_V664=1` cho `fuzz_db.py`.
+
+Chạy thử trên production 26/11 (khối DO tự huỷ bằng RAISE nên không lưu gì, không nạp lại schema): md5 nguyên văn khớp
+`56abfd2a…`, preflight đạt, khoá trên chiến dịch 63019 (8.685 dòng) 1.261 → 110 ms giữa giờ chiều, cùng 8.685 khoá; thân sau
+apply: khoá `dacc0179…`, `unmatched_keys` `4336e127…`, `finish` `ee0f2515…`. **Đã apply akachat 18:44:12 VN 26/11** theo yêu cầu ("Appply đi"; sổ `20261126114412`, md5 sổ = file, không apply lại;
+PostgREST nạp lại schema 3,2 s, 0 lỗi 5xx; [biên nhận](../migrations/snapshots/campaign-sheet-sync-v664/apply-receipt.json)).
+Bộ thử vòng lặp với V664 (`fuzz-loop.cjs` + `WITH_V664=1 fuzz_db.py`, mẫu data thật ngoài repo, hạt giống 21–23): 3 vòng sạch
+liền, mỗi vòng ~600 ca / ~800 lượt đồng bộ, ~300 kịch bản DB (sửa, xoá mềm, xoá, chạy song song, lượt cũ, khoá nhân viên).

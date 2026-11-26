@@ -186,6 +186,8 @@ export class SupabaseService {
   listCampaignActions() { return campaignActionRepo.listCampaignActions() }
   getAllCampaignActions() { return campaignActionRepo.getAllCampaignActions() }
   getCampaignAction(actionId: string) { return campaignActionRepo.getCampaignAction(actionId) }
+  /** "Chạy cùng lúc" (V670): loại chiến dịch akaBiz bật allow_parallel_run. */
+  listParallelRunActionIds() { return campaignActionRepo.listParallelRunActionIds() }
   createCampaignAction(action: Partial<CampaignAction>) { return campaignActionRepo.createCampaignAction(action) }
   updateCampaignAction(id: string, updates: Partial<CampaignAction>) { return campaignActionRepo.updateCampaignAction(id, updates) }
   deleteCampaignAction(id: string) { return campaignActionRepo.deleteCampaignAction(id) }

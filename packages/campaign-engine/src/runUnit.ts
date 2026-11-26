@@ -308,7 +308,7 @@ export type UnitEndReason =
   | 'account_mismatch' | 'account_not_found' | 'invalid_request' | 'app_access_denied' | 'report_rejected' | 'error'
   | 'daily_boundary' | 'runtime_not_owner' | 'staff_time_blocked' | 'account_logged_out' | 'stopped'
   | 'maintenance_required' | 'campaign_not_ready' | 'data_group_hard_end' | 'data_group_waiting' | 'account_paused' | 'entitlement_denied'
-  | 'concurrency_limit'
+  | 'concurrency_limit' | 'parallel_wait'
   | 'gate_unavailable' | 'cooldown_scan'
 
 export interface UnitResult {

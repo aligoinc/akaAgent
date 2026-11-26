@@ -29,3 +29,7 @@ verify_jwt = false
 # Khóa lại bằng secret AI_CHAT_AGENT_KEY (header x-agent-key), xem docs/AI_CHAT_AGENT_API.md.
 [functions.ai-chat-agent]
 verify_jwt = false
+
+# V662: DB job 30 giây gọi bằng x-internal-token (Vault), worker nhận việc qua lease trong DB.
+[functions.aka-agent-campaign-sheet-sync]
+verify_jwt = false

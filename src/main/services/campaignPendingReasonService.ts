@@ -12,8 +12,18 @@ import { parseZaloShareRepeatMinutes } from '../../shared/zaloShareRepeat'
 import { isWebFindDataAction } from '../../shared/webScan'
 
 export interface PendingReasonRuntime {
-  /** RAM-only observations; never start/claim/recover a runtime from this endpoint. */
-  busyReason(account: AutoAccount): string | null
+  /**
+   * RAM-only observations; never start/claim/recover a runtime from this endpoint.
+   * parallelLane: "Chạy cùng lúc" (V670), chiến dịch ở làn riêng không chờ hàng đợi chính của tài khoản.
+   */
+  busyReason(account: AutoAccount, options?: { parallelLane?: boolean }): string | null
+  /**
+   * "Chạy cùng lúc" (V670), chỉ RAM: chiến dịch ở làn riêng theo lần chia làn gần nhất của bộ lập lịch, tài khoản có làn riêng đang chạy trên
+   * máy này, và các chiến dịch đang chạy ở làn riêng (không chặn chiến dịch của hàng đợi chính).
+   */
+  parallelRun?(account: AutoAccount, campaign: Campaign): { lane: boolean; accountHasLaneRun: boolean; laneCampaignIds: number[] }
+  /** "Chạy cùng lúc": câu chờ khi phải chờ chiến dịch đang chạy cùng loại / chung thao tác (chỉ đọc); null = không chờ vì lý do này. */
+  parallelRunReason?(account: AutoAccount, campaign: Campaign, signal: AbortSignal): Promise<string | null>
   readinessReason(account: AutoAccount, campaign: Campaign): string | null
   configurationReason(campaign: Campaign, action: CampaignAction, requiresWorkflow: boolean): string | null
   limitReason(account: AutoAccount, campaign: Campaign, action: CampaignAction): Promise<string | null>
@@ -94,7 +104,7 @@ export async function inspectPendingCampaign(
   const { campaign } = observed
   const version = campaignPendingReasonVersion(campaign)
   let randomVersion: string | undefined
-  let busyObservation: { account: AutoAccount; reason: string | null } | undefined
+  let busyObservation: { account: AutoAccount; reason: string | null; options?: { parallelLane?: boolean } } | undefined
   const finish = async (message: string): Promise<CampaignPendingReasonResult> => {
     signal.throwIfAborted()
     const latest = await reads.readPendingReasonCampaign(campaignId, signal)
@@ -104,7 +114,7 @@ export async function inspectPendingCampaign(
       signal.throwIfAborted()
       if (!latestAccount || JSON.stringify(latestAccount.randomRun) !== randomVersion) return result(null)
     }
-    if (busyObservation && runtime.busyReason(busyObservation.account) !== busyObservation.reason) return result(null)
+    if (busyObservation && runtime.busyReason(busyObservation.account, busyObservation.options) !== busyObservation.reason) return result(null)
     return result(message, version)
   }
 
@@ -129,14 +139,25 @@ export async function inspectPendingCampaign(
   signal.throwIfAborted()
   const scheduleReason = pendingCampaignScheduleReason(campaign, clock.dbNow)
   if (scheduleReason) return finish(scheduleReason)
-  const otherCampaign = await reads.readBusyCampaign(campaign, signal)
+  // "Chạy cùng lúc" (V670): chờ chiến dịch đang chạy cùng loại / chung thao tác. Chỉ hỏi DB khi tài khoản có làn riêng (hoặc chiến dịch ở
+  // làn riêng); không ai tích thì các bước dưới y như trước.
+  const parallelWait = await runtime.parallelRunReason?.(account, campaign, signal) ?? null
+  signal.throwIfAborted()
+  if (parallelWait) return finish(parallelWait)
+  const parallel = runtime.parallelRun?.(account, campaign)
+  const parallelLane = parallel?.lane === true
+  // Chiến dịch ở làn riêng không chờ chiến dịch khác của tài khoản; chiến dịch của hàng đợi chính không chờ chiến dịch ở làn riêng.
+  const otherCampaign = parallelLane ? null : await reads.readBusyCampaign(campaign, signal, parallel?.laneCampaignIds ?? [])
   if (otherCampaign) return finish(`Tài khoản đang bận chạy chiến dịch “${otherCampaign}”. Chiến dịch này đang chờ đến lượt.`)
   if (observed.hasClaim) return finish('Đang chờ hoàn tất lượt chạy hoặc tác vụ trước của tài khoản.')
-  const busy = runtime.busyReason(account)
-  busyObservation = { account, reason: busy }
+  const busyOptions = parallelLane ? { parallelLane: true } : undefined
+  const busy = runtime.busyReason(account, busyOptions)
+  busyObservation = { account, reason: busy, options: busyOptions }
   if (busy) return finish(busy)
   if (account.status === 'tạm dừng') return finish('Tài khoản đang tạm dừng. Vui lòng tiếp tục tài khoản để chạy chiến dịch.')
-  if (account.status !== 'chờ xử lý' || accountState.hasOperation) return finish('Tài khoản đang bận, chưa thể chạy chiến dịch.')
+  // Tài khoản "đang chạy" vì làn riêng của máy này: hàng đợi chính vẫn nhận chiến dịch.
+  const runningForLane = account.status === 'đang chạy' && (parallelLane || parallel?.accountHasLaneRun === true)
+  if (account.status !== 'chờ xử lý' && !runningForLane || accountState.hasOperation) return finish('Tài khoản đang bận, chưa thể chạy chiến dịch.')
   if (account.loginStatus !== 'đã đăng nhập') return finish('Tài khoản chưa đăng nhập hoặc phiên đăng nhập đã hết hạn.')
   const readiness = runtime.readinessReason(account, campaign)
   if (readiness) return finish(readiness)

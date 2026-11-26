@@ -4,7 +4,7 @@
 DB + bộ chạy + Desktop + Web/API + iOS (chỉ xem) trên nhánh `claude/festive-rubin-5zi6qe` của akaAgent và akaAgentWebApp,
 **chưa merge, V654 đã apply akachat 17:54–17:59 VN 25/11 ([biên nhận](../migrations/snapshots/send-exclusion-multi-zalo-v654/apply-receipt.json), không apply lại), chưa deploy / build / phát hành; công tắc `campaign.send_exclusion_multi_zalo` V654 đặt `off`**.
 **V657 (mục 12) đã apply akachat 04:18 VN 26/11** (p1 sổ `20261125211803`, p2 `20261125211830`, không apply lại; [biên nhận](../migrations/snapshots/send-exclusion-global-match-v657/apply-receipt.json)).
-**Sửa lỗi review 26/11 (mục 13, V666; viết là V663, đổi số chiều 26/11 vì phiên khác đã apply `migration_v663_engine_facebook_page_identity_wait`; sổ lúc đổi tới V665, không nhánh nào giữ V666) trên nhánh `claude/send-exclusion-review-fixes` của cả ba repo: chưa apply V666, chưa merge / deploy / build.**
+**Sửa lỗi review 26/11 (mục 13, V666; viết là V663, đổi số chiều 26/11 vì phiên khác đã apply `migration_v663_engine_facebook_page_identity_wait`; sổ lúc đổi tới V665, không nhánh nào giữ V666) trên nhánh `claude/send-exclusion-review-fixes` của cả ba repo, đã merge 26/11 (akaAgent `dev_3` #804, WebApp `dev_1` #324, ChatApi `dev` #197); V666 đã apply akachat 17:43:55 VN 26/11 (sổ `20261126104354`, [biên nhận](../migrations/snapshots/send-exclusion-v666/apply-receipt.json)); chưa deploy / build.**
 Review lần 2 cùng ngày (anh: "review lại, giả lập test hoặc test thêm", mục 13.6) đổi công tắc sang `campaign.send_exclusion_multi_zalo_v2`
 và thêm bước chặn lúc nhận lượt. Trước khi bật công tắc phải có V666 và đặt `send_exclusion.runtime` (mục 13.5).
 Chi tiết ở mục 10.
@@ -442,7 +442,7 @@ và export, Fly không chạy loại chiến dịch web.
 Review 26/11 (3 hướng: SQL, Desktop / engine / Fly, Web / API / iOS; đối chiếu dữ liệu thật chỉ đọc) tìm ra 4 lỗi có thể gửi tin cho khách lẽ ra
 bị loại trừ và một loạt lỗi nhỏ. Bước A của V657 đang chạy thật thì đúng (86/86 data trong danh sách nhận ra, 0/160 loại nhầm, 617/617 người
 đã nhận tin ở chiến dịch trước nhận ra). Sửa trên nhánh `claude/send-exclusion-review-fixes` của akaAgent, akaAgentWebApp (nền `dev_1`) và
-akaAgentChatApi (nền `dev`); **V666 chưa apply, chưa merge / deploy / build**.
+akaAgentChatApi (nền `dev`); **đã merge 26/11; V666 đã apply akachat 17:43:55 VN 26/11 theo yêu cầu ("apply bây giờ luôn"); chưa deploy / build**.
 
 ### 13.1 Lỗi có thể gửi nhầm và cách sửa
 
@@ -505,7 +505,7 @@ akaAgentChatApi (nền `dev`); **V666 chưa apply, chưa merge / deploy / build*
 
 ### 13.5 Thứ tự đưa lên
 
-1. Apply V666 (ngoài giờ cao điểm; PostgREST nạp lại schema; file ~125 KB vì chép nguyên hai hàm nhận lượt: apply bằng
+1. ~~Apply V666~~ (đã apply 17:43:55 VN 26/11: chạy thử trong giao dịch tự huỷ đạt, PostgREST nạp lại schema 5,5 s, 1 lượt nhận lượt Desktop hết giờ lúc nạp lại, 0 chiến dịch bị tạm dừng) (ngoài giờ cao điểm; PostgREST nạp lại schema; file ~125 KB vì chép nguyên hai hàm nhận lượt: apply bằng
    `supabase db query --linked -f` + dòng sổ, không qua công cụ apply của MCP). Không đổi gì cho khách: công tắc mới
    `campaign.send_exclusion_multi_zalo_v2` chưa có dòng (= tắt), production chưa có cấu hình nào cần bản mới (đo 26/11: 0 / 14.294 lựa chọn).
 2. Deploy ChatApi `worker` có bản sửa (lõi gửi `ctx.sendExclusionRunner`); build + cài App Server mới; build + phát hành Desktop mới

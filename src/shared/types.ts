@@ -388,6 +388,8 @@ export interface CampaignAction {
   showStaffDeliveryCooldown?: boolean
   // Candidate action codes for daily/window quota checks, not for action-disable enforcement.
   limitCheckActionCodes: string[]
+  /** "Chạy cùng lúc" (V670): akaBiz bật cho loại này (auto_campaign_actions.allow_parallel_run); khách không sửa. DB chưa có cột thì false. */
+  allowParallelRun?: boolean
   /** Semantic target/source types accepted by this action. */
   dataTypes?: CampaignActionDataType[]
   isDelete: boolean
@@ -808,6 +810,11 @@ export interface Campaign {
   scheduleWeekDays?: string      // comma-separated weekday numbers e.g. "2,3,5" (2=Mon..8=Sun)
   continueNextDay?: boolean      // daily: continue at scheduled time next day if not finished
   refreshData?: boolean          // weekly/monthly: reset data to pending when all done
+  /**
+   * "Chạy cùng lúc" (V670): khách tích (auto_campaigns.parallel_run_enabled). Chỉ có hiệu lực khi loại có allowParallelRun và chiến dịch
+   * chạy bằng engine v2 trên tài khoản Zalo. Đọc theo bản ghi đầy đủ; DB chưa có cột thì false.
+   */
+  parallelRunEnabled?: boolean
   log: string
   note?: string | null
   content?: string
