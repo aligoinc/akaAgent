@@ -66,6 +66,7 @@ import { AI_CHAT_IPC, type AiChatDesktopAction, type AiChatIpcResult } from '../
 import type { AiChatImageUpload } from '../shared/aiChat'
 import { AFF_PARTNER_IPC, type AffPartnerIpcResult, type AffPartnerOpenPortalResult } from '../shared/affPartnerDesktop'
 import type { AffPartnerResponse } from '../shared/affPartner'
+import { CAMPAIGN_SHEET_SYNC_IPC, type CampaignSheetSyncRequest, type CampaignSheetSyncResult } from '../shared/campaignSheetSync'
 import { EMAIL_PROMPT_IPC, type EmailPromptAction, type EmailPromptIpcResult, type EmailPromptSaveRequest } from '../shared/emailPromptDesktop'
 import {
   ENGINE_ERROR_REVIEW_IPC,
@@ -295,6 +296,10 @@ const electronAPI = {
     ipcRenderer.invoke(AFF_PARTNER_IPC.summary),
   affPartnerOpenPortal: (): Promise<AffPartnerIpcResult<AffPartnerOpenPortalResult>> =>
     ipcRenderer.invoke(AFF_PARTNER_IPC.openPortal),
+
+  // Đồng bộ Google Sheet vào data chiến dịch (V662): một kênh, tiến trình chính gọi RPC bằng phiên Desktop.
+  campaignSheetSyncCall: <T = unknown>(request: CampaignSheetSyncRequest): Promise<CampaignSheetSyncResult<T>> =>
+    ipcRenderer.invoke(CAMPAIGN_SHEET_SYNC_IPC, request),
 
   // Form xin email sau khi đăng nhập (V652): một kênh, tiến trình chính gắn `client: 'desktop'` rồi gọi RPC.
   emailPromptCall: <A extends EmailPromptAction>(action: A, payload?: A extends 'save' ? EmailPromptSaveRequest : undefined): Promise<EmailPromptIpcResult<A>> =>

@@ -104,6 +104,8 @@ import { useAuthStore } from '../../stores/authStore'
 import type { GeneralSettingsMenu, OpenGeneralSettings } from '../Settings/GeneralSettingsModal'
 import CampaignInfoView from './CampaignInfoView'
 import CampaignDataUploadModal, { type CampaignImportDuplicateCheck, type ImportDuplicateSummary } from './CampaignDataUploadModal'
+import { CampaignSheetSyncFormNote } from '../CampaignSheetSync/CampaignSheetSyncFormNote'
+import { campaignSheetSyncErrorMessage, type CampaignSheetSyncDraft } from '../../../../shared/campaignSheetSync'
 import { InputDuplicateFormNote } from './InputDuplicateFormNote'
 import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
 import {
@@ -8631,6 +8633,21 @@ export default function CampaignFormModal({
         if (saveSignal.aborted) return
         await saveCompletion.finish(async () => {
           if (saveSignal.aborted) return
+          // Đồng bộ Google Sheet (V662): đăng ký một nguồn cho mọi chiến dịch vừa tạo. Lỗi thì chiến dịch đã lưu, nút
+          // "Thử lại hoàn tất" gửi lại đúng mã yêu cầu (DB trả nguồn cũ, không tạo nguồn thứ hai).
+          if (sheetSyncDraft && !isEditingSavedCampaign && !isDataGroupSource && savedCampaignIds.length > 0) {
+            updateSaveProgress(95, 'Đang bật đồng bộ Google Sheet...')
+            const syncResult = await window.electronAPI.campaignSheetSyncCall({
+              action: 'save', requestId: sheetSyncDraft.requestId, campaignIds: savedCampaignIds, config: sheetSyncDraft.config,
+              everyHours: sheetSyncDraft.everyHours, endDate: sheetSyncDraft.endDate,
+              splitMode: splitDataAcrossAccounts && savedCampaignIds.length > 1 ? 'split' : 'all',
+              sheetValues: sheetSyncDraft.sheetValues
+            })
+            if (!syncResult.ok) {
+              throw new Error(`Chưa bật được đồng bộ Google Sheet: ${syncResult.message || campaignSheetSyncErrorMessage(syncResult.code)}`)
+            }
+            if (saveSignal.aborted) return
+          }
           // Bật đồng bộ vào nhóm TRƯỚC khi bật chiến dịch: lỗi thì chiến dịch giữ tạm dừng, bảng ở chân form cho thử lại.
           if (showResultGroupsSection) {
             await resultGroups.saveForCampaigns(
@@ -8770,12 +8787,14 @@ export default function CampaignFormModal({
   const [isDataUploadModalOpen, setIsDataUploadModalOpen] = useState(false)
   // Lọc trùng với chiến dịch khác của lần tải gần nhất (V491/V493); chỉ trong phiên form, không lưu vào nháp.
   const [importDuplicateNote, setImportDuplicateNote] = useState<ImportDuplicateSummary | null>(null)
+  // "Đồng bộ liên tục từ link Google Sheet này" (V662): chọn ở cửa sổ Upload, đăng ký nguồn lúc lưu chiến dịch mới.
+  const [sheetSyncDraft, setSheetSyncDraft] = useState<CampaignSheetSyncDraft | null>(null)
   const inputDuplicateCheck = useMemo<CampaignImportDuplicateCheck | undefined>(() => (
     supportsInputDuplicateCheck(formData.actionId) && formData.accountIds.length > 0
       ? { currentAccounts: formData.accountIds.map(id => ({ id, name: accounts.find(account => account.id === id)?.name || `Tài khoản ${id}` })) }
       : undefined
   ), [formData.actionId, formData.accountIds.join(','), accounts])
-  useEffect(() => { if (!details.length) setImportDuplicateNote(null) }, [details.length])
+  useEffect(() => { if (!details.length) { setImportDuplicateNote(null); setSheetSyncDraft(null) } }, [details.length])
 
   const dataUploadPlatform: CampaignImportPlatform = selectedActionPlatform === 'zalo'
     ? 'zalo'
@@ -8855,7 +8874,7 @@ export default function CampaignFormModal({
     setIsDataUploadModalOpen(true)
   }
 
-  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary) => {
+  const handleImportedDataRows = (rows: Partial<CampaignInputData>[], duplicates?: ImportDuplicateSummary, sheetSync?: CampaignSheetSyncDraft) => {
     if (rows.length === 0) {
       showAlert('Không có data hợp lệ để chèn.', 'error')
       return
@@ -8872,6 +8891,7 @@ export default function CampaignFormModal({
 
     const addedCount = appendUniqueDetails(rows)
     if (duplicates) setImportDuplicateNote(duplicates)
+    if (sheetSync) setSheetSyncDraft(sheetSync)
     const skipped = duplicates?.skipped ? ` Bỏ qua ${duplicates.skipped.toLocaleString('vi-VN')} số đã có ở chiến dịch khác.` : ''
     showAlert(
       addedCount > 0 ? `Đã thêm ${addedCount} data.${skipped}` : 'Các data đã có trong danh sách.',
@@ -17377,6 +17397,9 @@ export default function CampaignFormModal({
                     </div>
                   )}
 
+                  {!isEditingSavedCampaign && sheetSyncDraft && details.length > 0 && (
+                    <CampaignSheetSyncFormNote draft={sheetSyncDraft} disabled={saveBusy} onChange={setSheetSyncDraft} />
+                  )}
                   {!isEditingSavedCampaign && importDuplicateNote && details.length > 0 && (
                     <InputDuplicateFormNote
                       note={importDuplicateNote}
@@ -18485,9 +18508,10 @@ export default function CampaignFormModal({
           accountIds={formData.accountIds}
           showDatasetName={false}
           duplicateCheck={inputDuplicateCheck}
+          sheetSync={!isEditingSavedCampaign && !isFindDataSearchCampaign ? { campaignEndDate: formData.scheduleEndDate || null } : undefined}
           onClose={() => setIsDataUploadModalOpen(false)}
-          onInsert={(rows, meta) => handleImportedDataRows(rows, meta?.duplicates)}
-          onSubmitRows={({ rows, duplicates }) => handleImportedDataRows(rows, duplicates)}
+          onInsert={(rows, meta) => handleImportedDataRows(rows, meta?.duplicates, meta?.sheetSync)}
+          onSubmitRows={({ rows, duplicates, sheetSync }) => handleImportedDataRows(rows, duplicates, sheetSync)}
         />
       )}
 
