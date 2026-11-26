@@ -32,7 +32,8 @@ async function variant(proposal) {
   const results = []
   try {
     await T.applyV657()
-    if (proposal) await db.query(PROPOSAL_SQL)
+    if (proposal && process.env.GID_TRUST_PROPOSAL === 'migration') await require('./gid-trust-apply-migration.cjs')(db)
+    else if (proposal) await db.query(PROPOSAL_SQL)
     await db.query(`INSERT INTO public.org_organization (id, name) VALUES ($1, 'Org gid trust') ON CONFLICT DO NOTHING`, [ORG])
     await ins('org_staff', { id: STAFF, organization_id: ORG, username: 'gt', password: 'pw', is_active: true })
     const cat = async code => (await one(`SELECT id FROM public.category_item WHERE code=$1 LIMIT 1`, [code]))?.id

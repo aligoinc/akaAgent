@@ -130,5 +130,44 @@ const rollbackSql = [fnBlock(p2, 'private.aka_agent_zalo_gid_ok'), fnBlock(p2, '
   'DROP FUNCTION IF EXISTS private.aka_agent_zalo_user_gid_trusted(jsonb, text);',
   preflight.replace("IF to_regprocedure('private.aka_agent_zalo_user_gid_trusted(jsonb,text)') IS NOT NULL THEN", "IF false THEN")
     .replace(/Đề xuất Global ID theo nguồn gốc: % khác bản production/, 'Gỡ đề xuất Global ID: % chưa về bản production')].join('\n\n') + '\n'
-module.exports = { sql, rollbackSql, LIVE_MD5, parts: { preflight, trusted, gidOk, personKeys, match, blockFacts } }
-if (require.main === module) process.stdout.write(process.argv.includes('--rollback') ? rollbackSql : sql)
+// File migration V668 p2 (hàm private.aka_agent_zalo_user_gid_trusted đã có từ V668 p1, apply 18:34 VN 26/11).
+const P1_TRUSTED_MD5 = '5cb04d481f679bcd5bf24de8a202b011'
+const migrationP2 = `-- V668 p2 (26/11/2026): hàm so khớp loại trừ gửi chỉ dùng dòng zalo_users có Global ID tin được (nguồn gốc dòng, V668 p1).
+-- Sinh bằng: node scripts/build-gid-trust-proposal-sql.cjs --migration-p2 (thân match từ V666, gid_ok / person_keys / block_facts
+-- từ V657 p2; 9 chỗ thay). Kiểm: scripts/send-exclusion-gid-trust-smoke.cjs, send-exclusion-gid-trust-fuzz.cjs, smoke V657 qua
+-- scripts/gid-trust-preload.cjs. Gỡ: migrations/rollback_v668_zalo_users_global_id_guard_p2.sql.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+DO $pre$
+BEGIN
+ IF NOT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v668_zalo_users_global_id_guard_p1') THEN
+  RAISE EXCEPTION 'V668 p2 cần V668 p1 trước';
+ END IF;
+ IF EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name = 'migration_v668_zalo_users_global_id_guard_p2') THEN
+  RAISE EXCEPTION 'V668 p2 đã có trong sổ migration, không chạy lại';
+ END IF;
+ IF md5(pg_get_functiondef(to_regprocedure('private.aka_agent_zalo_user_gid_trusted(jsonb,text)'))) IS DISTINCT FROM '${P1_TRUSTED_MD5}' THEN
+  RAISE EXCEPTION 'V668 p2: private.aka_agent_zalo_user_gid_trusted khác bản V668 p1';
+ END IF;
+END $pre$;
+${preflight.replace(/ IF to_regprocedure\('private\.aka_agent_zalo_user_gid_trusted\(jsonb,text\)'\) IS NOT NULL THEN\n  RAISE EXCEPTION [^\n]*\n END IF;\n/, '')}
+
+${[gidOk, personKeys, match, blockFacts].join('\n\n')}
+
+COMMIT;
+`
+const rollbackP2 = `-- Gỡ V668 p2: trả 4 hàm so khớp về thân production 26/11 sau V666 (md5 kiểm sau khi trả), giữ V668 p1.
+BEGIN;
+SET LOCAL lock_timeout = '5s';
+${[fnBlock(p2, 'private.aka_agent_zalo_gid_ok'), fnBlock(p2, 'private.aka_agent_send_exclusion_person_keys'),
+  fnBlock(v666, 'private.aka_agent_send_exclusion_match'), fnBlock(p2, 'private.aka_agent_send_exclusion_block_facts')].join('\n\n')}
+
+${preflight.replace(/ IF to_regprocedure\('private\.aka_agent_zalo_user_gid_trusted\(jsonb,text\)'\) IS NOT NULL THEN\n  RAISE EXCEPTION [^\n]*\n END IF;\n/, '').replace(/Đề xuất Global ID theo nguồn gốc: % khác bản production/, 'Gỡ V668 p2: % chưa về bản production')}
+
+COMMIT;
+`
+module.exports = { sql, rollbackSql, migrationP2, rollbackP2, LIVE_MD5, parts: { preflight, trusted, gidOk, personKeys, match, blockFacts } }
+if (require.main === module) {
+  const a = process.argv.slice(2)
+  process.stdout.write(a.includes('--migration-p2') ? migrationP2 : a.includes('--rollback-p2') ? rollbackP2 : a.includes('--rollback') ? rollbackSql : sql)
+}
