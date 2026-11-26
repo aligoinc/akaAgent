@@ -49,12 +49,15 @@ Hướng đã cân nhắc và không chọn:
 
 - **Chỉ thêm.** Dòng bị xoá khỏi Sheet thì data trong chiến dịch giữ nguyên. Sửa tên / info của dòng đã có thì không cập nhật.
   Đổi SĐT / UID của một dòng thì hệ thống coi là data mới.
-- **Mốc ban đầu = đúng những dòng form đã đọc.** Lúc lưu, app gửi kèm khoá của mọi dòng Sheet mà cửa sổ Upload đã đọc (cả dòng
-  bị loại vì trùng / không hợp lệ / khách tự bỏ). Các dòng đó không bao giờ được thêm lại. Lượt đồng bộ đầu chạy ngay sau khi lưu
-  và chỉ thêm dòng xuất hiện trong Sheet sau lúc khách bấm "Đọc dữ liệu".
-- **Lọc trùng mỗi lượt:** trùng trong Sheet, đã có trong sổ của nguồn, đã có trong (các) chiến dịch của nguồn (kể cả dòng khách
-  thêm tay hoặc đã xoá). So bằng khoá chuẩn hoá của đúng loại dữ liệu (SĐT chuẩn hoá Việt Nam, UID / link Facebook, UID Zalo,
-  link nhóm Zalo, email), dùng `aka_agent_sheet_identity` đang có.
+- **Mốc ban đầu = đúng những dòng form đã đọc.** Dòng đã thêm vào chiến dịch thì nằm sẵn trong data của chiến dịch. Dòng cửa sổ
+  Upload đã đọc mà không thêm (loại vì trùng / không hợp lệ / khách tự bỏ / lọc trùng với chiến dịch khác) thì app gửi khoá kèm lúc
+  lưu, ghi vào cột `skipped_keys` của bảng thông tin. Các dòng đó không bao giờ được thêm lại. Lượt đồng bộ đầu chạy ngay sau khi
+  lưu và chỉ thêm dòng xuất hiện trong Sheet sau lúc khách bấm "Đọc dữ liệu".
+- **Lọc trùng mỗi lượt (không có bảng sổ riêng):** trùng trong Sheet, nằm trong `skipped_keys`, đã có trong data của mọi chiến
+  dịch từng nhận từ nguồn (kể cả chiến dịch đã rời nguồn, dòng khách thêm tay hoặc đã xoá mềm `is_delete`). So bằng khoá chuẩn hoá
+  của đúng loại dữ liệu (SĐT chuẩn hoá Việt Nam, UID / link Facebook, UID Zalo, link nhóm Zalo, email), dùng
+  `aka_agent_sheet_identity` đang có. Mọi đường xoá data chiến dịch của app đều là xoá mềm, nên data của chiến dịch đủ làm sổ;
+  chỉ dòng bị xoá cứng bằng SQL tay mới có thể được thêm lại.
 - **Chuẩn hoá dòng giống hệt lúc nhập tay:** cùng ghép cột, cùng lựa chọn "ô chứa nhiều SĐT" (lấy số đầu / bỏ dòng / lấy tất cả)
   mà khách đã chọn trong cửa sổ Upload.
 - **Chiến dịch đang chạy:** vẫn thêm; dòng mới ở trạng thái "chờ xử lý" và được chạy theo thứ tự, theo đúng hạn mức, chống gửi
@@ -131,23 +134,51 @@ và chỉ khi nhân viên có ít nhất một nguồn. Không thêm đồng h�
 
 ### 6.1 DB (một migration, chỉ thêm đối tượng mới + thêm một khối vào hàm tick)
 
-| Đối tượng | Nội dung |
+Anh chốt 26/11/2026: chỉ **hai bảng**, một bảng thông tin, một bảng log.
+
+**`auto_campaign_sheet_syncs`** (bảng thông tin, mỗi nguồn đồng bộ một dòng; nhỏ, tối đa 20 dòng / nhân viên):
+
+| Nhóm cột | Cột |
 |---|---|
-| `auto_campaign_sheet_sync_sources` | Nhân viên, tổ chức, loại chiến dịch, mã loại dữ liệu, `config` (link chuẩn hoá có `gid`, có dòng tiêu đề, ghép cột, tiêu đề cột lúc kết nối, cách xử lý ô nhiều SĐT), `every_hours` 1–24, `end_date`, cách chia (`split` / `all`), `is_enabled`, `revision`, `status` (pending / running / success / retry / error / expired / paused), `next_run_at`, bộ đếm, mã yêu cầu tạo (chống tạo trùng khi mạng lỗi) |
-| `auto_campaign_sheet_sync_targets` | (nguồn, chiến dịch) còn nhận hay đã rời + lý do; mỗi chiến dịch thuộc tối đa một nguồn đang bật |
-| `auto_campaign_sheet_sync_seen` | Sổ khoá đã xử lý theo nguồn (kèm chiến dịch đã nhận). Giữ cả khi tắt nguồn, để bật lại không thêm trùng |
-| `auto_campaign_sheet_sync_runs` | Lịch sử lượt chạy, token, kết quả (gọi lại cùng token trả lại kết quả cũ) |
-| `auto_campaign_sheet_worker_state` | Một dòng: công tắc worker + lease của làn chiến dịch |
+| Chủ | `id`, `organization_id`, `staff_id`, `action_id` (loại chiến dịch), `data_type` |
+| Sheet | `config` jsonb: link chuẩn hoá có `gid`, có dòng tiêu đề, ghép cột, tiêu đề cột lúc kết nối, cách xử lý ô nhiều SĐT |
+| Lịch | `every_hours` 1–24, `end_date`, `split_mode` (`split` / `all`) |
+| Chiến dịch | `campaign_ids bigint[]` (đang nhận, chỉ mục GIN để tra "chiến dịch này có đồng bộ không"), `campaigns` jsonb: mọi chiến dịch từng nhận `[{campaignId, position, state: active/left, leftReason, joinedAt, leftAt, added}]`. Mỗi chiến dịch thuộc tối đa một nguồn đang bật: hàm `save` kiểm dưới khoá advisory theo nhân viên (mảng không đặt ràng buộc duy nhất được) |
+| Mốc | `skipped_keys text[]`: khoá các dòng cửa sổ Upload đã đọc mà không thêm (mục 4.1) |
+| Trạng thái | `is_enabled`, `status` (pending / running / success / retry / error / expired / paused), `next_run_at`, `last_run_at`, `last_success_at`, `last_added`, `retry_count`, `last_error_code`, `last_error_message`, `stopped_reason`, `stopped_at` |
+| Worker | `lease_token`, `lease_until` (worker nhận nguồn bằng `FOR UPDATE SKIP LOCKED`, không cần bảng trạng thái worker; công tắc worker ở `campaign.sheet_sync`) |
+| Kỹ thuật | `revision` (chống sửa đè), `create_request_id` (bấm lưu lại khi mạng lỗi không tạo nguồn thứ hai), `created_at`, `updated_at` |
+
+**`auto_campaign_sheet_sync_logs`** (bảng log, mỗi sự kiện một dòng; giữ 30 ngày, dọn trong bước dọn hằng giờ của tick):
+
+| Cột | Nội dung |
+|---|---|
+| `id`, `sync_id`, `organization_id`, `staff_id`, `created_at` | |
+| `kind` | `run` (một lượt đồng bộ), `enable`, `edit`, `disable`, `resume`, `stop` (hệ thống tự dừng), `campaign_left` |
+| `run_token` | Chỉ với `run`: mã lượt; `finish` gọi lại cùng mã thì trả lại kết quả cũ, không thêm data hai lần |
+| `started_at`, `finished_at`, `status` | Chỉ với `run` |
+| `rows_read`, `added`, `duplicates`, `invalid` | Chỉ với `run` |
+| `per_campaign` jsonb | Số data đã thêm vào từng chiến dịch của lượt |
+| `error_code`, `error_message` | Lỗi của lượt / lý do tự dừng |
+| `actor` | `staff` (khách làm từ Desktop / Web / iOS) hoặc `system` |
+
+Không có bảng sổ khoá riêng: lọc trùng dựa vào data của các chiến dịch (mục 4.1). Mỗi lượt đọc khoá của data các chiến dịch
+trong `campaigns` theo `campaign_id` một lần (đọc cả dòng `is_delete`); chiến dịch lớn (vài chục nghìn dòng) tốn hơn một bảng sổ,
+nhưng lượt chạy cách nhau ít nhất 1 giờ. Phần "Lịch sử đồng bộ" của thẻ chiến dịch đọc 30 dòng `kind = 'run'` gần nhất.
+
+| Đối tượng khác | Nội dung |
+|---|---|
 | `aka_agent_campaign_sheet_sync(jsonb)` | Desktop, quyền `aka_agent_desktop`, nhân viên lấy từ phiên. Thao tác `state` / `save` / `stop` / `resume` / `runs` |
 | `aka_agent_control_campaign_sheet_sync(staff, org, jsonb)` | API Web, quyền `service_role`, cùng lõi `private.…` |
 | `aka_agent_campaign_sheet_dispatch()` / `_claim(token)` / `_finish(token, rows, …)` | Worker; `claim` / `finish` chỉ `service_role` |
 | `auto_system_settings` `campaign.sheet_sync` | `{"audience":"off","worker":true,"maxSourcesPerStaff":20,"minEveryHours":1}`; `audience` off / admin_akabiz / all |
 
 `finish` trong một giao dịch: khoá nguồn → kiểm từng chiến dịch đích (còn, đúng nhân viên / tổ chức, đúng loại, không chạy bằng
-Nhóm data, chưa qua ngày kết thúc) → tính khoá, loại trùng (trong lượt, sổ, data đang có của chiến dịch, đọc theo `campaign_id`
-một lần) → chia dòng theo cách chia → khoá `aka_agent_lock_campaign_input_serialization` theo thứ tự id chiến dịch → một lệnh
-INSERT `auto_campaign_input_data` ("chờ xử lý") → ghi sổ → mở lại chiến dịch "hoàn thành" bằng CAS → ghi dòng tiến trình →
-đặt `next_run_at = now + every_hours`. Trần 60 giây như hàm của Nhóm data.
+Nhóm data, chưa qua ngày kết thúc) → tính khoá, loại trùng (trong lượt, `skipped_keys`, data của mọi chiến dịch trong `campaigns`,
+đọc theo `campaign_id` một lần) → chia dòng theo cách chia → khoá `aka_agent_lock_campaign_input_serialization` theo thứ tự id
+chiến dịch → một lệnh INSERT `auto_campaign_input_data` ("chờ xử lý") → mở lại chiến dịch "hoàn thành" bằng CAS → ghi dòng tiến
+trình → cập nhật dòng thông tin (`campaigns[].added`, trạng thái, `next_run_at = now + every_hours`) → ghi một dòng log `run`.
+Trần 60 giây như hàm của Nhóm data.
 
 Không ALTER bảng nóng (`auto_campaigns`, `auto_campaign_input_data`), không trigger mới trên bảng nóng. DDL nên apply buổi tối.
 
