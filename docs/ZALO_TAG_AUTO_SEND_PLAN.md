@@ -418,8 +418,23 @@ gửi Zalo giả, 16.362 tổ hợp chính sách, ~1.350 cặp bộ cũ, 16 ki�
 50.000 lần so DB, 3.000 kết nối Fly, 400 lượt bộ hỏi tag). V669 đã sửa chạy thử lại trên DB thật trong giao dịch tự huỷ: đạt,
 `aka_agent_engine_policy_lint` không thêm cảnh báo.
 
-Phát hiện, chưa sửa (có từ trước, không do V669; cần anh duyệt vì đổi hàm lõi `aka_agent_engine_report_v1`): khoá thao tác của tài
-khoản bị ghi đè bởi lỗi đến sau, kể cả khoá ngắn hơn (`ON CONFLICT … date_enable = EXCLUDED.date_enable`). Ví dụ khoá "Nhắn tin người
-lạ" tới 09:45 hôm sau vì 120 bị NET01 (rớt mạng, khoá mọi thao tác Zalo 5 phút) đè thành 5 phút. Đo 4 ngày tới 26/11: 219 lần khoá vì
-120 / 802, 6 lần (2,7%) bị lỗi sau đè, 1 lần tài khoản nhắn người lạ lại trong thời gian lẽ ra còn khoá và gặp 120 / 802 lần nữa. Cách A
-làm tăng khả năng gặp (chiến dịch bạn bè chạy tiếp sau 120). Sửa: lấy giờ muộn hơn khi khoá đang còn hiệu lực.
+Phát hiện (có từ trước, không do V669): khoá thao tác của tài khoản bị ghi đè bởi lỗi đến sau, kể cả khoá ngắn hơn
+(`ON CONFLICT … date_enable = EXCLUDED.date_enable` trong `aka_agent_engine_report_v1`). Ví dụ khoá "Nhắn tin người lạ" tới 09:45 hôm
+sau vì 120 bị NET01 (rớt mạng, khoá mọi thao tác Zalo 5 phút) đè thành 5 phút. Đo 4 ngày tới 26/11: 219 lần khoá vì 120 / 802, 6 lần
+(2,7%) bị lỗi sau đè, 1 lần tài khoản nhắn người lạ lại trong thời gian lẽ ra còn khoá và gặp 120 / 802 lần nữa. Cách A làm tăng khả năng
+gặp (chiến dịch bạn bè chạy tiếp sau 120).
+
+### 10.2 V671: giữ khoá dài hơn (26/11/2026, anh đồng ý "Ok"; CHƯA apply)
+
+[V671](../migrations/migration_v671_engine_action_lock_keep_longer.sql) (sinh bằng `node scripts/build-v671-sql.cjs` từ thân production
+đọc 26/11, md5 `b39e1e9d…` = bản sau V659 → `014a3d03…`; có bản gỡ) chỉ thêm một mệnh đề `WHERE` vào câu ghi khoá: khoá đang có còn
+hiệu lực (`is_disable`, `date_enable` không thời hạn hoặc sau giờ hiện tại) và dài hơn khoá mới thì giữ nguyên cả dòng (giờ mở, mã,
+câu, lúc khoá). Khoá mới không thời hạn luôn ghi; khoá cũ đã hết hạn luôn bị thay; khoá dài hơn vẫn thay khoá ngắn. Không đổi giờ hẹn
+lại data và câu "tới {until}" của chính lượt đó (lượt nhận sau vẫn chờ theo khoá dài hơn vì claim đọc `auto_account_action_status`);
+bộ chạy cũ không đổi. CREATE OR REPLACE nên PostgREST nạp lại schema: apply ngoài giờ cao điểm.
+
+Kiểm: `CHAT_REPO=… node scripts/engine-v2-lock-keep/v671-smoke.cjs` (migration / gỡ / chặn chạy lại / số 671 trong sổ trên thân
+production; câu ghi khoá chép nguyên văn trước / sau vá so với mô hình độc lập, 20.000–30.000 ca mỗi seed gồm khoá không thời hạn, đã
+hết, bằng giờ, khoá mới không thời hạn); bộ kiểm engine Cách A có bất biến A8 (bộ chạy Desktop thật, khoá do `report_v1` ghi, đếm bằng
+trigger; mặc định có V671, `--no-v671` để đối chứng). Cùng seed 301: không V671 rút ngắn 14 khoá đang còn hiệu lực, có V671 0 lần,
+mọi kết quả khác y hệt. Vòng seed 311, 312, 313 (data thật ẩn danh, 80 kịch bản + 30.000 ca mỗi vòng) sạch liền.

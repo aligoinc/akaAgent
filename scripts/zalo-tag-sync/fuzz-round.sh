@@ -15,6 +15,7 @@ step "Desktop / App Server: bộ hỏi tag" node "$DIR/runtime-fuzz.cjs" --seed 
 step "Bộ chạy mới Desktop: gửi cho người được gắn tag (kể cả người lạ)" node "$DIR/../campaign-engine-desktop-smoke.cjs"
 step "Cách A: bộ chạy mới thật, data ngẫu nhiên + sai lệch, gắn tag so với không" node "$DIR/cach-a-engine-fuzz.cjs" --seed "$SEED" --scenarios "${CACH_A_SCENARIOS:-60}" ${CACH_A_POOL:+--real "$CACH_A_POOL"}
 step "Cách A: chính sách V669 trên bản sao danh mục production (engine + bộ cũ + gỡ + sai cố ý)" node "$DIR/cach-a-policy-fuzz.cjs" --seed "$SEED" ${CACH_A_SIGNALS:+--signals "$CACH_A_SIGNALS"}
+step "V671: giữ khoá thao tác dài hơn (migration + câu ghi khoá so mô hình)" node "$DIR/../engine-v2-lock-keep/v671-smoke.cjs" --seed "$SEED"
 step "Bài kiểm V660 + gỡ / apply lại" bash "$DIR/v660-smoke.sh"
 step "Desktop / App Server: smoke" node "$DIR/runtime-smoke.cjs"
 echo "== VÒNG seed $SEED: $([ $status = 0 ] && echo SẠCH || echo CÒN LỖI)"

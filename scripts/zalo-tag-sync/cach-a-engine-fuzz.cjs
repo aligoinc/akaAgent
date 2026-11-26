@@ -17,6 +17,8 @@
 //   A5 tin gửi đi không còn biến chưa thay (#{...}), không "undefined"/"null"; hồ sơ Zalo có tên thì tin dùng tên hồ sơ.
 //   A6 UID là SĐT / rỗng / không phải số → không gửi.
 //   A7 sau khi chạy: không data / chiến dịch nào còn "đang chạy", không lượt engine còn mở.
+//   A8 có V671 (mặc định; --no-v671 để đối chứng): khoá thao tác đến sau không ghi đè khoá đang còn hiệu lực và dài hơn (vd NET01 5 phút sau
+//      120 tới 09:45), khoá dài hơn vẫn thay khoá ngắn; ghi nhận bằng trigger trên auto_account_action_status, đếm từng lần ghi khoá.
 'use strict'
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
@@ -37,6 +39,7 @@ const v499 = require('../build-v499-sql.cjs')
 const v501 = require('../build-v501-sql.cjs')
 const V500 = fs.readFileSync(path.join(ROOT, 'migrations/migration_v500_zalo_error_policies.sql'), 'utf8')
 const V669 = fs.readFileSync(path.join(ROOT, 'migrations/migration_v669_zalo_friend_stranger_restricted.sql'), 'utf8')
+const v671 = require('../build-v671-sql.cjs')
 
 const args = process.argv.slice(2)
 const opt = (name, def) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : def }
@@ -44,6 +47,7 @@ const flag = name => args.includes(name)
 const SEED = Number(opt('--seed', 1))
 const SCENARIOS = Number(opt('--scenarios', 40))
 const NO_V669 = flag('--no-v669')
+const NO_V671 = flag('--no-v671')
 const CATALOG = opt('--catalog', path.join(ROOT, 'scripts/fixtures/engine-v2-facebook/engine-catalog-20261126.json'))
 const REAL = opt('--real')
 const DUMP = opt('--dump')
@@ -204,7 +208,7 @@ async function main() {
   const db = await connect()
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'aka-cach-a-userdata-'))
   const violations = []
-  const stats = { scenarios: 0, targets: 0, sends: 0, byOutcome: {}, deferred: 0, paused: 0 }
+  const stats = { scenarios: 0, targets: 0, sends: 0, byOutcome: {}, deferred: 0, paused: 0, lockWrites: 0, lockKeep: 0, lockReplaced: 0, lockShortened: 0 }
   const violate = (code, detail) => { violations.push({ code, ...detail }); if (violations.length <= 30) console.log('VI PHẠM', code, JSON.stringify(detail)) }
   try {
     await buildFixture(db, [])
@@ -212,6 +216,39 @@ async function main() {
     const loaded = await loadProductionCatalog(db)
     console.log('Danh mục production:', JSON.stringify(Object.fromEntries(Object.entries(loaded).map(([t, v]) => [t, { rows: v.rows, thiếuCột: v.missing }]))))
     if (!NO_V669) await db.query(V669)
+    // V671: thân report_v1 của bộ kiểm (bản V501) có đúng đoạn ghi khoá như production; vá cùng một chỗ.
+    if (!NO_V671) {
+      const { rows: [{ d }] } = await db.query(`SELECT pg_get_functiondef(p.oid) AS d FROM pg_proc p WHERE p.proname = 'aka_agent_engine_report_v1'`)
+      if (d.split(v671.OLD).length !== 2) throw new Error('V671: đoạn ghi khoá report_v1 của bộ kiểm không đúng một chỗ')
+      await db.query(d.replace(v671.OLD, v671.NEW))
+    }
+    // A8: ghi nhận mọi lần ghi khoá (lúc ghi = disabled_at = v_now của report_v1). BEFORE INSERT chạy trước bước ON CONFLICT nên thấy cả
+    // lần bị giữ (không cập nhật); BEFORE UPDATE thấy lần thay thật. Bộ kiểm tự cho khoá ngắn hết hạn bằng UPDATE không đổi disabled_at.
+    await db.query(`CREATE TABLE public.zz_lock_audit (id bigserial, kind text, account_id bigint, action_code text, old_date timestamptz, new_date timestamptz, at timestamptz);
+      CREATE FUNCTION public.zz_lock_audit_ins() RETURNS trigger LANGUAGE plpgsql AS $f$
+      DECLARE o record;
+      BEGIN
+        IF NEW.is_disable IS TRUE THEN
+          SELECT s.is_disable, s.date_enable INTO o FROM public.auto_account_action_status s WHERE s.account_id = NEW.account_id AND s.action_code = NEW.action_code;
+          IF FOUND THEN
+            INSERT INTO public.zz_lock_audit (kind, account_id, action_code, old_date, new_date, at)
+            VALUES (CASE WHEN o.is_disable AND NEW.date_enable IS NOT NULL AND (o.date_enable IS NULL OR (o.date_enable > NEW.disabled_at AND o.date_enable > NEW.date_enable))
+                         THEN 'keep' ELSE 'write' END, NEW.account_id, NEW.action_code, o.date_enable, NEW.date_enable, NEW.disabled_at);
+          END IF;
+        END IF;
+        RETURN NEW;
+      END $f$;
+      CREATE FUNCTION public.zz_lock_audit_upd() RETURNS trigger LANGUAGE plpgsql AS $f$
+      BEGIN
+        IF NEW.is_disable IS TRUE AND NEW.disabled_at IS DISTINCT FROM OLD.disabled_at THEN
+          INSERT INTO public.zz_lock_audit (kind, account_id, action_code, old_date, new_date, at)
+          VALUES (CASE WHEN OLD.is_disable AND NEW.date_enable IS NOT NULL AND (OLD.date_enable IS NULL OR (OLD.date_enable > NEW.disabled_at AND OLD.date_enable > NEW.date_enable))
+                       THEN 'shortened' ELSE 'replaced' END, NEW.account_id, NEW.action_code, OLD.date_enable, NEW.date_enable, NEW.disabled_at);
+        END IF;
+        RETURN NEW;
+      END $f$;
+      CREATE TRIGGER zz_lock_audit_ins BEFORE INSERT ON public.auto_account_action_status FOR EACH ROW EXECUTE FUNCTION public.zz_lock_audit_ins();
+      CREATE TRIGGER zz_lock_audit_upd BEFORE UPDATE ON public.auto_account_action_status FOR EACH ROW EXECUTE FUNCTION public.zz_lock_audit_upd();`)
 
     const client = {
       rpc(name, a) {
@@ -328,7 +365,9 @@ async function main() {
         .rows[0].n
       const locks = (await db.query(`SELECT action_code, date_enable FROM public.auto_account_action_status WHERE account_id = $1 AND date_enable > now()`,
         [fx.account.id])).rows
-      return { fx, sent, lines, data, details, outcomes, campaign, streak, openRuns, locks, results }
+      const audit = (await db.query(`SELECT kind, count(*)::int n FROM public.zz_lock_audit WHERE account_id = $1 GROUP BY kind`, [fx.account.id])).rows
+      const lockAudit = Object.fromEntries(audit.map(a => [a.kind, a.n]))
+      return { fx, sent, lines, data, details, outcomes, campaign, streak, openRuns, locks, results, lockAudit }
     }
 
     // Tóm tắt kết quả theo data, bỏ mã / id riêng của từng chiến dịch, để so dòng gắn tag với dòng thường (A2).
@@ -369,6 +408,12 @@ async function main() {
         if (r.openRuns) violate('A7', { ...ctx, label, openRuns: r.openRuns })
         if (r.data.some(d => d.status === 'đang chạy') || r.campaign.status === 'đang chạy') violate('A7', { ...ctx, label, campaign: r.campaign })
         if (r.campaign.status === 'tạm dừng') stats.paused++
+        // A8: mỗi lần ghi khoá vào dòng đã có là "keep" (khoá cũ còn hiệu lực, dài hơn) hoặc "write". Có V671: không lần nào rút ngắn khoá
+        // ("shortened"), mọi "write" đều thành "replaced". Không V671 (đối chứng): mọi lần đều cập nhật, keep = shortened.
+        const la = { keep: 0, write: 0, replaced: 0, shortened: 0, ...r.lockAudit }
+        stats.lockWrites += la.keep + la.write; stats.lockKeep += la.keep; stats.lockReplaced += la.replaced; stats.lockShortened += la.shortened
+        const okLocks = NO_V671 ? (la.shortened === la.keep && la.replaced === la.write) : (la.shortened === 0 && la.replaced === la.write)
+        if (!okLocks) violate('A8', { ...ctx, label, lockAudit: la })
         const texts = r.sent.filter(x => x.startsWith('text:'))
         stats.sends += texts.length
         for (const t of texts) {
@@ -408,8 +453,7 @@ async function main() {
             const days = b.send === 'z120' ? 1 : 2
             const expected = (await db.query(`SELECT greatest((date_trunc('day', now() AT TIME ZONE 'Asia/Ho_Chi_Minh') + make_interval(days => $1) + time '09:45')
               AT TIME ZONE 'Asia/Ho_Chi_Minh', now() + interval '1 second') AS t`, [days])).rows[0].t
-            // Khoá "Nhắn tin người lạ" của tài khoản không kiểm ở đây: hàm báo kết quả ghi đè khoá bằng lỗi đến sau (kể cả khoá ngắn hơn),
-            // có từ trước Cách A (ghi ở docs/ZALO_TAG_AUTO_SEND_PLAN.md mục 10.4).
+            // Khoá "Nhắn tin người lạ" của tài khoản kiểm ở A8 (V671: lỗi đến sau không đè khoá dài hơn).
             const okState = d.status === 'chờ xử lý' && d.schedule && Math.abs(new Date(d.schedule) - new Date(expected)) < 2000
             if (!okState) violate('A4-hẹn', { ...ctx, label, data: d, expected, lock })
             if (contrib.streak && contrib.streak !== 'ignore') violate('A4-chuỗi', { ...ctx, label, contrib })
@@ -440,7 +484,7 @@ async function main() {
   }
   console.log('Thống kê:', JSON.stringify(stats))
   const codes = [...new Set(violations.map(v => v.code))]
-  console.log(`${violations.length} vi phạm${codes.length ? ' (' + codes.join(', ') + ')' : ''}${NO_V669 ? ' [không V669, đối chứng]' : ''}`)
+  console.log(`${violations.length} vi phạm${codes.length ? ' (' + codes.join(', ') + ')' : ''}${NO_V669 ? ' [không V669, đối chứng]' : ''}${NO_V671 ? ' [không V671, đối chứng]' : ''}`)
   process.exit(violations.length && !NO_V669 ? 1 : 0)
 }
 
