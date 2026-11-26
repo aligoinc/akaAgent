@@ -1,0 +1,93 @@
+{
+ "readAt": "2026-11-26T02:46:28Z",
+ "note": "Đọc chỉ đọc production 26/11/2026 (câu 639 / 3300 / 6279 của bộ kiểm lỗi). Code block 2859 = bản V641 (scripts/fixtures/fb-ai-filter/blocks-v641.json, md5 81f1dd79…); bộ cũ 2554 = bản V641. Block 2859 chỉ workflow 316 (facebook_comment_seeding) dùng, không có trong danh mục bước. Mã / chính sách FB04, FB43, FB45 có sẵn từ V559.",
+ "block": {
+  "id": 2859,
+  "md5": "81f1dd79e70bbafcb85cf98b2d672210",
+  "name": "[engine] fb_prepare_seeding_iterations",
+  "updatedAt": "2026-11-24T08:55:56.117712+00:00"
+ },
+ "source": {
+  "id": 2554,
+  "md5": "091f57483369c8b03fea65e9eba0390c",
+  "name": "fb_prepare_seeding_iterations"
+ },
+ "copy": {
+  "engineBlockId": 2859,
+  "engineMd5AtCopy": "81f1dd79e70bbafcb85cf98b2d672210",
+  "sourceBlockId": 2554,
+  "sourceMd5AtCopy": "091f57483369c8b03fea65e9eba0390c"
+ },
+ "steps": [],
+ "workflowsUsing": [
+  316
+ ],
+ "workflowPurposes": [
+  {
+   "purpose": "facebook_comment_seeding",
+   "wf": 316
+  }
+ ],
+ "errors": [
+  {
+   "active": true,
+   "errorCode": "err_engine_fb_logged_out",
+   "publicCode": "FB43"
+  },
+  {
+   "active": true,
+   "errorCode": "err_engine_fb_no_history",
+   "publicCode": "FB45"
+  },
+  {
+   "active": true,
+   "errorCode": "err_fb_checkpoint",
+   "publicCode": "FB04"
+  }
+ ],
+ "policies": [
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "detailMode": "suppress",
+   "errorCode": "err_fb_checkpoint",
+   "id": 281,
+   "loginEffect": "checkpoint",
+   "runEffect": "stop_account",
+   "streak": "ignore",
+   "targetEffect": "requeue"
+  },
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "detailMode": "suppress",
+   "errorCode": "err_engine_fb_logged_out",
+   "id": 341,
+   "loginEffect": "logged_out",
+   "runEffect": "stop_account",
+   "streak": "ignore",
+   "targetEffect": "requeue"
+  },
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "detailMode": "suppress",
+   "errorCode": "err_engine_fb_no_history",
+   "id": 343,
+   "loginEffect": "none",
+   "runEffect": "continue",
+   "streak": "ignore",
+   "targetEffect": "complete"
+  }
+ ],
+ "elements": {
+  "PostLinkInUid": "//*[@role='feed']//a[(contains(@href, '/pending_posts/') or contains(@href, '/posts/') or contains(@href, 'story_fbid=')) and not(contains(@href, 'comment_id=')) and not(contains(@href, 'reply_comment_id='))]",
+  "RawPostLinkInUid": "//*[@role='feed']//a[@target='_blank' and contains(@href, '?__cft__[0]=')]",
+  "fb_content_in_post_in_uid": ".//*[@dir='auto']//*[@data-ad-rendering-role='message' or @data-ad-rendering-role='story_message' or @data-ad-comet-preview='message' or @data-ad-preview='message' or @class='xh8yej3' or @id]",
+  "fb_post_in_uid": "//*[@role='feed']//*[@class='x1yztbdb x1n2onr6 xh8yej3 x1ja2u2z' or @class='x1n2onr6 x1ja2u2z']|//*[@class='x1yztbdb x1n2onr6 xh8yej3 x1ja2u2z']",
+  "fb_see_more_content_post_btn": ".//*[@dir='auto']//*[@data-ad-comet-preview='message' or @data-ad-preview='message' or @data-ad-rendering-role='story_message' or @class='xh8yej3' or @id]//*[@role='button' and (.='Xem thêm' or .='See more')]"
+ }
+}
