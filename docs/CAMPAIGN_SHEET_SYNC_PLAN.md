@@ -261,3 +261,46 @@ Câu ở mục 9 dùng đúng cột "Đề xuất" (anh chưa chốt khác). M�
 | Web / API / iOS | akaAgentWebApp cùng tên nhánh (`docs/CAMPAIGN_SHEET_SYNC.md`): `POST /api/aka-agent/control/v1/campaigns/sheet-sync` → `aka_agent_control_campaign_sheet_sync`; Web: ô ở tab Link Google Sheet, dòng tóm tắt trong form, thẻ ở tab Data (Kết nối lại trên Web chỉ cho Zalo); iOS: thẻ chỉ xem + Tắt đồng bộ. "Thêm thành viên nhóm" trên Web nhận SĐT hoặc UID nên không có ô đồng bộ | API `npx vitest run src/modules/campaign-sheet-sync` (7), Web `src/test/CampaignSheetSyncUpload.test.tsx` (3), iOS `SheetSyncCard.test.tsx` (3); `WEBAPP_REPO=… node scripts/campaign-sheet-sync/rows-smoke.cjs` so bản chép hợp đồng |
 
 Chưa có: chạy trong Electron thật, chạy thật với Sheet công khai qua job thật (cần apply + deploy). Thứ tự đưa lên như mục 8.
+
+## 12. Kiểm thử vòng lặp (26/11/2026)
+
+Anh yêu cầu: lấy data nội bộ + data mẫu + mô phỏng hàng nghìn trường hợp + cố tình tạo data sai, lặp tới khi ít nhất 3 vòng liền
+không còn vấn đề.
+
+**Cách chạy** (data thật chỉ đọc, để ngoài repo):
+
+```
+WEBAPP_REPO=<akaAgentWebApp> node scripts/campaign-sheet-sync/fuzz-loop.cjs --seed N --cases 600 \
+  --real <mẫu data thật> --realcamp <data trọn chiến dịch thật> --out <kịch bản>
+python3 scripts/campaign-sheet-sync/fuzz_db.py <kịch bản> --seed N
+```
+
+- Data thật: 40.904 dòng lấy mẫu `TABLESAMPLE` từ `auto_campaign_input_data` (14 loại chiến dịch được đồng bộ) + trọn data của 15
+  chiến dịch thật (~29.000 dòng). Chỉ đọc, lưu ở scratchpad, không commit.
+- Tầng JS (`fuzz-loop.cjs`): Sheet sinh từ data thật + data tự sinh + data sai cố ý (SĐT nhiều cách viết, nhiều số trong ô, số
+  khoa học, chữ số toàn chiều rộng, NUL, HTML, công thức, chuỗi 5.000 ký tự, link sai…), xuất CSV như Google rồi đọc bằng **cả hai
+  bộ đọc thật** (SheetJS của cửa sổ Upload, `parseSheetCsv` của Edge), nhiều lượt Sheet đổi (thêm / sửa / xoá / đảo dòng, thêm cột,
+  đổi tên / đổi chỗ cột). Kiểm: dòng đồng bộ = dòng hợp lệ của Upload, số đếm khớp, luật đổi cột so với Sheet gốc, cấu hình và
+  mốc ban đầu, Web dựng cùng cấu hình / cùng dòng như Desktop (bộ đọc của API Web).
+- Tầng DB (`fuzz_db.py`, PG16, locale UTF-8 như production): 1–3 chiến dịch đủ trạng thái, data đã có (có dòng xoá mềm, cách
+  viết khác, data thật), thao tác chen giữa lượt (tắt / bật lại, xoá chiến dịch, hoàn thành, khách thêm tay đúng số sắp có, Sửa
+  giữa lượt, lỗi tạm thời, nhân viên bị khoá, hai Edge cùng nhận việc, hai `finish` cùng token song song). "Sự thật" tính độc lập
+  theo khoá chuẩn hoá của app; mọi giá trị khách tự nhập được so khoá DB với khoá app.
+
+**Lỗi tìm ra và đã sửa** (đều trước khi apply V662):
+
+| # | Lỗi | Sửa |
+|---|---|---|
+| 1 | UID dài hơn 2.048 ký tự bị DB cắt cụt rồi vẫn thêm vào chiến dịch | Quá giới hạn thì không hợp lệ, không cắt |
+| 2 | Data Facebook thật trong chiến dịch thường còn `/` cuối (8–73% tuỳ loại), Sheet chuẩn hoá bỏ `/` ⇒ DB thêm trùng group / bài | Khoá DB theo đúng luật app: bỏ mọi khoảng trắng, bỏ `/` cuối; link group Zalo về `https://zalo.me/g/<mã>` |
+| 3 | UID Zalo có `/` (app coi là sai) DB coi là trùng ⇒ dòng Sheet hợp lệ bị bỏ, khách không bao giờ được nhắn | UID Zalo chỉ nhận chữ số |
+| 4 | Email `mailto:…` DB nhận mà app không | Khoá email theo `isValidEmailInputDataValue` |
+| 5 | Khoảng trắng hai đầu: DB chỉ bỏ dấu cách, app bỏ cả tab / NBSP / khoảng trắng Unicode | Hàm `aka_agent_campaign_sheet_trim` / `_space` theo `\s` của JS |
+| 6 | Ký tự NUL trong ô (tiêu đề / tên) làm Postgres từ chối cả gói JSON ⇒ không lưu được nguồn, lượt đồng bộ lỗi mãi | Bỏ NUL ở JS trước khi gửi (Desktop + bản chép Web) |
+| 7 | (có sẵn từ trước, ở cửa sổ Upload) Sheet có ô A1 bắt đầu bằng `<` thì SheetJS đọc CSV của Google thành HTML và báo lỗi | CSV Google đã biết định dạng thì tách CSV riêng (Desktop `src/shared/campaignImportWorkbook.ts` + Web `campaign-core`) |
+
+Đo trên 26.262 SĐT thật: khoá DB và khoá app khớp 100%. Hai dạng SĐT lệch (`781288208.0`, nhiều số trong một ô) không thể nằm
+trong data chiến dịch qua đường nào của app, và nếu có thì bộ chạy cũng không gửi được dòng đó, nên thêm từ Sheet là đúng.
+
+Giới hạn còn lại: so trùng theo đúng cách chuẩn hoá của cửa sổ Upload (cùng group viết `m.facebook.com` với `www.facebook.com`,
+có / không tham số theo dõi vẫn là hai giá trị, như Upload hôm nay).

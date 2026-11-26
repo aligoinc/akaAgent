@@ -492,12 +492,16 @@ var CampaignSheetSyncError = class extends Error {
     this.name = "CampaignSheetSyncError";
   }
 };
-var headerCell = (value) => importText(value).replace(/\s+/g, " ");
+var stripNul = (value) => value.replace(/\u0000/g, "");
+var headerCell = (value) => stripNul(importText(value)).replace(/\s+/g, " ");
 function campaignSheetTable(rows) {
   return {
     name: "Google Sheet",
     rowNumbers: rows.map((_, index) => index + 1),
-    rows: rows.map((row) => row.map((value) => ({ value, text: value })))
+    rows: rows.map((row) => row.map((raw) => {
+      const value = stripNul(raw);
+      return { value, text: value };
+    }))
   };
 }
 function campaignSheetSyncRows(table, config, actionId) {

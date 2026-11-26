@@ -87,6 +87,18 @@ def run(pg):
     ok(pg.one("SELECT position('Campaign Sheet dispatch' in prosrc) > 0 FROM pg_proc WHERE proname='aka_agent_data_group_background_tick'") == 't',
        'hàm tick có khối dispatch chiến dịch')
 
+    # Khoá so trùng: cùng luật với cửa sổ Upload (tìm ra bằng bộ thử ngẫu nhiên + data thật 26/11).
+    def key(field, action, value):
+        return pg.one(f"SELECT coalesce(private.aka_agent_campaign_sheet_key('{field}', '{action}', $v${value}$v$, $v${value}$v$, $v${value}$v$), '∅')")
+    ok(key('uid', 'facebook_group_post', 'https://www.facebook.com/groups/123/') == 'https://www.facebook.com/groups/123', 'UID Facebook bỏ "/" cuối như app')
+    ok(key('uid', 'facebook_message_uid', ' Đoàn  Phóng ') == 'ĐoànPhóng', 'UID bỏ mọi khoảng trắng như app')
+    ok(key('uid', 'zalo_message_group_member', '5353486665/') == '∅' and key('uid', 'zalo_message_group_member', '5353 486665') == '5353486665',
+       'UID Zalo chỉ nhận chữ số (app coi "/" là sai)')
+    ok(key('uid', 'zalo_join_group_link', 'ZALO.ME/G/AbC?src=qr') == 'https://zalo.me/g/AbC', 'link group Zalo về dạng chuẩn')
+    ok(key('uid', 'facebook_find_data_search', '\u00a0BÁN  NHÀ\t') == 'bán nhà', 'từ khoá: chữ thường tiếng Việt, gộp khoảng trắng kiểu JS')
+    ok(key('email', 'email_send', 'mailto:a@x.vn') == '∅' and key('email', 'email_send', ' A.B@X.VN ') == 'a.b@x.vn', 'email theo luật của app')
+    ok(key('uid', 'facebook_group_post', 'x' * 2049) == '∅', 'UID quá 2.048 ký tự: không nhận, không cắt')
+
     # Quyền.
     for role, fn in [('anon', 'public.aka_agent_campaign_sheet_finish(uuid,jsonb)'), ('authenticated', 'public.aka_agent_campaign_sheet_claim()'),
                      ('aka_agent_desktop', 'public.aka_agent_campaign_sheet_claim()'),

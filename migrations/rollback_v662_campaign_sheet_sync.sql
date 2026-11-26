@@ -30,6 +30,8 @@ DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_log(public.auto_campaig
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_view(public.auto_campaign_sheet_syncs);
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_campaign_issue(bigint, bigint, bigint, text);
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_key(text, text, text, text, text);
+DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_space(text, text);
+DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_trim(text);
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_action_allowed(text);
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_today();
 DROP FUNCTION IF EXISTS private.aka_agent_campaign_sheet_setting();

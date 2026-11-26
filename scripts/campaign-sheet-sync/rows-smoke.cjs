@@ -113,6 +113,15 @@ ok('mã lỗi RPC → câu tiếng Việt', () => {
   assert.equal(contract.campaignSheetSyncErrorCode('ERROR: sheet_sync_campaign_taken'), 'sheet_sync_campaign_taken')
   assert.match(contract.campaignSheetSyncErrorMessage('sheet_sync_limit', '20'), /20 nguồn/)
 })
+ok('ký tự NUL bị bỏ trước khi gửi DB (jsonb không nhận)', () => {
+  const t = rows.campaignSheetTable([['SĐT\u0000', 'Tên'], ['0912345678', 'A\u0000n']])
+  assert.equal(t.rows[0][0].text, 'SĐT')
+  const cfg = rows.buildCampaignSheetSyncConfig({ link, table: { ...t, rows: [[{ value: 'SĐT\u0000', text: 'SĐT\u0000' }, ...t.rows[0].slice(1)], t.rows[1]] },
+    mapping: { phone: 0, name: 1 }, skipHeader: true, phonePolicy: 'first', platform: 'zalo', actionId: 'zalo_message_phone' })
+  assert.deepEqual(cfg.expectedHeaders, ['SĐT', 'Tên'])
+  const out = rows.campaignSheetSyncRows(t, cfg, 'zalo_message_phone')
+  assert.equal(JSON.stringify(out).includes('\\u0000'), false)
+})
 ok('bản đóng gói Edge khớp mã nguồn', () => {
   const r = require('node:child_process').spawnSync(process.execPath, [path.join(__dirname, 'build-edge-core.cjs'), '--check'], { encoding: 'utf8' })
   assert.equal(r.status, 0, r.stderr)

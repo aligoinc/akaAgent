@@ -158,16 +158,33 @@ RETURNS boolean LANGUAGE sql IMMUTABLE SET search_path = pg_catalog AS $fn$
     'email_send']);
 $fn$;
 
--- Khoá so trùng của một dòng: cùng cách cửa sổ Upload so trùng (SĐT chuẩn hoá, email chữ thường, từ khoá tìm kiếm
--- chữ thường, còn lại nguyên văn đã bỏ khoảng trắng hai đầu). Dùng cho cả data đang có của chiến dịch.
+-- Khoảng trắng theo nghĩa `\s` của JavaScript (app dùng trim / \s+): ASCII + NBSP + khoảng trắng Unicode + BOM.
+CREATE FUNCTION private.aka_agent_campaign_sheet_trim(p_value text)
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = pg_catalog AS $fn$
+  SELECT regexp_replace(p_value, '^[\s   -     　﻿]+|[\s   -     　﻿]+$', '', 'g');
+$fn$;
+CREATE FUNCTION private.aka_agent_campaign_sheet_space(p_value text, p_with text)
+RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = pg_catalog AS $fn$
+  SELECT regexp_replace(p_value, '[\s   -     　﻿]+', p_with, 'g');
+$fn$;
+
+-- Khoá so trùng của một người nhận, cùng luật với cửa sổ Upload (src/shared/campaignImportVerification.ts):
+-- SĐT chuẩn hoá; email theo isValidEmailInputDataValue rồi chữ thường; UID bỏ khoảng trắng và "/" cuối; UID Zalo chỉ số;
+-- link group Zalo về https://zalo.me/g/<mã>; từ khoá tìm kiếm gộp khoảng trắng + chữ thường. Quá 2.048 ký tự: không nhận.
 CREATE FUNCTION private.aka_agent_campaign_sheet_key(p_field text, p_action_id text, p_phone text, p_uid text, p_email text)
 RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE SET search_path = pg_catalog, public AS $fn$
   SELECT CASE p_field
     WHEN 'phone' THEN NULLIF(public.aka_agent_internal_normalize_phone(p_phone), '')
-    WHEN 'email' THEN CASE WHEN length(btrim(p_email)) <= 254 AND btrim(p_email) ~ '^[^[:space:]@]+@[^[:space:]@]+\.[^[:space:]@]+$'
-      THEN lower(btrim(p_email)) END
-    ELSE NULLIF(left(CASE WHEN p_action_id = 'facebook_find_data_search'
-      THEN lower(regexp_replace(btrim(p_uid), '\s+', ' ', 'g')) ELSE btrim(p_uid) END, 2048), '')
+    WHEN 'email' THEN (SELECT e FROM (SELECT lower(private.aka_agent_campaign_sheet_trim(p_email)) AS e) z
+      WHERE length(e) <= 254
+        AND e ~ '^[a-z0-9.!#$%&''*+/=?^_`{|}~-]{1,64}@([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+        AND split_part(e, '@', 1) !~ '(^\.|\.$|\.\.)' AND length(split_part(e, '@', 2)) <= 253)
+    ELSE (SELECT CASE WHEN length(v) <= 2048 THEN NULLIF(v, '') END FROM (SELECT CASE
+      WHEN p_action_id = 'facebook_find_data_search' THEN lower(private.aka_agent_campaign_sheet_space(private.aka_agent_campaign_sheet_trim(p_uid), ' '))
+      WHEN p_action_id = 'zalo_message_group_member' THEN (SELECT u FROM (SELECT private.aka_agent_campaign_sheet_space(p_uid, '') AS u) z WHERE u ~ '^[0-9]{5,30}$')
+      WHEN p_action_id = 'zalo_join_group_link' THEN (SELECT 'https://zalo.me/g/' || m[1]
+        FROM regexp_match(private.aka_agent_campaign_sheet_trim(p_uid), '^(?:https?://)?(?:[^/?#\s]*\.)?(?:zalo\.me/g|zaloapp\.com/qr/g)/([^/?#\s]+)', 'i') m)
+      ELSE regexp_replace(private.aka_agent_campaign_sheet_space(p_uid, ''), '/+$', '') END AS v) x)
   END;
 $fn$;
 
@@ -734,7 +751,7 @@ BEGIN
              private.aka_agent_campaign_sheet_key(v_field, v_sync.action_id, x->>'phone', x->>'uid', x->>'email') AS key,
              NULLIF(left(btrim(COALESCE(x->>'name', '')), 500), '') AS name,
              CASE WHEN v_field = 'phone' THEN public.aka_agent_internal_normalize_phone(x->>'phone') END AS phone,
-             CASE WHEN v_field = 'uid' THEN left(btrim(x->>'uid'), 2048) END AS uid,
+             CASE WHEN v_field = 'uid' THEN btrim(x->>'uid') END AS uid,
              CASE WHEN v_field = 'email' THEN lower(btrim(x->>'email')) END AS email,
              NULLIF(left(COALESCE(x->>'info1', ''), 4000), '') AS info1, NULLIF(left(COALESCE(x->>'info2', ''), 4000), '') AS info2,
              NULLIF(left(COALESCE(x->>'info3', ''), 4000), '') AS info3, NULLIF(left(COALESCE(x->>'info4', ''), 4000), '') AS info4,

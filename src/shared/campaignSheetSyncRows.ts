@@ -43,7 +43,9 @@ export interface CampaignSheetSyncRowsResult {
   duplicates: number
 }
 
-const headerCell = (value: unknown) => importText(value).replace(/\s+/g, ' ')
+// Postgres không lưu được ký tự NUL trong jsonb: bỏ trước khi gửi (cả lúc so tiêu đề, để hai phía giống nhau).
+const stripNul = (value: string) => value.replace(/\u0000/g, '')
+const headerCell = (value: unknown) => stripNul(importText(value)).replace(/\s+/g, ' ')
 
 /** Cấu hình nguồn từ lựa chọn của cửa sổ Upload. `null` khi link / loại chiến dịch không đồng bộ được. */
 export function buildCampaignSheetSyncConfig(input: {
@@ -78,7 +80,8 @@ export function buildCampaignSheetSyncConfig(input: {
 export function campaignSheetSyncValues(report: Pick<ImportVerificationResult, 'valid'>): string[] {
   const values = new Set<string>()
   for (const entry of report.valid) {
-    if (entry.normalizedValue) values.add(entry.normalizedValue)
+    const value = stripNul(entry.normalizedValue || '')
+    if (value) values.add(value)
     if (values.size >= CAMPAIGN_SHEET_SYNC_MAX_VALUES) break
   }
   return Array.from(values)
@@ -89,7 +92,7 @@ export function campaignSheetTable(rows: string[][]): ImportTable {
   return {
     name: 'Google Sheet',
     rowNumbers: rows.map((_, index) => index + 1),
-    rows: rows.map(row => row.map(value => ({ value, text: value })))
+    rows: rows.map(row => row.map(raw => { const value = stripNul(raw); return { value, text: value } }))
   }
 }
 
