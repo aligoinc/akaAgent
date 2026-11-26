@@ -7,6 +7,16 @@
 export const ZALO_TAG_AUTO_ADD_KEY_PREFIX = 'zalotag:'
 export const ZALO_TAG_NOT_FRIEND_NOTE = 'Chưa là bạn bè nên không gửi'
 
+/** Chữ trên form (bản thiết kế 26/11/2026, chờ anh duyệt câu). */
+export const ZALO_TAG_AUTO_ADD_LABEL = 'Tự động gửi cho người được gắn tag này về sau (chỉ gửi khi người đó đã là bạn bè)'
+export const ZALO_TAG_AUTO_ADD_HINT = 'Khi bạn gắn một trong các tag đã chọn cho ai đó trên Zalo, người đó được thêm vào chiến dịch sau khoảng 1–2 phút. ' +
+  'Chiến dịch đã hoàn thành sẽ tự chuyển về Chờ xử lý để gửi tiếp. Mỗi người chỉ nhận một lần; người chưa là bạn bè sẽ bị bỏ qua; ' +
+  'người được gắn tag trong lúc tài khoản Zalo mất kết nối sẽ không được thêm.'
+export const ZALO_TAG_AUTO_ADD_ON_TEXT = 'Đang tự thêm người mới được gắn tag'
+export const ZALO_TAG_AUTO_ADD_OFF_TEXT = 'Đã dừng tự thêm người được gắn tag. Người đã vào hàng chờ vẫn được gửi.'
+export const ZALO_TAG_AUTO_ADD_STOP = 'Dừng tự thêm'
+export const ZALO_TAG_AUTO_ADD_RESUME = 'Tiếp tục tự thêm'
+
 export function isZaloTagAutoAddInput(input: { controlAppendIdempotencyKey?: string | null } | null | undefined): boolean {
   return String(input?.controlAppendIdempotencyKey ?? '').startsWith(ZALO_TAG_AUTO_ADD_KEY_PREFIX)
 }
@@ -112,4 +122,18 @@ export function zaloTagSnapshotFromLabels(labels: ReadonlyArray<{
     tags.push({ id, ...(name ? { name } : {}), m: members })
   }
   return tags
+}
+
+/** Kênh IPC của công tắc Dừng / Tiếp tục tự thêm ở chi tiết chiến dịch Desktop. */
+export const ZALO_TAG_AUTO_ADD_SET_CHANNEL = 'campaign:zalo-tag-auto-add:set'
+
+export type ZaloTagAutoAddSetResult =
+  | { ok: true; enabled: boolean; changed: boolean }
+  | { ok: false; code: string; message: string }
+
+export function zaloTagAutoAddSetErrorMessage(code: string): string {
+  if (code === 'campaign_not_found') return 'Không tìm thấy chiến dịch.'
+  if (code === 'campaign_not_tagged_friends') return 'Chiến dịch không gửi theo danh sách tag.'
+  if (code === 'not_installed') return 'Tính năng đang được cập nhật, vui lòng thử lại sau.'
+  return 'Không đổi được trạng thái tự thêm. Vui lòng thử lại.'
 }

@@ -680,6 +680,8 @@ export interface CampaignExtraSettings {
   zaloAliasTemplate?: string
   zaloFriendTargetMode?: 'selected' | 'all_friends' | 'tagged_friends'
   zaloFriendSourceTagIds?: Array<number | string>
+  /** V660: tự thêm người vừa được gắn tag nguồn vào chiến dịch (chỉ chế độ theo tag). */
+  zaloFriendTagAutoAddEnabled?: boolean
   zaloFriendSourceTagNames?: string[]
   zaloFriendDataMaterializedAt?: string | null
   zaloFriendMaterializedCount?: number

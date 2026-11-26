@@ -1,3 +1,4 @@
+import { ZaloTagAutoAddBanner } from './ZaloTagAutoAddBanner'
 import { useCampaignTypeVisibility } from '../../stores/campaignTypeVisibilityStore'
 import { isCampaignTypeVisible } from '../../../../shared/campaignTypeVisibility'
 import { displayHistoryEntry } from '../../../../shared/campaignHistory'
@@ -2180,6 +2181,13 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
       }
     })
   }, [zaloLoginAccount?.id, loadAccounts, loadCampaigns, showAlert, onDiagnosticsChanged])
+
+  // V660: dải tự thêm người được gắn tag cần cài đặt của chiến dịch nhắn tin bạn bè.
+  useEffect(() => {
+    if (!isActive || !detailDockOpen || !selectedCampaignId || selectedCampaignSummary?.actionId !== 'zalo_message_friend') return
+    if (selectedCampaignConfig) return
+    void loadCampaignConfig(selectedCampaignId).catch(() => {})
+  }, [isActive, detailDockOpen, loadCampaignConfig, selectedCampaignSummary?.actionId, selectedCampaignConfig, selectedCampaignId])
 
   useEffect(() => {
     if (!isActive || !detailDockOpen || !selectedCampaignId || (detailTab !== 'info' && detailTab !== 'contentPreview')) return
@@ -6465,6 +6473,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
               ) : (
                 <>
               {/* Tabs */}
+              <ZaloTagAutoAddBanner
+                campaign={selectedCampaignConfig}
+                onChanged={() => {
+                  if (!selectedCampaignId) return
+                  void loadCampaignConfig(selectedCampaignId, { force: true }).catch(() => {})
+                  void loadCampaigns({ silent: true })
+                }}
+              />
               <div className="detail-dock-tabs">
                 {selectedCampaignSummary && (
                   <button
