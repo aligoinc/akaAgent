@@ -1,7 +1,7 @@
 # Engine v2 cho tài khoản Zalo Server chạy trên VPS (App Server): phương án
 
 26/11/2026. **Anh đã chốt các điểm ở mục 9 (26/11, qua hộp chọn) rồi "Code luôn", sau đó "Làm luôn" cho tài khoản Zalo QR / trình duyệt
-của cùng tổ chức (mục 3.5). Đã code trên nhánh `claude/engine-v2-vps-server`, đã merge `dev_3` qua [PR #805](https://github.com/aligoinc/akaAgent/pull/805) ngày 26/11; migration V667 chưa apply, App Server
+của cùng tổ chức (mục 3.5). Đã code trên nhánh `claude/engine-v2-vps-server`, đã merge `dev_3` qua [PR #805](https://github.com/aligoinc/akaAgent/pull/805) ngày 26/11; migration V667 đã apply akachat 20:57:21–20:58:13 VN 26/11 (trước V670 của "Chạy cùng lúc"; [biên nhận](../migrations/snapshots/engine-server-runtime-v667/apply-receipt.json)), App Server
 và Desktop chưa build bộ cài / chưa phát hành; chưa đổi gì trên production. Tình trạng ở mục 10.** Số liệu ở đây đọc từ production bằng truy
 vấn chỉ đọc ngày 26/11.
 

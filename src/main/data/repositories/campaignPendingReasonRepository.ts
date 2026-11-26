@@ -50,16 +50,53 @@ export async function readPendingReasonAction(id: string, signal: AbortSignal): 
   return data ? mapCampaignActionFromDB(data) : null
 }
 
-export async function readBusyCampaign(campaign: Campaign, signal: AbortSignal): Promise<string | null> {
+/** excludeCampaignIds: "Chạy cùng lúc" (V670), chiến dịch đang chạy ở làn riêng không chặn chiến dịch của hàng đợi chính. */
+export async function readBusyCampaign(campaign: Campaign, signal: AbortSignal, excludeCampaignIds: readonly number[] = []): Promise<string | null> {
   signal.throwIfAborted()
   const user = requireCurrentUser()
-  const { data, error } = await getSupabaseClient().from('auto_campaigns').select('id,name')
+  let query = getSupabaseClient().from('auto_campaigns').select('id,name')
     .eq('account_id', campaign.accountId).eq('staff_id', user.staffId).neq('id', campaign.id)
     .or(`organization_id.is.null,organization_id.eq.${user.organizationId}`)
     .or('status.eq.đang chạy,runtime_claim_token.not.is.null,runtime_unit_token.not.is.null')
-    .order('id').limit(1).abortSignal(signal)
+  const excluded = excludeCampaignIds.filter(id => Number.isSafeInteger(id) && id > 0)
+  if (excluded.length > 0) query = query.not('id', 'in', `(${excluded.join(',')})`)
+  const { data, error } = await query.order('id').limit(1).abortSignal(signal)
   if (error) throw error
   return data?.[0]?.name || null
+}
+
+export interface CampaignParallelWaitRead {
+  campaignId: number
+  campaignName: string | null
+  reason: 'same_type' | 'same_action'
+  actionCodes: string[]
+}
+
+/**
+ * "Chạy cùng lúc" (V670): chiến dịch đang chạy ở làn khác của tài khoản mà chiến dịch này phải chờ (cùng loại / chung thao tác), đọc bằng
+ * aka_agent_engine_parallel_wait_v1 (chỉ đọc). Không chờ, DB chưa có hàm hay đọc lỗi thì null: nút "Lý do đang chờ" xét tiếp như cũ.
+ */
+/**
+ * actionCodes: mã thao tác lõi engine khai khi nhận lượt của chính chiến dịch (zaloClaimActionCodes), để DB xét chung thao tác đúng như claim.
+ * Rỗng thì DB tự lấy theo loại chiến dịch.
+ */
+export async function readCampaignParallelWait(campaignId: number, signal: AbortSignal, actionCodes: readonly string[] = []): Promise<CampaignParallelWaitRead | null> {
+  signal.throwIfAborted()
+  const args = actionCodes.length ? { p_campaign_id: campaignId, p_action_codes: [...actionCodes] } : { p_campaign_id: campaignId }
+  const { data, error } = await getSupabaseClient().rpc('aka_agent_engine_parallel_wait_v1', args).abortSignal(signal)
+  if (error) {
+    if (error.code !== 'PGRST202') console.warn('[PendingReason] parallel wait read failed:', error.message)
+    return null
+  }
+  const row = data as Record<string, unknown> | null
+  const id = Number(row?.campaignId)
+  if (!row || !Number.isSafeInteger(id) || id <= 0) return null
+  return {
+    campaignId: id,
+    campaignName: typeof row.campaignName === 'string' && row.campaignName.trim() ? row.campaignName.trim() : null,
+    reason: row.reason === 'same_action' ? 'same_action' : 'same_type',
+    actionCodes: Array.isArray(row.actionCodes) ? row.actionCodes.map(code => String(code || '').trim()).filter(Boolean) : []
+  }
 }
 
 export type PendingInputAvailability =
