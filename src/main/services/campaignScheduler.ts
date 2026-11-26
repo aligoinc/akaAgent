@@ -6867,9 +6867,16 @@ export class CampaignScheduler {
       }
       // 6a. Workflow chạy xong mà bộ dựng cũ không ghi dòng nào cho data (comment seeding không có bài hợp điều kiện…): bộ cũ đóng data, không
       //     ghi lịch sử, không cộng chuỗi data lỗi (phát lại lịch sử thật 16/11). Báo FB45 để lõi không coi là "không có kết quả" (SYS07).
+      //     Câu 639 / 3300 / 6279 của bộ kiểm lỗi (26/11/2026, Q6): trang chạy ngầm đang ở trang xác minh / đăng nhập (mở nhóm bị Facebook chuyển
+      //     hướng, trang vẫn có vùng chính nên không bước nào lỗi, quét ra 0 bài) thì đó là trạng thái đăng nhập, không phải "không có bài": báo
+      //     FB04 / FB43 trước khi gửi (data về hàng đợi, đổi trạng thái đăng nhập) thay cho FB45. Trang khác vẫn FB45 như bộ cũ.
       if (!state.stopped && result.status === 'completed' && state.reportCount === 0 && marks.size === 0) {
-        await report('__no_history', firstAction, { ok: false, phase: 'before_send',
-          signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Chạy xong, không có kết quả nào để ghi (như bộ cũ)' } })
+        const pageState = page?.isConnected() ? facebookPageStateSignal(safePageUrl(page)) : null
+        if (pageState) await report('__page_state', firstAction, { ok: false, phase: 'before_send', signal: pageState })
+        else {
+          await report('__no_history', firstAction, { ok: false, phase: 'before_send',
+            signal: { kind: 'engine', code: 'no_history', errorCode: 'err_engine_fb_no_history', message: 'Chạy xong, không có kết quả nào để ghi (như bộ cũ)' } })
+        }
       }
       // 6. Nhóm chia sẻ chưa có kết quả: theo kết quả cú bấm Đăng của data chính. Đã đăng: ghi như bộ cũ (bộ dựng thường đã ghi); không rõ:
       //    không gửi lại; chưa bấm: về hàng đợi. Không biết kết quả cú bấm (hiếm) thì coi như không rõ, không đăng lại.
