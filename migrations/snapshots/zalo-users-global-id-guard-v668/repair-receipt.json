@@ -1,0 +1,37 @@
+{
+  "what": "Sửa zalo_users.global_id ghi sai (Global ID của chính nick đang xem từ lần quét thành viên nhóm) — scripts/zalo-users-gid-repair.cjs",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by": "anh: \"ủa sửa hết luôn đi chứ, nếu cần chạy thật thì cứ chạy thật\" (26/11/2026)",
+  "preflight": {
+    "disk_data_vn_18_3x": "/data 562,1 GB, trống 76,0 GB (13,5%) — node_filesystem_avail_bytes từ endpoint metrics của project",
+    "v668_p1_trigger": "đã bật từ 18:34:03 VN (chặn ghi lại Global ID sai trong lúc sửa)",
+    "scale_estimate_sample_2pct": "R1 ~1,25 triệu, R2 ~27 nghìn, R3 0"
+  },
+  "run": {
+    "setup_vn": "18:35:44 (bảng private.zalo_users_gid_repair_20261126 + hàm tạm)",
+    "phase_1_function_vn": "18:35:56 – 18:50:59, 112 lô hàm một giao dịch (5.000 dòng / ~20 s): 547.887 dòng, tới tài khoản 4066",
+    "incident": "1 upsert zalo_users của aka_agent_desktop bị hủy (statement_timeout 3 s, HTTP 500, 18:40:13 VN) vì lô giữ khoá dòng tới hết lô; 4 lỗi claim_account_operation 57014 lúc 18:49–18:52 VN có thể cùng lý do ⇒ dừng, đổi sang procedure",
+    "phase_2_procedure_vn": "18:53:10 – 19:07:58, CALL private.zalo_users_gid_repair_run_20261126 (COMMIT sau mỗi câu ≤ 1.000 dòng, ngân sách 45 s): 2.031 + 685.653 dòng, tới hết account_id 13000; sau đó 0 lỗi 5xx zalo_users / claim_account_operation",
+    "teardown_vn": "19:21 (xoá hàm + procedure tạm; giữ bảng lưu)"
+  },
+  "result": {
+    "backup_rows_by_reason": {
+      "R1_group_scan_viewer_gid": { "rows": 1212787, "accounts": 1048 },
+      "R2_restore_profile_gid": { "rows": 27773, "restored": 27773, "accounts": 390 },
+      "R3_own_gid": { "rows": 11, "accounts": 11 }
+    },
+    "total_rows": 1240571,
+    "total_accounts": 1063,
+    "recount_full_index_after": {
+      "rows_with_gid": "6.158.201 (16:3x VN) → 4.959.547",
+      "rows_with_own_gid_not_self": "1.188.119 → 0",
+      "pairs_ge4_rows_not_own": "36 (49.121 dòng) → 0",
+      "max_rows_per_account_gid": "64.822 → 3",
+      "pairs_2_3_rows_gid_ok_with_scan_only_rows": 0
+    },
+    "zalo_users_size": "8.398 MB → 9.382 MB (dòng chết 169 nghìn sau autovacuum 19:11 VN)",
+    "backup_table_size": "210 MB"
+  },
+  "rollback": "node scripts/zalo-users-gid-repair.cjs rollback <lo> <hi> — chạy trong giao dịch có SELECT set_config('aka.zalo_gid_guard','off',true) (trigger V668 chặn ghi lại Global ID của nick); chỉ trả dòng vẫn giữ giá trị lần sửa đặt",
+  "not_done": "chat_zalo_account_user (79.833 dòng, ChatApi) — để sau khi deploy aligoinc/akaAgentChatApi#198 (bảng rất nóng, trigger touch_updated_at)"
+}

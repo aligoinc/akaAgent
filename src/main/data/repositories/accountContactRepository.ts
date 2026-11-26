@@ -381,6 +381,13 @@ function isNonEmptyRecord(value: unknown): boolean {
   return !!value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0
 }
 
+/** Hồ sơ thành viên nhóm Zalo: bỏ `globalId` (là Global ID của chính nick đang xem, không phải của thành viên). */
+function withoutGroupScanGlobalId(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const { globalId: _viewerGlobalId, ...rest } = value as Record<string, unknown>
+  return rest
+}
+
 function compactRecord(record: Record<string, unknown>): Record<string, unknown> {
   const compacted: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(record)) {
@@ -2673,7 +2680,7 @@ async function upsertZaloUsersForGroupMembers(
       const row = existing.get(member.zaloUid) || {}
       const rawPayload = isNonEmptyRecord(row.raw_payload)
         ? row.raw_payload
-        : (member.rawPayload || {})
+        : withoutGroupScanGlobalId(member.rawPayload)
       return {
         account_id: accountId,
         zalo_uid: member.zaloUid,
@@ -2703,7 +2710,9 @@ async function upsertZaloUsersForGroupMembers(
         account_status: firstNullableNumber(member.accountStatus, row.account_status),
         oa_info: normalizeJsonValue(row.oa_info),
         user_mode: normalizeNullableNumber(row.user_mode),
-        global_id: normalizeNullableString(member.globalId) || normalizeNullableString(row.global_id),
+        // Không bao giờ lấy Global ID của lần quét thành viên nhóm: Zalo trả Global ID của chính nick đang xem (cả QR lẫn Fly / bản
+        // ChatApi chưa sửa), ghi vào sẽ gộp mọi thành viên thành một người và đè Global ID đúng đã có (từ bạn bè / tra số).
+        global_id: normalizeNullableString(row.global_id),
         biz_pkg: normalizeJsonValue(row.biz_pkg),
         created_ts: normalizeNullableNumber(row.created_ts),
         oa_status: normalizeJsonValue(row.oa_status),
@@ -2989,7 +2998,7 @@ export async function upsertZaloGroupMemberContacts(input: ZaloGroupMemberUpsert
       is_creator: member.isCreator,
       is_admin: member.isAdmin,
       is_current: true,
-      raw_payload: member.rawPayload || {},
+      raw_payload: withoutGroupScanGlobalId(member.rawPayload),
       last_seen_at: now,
       staff_id: u.staffId,
       organization_id: u.organizationId,
