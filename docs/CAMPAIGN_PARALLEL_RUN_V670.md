@@ -1,6 +1,6 @@
 # Chạy cùng lúc chiến dịch Zalo trên một tài khoản (V670)
 
-Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), **chưa PR, chưa merge, chưa apply, chưa deploy, chưa build**:
+Trạng thái (26/11/2026 tối): code đã commit và đẩy lên ba nhánh theo yêu cầu ("Commit và đẩy"), PR mở theo yêu cầu ("Mở PR"): [#810](https://github.com/aligoinc/akaAgent/pull/810), [aligoinc/akaAgentChatApi#199](https://github.com/aligoinc/akaAgentChatApi/pull/199), [aligoinc/akaAgentWebApp#327](https://github.com/aligoinc/akaAgentWebApp/pull/327). **Chưa merge, chưa apply, chưa deploy, chưa build**:
 
 - akaAgent: worktree `.claude/worktrees/campaign-parallel-run`, nhánh `claude/campaign-parallel-run`, commit `f4d5e08a` trên `dev_3` `cab27ed3` (sau #807, #808, #809).
 - ChatApi: worktree `../akaAgentChatApi-parallel-run`, nhánh `feat/campaign-parallel-run`, commit `cf34727` trên `dev` `ddc8c58` (sau #198). Lõi `packages/campaign-engine` chép từ akaAgent `f4d5e08a` (`SOURCE.json`, `sourceDirty: false`).
