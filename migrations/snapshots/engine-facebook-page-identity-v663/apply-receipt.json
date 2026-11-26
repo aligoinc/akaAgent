@@ -1,0 +1,38 @@
+{
+  "migration": "migration_v663_engine_facebook_page_identity_wait",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply, thử trên Lee Danh (26/11/2026, sau khi chốt từng việc qua hộp chọn và thử thật trên tài khoản thử Lee Danh)",
+  "applied_at_vn": "2026-11-26 16:58:21",
+  "ledger_version": "20261126095821",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 2 giây, rc 0",
+  "file_md5": "69dd558d1b37433a167c4478931e295c",
+  "ledger_statements_md5": "69dd558d1b37433a167c4478931e295c",
+  "preflight_live_16_5x": {
+    "ledger_v663_rows": 0,
+    "ledger_last": "migration_v662_campaign_sheet_sync, migration_v660_zalo_tag_sync, migration_v659_engine_network_proxy_codes",
+    "block_2879_md5": "dfc2ad1c4bf6a6831968cedf206807ed",
+    "block_2880_md5": "aaf3d54ca1041881d67073359168647f",
+    "legacy_2670_2671_md5": ["dfc2ad1c4bf6a6831968cedf206807ed", "aaf3d54ca1041881d67073359168647f"],
+    "step_24_reviewed_md5": "aaf3d54ca1041881d67073359168647f",
+    "policy_284_log": "Không chuyển được sang Page để đăng bài",
+    "auto_error_65_customer_title": "Không chuyển được sang Page để đăng bài"
+  },
+  "dry_run_rollback": "nguyên file, COMMIT cuối thay bằng SELECT + ROLLBACK: trong giao dịch 2879 = ad88ba5e…, 2880 = 46a9e22d…, dòng 24 = 46a9e22d…, câu 284 / mã 65 mới, bộ cũ không đổi; sau ROLLBACK đọc lại đúng bản cũ, sổ không có V663",
+  "postflight_live_16_58": {
+    "block_2879_md5": "ad88ba5e6b3f56bc96e0ca9f79571cf6",
+    "block_2880_md5": "46a9e22dd09d5efc5953eece67451285",
+    "legacy_unchanged": true,
+    "block_2915_md5_unchanged": "8c88628c05657002ea0675ae2ff3eedb",
+    "step_24_reviewed_md5": "46a9e22dd09d5efc5953eece67451285",
+    "copies_unchanged": true,
+    "policy_284": "log 'Không chuyển được sang Page đã chọn', note '… đã chọn (FB06). Kiểm tra …', campaign pause, target requeue, active",
+    "auto_error_65_customer_title": "Không chuyển được sang Page đã chọn"
+  },
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "v663-smoke.cjs 66/66; v663-electron-smoke.cjs 61/61; đối chứng kỳ vọng V663 trên code production hỏng 20 ca; desktop-fb-smoke.cjs 79/79; scenarios --seeds 3 --interrupt 0.05 --pages 2 0 vi phạm; thử thật 3 bước trên Lee Danh theo logic mới",
+  "rollback": "migrations/rollback_v663_engine_facebook_page_identity_wait.sql (chỉ chạy khi block / dòng 24 / câu FB06 còn đúng bản V663)",
+  "not_verified": [
+    "Chưa chạy nguyên văn block mới trong app trên Facebook thật (bước thử chiến dịch Page trên Lee Danh làm sau apply).",
+    "Phần Desktop (RUN01 / FB04 / mã ảnh / truyền originalIdentityIsPage) chưa build; app cũ: lượt chuyển về chạy riêng chỉ so tên như trước."
+  ]
+}

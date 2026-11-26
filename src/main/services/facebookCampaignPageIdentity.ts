@@ -52,6 +52,8 @@ export function assertPageIdentityWorkflow(workflow: WorkflowDef | null): assert
 /** Per-execution state only. All Facebook interactions run in the saved workflow. */
 export class FacebookCampaignPageIdentity {
   originalIdentityName = ''
+  /** Danh tính ban đầu là Page (cookie i_user lúc block đọc tên, V663); null khi block chưa trả (code block trước V663). */
+  originalIdentityIsPage: boolean | null = null
   ready = false
   switchAttempted = false
   targetStarted = false
@@ -70,6 +72,8 @@ export class FacebookCampaignPageIdentity {
       runAsPageUid: this.campaign.extraSettings!.runAsPageUid,
       runAsPageName: this.campaign.extraSettings!.runAsPageName,
       originalIdentityName: this.originalIdentityName,
+      // V663: block chuyển danh tính cần biết danh tính ban đầu là Page hay trang cá nhân (trang cá nhân và Page có thể cùng tên).
+      ...(this.originalIdentityIsPage === null ? {} : { originalIdentityIsPage: this.originalIdentityIsPage }),
       pageIdentityReady: this.ready,
       pageIdentityRestoreOnly: false,
       pageIdentityRestoreAfterTarget: false
@@ -84,6 +88,7 @@ export class FacebookCampaignPageIdentity {
     }
     if (id === PAGE_IDENTITY_NODE_PREFIX + 'original' && step.status === 'success') {
       this.originalIdentityName = String(step.output.identityName || '').trim()
+      this.originalIdentityIsPage = typeof step.output.isPage === 'boolean' ? step.output.isPage : null
     }
     if (id === PAGE_IDENTITY_NODE_PREFIX + 'switch' && step.status === 'running') this.switchAttempted = true
     if (id === PAGE_IDENTITY_NODE_PREFIX + 'ready' && step.status === 'success' && step.output.ok === true) this.ready = true

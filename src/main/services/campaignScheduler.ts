@@ -28,7 +28,7 @@ import { readZaloApiFriendStatus, resolveZaloAccountTagSettings, isZaloLabelSkip
 import { isZaloTagAutoAddInput, ZALO_TAG_NOT_FRIEND_NOTE } from '../../shared/zaloTagAutoAdd'
 import { recordAccountLog, recordAccountState, recordCampaignState, clearAccountCampaignLogContext } from './accountLogService'
 import { accountOperationRegistry } from './accountOperationRegistry'
-import { FacebookCampaignPageIdentity } from './facebookCampaignPageIdentity'
+import { FacebookCampaignPageIdentity, PAGE_IDENTITY_NODE_PREFIX } from './facebookCampaignPageIdentity'
 import { validateCampaignPageIdentity } from '../data/repositories/facebookPageIdentityRepository'
 import { getWorkflow, getWorkflowByName } from '../data/repositories/workflowV2Repository'
 import { WebEnrichmentService } from './webEnrichmentService'
@@ -6339,6 +6339,7 @@ export class CampaignScheduler {
     if (!campaign || !workflow) { clearFacebookIdentityMarker(account.id); return }
     const identity = new FacebookCampaignPageIdentity(campaign, workflow)
     identity.originalIdentityName = marker.originalIdentityName
+    identity.originalIdentityIsPage = marker.originalIdentityIsPage ?? null
     identity.switchAttempted = true
     identity.page = (await this.getAutomationPage(account, campaign.id)).page
     await identity.restore((wf, variables, page, context) => this.engineV2.run(wf, variables, page, context), {
@@ -6765,7 +6766,7 @@ export class CampaignScheduler {
             if (identity) {
               identity.observe(step)
               if (identity.switchAttempted) writeFacebookIdentityMarker(account.id, { campaignId: campaign.id, workflowId: identity.workflow.id,
-                originalIdentityName: identity.originalIdentityName })
+                originalIdentityName: identity.originalIdentityName, originalIdentityIsPage: identity.originalIdentityIsPage })
             }
             try { this.mainWindow.webContents.send(IPC_EVENTS_V2.RUN_PROGRESS, { runKey: `campaign-${campaign.id}`, step }) } catch { /* đóng */ }
           },
@@ -6783,7 +6784,11 @@ export class CampaignScheduler {
 
       // Không chuyển được sang Page: bộ cũ tạm dừng chiến dịch trước khi chạy data (pauseBeforePageIdentityTarget); engine báo FB06.
       if (identity && !identity.targetStarted && state.reportCount === 0) {
-        const failure = result.steps.find(step => step.status === 'error')
+        // Bước danh tính hỏng đầu tiên: bước ném lỗi (đọc tên, block "ready"), hoặc bước chuyển Page trả ok:false (block chuyển Page không ném;
+        // block "ready" ném lại đúng câu đó ở bước sau). Lấy bước hỏng thật: câu, ảnh và trang lúc hỏng (câu 605: ảnh của bước chuyển cho thấy menu
+        // đang tải, ảnh bước "ready" một giây sau đã đủ nút), và còn câu thật khi lượt bị dừng trước bước "ready" (câu 603, lượt 332906).
+        const failure = result.steps.find(step => step.status === 'error'
+          || (step.status === 'success' && step.nodeId.startsWith(PAGE_IDENTITY_NODE_PREFIX) && step.output?.ok === false))
         // Lượt bị ngắt từ ngoài (thoát / cập nhật app, đăng xuất) đúng lúc đang chuyển sang Page, chưa chạy data: không phải lỗi chuyển
         // Page. Báo "đã dừng" (RUN01): data về hàng đợi, không tạm dừng chiến dịch. Bước chuyển Page lỗi thật trước khi bị ngắt vẫn là FB06.
         const failureEntry = failure?.stepKey ? stepsInfo.get(failure.stepKey) : undefined
@@ -6791,14 +6796,28 @@ export class CampaignScheduler {
           await report('__stopped', firstAction, { ok: false, ...interruptedOutcome('before_send') })
           return state.stopped ?? { done: true }
         }
-        const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 603 / 611 / 3297 của bộ kiểm lỗi (anh chốt 26/11/2026): workflow dừng ở ranh giới block (hook trước block trả 'stop' vì
+        // api.shouldStop(): yêu cầu tạm dừng chiến dịch, app thôi nhận việc / máy sắp ngủ, lệnh dừng sau data) mà không bước danh tính nào hỏng.
+        // Tín hiệu huỷ không bật nên nhánh trên không bắt. Không phải lỗi chuyển Page: RUN01 như lượt bị dừng không chạy bằng Page. Danh tính
+        // đã chuyển (nếu có) vẫn được chuyển về lúc đóng lượt như cũ.
+        if (!failure && result.stopped === true) {
+          await report('__stopped', firstAction, { ok: false, ...interruptedOutcome('before_send') })
+          return state.stopped ?? { done: true }
+        }
+        const failureMessage = failure?.error || (typeof failure?.output?.message === 'string' ? failure.output.message : '')
+        const message = failureMessage || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 631 (anh chốt 26/11/2026): bước danh tính hỏng khi Facebook đang ở trang xác minh / đăng nhập là trạng thái đăng nhập (FB04 /
+        // FB43) như mọi bước khác (câu 533 / 639), không phải lỗi chuyển Page.
+        const pageState = failureEntry?.pageState ?? null
         // Câu 6282 / 633 / 3484 của bộ kiểm lỗi (anh chốt 26/11/2026): bước đọc / chuyển danh tính hỏng ngay lúc mở trang (lỗi mạng / proxy
         // của trình duyệt, chưa tới phần tìm nút) báo như bước mở trang, không gắn sẵn mã, để DB phân loại theo luật mạng / proxy (NET01 /
         // NET02, V659) như mọi bước mở trang. Lỗi trên trang (không thấy nút menu, không đọc được tên, chọn Page hết giờ) vẫn FB06.
-        const navigation = parseNavigationError(message)
-        await report('__identity', firstAction, { ok: false, phase: 'before_send',
-          signal: navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
-            : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+        const navigation = pageState ? null : parseNavigationError(message)
+        const signal: Signal = pageState ?? (navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
+          : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message })
+        // Mã ảnh lỗi của bước hỏng (anh chốt 26/11/2026) như mọi bước lỗi khác, để hộp thư lỗi tự xin ảnh + DOM.
+        const screenshotId = failureEntry?.screenshotId ?? null
+        await report('__identity', firstAction, { ok: false, phase: 'before_send', signal: screenshotId ? { ...signal, screenshotId } : signal })
         return state.stopped ?? { done: true }
       }
       if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {

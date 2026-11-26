@@ -1,0 +1,289 @@
+{
+ "readAt": "2026-11-26T07:12:22.351916+00:00",
+ "note": "Đọc chỉ đọc production akachat 26/11/2026 cho V663 (câu 605 / nhóm FB06 chuyển Page). Code block engine 2879 / 2880 = bộ cũ 2670 / 2671.",
+ "blocks": {
+  "get": {
+   "id": 2879,
+   "name": "[engine] fb_get_current_identity_name",
+   "md5": "dfc2ad1c4bf6a6831968cedf206807ed",
+   "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst currentSelector = await helpers.element('FbCurrentIdentityLink')\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\nasync function rawText(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    const el = xpathAll(selector)[0] || null;\n    return el ? String(el.innerText || el.textContent || '').trim() : '';\n  `, selector)\n}\n\nhelpers.log('Đang lấy tên Facebook identity hiện tại')\nawait page.navigate('https://facebook.com')\nconst opened = await rawClick(menuSelector)\nif (!opened || opened.clicked !== true) throw new Error('Không tìm thấy nút mở menu profile/page hiện tại')\nawait helpers.sleep(stepMs + 500, signal)\n\nconst identityName = String(await rawText(currentSelector) || '').trim()\nawait rawClick(menuSelector).catch(() => null)\nawait helpers.sleep(stepMs + 500, signal)\n\nif (!identityName) throw new Error('Không lấy được tên Facebook identity hiện tại')\nvars.originalIdentityName = identityName\nhelpers.log('Identity hiện tại: ' + identityName)\nreturn { ok: true, identityName }\n"
+  },
+  "switch": {
+   "id": 2880,
+   "name": "[engine] fb_switch_identity_by_name",
+   "md5": "aaf3d54ca1041881d67073359168647f",
+   "code": "\nconst stepMs = Number(vars.facebookStepMs || input.facebookStepMs || 1000)\nconst useOriginalIdentity = input.useOriginalIdentity === true\nconst identityNameFromVars = String(input.identityNameFromVars || '').trim()\nconst identityName = String(\n  useOriginalIdentity\n    ? (vars.originalIdentityName || '')\n    : identityNameFromVars\n      ? (vars[identityNameFromVars] || '')\n      : (input.identityName || vars.identityName || vars.pageName || '')\n).trim()\n\nif (!identityName) {\n  return {\n    ok: false,\n    identityName,\n    message: useOriginalIdentity ? 'Không có tên profile gốc để chuyển lại' : 'Thiếu tên identity/page cần chuyển'\n  }\n}\n\nconst menuSelector = await helpers.element('FbIdentityMenuButton')\nconst seeAllSelector = await helpers.element('FbIdentitySeeAllButton')\nconst searchSelector = await helpers.element('FbIdentitySearchInput')\nconst selectTemplate = await helpers.element('FbIdentitySelectByNameButton')\n\nfunction xpathLiteral(value) {\n  const text = String(value || '')\n  if (!text.includes(\"'\")) return \"'\" + text + \"'\"\n  const singleQuoteLiteral = '\"\\'\"'\n  return 'concat(' + text.split(\"'\").map(part => \"'\" + part + \"'\").join(', ' + singleQuoteLiteral + ', ') + ')'\n}\n\nconst selectSelector = selectTemplate.replace(\"'$page_name'\", xpathLiteral(identityName)).replace('$page_name', identityName)\n\nasync function rawClick(selector) {\n  return await page.evaluate(`\n    const selector = __args[0];\n    function xpathAll(xpath) {\n      const out = [];\n      try {\n        const result = document.evaluate(xpath, document, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);\n        for (let i = 0; i < result.snapshotLength; i++) {\n          const item = result.snapshotItem(i);\n          if (item) out.push(item);\n        }\n      } catch {}\n      return out;\n    }\n    function clickSynthetic(el) {\n      try { el.scrollIntoView({ block: 'center', inline: 'nearest' }); } catch {}\n      const init = { bubbles: true, cancelable: true, view: window };\n      const p = Object.assign({}, init, { pointerId: 1, pointerType: 'mouse', isPrimary: true });\n      try { el.dispatchEvent(new PointerEvent('pointerdown', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mousedown', init)); } catch {}\n      try { el.dispatchEvent(new PointerEvent('pointerup', p)); } catch {}\n      try { el.dispatchEvent(new MouseEvent('mouseup', init)); } catch {}\n      try { el.click(); } catch {}\n    }\n    const el = xpathAll(selector)[0] || null;\n    if (!el) return { clicked: false };\n    clickSynthetic(el);\n    return { clicked: true };\n  `, selector)\n}\n\ntry {\n  helpers.log('Đang chuyển Facebook identity sang \"' + identityName + '\"')\n  await page.navigate('https://facebook.com')\n  const opened = await rawClick(menuSelector)\n  if (!opened || opened.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút mở menu profile/page hiện tại' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  const seeAll = await rawClick(seeAllSelector)\n  if (!seeAll || seeAll.clicked !== true) return { ok: false, identityName, message: 'Không tìm thấy nút xem tất cả profile/page' }\n  await helpers.sleep(stepMs + 500, signal)\n\n  let selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  await page.type(searchSelector, identityName, { clearFirst: true })\n  await helpers.sleep(stepMs + 500, signal)\n\n  selected = await rawClick(selectSelector)\n  if (selected && selected.clicked === true) {\n    await helpers.sleep(stepMs + 7000, signal)\n    helpers.log('Đã chuyển identity sang \"' + identityName + '\"')\n    return { ok: true, identityName }\n  }\n\n  return { ok: false, identityName, message: 'Không tìm thấy page/profile \"' + identityName + '\"' }\n} catch (e) {\n  if (signal && signal.aborted) throw e\n  const message = e && e.message ? String(e.message) : String(e)\n  return { ok: false, identityName, message: 'Có lỗi xảy ra khi chọn page/profile: ' + message }\n}\n"
+  }
+ },
+ "sources": {
+  "get": {
+   "id": 2670,
+   "name": "fb_get_current_identity_name",
+   "md5": "dfc2ad1c4bf6a6831968cedf206807ed"
+  },
+  "switch": {
+   "id": 2671,
+   "name": "fb_switch_identity_by_name",
+   "md5": "aaf3d54ca1041881d67073359168647f"
+  }
+ },
+ "state": {
+  "id": 2915,
+  "name": "[engine] fb_campaign_page_identity_state",
+  "md5": "8c88628c05657002ea0675ae2ff3eedb"
+ },
+ "copies": [
+  {
+   "engineBlockId": 2879,
+   "sourceBlockId": 2670,
+   "engineMd5AtCopy": "dfc2ad1c4bf6a6831968cedf206807ed",
+   "sourceMd5AtCopy": "dfc2ad1c4bf6a6831968cedf206807ed"
+  },
+  {
+   "engineBlockId": 2880,
+   "sourceBlockId": 2671,
+   "engineMd5AtCopy": "aaf3d54ca1041881d67073359168647f",
+   "sourceMd5AtCopy": "aaf3d54ca1041881d67073359168647f"
+  }
+ ],
+ "steps": [
+  {
+   "active": true,
+   "blockId": 2880,
+   "id": 24,
+   "nodeId": null,
+   "reviewedMd5": "aaf3d54ca1041881d67073359168647f",
+   "stepKind": "session",
+   "workflowId": null
+  }
+ ],
+ "workflowsUsing": [
+  {
+   "id": 316,
+   "name": "[engine] facebook_comment_seeding",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 317,
+   "name": "[engine] facebook_comment_seeding_post",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 318,
+   "name": "[engine] [Built-in] Facebook - Tìm kiếm data trong group",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 319,
+   "name": "[engine] [Built-in] Facebook - Tìm kiếm data bằng search",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 321,
+   "name": "[engine] facebook_group_post",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 322,
+   "name": "[engine] facebook_join_group",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "page_identity_original"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "runAsPageName"
+     },
+     "id": "page_identity_switch"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "page_identity_restore"
+    }
+   ]
+  },
+  {
+   "id": 326,
+   "name": "[engine] facebook_page_post",
+   "nodes": [
+    {
+     "blockId": 2879,
+     "config": {},
+     "id": "get_original_identity"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "identityNameFromVars": "pageName"
+     },
+     "id": "switch_to_page"
+    },
+    {
+     "blockId": 2880,
+     "config": {
+      "useOriginalIdentity": true
+     },
+     "id": "restore_original_identity"
+    }
+   ]
+  }
+ ],
+ "elements": {
+  "FbCurrentIdentityLink": "//a[@href='/me/']",
+  "FbIdentityMenuButton": "//*[@role='button' and (@aria-label='Trang cá nhân của bạn' or @aria-label='Tài khoản, trang cá nhân của bạn' or @aria-label='Account, your profile')]",
+  "FbIdentitySearchInput": "//input[contains(@aria-label, 'Tìm kiếm trang')]",
+  "FbIdentitySeeAllButton": "//*[@role='button' and @aria-label='Xem tất cả trang cá nhân']",
+  "FbIdentitySelectByNameButton": "//*[@role='button' and .//span[.='$page_name']]"
+ },
+ "policies": [
+  {
+   "actionCode": null,
+   "active": false,
+   "campaignActionId": null,
+   "campaignEffect": "hold",
+   "deleted": false,
+   "errorCode": "err_fb_identity_switch_failed",
+   "id": 29,
+   "logTemplate": "Không chuyển được sang danh tính Facebook cần dùng",
+   "noteTemplate": "Không chuyển được sang danh tính Facebook cần dùng",
+   "revision": 2,
+   "source": "seed_v495_error",
+   "streak": "ignore",
+   "targetEffect": "requeue",
+   "updatedAt": "2026-11-17T09:32:37.516295+00:00"
+  },
+  {
+   "actionCode": null,
+   "active": true,
+   "campaignActionId": null,
+   "campaignEffect": "pause",
+   "deleted": false,
+   "errorCode": "err_fb_identity_switch_failed",
+   "id": 284,
+   "logTemplate": "Không chuyển được sang Page để đăng bài",
+   "noteTemplate": "Không chuyển được sang Page để đăng bài (FB06). Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.",
+   "revision": 1,
+   "source": "v559_fb_draft",
+   "streak": "ignore",
+   "targetEffect": "requeue",
+   "updatedAt": "2026-11-17T09:32:37.516295+00:00"
+  }
+ ],
+ "error": {
+  "active": true,
+  "customerHelp": "Kiểm tra tài khoản còn quản lý Page này và tên Page trong chiến dịch đã đúng chưa, rồi bấm Tiếp tục chiến dịch.",
+  "customerTitle": "Không chuyển được sang Page để đăng bài",
+  "errorCode": "err_fb_identity_switch_failed",
+  "id": 65,
+  "name": "Không chuyển được sang danh tính Facebook cần dùng",
+  "notiCampaign": "Không chuyển được sang danh tính Facebook cần dùng",
+  "notiRunning": "Không chuyển được sang danh tính Facebook cần dùng",
+  "publicCode": "FB06"
+ }
+}
