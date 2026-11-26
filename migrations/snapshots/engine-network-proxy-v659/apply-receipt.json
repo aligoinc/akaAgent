@@ -1,0 +1,51 @@
+{
+  "migration": "migration_v659_engine_network_proxy_codes",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Merge và apply V659 (26/11/2026, sau khi chốt từng mục qua hộp chọn, phát lại thật 178.765 lượt và mở PR #794)",
+  "applied_at_vn": "2026-11-26 11:25:30",
+  "ledger_version": "20261126042530",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 3 giây, rc 0",
+  "file_md5": "f4de1eca314b7625222ff927dac02839",
+  "ledger_statements_md5": "f4de1eca314b7625222ff927dac02839",
+  "preflight_live_11_24_56": {
+    "ledger_v659_rows": 0,
+    "ledger_last": "migration_v661_engine_error_watch_spike_per_data (20261126035934), migration_v658_engine_facebook_seeding_checkpoint (20261126032120)",
+    "report_v1_md5": "78ed8f80c4ff7de3cae3eb3e36bb6e1b",
+    "net01_title": "Kết nối mạng tạm thời gián đoạn",
+    "net02_help": null,
+    "zalo_net01_old_text_rows": 11,
+    "net04_exists": 0,
+    "v659_rows": 0,
+    "rules_active": 125,
+    "policies_active": 378,
+    "catalog_reread_after_v658": "bảng danh mục, chỉ mục, ràng buộc, trigger, md5 13 hàm giống hệt scripts/fixtures/engine-v2-facebook/engine-catalog-20261126.json"
+  },
+  "dry_run_rollback": "nguyên file bọc (kèm dòng sổ), COMMIT cuối thay bằng SELECT + ROLLBACK lúc 11:25:13: kiểm trước / sau trong file đạt; trong giao dịch report_v1 = b39e1e9d…, 30 luật, 39 chính sách, 1 dòng sổ; sau ROLLBACK đọc lại như preflight (report_v1 78ed8f80…, sổ không có V659)",
+  "postflight_live_11_25_52": {
+    "report_v1_md5": "b39e1e9dbcab4775d96779bd4799b63a",
+    "v659_rules_active": 30,
+    "v659_policies_active": 39,
+    "net04": "err_proxy_unknown_delivery / NET04 / unknown_delivery, đang bật",
+    "net01_title": "Kết nối mạng bị gián đoạn",
+    "net02_help": "Kiểm tra lại proxy của tài khoản rồi bấm Tiếp tục chiến dịch.",
+    "rows_with_new_net01_text": "22 (11 Zalo đổi câu + 11 Facebook mới)",
+    "classify": {
+      "fb ERR_CONNECTION_TIMED_OUT trước lúc gửi": "err_network_offline",
+      "fb ERR_PROXY_CONNECTION_FAILED trước lúc gửi": "err_proxy_failed",
+      "fb bước danh tính, Desktop cũ gửi thẳng FB06": "err_fb_identity_switch_failed",
+      "fb waitForSelector timeout": "err_engine_fb_ui_not_ready (không đổi)",
+      "zalo net::ERR_TUNNEL_CONNECTION_FAILED trước lúc gửi": "err_proxy_failed",
+      "zalo net::ERR_TUNNEL_CONNECTION_FAILED lúc đang gửi": "err_proxy_unknown_delivery",
+      "zalo fetch failed (read ECONNRESET)": "err_network_offline (không đổi)"
+    },
+    "policy_fb_post_group_net01": "requeue, chuỗi increment, ngưỡng 4, tạm dừng, khoá 5 phút, câu mới",
+    "wait_notes": ["⏳ Kết nối mạng bị gián đoạn, chạy tiếp lúc 11:30 26/11 (NET01)", "⏳ Proxy của tài khoản không kết nối được, chạy tiếp lúc 11:30 26/11 (NET02)"]
+  },
+  "schema_reload": "có (CREATE OR REPLACE aka_agent_engine_report_v1). edge_logs 11:23–11:27 VN: 2 lỗi 500 đúng giây apply 11:25:32 (1 POST rpc/aka_agent_engine_report_v1, 1 POST rpc/aka_agent_engine_claim_target_v1), 0 lỗi 503; postgres_logs không ghi lỗi nào cho hai lần đó. Engine chạy tiếp ngay: 11:25:33–11:27:00 có 269 lượt bắt đầu, 230 lượt xong, 513 kết quả.",
+  "smoke_before_apply": "v659-smoke.cjs 12/12; desktop-fb-smoke.cjs 70/70 (nhánh đã gộp dev_3 có V658); scenarios.cjs --seeds 2 --pages 2 --interrupt 0.05 0 vi phạm; phát lại v659-replay.cjs trên 178.765 lượt lỗi FB + Zalo 7 ngày: bản sao khớp mã production 99,99%, 43 lượt đổi mã đều do luật V659",
+  "rollback": "migrations/rollback_v659_engine_network_proxy_codes.sql (tắt dòng mới, trả câu NET01 Zalo / tên mã NET01 / câu NET02, gỡ vá report_v1 có kiểm md5)",
+  "not_verified": [
+    "Lúc apply chưa có lượt nào ra NET02 / NET04 thật, chưa thấy lượt NET01 Facebook có khoá 5 phút trên production.",
+    "Phần Desktop (bước danh tính Page gửi lỗi mở trang như bước mở trang) chưa build, chưa phát hành: tới lúc đó bước danh tính lỗi proxy vẫn ra FB06."
+  ]
+}

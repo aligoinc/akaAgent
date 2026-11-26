@@ -120,6 +120,7 @@ import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/fa
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
 import { clearFacebookIdentityMarker, readFacebookIdentityMarker, writeFacebookIdentityMarker, type FacebookIdentityMarker } from '../engineAdapters/facebook/identityMarker'
+import { parseNavigationError } from '../engineAdapters/facebook/navigationError'
 import { cleanupScreenshots, findErrorScreenshots, gzipErrorDom, PAGE_DOM_MAX_CHARS, PAGE_DOM_SCRIPT, PAGE_DOM_TIMEOUT_MS, readErrorScreenshotDataUrl,
   saveErrorEvidence, screenshotAllowed } from '../engineAdapters/facebook/errorScreenshots'
 import { cachedFacebookRuntimeSettings, loadFacebookEngineCatalog, loadFacebookRuntimeSettings, type FacebookEngineCatalog, type FacebookRuntimeSettings } from '../data/repositories/facebookEngineRepository'
@@ -6783,8 +6784,13 @@ export class CampaignScheduler {
           return state.stopped ?? { done: true }
         }
         const message = failure?.error || result.error || 'Không chuyển được sang Page đã chọn.'
+        // Câu 6282 / 633 / 3484 của bộ kiểm lỗi (anh chốt 26/11/2026): bước đọc / chuyển danh tính hỏng ngay lúc mở trang (lỗi mạng / proxy
+        // của trình duyệt, chưa tới phần tìm nút) báo như bước mở trang, không gắn sẵn mã, để DB phân loại theo luật mạng / proxy (NET01 /
+        // NET02, V659) như mọi bước mở trang. Lỗi trên trang (không thấy nút menu, không đọc được tên, chọn Page hết giờ) vẫn FB06.
+        const navigation = parseNavigationError(message)
         await report('__identity', firstAction, { ok: false, phase: 'before_send',
-          signal: { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
+          signal: navigation ? { kind: 'block', code: `navigate:${navigation.host}`, message }
+            : { kind: 'block', code: 'identity_switch', errorCode: 'err_fb_identity_switch_failed', message } })
         return state.stopped ?? { done: true }
       }
       if (campaign.actionId === PAGE_INBOX_MESSAGE_ACTION_ID && result.steps.some(step => step.blockName === 'fb_page_inbox_open' && step.status === 'success')) {
