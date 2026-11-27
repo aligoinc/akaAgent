@@ -1,7 +1,9 @@
 # Chặn chiến dịch Zalo dùng danh sách quét bằng tài khoản khác (DAT04)
 
-Tình trạng 27/11/2026: phương án, chưa code, chưa đổi gì trên production. Các quyết định ở mục 3 anh đã chốt
-cùng ngày. Câu cho khách ở mục 4.3 chờ anh duyệt.
+Tình trạng 27/11/2026: phần DB đã viết ([V679](../migrations/migration_v679_zalo_uid_account_guard.sql) chặn danh sách,
+[V680](../migrations/migration_v680_notification_campaign_pause_default.sql) thông báo tạm dừng bật sẵn, kèm bản gỡ) và đã
+kiểm thử lặp (mục 5), **chưa apply, chưa đổi gì trên production**. Chưa làm: điểm chặn ở API Web và Desktop (mục 4.2).
+Các quyết định ở mục 3 anh đã chốt cùng ngày. Câu cho khách ở mục 4.3 chờ anh duyệt.
 
 ## 1. Chuyện đã xảy ra
 
@@ -43,9 +45,18 @@ là "-". Nhân viên này chỉ có thông báo "Chào ngày mới", không có 
 
 ### 4.1 Luật kiểm, viết một chỗ trong DB
 
-Hàm chỉ đọc mới `aka_agent_campaign_uid_account_check_v1`. Đầu vào: tài khoản định dùng (một hoặc nhiều) và danh
-sách UID, hoặc mã chiến dịch (hàm tự đọc data đang chờ). Tối đa 2.000 UID mỗi lượt, bên gọi chia lượt. Mỗi UID
-thuộc một trong ba nhóm:
+Hai hàm mới cùng một lõi: `aka_agent_campaign_uid_account_check_v1(payload)` (Desktop theo phiên) và
+`aka_agent_control_campaign_uid_account_check(staff, org, payload)` (API Web, chỉ `service_role`); quyền của mọi vai trò
+khác bị thu (Supabase mặc định cấp hàm mới cho `anon` / `authenticated`). `payload.mode`:
+
+- `uids`: tài khoản định dùng (tối đa 50) + danh sách UID (tối đa 2.000 mỗi lượt, bên gọi chia lượt). Dùng khi lưu.
+- `campaign`: mã chiến dịch + tài khoản (bỏ trống = tài khoản hiện tại); hàm tự đọc tối đa 5.000 data đang chờ, kể cả
+  data đang giữ vì DAT04, trả `truncated` khi còn nữa. Dùng khi bấm Tiếp tục / đổi tài khoản.
+- `hold`: nút "Bỏ N người": đặt các data đang chờ mà tài khoản hiện tại không gửi được sang "tạm dừng" với ghi chú
+  DAT04 (đổi lại đúng tài khoản thì trigger ở mục 4.4 trả về). Từ chối khi chiến dịch đang chạy.
+
+UID được chuẩn hoá trước khi so (bỏ mọi khoảng trắng kể cả khoảng trắng Unicode, bỏ đuôi `_0`). Mỗi UID thuộc một
+trong ba nhóm:
 
 | Nhóm | Điều kiện | Xử lý |
 |---|---|---|
@@ -53,9 +64,10 @@ thuộc một trong ba nhóm:
 | Không gửi được | UID không thuộc nhóm trên và có trong `zalo_users` của tài khoản khác cùng tổ chức | chặn |
 | Không rõ | UID không có ở tài khoản nào (nhập tay, file ngoài) | cho qua, không kiểm được |
 
-Hàm trả số lượng từng nhóm cho từng tài khoản, kèm tên các tài khoản đã quét (để câu báo nói đúng tên). Dùng chỉ mục
-đang có `idx_zalo_users_account_uid` và `idx_kgt_zalo_users_uid_v3`, so cả dạng UID có đuôi `_0`. Quyền: Desktop theo
-phiên (chỉ tài khoản của chính nhân viên), `service_role` cho API Web. Không sửa bảng nào.
+Hàm trả số lượng từng nhóm cho từng tài khoản, kèm tên các tài khoản đã quét (để câu báo nói đúng tên); chỉ tra
+"tài khoản khác" cho UID không thuộc tài khoản định dùng. Dùng chỉ mục đang có `idx_zalo_users_account_uid` và
+`idx_kgt_zalo_users_uid_v3`. Không sửa bảng nào. Đo trên production (hàm tạm, chỉ đọc): chiến dịch 5.436 người nhận
+6,3 giây lần đầu khi dữ liệu chưa vào bộ nhớ đệm, 138 ms các lần sau; trần hàm 15 giây.
 
 Loại chiến dịch áp dụng: `zalo_message_group_member`, `zalo_message_friend`, `zalo_message_remarketing_customer`,
 `zalo_cancel_sent_friend_request`. Chiến dịch chạy bằng Nhóm data không kiểm (đã gắn tài khoản theo nhóm).
@@ -99,10 +111,10 @@ engine, để sau.
 
 Chỉ đổi dữ liệu chính sách DAT04 (`err_engine_zalo_uid_other_account`), theo đúng mẫu EXC06 của V677:
 
-- Người nhận gặp DAT04 được để riêng (data sang "tạm dừng", `target_effect` `complete` thành `hold`), không tính
-  lượt, cộng chuỗi lỗi. Chiến dịch chạy tiếp người kế; 4 người liền thì tạm dừng chiến dịch như hiện nay.
+- Người nhận gặp DAT04 được để riêng (data sang "tạm dừng", `target_effect` `complete` thành `hold` ở dòng chính sách
+  426; ba dòng theo thao tác 427–429 thừa hưởng từ dòng này), không tính lượt, cộng chuỗi lỗi. Chiến dịch chạy tiếp người kế; 4 người liền thì tạm dừng chiến dịch như hiện nay.
 - Danh sách lẫn vài người sai: các người sai được để riêng, phần còn lại gửi bình thường.
-- Trigger mới trên `auto_campaigns`, chỉ chạy khi `account_id` đổi: người đang để riêng vì DAT04 mà UID thuộc tài
+- Trigger mới `trg_aka_agent_uid_account_release` trên `auto_campaigns`, chỉ chạy khi `account_id` đổi: người đang để riêng vì DAT04 mà UID thuộc tài
   khoản mới (theo luật 4.1) được trả về "chờ xử lý"; chiến dịch đã "hoàn thành" thì mở lại như khi Thêm data.
   Có hiệu lực với mọi bản app vì nằm ở DB.
 - Không xử lý lại data đã bị đóng trước đây. Bộ chạy cũ không đổi (vẫn "Tham số không hợp lệ", đóng data).
@@ -112,9 +124,12 @@ Chỉ đổi dữ liệu chính sách DAT04 (`err_engine_zalo_uid_other_account`
 Sửa hai hàm của trung tâm thông báo (có kiểm md5 thân production: `aka_agent_notification_capture_campaign`
 `28c58b14…`, `aka_agent_notification_seed_defaults` `1af8d8da…`):
 
-- Hàm ghi thông báo: chuyển sang "tạm dừng" mà ghi chú trống (khách tự bấm) thì không ghi thông báo. Áp dụng cho
-  mọi người, gồm 113 người đang tự bật.
-- Hàm bật sẵn (chạy mỗi giờ, 1.000 người mỗi lượt): nhân viên đủ điều kiện chưa có dòng "Chiến dịch" được thêm dòng
+- Hàm ghi thông báo: chuyển sang "tạm dừng" do khách tự bấm thì không ghi thông báo. "Tự bấm" = ghi chú trống, chỉ có
+  khoảng trắng, "Chờ data phù hợp", "Chờ data mới" (nút Tạm dừng của Nhóm data giữ ghi chú này) hoặc bắt đầu bằng
+  "Đang chờ tạm dừng" (Desktop khi đang chạy) (`private.aka_agent_notification_user_pause_note`). Áp dụng cho mọi
+  người, gồm 113 người đang tự bật.
+- Hàm bật sẵn (chạy mỗi giờ, theo thiết lập mới `notifications.default_campaign_pause`
+  `{"audience":"all","batch":1000}`, `off` để dừng): nhân viên đủ điều kiện chưa có dòng "Chiến dịch" được thêm dòng
   `campaign.status_changed` với `toStatuses` = `["tạm dừng"]`, bật đẩy iPhone, bật email khi đã có email nhận
   (cùng luật với Chào ngày mới). Khoảng 2.200 người, xong trong khoảng 3 giờ.
 - Người đã có dòng "Chiến dịch" thì giữ nguyên lựa chọn (17 người đang bật mà chỉ chọn Hoàn thành, 2 người đã tắt).
@@ -127,27 +142,59 @@ Không đổi giao diện cài đặt, không đổi API, không cần build Des
 
 ## 5. Kiểm thử
 
-- DB (PG cục bộ): hàm kiểm với đủ ca gửi được / tài khoản khác / cùng nick / không rõ / đuôi `_0` / quá 2.000 /
-  tài khoản không thuộc nhân viên; trigger trả data; chính sách DAT04 qua `aka_agent_engine_simulate_v1`.
-- Dữ liệu thật, chỉ đọc: hàm phải bắt đủ 25 chiến dịch ở mục 2 và không chặn lượt nào trong mẫu gửi thành công
-  24 giờ.
-- Engine (bộ kịch bản): cả danh sách sai thì dừng sau 4 người và không mất data; danh sách lẫn thì chạy hết phần
-  đúng; đổi về đúng tài khoản thì người để riêng được gửi, không gửi trùng.
-- API Web: test từng điểm chặn và câu trả về. Desktop: smoke tiến trình chính + smoke giao diện hộp thoại ở hai form.
-- Thông báo: tự bấm Tạm dừng không báo; hệ thống dừng có báo kèm lý do; bật sẵn không đè dòng đã có; bản gỡ.
+Kiểm thử lặp theo yêu cầu 27/11 ("ít nhất 3 vòng không còn vấn đề"). Một vòng = 5 hạt giống tổng hợp + một cửa sổ dữ
+liệu thật mới:
+
+- Tổng hợp: `PG_MODULE_DIR=<thư mục có node_modules/pg> node scripts/zalo-uid-account-guard/fuzz-round.cjs --seed N
+  [--checks 800] [--pool <mẫu UID / ghi chú thật đã che, ngoài repo>]`. Dựng PG16 cục bộ, nạp
+  [fixture.sql](../scripts/zalo-uid-account-guard/fixture.sql) (bảng + hàm production chép nguyên văn 27/11) rồi V679,
+  V680; sinh dữ liệu sai lệch có chủ ý (khoảng trắng Unicode, đuôi `_0`, UID trùng chuỗi giữa tài khoản, tài khoản cùng
+  nick, tài khoản đã xoá / khác tổ chức, payload sai kiểu, chiến dịch xoá / đang chạy / Nhóm data) và so mọi kết quả với
+  mô hình viết độc lập bằng JS. Phủ: mọi chế độ của hàm kiểm, quét từng chiến dịch, quyền theo phiên Desktop, "Bỏ N
+  người" rồi đổi tài khoản (trigger trả data, mở lại chiến dịch "hoàn thành"), đổi tài khoản và "Bỏ N người" chạy cùng
+  lúc, bật sẵn + ghi thông báo, gỡ rồi apply lại (md5 thân hàm về đúng bản production).
+- Dữ liệu thật, chỉ đọc: [realdata-check.sql](../scripts/zalo-uid-account-guard/realdata-check.sql) trên cửa sổ 40.000
+  dòng `auto_campaign_details` chọn ngẫu nhiên: lượt gửi thành công phải là "gửi được" hoặc "không rõ", không bao giờ
+  "chặn"; DAT04 thật phải bị luật bắt.
+
+Lỗi tìm ra và đã sửa ở vòng 1–2: hàm mới có quyền `anon` / `authenticated` theo quyền mặc định của Supabase; chuẩn hoá
+UID bỏ sót khoảng trắng Unicode (`[[:space:]]` ở locale C); payload thiếu khoá / sai kiểu lọt qua kiểm tra NULL; chia
+lượt UID bị đếm trùng tài khoản khác; quét chiến dịch lớn chậm (nay một lượt phân loại, trần 5.000 data, chỉ tra tài khoản
+khác khi cần); khoảng trắng-only chưa được coi là khách tự bấm Tạm dừng.
+
+| Vòng | Tổng hợp (hạt giống, phép kiểm) | Dữ liệu thật | Kết quả |
+|---|---|---|---|
+| 3 | 101–105, 5.908 | cửa sổ 17.965.958: 2.336 lượt thành công đều "gửi được" | sạch |
+| 4 | 201–205, 6.514 | cửa sổ 18.152.578: 1.556 thành công, 0 "chặn" (40 "không rõ": UID không có ở tài khoản nào); 10 Z114 không bị xếp DAT04 (SĐT nhập vào cột UID) | sạch |
+| 5 | 301–305, 5.962 | cửa sổ 14.897.927: 5.033 thành công đều "gửi được"; DAT04 thật 3 ngày 14/14 bị luật bắt | sạch |
+
+Sau khi đổi số V678/V679 thành V679/V680 chạy lại hạt giống 401–403 (3.934 phép kiểm): sạch. Đo trước đó cùng ngày:
+3.818 lượt thành công 24 giờ 0 chặn nhầm, DAT04 8 ngày 29/29, ghi chú tạm dừng của engine 30 ngày 390/390 được coi là
+hệ thống dừng.
+
+Chưa kiểm: bộ kịch bản engine với chính sách DAT04 mới (data giữ lại, đổi tài khoản thì gửi, không trùng), API Web,
+Desktop.
 
 ## 6. Thứ tự đưa lên và cách gỡ
 
-1. Migration 1 (hàm kiểm, trigger trả data, chính sách và câu DAT04). Có tạo hàm và trigger nên apply buổi tối.
-2. Migration 2 (hai hàm thông báo), apply buổi tối. Từ lượt chạy hằng giờ kế tiếp hệ thống tự bật sẵn.
+1. V679 (hàm kiểm, trigger trả data, chính sách và câu DAT04). Có tạo hàm và trigger nên apply buổi tối. Chính sách
+   và câu lúc chạy có hiệu lực ngay ở Desktop, App Server, Fly.
+2. V680 (hai hàm thông báo), apply buổi tối. Từ lượt chạy hằng giờ kế tiếp hệ thống tự bật sẵn.
 3. Deploy API + Web (điểm chặn và hộp thoại).
 4. Build Desktop (hai form + tiến trình chính). iOS có hộp thoại đủ nút ở bản phát hành sau.
 
-Số migration lấy lúc làm, kiểm sổ production ngay trước khi apply.
+Số migration: viết là V678 / V679, đổi thành V679 / V680 vì 15:25 VN 27/11 sổ đã có
+`migration_v678_notification_email_pacing` (không đụng hai hàm V680 sửa, đã kiểm md5). Kiểm sổ production ngay trước
+khi apply; preflight của mỗi bản còn kiểm md5 thân hàm / dòng chính sách nó thay.
 
-Gỡ: chặn khi lưu tắt bằng `campaign.uid_account_guard` = `off`; chính sách DAT04 trả `target_effect` về `complete`
-và gỡ trigger; thông báo trả hai hàm về thân cũ và tắt các dòng do lượt bật sẵn tạo mà khách chưa sửa.
+Gỡ: chặn khi lưu tắt bằng `campaign.uid_account_guard` = `off`; gỡ hẳn bằng
+[rollback_v679](../migrations/rollback_v679_zalo_uid_account_guard.sql) (chính sách DAT04 về `complete`, gỡ trigger và
+hàm; người đang giữ vì DAT04 không tự trả về hàng đợi) và
+[rollback_v680](../migrations/rollback_v680_notification_campaign_pause_default.sql) (hai hàm về thân cũ, xoá các dòng
+do lượt bật sẵn tạo). Sinh lại V680: `python3 scripts/zalo-uid-account-guard/build-v680-sql.py`.
 
 ## 7. Còn mở
 
-- Anh duyệt các câu ở mục 4.3.
+- Anh duyệt các câu ở mục 4.3 (câu lúc chạy trong V679 viết theo bản đề xuất, đổi lại chỉ cần sửa dữ liệu).
+- Code điểm chặn ở API Web và Desktop (mục 4.2), chạy bộ kịch bản engine với chính sách DAT04 mới.
+- Apply V679, V680 (chờ anh bảo).
