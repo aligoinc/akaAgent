@@ -11,6 +11,7 @@ const { pathToFileURL } = require('node:url')
 const { ROOT, MIGRATION, buildFixture, startCluster } = require('./fixtures/campaign-outcome-engine/pg-fixture.cjs')
 const chain = [499, 501, 503, 504, 505, 506, 507, 508, 509, 512, 515, 517, 527, 532].reduce((m, n) => ({ ...m, [n]: require(`./build-v${n}-sql.cjs`) }), {})
 const v581 = require('./build-v581-sql.cjs')
+const v677 = require('./build-v677-sql.cjs')
 const V500 = fs.readFileSync(path.join(ROOT, 'migrations/migration_v500_zalo_error_policies.sql'), 'utf8')
 const PORT = Number(process.env.V581_TEST_PORT || 55581)
 const GROUP = 'zalo_message_group_member'
@@ -102,11 +103,13 @@ async function main() {
     const STAFF = 9681, ORG = 681
     await db.query(`INSERT INTO public.org_organization(id, name, use_new_zalo_runtime) VALUES ($1, 'Org', true) ON CONFLICT (id) DO NOTHING`, [ORG])
     await db.query(`INSERT INTO public.org_staff(id) VALUES ($1) ON CONFLICT (id) DO NOTHING`, [STAFF])
-    const make = async ({ extra = {}, targets }) => {
+    const make = async ({ extra = {}, targets, exclusion = false }) => {
       const account = ++nextId, campaign = ++nextId
       await db.query(`INSERT INTO public.auto_accounts(id, name, flatform_type, login_status, status, is_active, is_delete, staff_id, organization_id, is_zalo_server)
         OVERRIDING SYSTEM VALUE VALUES ($1, 'Zalo', 'zalo', 'đã đăng nhập', 'chờ xử lý', true, false, $2, $3, false)`, [account, STAFF, ORG])
-      const extraSettings = { enableMessage: true, ...extra }
+      const extraSettings = { enableMessage: true, ...extra,
+        // Loại trừ theo Nhóm data (V654+): cổng loại trừ cần biết khách là ai (Zalo global ID / SĐT) mới so được với Nhóm data.
+        ...(exclusion ? { zaloSendExclusionsByAccountId: { [account]: { groupId: null, blocklistIds: [], dataGroupIds: [6169] } } } : {}) }
       await db.query(`INSERT INTO public.auto_campaigns(id, name, action_id, account_id, status, schedule, is_delete, staff_id, organization_id, content,
         extra_settings, images) OVERRIDING SYSTEM VALUE VALUES ($1, 'Thành viên nhóm', $2, $3, 'chờ xử lý', now() - interval '1 minute', false,
         $4, $5, 'Chào bạn', $6::jsonb, '[]'::jsonb)`, [campaign, GROUP, account, STAFF, ORG, JSON.stringify(extraSettings)])
@@ -131,8 +134,25 @@ async function main() {
         findUser: async () => null, phoneSearchLimitScope: async () => null, saveFoundUser: async () => {},
         getUserProfile: async (_ctx, uid) => {
           calls.push(`profile:${uid}`)
+          // b.noProfile: Zalo không trả hồ sơ cho UID (UID của tài khoản khác) nên không có Zalo global ID.
+          if (b.noProfile?.(uid)) return null
+          if (b.profileError?.(uid)) throw new Error(b.profileError(uid))
+          // b.profileNoGid: đọc được hồ sơ nhưng Zalo không kèm Global ID.
+          if (b.profileNoGid?.(uid)) return E.normalizeZaloFoundUser({ userId: uid, display_name: 'Lan', zalo_name: 'Lan' })
           return E.normalizeZaloFoundUser({ userId: uid, display_name: 'Lan', zalo_name: 'Lan', globalId: `g-${uid}` })
         },
+        // Loại trừ theo Nhóm data: DB không xác định được khách (V666 'unknown') với mọi người nhận.
+        sendExclusionSnapshot: async () => ({ catalog: {}, group: null, blocklistUids: [],
+          remote: { groupName: null, blocks: [], blocklistIds: [], dataGroups: [{ id: 6169, name: 'Nhóm A' }], campaigns: [] } }),
+        sendExclusionRemote: async (_ctx, payload) => {
+          calls.push(`exclusion:${payload.uid}:${payload.globalId ?? '-'}`)
+          // b.exclusionOk: DB xác định được khách (không thuộc nguồn loại trừ) với UID này.
+          if (b.exclusionOk?.(payload.uid)) return { match: null, blocks: [], unknown: null }
+          return { match: null, blocks: [], unknown: 'Chưa xác định được khách để kiểm tra loại trừ.' }
+        },
+        sendExclusionFacts: async () => ({ akabiz_contact: null, campaign_delivery: null }),
+        labelMembership: async () => null,
+        friendRequestStatus: async () => null,
         saveResolvedProfile: async () => {},
         isOptedOut: async () => false,
         prepareOptOutLink: async () => ({ id: 'x', isOptedOut: false }),
@@ -357,6 +377,119 @@ async function main() {
     const notInvalid = await run(c127, { other: () => true, text: () => { throw zaloErr('Bạn gửi quá nhanh', 127) } })
     assert.equal(notInvalid.calls.filter(call => call.startsWith('owner:')).length, 0, 'mã khác 114 không tra')
     pass('mã Zalo khác 114 không gọi phép tra tài khoản khác')
+
+    // ---- 7. Loại trừ theo Nhóm data mà UID là của tài khoản khác (chiến dịch 53605, 27/11/2026) -----------------------------------
+    // Khách đổi tài khoản chạy chiến dịch: UID của tài khoản cũ, Zalo không trả hồ sơ nên không có global ID, cổng loại trừ không xác
+    // định được khách. Trước bản sửa: mọi data ra EXC02 và bị tạm dừng (155 data trong 2 phút). Nay: tra tài khoản khác, đúng thì DAT04
+    // ở cổng (chưa gọi Zalo), 4 data liền thì tạm dừng chiến dịch kèm câu.
+    const swapTargets = [UID(91), UID(92), UID(93), UID(94), UID(95), UID(96)]
+    const swap = await run(await make({ extra: { enableAddFriend: true }, targets: swapTargets, exclusion: true }),
+      { own: OWN_UID, noProfile: all, other: () => true })
+    assert.deepEqual(swap.calls, swapTargets.slice(0, 4).flatMap(u => [`profile:${u}`, `exclusion:${u}:-`, `owner:${u}`]),
+      'mỗi data: không có hồ sơ → loại trừ không xác định → tra một lần → không gửi tin, không kết bạn; data thứ 5, 6 không chạy')
+    assert.deepEqual(swap.details, swapTargets.slice(0, 4).map(() =>
+      `zalo_message_stranger|thất bại|${CODES.otherAccount.code}|false|UID được quét bằng tài khoản Zalo khác nên tài khoản này không gửi được (DAT04)`))
+    assert.equal(swap.campaign, 'tạm dừng')
+    assert.equal(swap.note, 'Dừng sau 4 data lỗi/thất bại liên tiếp (ngưỡng 4): UID được quét bằng tài khoản Zalo khác nên tài khoản này không gửi được (DAT04)')
+    assert.deepEqual(swap.inputs.map(i => i.status), ['hoàn thành', 'hoàn thành', 'hoàn thành', 'hoàn thành', 'chờ xử lý', 'chờ xử lý'], 'data chưa chạy giữ nguyên')
+    assert.deepEqual([swap.streak, await swap.used('zalo_message_stranger'), await swap.used('zalo_add_friend')], [4, 0, 0], 'không tính lượt')
+    assert.ok(!swap.lines.some(l => l.includes('(EXC02)')), swap.lines.join('\n'))
+    pass('loại trừ theo Nhóm data + UID của tài khoản khác: DAT04 ở cổng (không gọi Zalo gửi), không tính lượt, 4 data liền thì tạm dừng chiến dịch, data chưa chạy giữ nguyên')
+
+    // Không thuộc tài khoản khác / tra lỗi / cổng cũ chưa có hàm tra, mà đọc hồ sơ không ra: không giữ data với EXC02 nữa (tín hiệu đọc hồ
+    // sơ không ra; trước V677 luật chung ra NET01): một data rồi dừng lượt, data về hàng đợi, không gửi.
+    for (const [label, answer] of [['không thuộc tài khoản khác', () => false], ['tra lỗi', () => new Error('mất kết nối DB')], ['cổng cũ', null]]) {
+      const targets = [UID(101), UID(102), UID(103), UID(104), UID(105)]
+      const keep = await run(await make({ extra: { enableAddFriend: true }, targets, exclusion: true }),
+        { own: OWN_UID, noProfile: all, ...(answer ? { other: answer } : {}) })
+      assert.equal(keep.calls.filter(call => call.startsWith('text:') || call.startsWith('friend:')).length, 0, `${label}: không gửi`)
+      assert.deepEqual(keep.inputs.map(i => i.status), targets.map(() => 'chờ xử lý'), `${label}: không data nào bị giữ`)
+      assert.deepEqual(keep.details, [], label)
+      assert.notEqual(keep.campaign, 'tạm dừng', label)
+      assert.equal(keep.calls.filter(call => call.startsWith('owner:')).length, answer ? 1 : 0, label)
+      assert.ok(keep.lines.some(l => l.includes('(NET01)')) && !keep.lines.some(l => l.includes('(EXC02)')), `${label}\n${keep.lines.join('\n')}`)
+    }
+    // Đọc được hồ sơ mà không có Global ID (UID không thuộc tài khoản khác), hoặc có Global ID mà DB vẫn không xác định được: giữ EXC02.
+    const noGid = await run(await make({ targets: [UID(106), UID(107)], exclusion: true }), { own: OWN_UID, profileNoGid: all, other: () => false })
+    assert.deepEqual(noGid.inputs.map(i => [i.status, i.note]), [UID(106), UID(107)].map(() => ['tạm dừng', 'Chưa xác định được khách để kiểm tra loại trừ. (EXC02)']))
+    assert.equal(noGid.calls.filter(call => call.startsWith('owner:')).length, 2, 'không có Global ID nên vẫn tra tài khoản khác')
+    const known = await run(await make({ targets: [UID(111), UID(112)], exclusion: true }), { own: OWN_UID, other: () => true })
+    assert.deepEqual(known.calls, [UID(111), UID(112)].flatMap(u => [`profile:${u}`, `exclusion:${u}:g-${u}`]), 'có global ID: không tra tài khoản khác')
+    assert.deepEqual(known.inputs.map(i => i.status), ['tạm dừng', 'tạm dừng'])
+    pass('đọc hồ sơ không ra mà UID không thuộc tài khoản khác: không giữ data (NET01 khi chưa có V677); đọc được hồ sơ thiếu Global ID, hoặc có Global ID: giữ EXC02')
+
+    // ---- 8. V677: đọc hồ sơ Zalo không ra khi cần Global ID để kiểm loại trừ (chiến dịch 63333, 27/11/2026) -----------------------
+    // Tài khoản 1828 từ 11:55 VN không đọc được hồ sơ nào; trước bản sửa mỗi data ra EXC02 và bị giữ "tạm dừng", không nghỉ.
+    const signalOf = async campaign => rows(`SELECT error_code, signal->>'message' m, signal->'evidence'->>'profileError' e FROM public.auto_engine_outcomes
+      WHERE campaign_id = $1 ORDER BY created_at`, [campaign])
+    // Trước V677: tín hiệu mới là tín hiệu engine lạ trước khi gửi, luật chung đưa về NET01 (data về hàng đợi), không giữ data.
+    const preTargets = [UID(121), UID(122)]
+    const pre677 = await run(await make({ targets: preTargets, exclusion: true }), { own: OWN_UID, noProfile: all, other: () => false })
+    assert.deepEqual(pre677.inputs.map(i => i.status), ['chờ xử lý', 'chờ xử lý'], 'trước V677: data về hàng đợi (NET01), không bị giữ')
+    assert.deepEqual(pre677.details, [])
+    assert.ok(pre677.lines.some(l => l.includes('(NET01)')), pre677.lines.join('\n'))
+    assert.equal(pre677.calls.filter(c => c.startsWith('text:')).length, 0)
+    pass('trước V677: lõi mới báo tín hiệu đọc hồ sơ không ra thì luật chung ra NET01, data về hàng đợi, không gửi, không bị giữ')
+
+    // Apply / chặn chạy lại / gỡ / apply lại.
+    await db.query(v677.migration.replace(/COMMIT;\s*$/, 'ROLLBACK;'))
+    assert.equal(await classify('zalo_message_stranger', { kind: 'engine', code: v677.SIGNAL }, 'before_send'), 'err_network_offline', 'apply rồi ROLLBACK không đổi gì')
+    await db.query(v677.migration)
+    assert.equal(fs.readFileSync(path.join(ROOT, `migrations/${v677.NAME}.sql`), 'utf8'), v677.migration, 'file migration = bản sinh')
+    assert.equal(fs.readFileSync(path.join(ROOT, `migrations/${v677.ROLLBACK_NAME}.sql`), 'utf8'), v677.rollback, 'file gỡ = bản sinh')
+    const changed = ['target_streak_effect', 'streak_threshold', 'campaign_effect']
+    for (const a of ['zalo_message_stranger', 'zalo_message_friend', 'zalo_add_friend']) {
+      for (const phase of ['before_send', 'after_send']) assert.equal(await classify(a, { kind: 'engine', code: v677.SIGNAL }, phase), v677.CODE.code, `${a} ${phase}`)
+      const mine = await policy(v677.CODE.code, a, 'desktop', 'before_send'), base = await policy(v677.BASE, a, 'desktop', 'before_send')
+      assert.deepEqual(strip(mine, changed), strip(base, changed), `${a}: chính sách như EXC02 ngoài câu và phần đã chốt`)
+      assert.deepEqual([mine.target_effect, mine.detail_mode, mine.quota_effect, mine.run_effect, mine.target_streak_effect, mine.streak_threshold, mine.campaign_effect, mine.lock_action_codes ?? []],
+        ['hold', 'suppress', 'no_count', 'continue', 'increment', 4, 'pause', []])
+    }
+    const err677 = (await rows(`SELECT public_code, error_class, customer_title, customer_help FROM public.auto_error WHERE error_code = $1`, [v677.CODE.code]))[0]
+    assert.deepEqual(err677, { public_code: 'EXC06', error_class: 'target_temporary', customer_title: v677.CODE.title, customer_help: null })
+    assert.equal(v677.CODE.title, 'Chưa đọc được hồ sơ Zalo của người nhận nên chưa kiểm tra được điều kiện loại trừ gửi', 'câu anh duyệt 27/11/2026')
+    assert.equal(Number(await val(`SELECT count(*) FROM public.aka_agent_engine_policy_lint`)), 0, 'không có dòng lint')
+    await assert.rejects(db.query(v677.migration), /Đã có mã|Đã có chính sách/)
+    await db.query('ROLLBACK')
+    await db.query(v677.rollback)
+    assert.equal(await classify('zalo_message_stranger', { kind: 'engine', code: v677.SIGNAL }, 'before_send'), 'err_network_offline', 'gỡ trả luật chung')
+    await assert.rejects(db.query(v677.rollback), /Chưa có V677/)
+    await db.query('ROLLBACK')
+    await db.query(v677.migration)
+    pass('V677: tín hiệu ra EXC06 ở mọi thao tác và pha; chính sách như EXC02 nhưng cộng chuỗi, 4 liền thì tạm dừng, không khoá; câu như anh duyệt; chạy lại bị chặn; gỡ trả NET01; apply lại được')
+
+    // Cả tài khoản không đọc được hồ sơ (như 63333): 4 data bị giữ kèm câu EXC06 rồi chiến dịch tạm dừng, phần còn lại giữ "chờ xử lý".
+    const prfTargets = [UID(131), UID(132), UID(133), UID(134), UID(135), UID(136)]
+    const prfCampaign = await make({ extra: { enableAddFriend: true }, targets: prfTargets, exclusion: true })
+    const prf = await run(prfCampaign, { own: OWN_UID, profileError: () => 'Zalo từ chối đọc hồ sơ', other: () => false })
+    assert.deepEqual(prf.calls, prfTargets.slice(0, 4).flatMap(u => [`profile:${u}`, `exclusion:${u}:-`, `owner:${u}`]), 'không gửi tin / kết bạn; data thứ 5, 6 không chạy')
+    const held = `${v677.CODE.title} (EXC06)`
+    assert.deepEqual(prf.inputs.map(i => [i.status, i.note]), [...prfTargets.slice(0, 4).map(() => ['tạm dừng', held]), ['chờ xử lý', null], ['chờ xử lý', null]])
+    assert.deepEqual(prf.details, [])
+    assert.equal(prf.campaign, 'tạm dừng')
+    assert.equal(prf.note, `Dừng sau 4 data lỗi/thất bại liên tiếp (ngưỡng 4): ${held}`)
+    assert.deepEqual([prf.streak, await prf.used('zalo_message_stranger')], [4, 0], 'không tính lượt')
+    assert.ok(prf.lines.some(l => l.includes(held)) && !prf.lines.some(l => l.includes('(EXC02)')), prf.lines.join('\n'))
+    const sig = (await signalOf(prfCampaign.campaign)).filter(r => r.error_code === v677.CODE.code)
+    assert.ok(sig.length === 4 && sig.every(r => r.m.includes('Zalo từ chối đọc hồ sơ')), JSON.stringify(sig))
+    pass('V677: cả tài khoản không đọc được hồ sơ khi cần Global ID: 4 data bị giữ kèm câu EXC06, câu lỗi Zalo ghi ở tín hiệu, không tính lượt, rồi tạm dừng chiến dịch; data còn lại giữ chờ xử lý')
+
+    // Một người hỏng lẻ: data đó bị giữ, người kế đọc được hồ sơ thì chuỗi về 0, chiến dịch chạy hết.
+    const loneTargets = [UID(161), UID(162), UID(163), UID(164)]
+    const lone = await run(await make({ targets: loneTargets, exclusion: true, extra: {} }),
+      { own: OWN_UID, noProfile: uid => uid === UID(161) || uid === UID(163), other: () => false, exclusionOk: uid => uid !== UID(161) && uid !== UID(163) })
+    assert.deepEqual(lone.inputs.map(i => i.status), ['tạm dừng', 'hoàn thành', 'tạm dừng', 'hoàn thành'], lone.lines.join('\n'))
+    assert.equal(lone.campaign, 'hoàn thành')
+    assert.equal(lone.streak, 0)
+    pass('V677: người hỏng lẻ bị giữ, người đọc được hồ sơ vẫn gửi, chuỗi lỗi về 0, chiến dịch không dừng')
+
+    // Ưu tiên: UID của tài khoản khác thì DAT04 (không phải EXC06) dù đọc hồ sơ cũng không ra.
+    const both = await run(await make({ targets: [UID(141)], exclusion: true }), { own: OWN_UID, noProfile: all, other: () => true })
+    assert.deepEqual(both.details, [`zalo_message_stranger|thất bại|${CODES.otherAccount.code}|false|UID được quét bằng tài khoản Zalo khác nên tài khoản này không gửi được (DAT04)`])
+    // Không cần Global ID (không bật loại trừ): đọc hồ sơ không ra vẫn gửi như cũ.
+    const noExc = await run(await make({ targets: [UID(151)] }), { own: OWN_UID, noProfile: all })
+    assert.deepEqual(noExc.details, ['zalo_message_stranger|thành công|-|true|Đã gửi tin nhắn đến Khách 1'])
+    pass('V677: UID của tài khoản khác vẫn ra DAT04; chiến dịch không bật loại trừ thì đọc hồ sơ không ra vẫn gửi như trước')
 
     console.log(`OK V581: ${checks} nhóm kiểm`)
   } finally {
