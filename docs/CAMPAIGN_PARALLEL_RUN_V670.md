@@ -246,10 +246,11 @@ Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps
 
 **Deploy (27/11):**
 - ChatApi: không deploy nguyên `dev` vì còn #200 (Cách A, của dung688; anh chốt để dung688 deploy) và #202 (báo cáo chat, kèm migration). Image `deploy-7bc19c5-20261127` = `972e138` (bản đang chạy) + #203, nhánh `deploy/972e138-parallel-gaps-20261127`; `npm run verify` trên bản này đạt 3.313 ca. `api` 10:48:07–10:48:25 VN; `worker` dừng 10:49:22, chạy lại 10:50:41.
-- Sự cố: lần khởi động `worker` đầu, bước khôi phục lúc khởi động lỗi kết nối DB (lỗi không thuộc loại tạm thời) nên vai trò chiến dịch dừng hẳn, 0 lượt Fly. Khởi động lại `worker` lần hai 10:54:46–10:54:49; lượt Fly đầu tiên 10:55:02. Chiến dịch trên Fly ngừng khoảng 5 phút 40 giây. Có từ trước, không do #203; chi tiết ở ChatApi `docs/DEPLOY_FLY_IO.md`.
+- Sự cố: lần khởi động `worker` đầu, bước khôi phục lúc khởi động lỗi kết nối DB (lỗi không thuộc loại tạm thời) nên vai trò chiến dịch dừng hẳn, 0 lượt Fly. Khởi động lại `worker` lần hai 10:54:46–10:54:49; lượt Fly đầu tiên 10:55:02. Chiến dịch trên Fly ngừng khoảng 5 phút 40 giây. Có từ trước, không do #203; chi tiết ở ChatApi `docs/DEPLOY_FLY_IO.md`; bản sửa ở [aligoinc/akaAgentChatApi#206](https://github.com/aligoinc/akaAgentChatApi/pull/206) (đã merge `dev` 13:39 VN 27/11, chưa deploy).
 - Hậu kiểm 10:55:36: 151 lượt Fly từ 10:54:49, 0 lượt treo quá 5 phút, 0 UNK01, 0 lệnh `command_result_unknown` từ 10:47. Lúc dừng `worker` lần đầu có 4 lượt RUN01 (data về hàng đợi).
 - Web v150 (`dev_1` `b491ecf7`) 10:50:50–10:51:18 VN; v149 đang chạy trước đó đã có mọi thay đổi trước #333 (so source map 262 tệp). iOS không cần phát hành.
 - Chưa có tài khoản nào chạy làn riêng trên Fly lúc deploy, nên phần chờ thêm và câu "Lý do đang chờ" mới chưa gặp ở lượt thật.
+- Biên nhận merge 13:48 VN theo yêu cầu ("Merge cả ba"): ChatApi `dev` qua [aligoinc/akaAgentChatApi#204](https://github.com/aligoinc/akaAgentChatApi/pull/204) (`9e7f378c`), WebApp `dev_1` qua [aligoinc/akaAgentWebApp#334](https://github.com/aligoinc/akaAgentWebApp/pull/334) (`c716d8f1`), ghi chú này vào `dev_3` qua [#824](https://github.com/aligoinc/akaAgent/pull/824). Kiểm production 13:4x VN (chỉ đọc): cả hệ thống mới có 1 chiến dịch tích "Chạy cùng lúc" (đã hoàn thành), mọi lượt đang chạy ở làn chính, 0 lượt của chiến dịch tích từ lúc deploy.
 
 ## Kiểm thử (26/11 tối, sau khi lên `dev_3` / `dev` / `dev_1` mới)
 
