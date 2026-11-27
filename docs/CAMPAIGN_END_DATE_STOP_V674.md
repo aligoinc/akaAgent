@@ -1,5 +1,7 @@
 # V674: chiến dịch qua ngày kết thúc thì dừng hẳn
 
+**Đã apply akachat 10:09:58 VN 27/11/2026** theo yêu cầu (sổ `20261127030958`, md5 sổ = file `b4637f83…`, không apply lại). PostgREST nạp lại schema mất 10,4 giây (giờ cao điểm); có 3 lỗi 500 hết giờ 3 giây của Desktop, 0 lỗi 503. Bước dọn chạy 10:10:40–10:11:08 VN: 135 chiến dịch hoàn thành, 38.743 data được đóng, 0 lỗi. [Biên nhận](../migrations/snapshots/campaign-end-date-v674/apply-receipt.json).
+
 Anh chốt 27/11/2026: qua ngày kết thúc mà còn data chưa gửi thì **dừng hẳn**.
 
 ## Lỗi
