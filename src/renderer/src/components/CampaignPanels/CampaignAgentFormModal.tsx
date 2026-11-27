@@ -179,7 +179,6 @@ import {
   campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
 } from '../../../../shared/campaignRepeat'
 import { CAMPAIGN_PARALLEL_RUN_HINT, CAMPAIGN_PARALLEL_RUN_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
-import { initialScheduleEnd, scheduleEndError, scheduleEndForSave, scheduleEndHint } from '../../../../shared/campaignScheduleEnd'
 import { campaignRepeatFromLegacyRerun } from '../../../../shared/campaignRepeatDesktop'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
@@ -1926,15 +1925,6 @@ export default function CampaignAgentFormModal({
           ? 'manual'
           : 'group')
     : 'group'
-  // Ngày kết thúc của lịch tuần / tháng luôn bắt buộc (anh chốt 27/11/2026). Chiến dịch mới đặt sẵn hôm nay + 7 ngày; chiến dịch đang
-  // sửa giữ ngày đã lưu; bản nhân bản là chiến dịch mới nên lưu là dừng đúng ngày. Lịch Hàng ngày dùng ngày kết thúc của "Lặp lại sau
-  // khi chạy xong" (repeatEndDate).
-  const initialScheduleEndState = initialScheduleEnd(
-    campaign && (campaign.scheduleType || 'daily') !== 'daily'
-      ? { scheduleEndDate: campaign.scheduleEndDate, scheduleEndStrict: campaign.scheduleEndStrict }
-      : null,
-    { clone: Boolean(cloneFromId), today: formatScheduleVietnam(new Date()).slice(0, 10) }
-  )
   const [formData, setFormData, contentStore] = useCampaignContentFormData(draftPayload, draftValuesRef, {
     name: campaign?.name || '',
     actionId: initialActionId,
@@ -1947,9 +1937,7 @@ export default function CampaignAgentFormModal({
     dataGroupId: campaign?.dataGroupId ?? initialDataGroup?.id ?? null as number | null,
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
-    scheduleEndDate: initialScheduleEndState.date,
-    // Ngày kết thúc kiểu cũ (chưa dừng đúng ngày) của chiến dịch đang sửa: khách không đổi ngày thì giữ cách chạy cũ.
-    scheduleEndLegacyDate: initialScheduleEndState.legacyDate,
+    scheduleEndDate: initEndDate(),
     useDailyStopTime: campaign ? !!savedDailyStopTime : false,
     dailyStopTime: savedDailyStopTime || DEFAULT_DAILY_STOP_TIME,
     scheduleDays: campaign?.scheduleDays || '',
@@ -2197,11 +2185,6 @@ export default function CampaignAgentFormModal({
   const [preservedScheduleSnapshot] = useState(() => draftPayload ? draftPayload.preservedSchedule
     : preserveCampaignSchedule(formData, cloneFromId ? undefined : campaign?.schedule, campaign?.scheduleEndDate))
   const preservedDraftSchedule = getPreservedCampaignDraftSchedule(preservedScheduleSnapshot, formData)
-  const scheduleEndState = {
-    date: formData.scheduleEndDate || '',
-    // Chiến dịch Nhóm data vốn dừng đúng ngày kết thúc nên không có kiểu cũ.
-    legacyDate: formData.dataTargetSourceMode === 'data_group' ? '' : (formData.scheduleEndLegacyDate || '')
-  }
   const [advancedContentSourceMode, setAdvancedContentSourceMode] = useCampaignDraftField<AdvancedContentSourceMode>(draftPayload, draftValuesRef, 'advancedContentSourceMode',
     initialAdvancedContentSourceMode
   )
@@ -6418,18 +6401,13 @@ export default function CampaignAgentFormModal({
       const formOriginalSchedule = isEditingSavedCampaign && usesMultiDailyTimeSlots && preservedDraftSchedule?.multiSlotStart
         ? (campaign?.originalSchedule ?? formSchedule)
         : formSchedule
-      const scheduleEndSave = scheduleEndForSave(scheduleEndState)
       // Lịch Hàng ngày chỉ có ngày kết thúc khi đang bật "Lặp lại sau khi chạy xong" và người dùng có đặt.
       const normalizedScheduleEndDate = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign
         ? null
         : formData.scheduleType === 'daily'
           ? (usesCampaignRepeat && formData.repeatEndDate ? new Date(formData.repeatEndDate + 'T23:59:59+07:00').toISOString() : null)
-        : (scheduleEndSave.date === null
-          ? null
-          : (preservedDraftSchedule?.end?.iso ?? new Date(scheduleEndSave.date + 'T23:59:59+07:00').toISOString()))
-      // "Đặt ngày kết thúc" (V674): chỉ lịch tuần / tháng. true = dừng đúng ngày; false = chiến dịch cũ chưa đổi ngày (chạy nốt data còn chờ).
-      const normalizedScheduleEndStrict = !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign
-        && formData.scheduleType !== 'daily' && scheduleEndSave.strict
+        : (preservedDraftSchedule?.end?.iso
+          ?? (formData.scheduleEndDate ? new Date(formData.scheduleEndDate + 'T23:59:59+07:00').toISOString() : null))
       const normalizedScheduleType = isZaloMessageGroupRealtimeCampaign || isMobileManagedSmsCampaign ? 'daily' : formData.scheduleType
       const normalizedScheduleDays = normalizedScheduleType === 'monthly' ? formData.scheduleDays.trim() : ''
       const normalizedScheduleWeekDays = normalizedScheduleType === 'weekly' ? formData.scheduleWeekDays : ''
@@ -6603,7 +6581,6 @@ export default function CampaignAgentFormModal({
           originalSchedule: formOriginalSchedule,
           scheduleType: normalizedScheduleType,
           scheduleEndDate: normalizedScheduleEndDate,
-          scheduleEndStrict: normalizedScheduleEndStrict,
           dailyStopTime: isMobileManagedSmsCampaign ? null : (formData.useDailyStopTime ? (formData.dailyStopTime || DEFAULT_DAILY_STOP_TIME) : null),
           scheduleDays: normalizedScheduleDays,
           scheduleWeekDays: normalizedScheduleWeekDays,
@@ -7449,17 +7426,6 @@ export default function CampaignAgentFormModal({
         : null)
       if (repeatError) {
         showAlert(repeatError, 'error')
-        return
-      }
-    }
-    if (!isMobileManagedSmsCampaign && !isZaloMessageGroupRealtimeCampaign && formData.scheduleType !== 'daily') {
-      const scheduleEndProblem = scheduleEndError({
-        state: scheduleEndState,
-        runDate: String(formData.schedule || '').slice(0, 10),
-        today: formatScheduleVietnam(new Date()).slice(0, 10)
-      })
-      if (scheduleEndProblem) {
-        showAlert(scheduleEndProblem, 'error')
         return
       }
     }
@@ -18092,13 +18058,11 @@ export default function CampaignAgentFormModal({
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
                         <input
-                          type="date" aria-label="Ngày kết thúc"
-                          min={String(formData.schedule || '').slice(0, 10) || undefined}
+                          type="date"
                           value={formData.scheduleEndDate} data-agent-field="scheduleEndDate" data-agent-filled={agent.changed('scheduleEndDate')}
                           onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
                           className="stepper-input"
                         />
-                        <span className="schedule-hint">{scheduleEndHint(scheduleEndState)}</span>
                         {preservedDraftSchedule?.end && <span className="schedule-hint">
                           Giữ thời điểm kết thúc: {new Date(preservedDraftSchedule.end.iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (giờ Việt Nam).
                         </span>}

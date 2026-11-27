@@ -168,24 +168,11 @@ const CAMPAIGN_CONFIG_SELECT = [
  * "Chạy cùng lúc" (V670): form sửa đọc kèm auto_campaigns.parallel_run_enabled. DB chưa có cột (hoặc đã gỡ V670) thì PostgREST báo 42703:
  * đọc lại như cũ và không thử cột này trong 10 phút, để form vẫn mở được. Đường chạy chiến dịch đọc bằng CAMPAIGN_SELECT (`*`) nên không cần.
  */
+const CAMPAIGN_CONFIG_PARALLEL_SELECT = `${CAMPAIGN_CONFIG_SELECT}, parallel_run_enabled`
 const PARALLEL_RUN_COLUMN_RECHECK_MS = 10 * 60_000
-/**
- * Cột form sửa đọc kèm mà DB có thể chưa có: parallel_run_enabled (V670), schedule_end_strict ("Đặt ngày kết thúc", V674). Cột nào
- * PostgREST báo thiếu thì bỏ khỏi câu đọc trong 10 phút.
- */
-const CAMPAIGN_CONFIG_OPTIONAL_COLUMNS = ['parallel_run_enabled', 'schedule_end_strict'] as const
-const campaignConfigColumnMissingUntil = new Map<string, number>()
-function campaignConfigSelect(columns: readonly string[]): string {
-  return columns.length > 0 ? `${CAMPAIGN_CONFIG_SELECT}, ${columns.join(', ')}` : CAMPAIGN_CONFIG_SELECT
-}
-function findMissingCampaignColumn(
-  error: { code?: string; message?: string } | null | undefined,
-  columns: readonly string[]
-): string | null {
-  // Đọc cột chưa có: Postgres 42703. Ghi cột chưa có: PostgREST PGRST204 (không thấy cột trong schema cache).
-  if (!error || (error.code !== '42703' && error.code !== 'PGRST204')) return null
-  const message = String(error.message || '')
-  return columns.find(column => message.includes(column)) ?? null
+let parallelRunColumnMissingUntil = 0
+function isMissingParallelRunColumn(error: { code?: string; message?: string } | null | undefined): boolean {
+  return !!error && error.code === '42703' && /parallel_run_enabled/.test(String(error.message || ''))
 }
 const CAMPAIGN_LIST_ITEM_SELECT = [
   'id',
@@ -314,7 +301,6 @@ const RESTRICTED_CAMPAIGN_CONFIG_UPDATE_KEYS = new Set<keyof Campaign>([
   'continueNextDay',
   'refreshData',
   'parallelRunEnabled',
-  'scheduleEndStrict',
   'content',
   'extraSettings',
   'images'
@@ -1275,14 +1261,11 @@ export async function getCampaignConfig(id: number): Promise<CampaignConfig | nu
     .eq('staff_id', u.staffId)
     .eq('is_delete', false)
     .maybeSingle()
-  let columns: string[] = CAMPAIGN_CONFIG_OPTIONAL_COLUMNS.filter(
-    column => Date.now() >= (campaignConfigColumnMissingUntil.get(column) ?? 0)
-  )
-  let { data, error } = await readConfig(campaignConfigSelect(columns))
-  for (let missing = findMissingCampaignColumn(error, columns); missing; missing = findMissingCampaignColumn(error, columns)) {
-    campaignConfigColumnMissingUntil.set(missing, Date.now() + PARALLEL_RUN_COLUMN_RECHECK_MS)
-    columns = columns.filter(column => column !== missing)
-    ;({ data, error } = await readConfig(campaignConfigSelect(columns)))
+  const withParallelRun = Date.now() >= parallelRunColumnMissingUntil
+  let { data, error } = await readConfig(withParallelRun ? CAMPAIGN_CONFIG_PARALLEL_SELECT : CAMPAIGN_CONFIG_SELECT)
+  if (withParallelRun && isMissingParallelRunColumn(error)) {
+    parallelRunColumnMissingUntil = Date.now() + PARALLEL_RUN_COLUMN_RECHECK_MS
+    ;({ data, error } = await readConfig(CAMPAIGN_CONFIG_SELECT))
   }
 
   if (error) throw new Error(`Failed to load campaign configuration: ${error.message}`)
@@ -2225,8 +2208,6 @@ export async function createCampaign(campaign: Partial<Campaign>): Promise<Campa
     refresh_data: isSmsCampaign ? true : (campaign.refreshData ?? false),
     // "Chạy cùng lúc" (V670): chỉ gửi khi khách tích (form chỉ hiện ô khi loại được bật, tức DB đã có cột); không tích thì để mặc định false.
     ...(campaign.parallelRunEnabled === true ? { parallel_run_enabled: true } : {}),
-    // "Đặt ngày kết thúc" (V674): chỉ gửi khi khách đặt ngày kết thúc trên form mới; còn lại để mặc định false (DB chưa có cột vẫn tạo được).
-    ...(!isSmsCampaign && campaign.scheduleEndStrict === true && campaign.scheduleEndDate ? { schedule_end_strict: true } : {}),
     content: campaign.content || '',
     extra_settings: extraSettings,
     images: campaign.images || [],
@@ -2521,10 +2502,6 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
   if (updates.refreshData !== undefined) payload.refresh_data = isSmsCampaign ? true : updates.refreshData
   // "Chạy cùng lúc" (V670): form chỉ gửi khi ô đang hiện (loại được bật, DB đã có cột).
   if (updates.parallelRunEnabled !== undefined) payload.parallel_run_enabled = updates.parallelRunEnabled === true
-  // "Đặt ngày kết thúc" (V674): form mới gửi cùng ngày kết thúc. Không có ngày kết thúc thì luôn false.
-  if (updates.scheduleEndStrict !== undefined) {
-    payload.schedule_end_strict = !isSmsCampaign && updates.scheduleEndStrict === true
-  }
   if (updates.content !== undefined) payload.content = updates.content
   if (updates.extraSettings !== undefined) {
     const entitlements = await loadCurrentUserEffectiveEntitlements()
@@ -2546,22 +2523,14 @@ export async function updateCampaign(id: number, updates: CampaignUpdate, requir
     payload.refresh_data = true
   }
 
-  const writeCampaign = (values: Record<string, unknown>) => {
-    let write = client()
-      .from('auto_campaigns')
-      .update(values)
-      .eq('id', id)
-      .eq('staff_id', u.staffId)
-    if (requireEditReady) write = write.eq('is_delete', false).eq('status', 'tạm dừng')
-    if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
-    return write.select(CAMPAIGN_SELECT).maybeSingle()
-  }
-  let { data, error } = await writeCampaign(payload)
-  // DB chưa có cột "Đặt ngày kết thúc" (V674): câu lỗi không ghi gì, ghi lại không có cột (chiến dịch chạy theo cách cũ).
-  if (error && 'schedule_end_strict' in payload && findMissingCampaignColumn(error, ['schedule_end_strict'])) {
-    const { schedule_end_strict: _omitted, ...withoutStrict } = payload
-    ;({ data, error } = await writeCampaign(withoutStrict))
-  }
+  let write = client()
+    .from('auto_campaigns')
+    .update(payload)
+    .eq('id', id)
+    .eq('staff_id', u.staffId)
+  if (requireEditReady) write = write.eq('is_delete', false).eq('status', 'tạm dừng')
+  if (requireEditReady && expectedUpdatedAt) write = write.eq('updated_at', expectedUpdatedAt)
+  const { data, error } = await write.select(CAMPAIGN_SELECT).maybeSingle()
 
   if (error) throw new Error(sendExclusionSaveErrorMessage(error.message) ?? `Failed to update campaign: ${error.message}`)
   if (!data) throw new Error('Chiến dịch đã thay đổi hoặc không còn sẵn sàng sửa. Vui lòng thử lưu lại; nếu vẫn lỗi, mở lại form sửa để tải cấu hình mới nhất.')
@@ -2879,8 +2848,6 @@ export async function cloneCampaign(id: number): Promise<Campaign> {
       refresh_data: origCamp.refresh_data,
       // "Chạy cùng lúc" (V670): bản gốc đọc bằng `*`; chỉ chép khi đã tích, để DB chưa có cột vẫn nhân bản được.
       ...(origCamp.parallel_run_enabled === true ? { parallel_run_enabled: true } : {}),
-      // "Đặt ngày kết thúc" (V674): bản sao giữ lựa chọn dừng đúng ngày của bản gốc; chỉ chép khi đang bật.
-      ...(origCamp.schedule_end_strict === true && origCamp.schedule_end_date ? { schedule_end_strict: true } : {}),
       content: origCamp.content,
       extra_settings: sanitizeClonedCampaignExtraSettings(origCamp.action_id, origCamp.extra_settings),
       images: origCamp.images,
