@@ -1,5 +1,14 @@
 # Trạng thái đã xác nhận — cập nhật 14/11/2026
 
+[Quyền sequence nhật ký lỗi Zalo API (V675)](../../migrations/migration_v675_zalo_api_error_logs_sequence_grants.sql):
+**V675 đã apply akachat 27/11/2026 10:32:16 VN** (`20261127033216`, md5 sổ = tệp `35b43d22…`, không apply lại;
+[biên nhận](../../migrations/snapshots/zalo-api-error-logs-seq-v675/apply-receipt.json)). Trả lại quyền trên
+`public.auto_zalo_api_error_logs_id_seq` mà khối `$grants$` của V525 thu nhầm (mẫu `auto\_zalo\_%` quét cả `public`):
+`service_role` SELECT / UPDATE / USAGE, `aka_agent_desktop` USAGE, `aka_agent_chat_api` SELECT / USAGE. Từ 18:42:15 VN 25/11 tới lúc
+apply, mọi lần ghi nhật ký lỗi Zalo API (Desktop / App Server qua PostgREST và ChatApi) báo `permission denied for sequence`, mất khoảng
+42 nghìn dòng (không lấy lại được); chiến dịch không bị ảnh hưởng vì cả hai nơi gọi bắt lỗi. Hậu kiểm: 0 lỗi sequence sau apply, Desktop ghi
+lại từ 10:32:21 VN, ChatApi từ 10:38:30 VN, PostgREST không nạp lại schema.
+
 [Bộ lọc Hành động và "Gộp hành động vào một dòng" ở tab Kết quả chạy (V539/V540)](../CAMPAIGN_RESULT_ACTION_FILTER_DESKTOP_V540.md):
 Mã Desktop đã merge `dev_3` qua PR #684, **có trong bản build 9.8.0 (16/11/2026), chưa phát hành**. Hai hàm chỉ đọc
 `aka_agent_list_campaign_details_page_v3` và `aka_agent_read_campaign_result_recipients` **đã có trên akachat** từ tối 14/11/2026 (người dùng
@@ -21,6 +30,10 @@ khoản Zalo Server của tổ chức chưa bật cờ sẽ đứng khi bật c�
 `dev_3` qua #674 (02:05 VN, trước khi apply). [Receipt](../../migrations/snapshots/engine-claim-stale-legacy-token-v527/apply-receipt.json).
 
 [Đồng bộ trạng thái tin nhắn Zalo, phần của chương trình gửi](../ZALO_MESSAGE_STATUS_SYNC.md):
+**Cập nhật 27/11/2026 (đọc production): V525 / V526 ĐÃ apply akachat 25/11/2026 18:42:12 / 18:42:25 VN** (`20261125114212` /
+`20261125114225`, md5 sổ = tệp `1250bb56…` / `342d5840…`); `zalo.message_status_sync.enabled` = `true` từ 19:12:58 VN 25/11,
+`organization_ids` = `all`. Phần "CHƯA apply" và "chưa có dòng thiết lập" bên dưới là trạng thái 13/11, không còn đúng. Khối `$grants$` của
+V525 thu nhầm quyền sequence `auto_zalo_api_error_logs_id_seq`, đã sửa bằng V675 (mục trên cùng).
 **Mã đã merge `dev_3` qua #672 (13/11/2026; WebApp `dev_1` qua #226), chưa build/phát hành,
 App Server chưa cài VPS. `migration_v525_zalo_message_status_sync.sql` và `migration_v526_zalo_message_status_statuses.sql`
 CHƯA apply** (ban đầu giữ 522/523, đổi thành 525/526 trước khi merge vì sổ DB thật nhận `migration_v522_data_group_member_matches_desktop` lúc 22:23:07 VN và V524 lúc 22:23:57 VN 13/11; lúc đổi (22:57 VN) số lớn nhất trong sổ và trên mọi nhánh là 524; kiểm lại sổ trước khi apply). Chưa có dòng
