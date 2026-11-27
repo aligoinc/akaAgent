@@ -9,9 +9,9 @@
  * - phần chữ: một lệnh chia sẻ cho mọi người chưa lỗi tệp (forwardMessageToUsers / Groups, mforward);
  * - cả lô báo một lần (report_batch_v1): DB chọn chế độ cho từng người như policyHandling của Desktop và tạm dừng chiến dịch khi cả lô
  *   thất bại.
- * Dòng tiến trình: không "▶️" / "✅" từng người; mỗi lỗi khác nhau in một lần "⚠️ <thao tác>: <câu>", riêng lỗi lẻ (chỉ đóng data đó,
- * lô chạy tiếp) chỉ in khi lô dừng (khác Desktop, anh chốt 27/11/2026); cuối lô "📨 Kết quả chia sẻ tin nhắn Zalo: tổng N, thành công X,
- * thất bại Y" và "⏸ Dừng gửi: …" khi dừng. Nghỉ giữa hai lô không in.
+ * Dòng tiến trình: không "▶️" / "✅" từng người; mỗi lỗi khác nhau in một lần "⚠️ <thao tác>: <câu>", riêng lỗi lẻ phía người nhận
+ * (Z119, Z126…, lô chạy tiếp) chỉ in khi lô dừng (khác Desktop, anh chốt 27/11/2026); cuối lô "📨 Kết quả chia sẻ tin nhắn Zalo: tổng N,
+ * thành công X, thất bại Y" và "⏸ Dừng gửi: …" khi dừng. Nghỉ giữa hai lô không in.
  * Đặc tả: docs/engine-v2-specs/zalo-other-types.md §3, zalo-media.md §3.4 / §4.2.
  */
 import type { OutcomeDecision, RawOutcome, ReportSuccess } from '../contracts.js'
@@ -176,12 +176,16 @@ function endReason(next: ReportSuccess['next']): BatchStop['reason'] {
   return next === 'next_target' || next === 'next_step' ? 'end_unit' : next
 }
 
+/** Nhóm lỗi phía người nhận: người nhận chặn / từ chối (Z119, Z112, Z122), Zalo từ chối tin tới người đó (Z126, Z127). */
+const SHARE_RECIPIENT_ERROR_CLASSES = new Set(['target_permanent', 'account_restricted'])
+
 /**
- * Lỗi lẻ của một người trong lô: DB đã đóng đúng data đó, lô chạy tiếp, không khoá thao tác, không tạm dừng chiến dịch / tài khoản.
- * Dòng ⚠️ của lỗi lẻ chỉ in khi lô dừng (anh chốt 27/11/2026).
+ * Lỗi lẻ phía người nhận trong lô: lỗi thuộc nhóm phía người nhận, lô chạy tiếp, không khoá thao tác, không tạm dừng chiến dịch / tài
+ * khoản. Dòng ⚠️ của lỗi lẻ chỉ in khi lô dừng (anh chốt 27/11/2026). Lỗi mạng (NET01) và không rõ đã tới (UNK01) không phải lỗi lẻ, vẫn in
+ * ngay (anh chốt cùng ngày): trong lô có người nhận được, DB bỏ khoá và vẫn báo target.done nên không dựa vào hiệu ứng để giữ chúng lại.
  */
 export function isLoneShareFailure(decision: OutcomeDecision, res: ReportSuccess): boolean {
-  return !decision.ok && !decision.lockUntil && res.target.done && res.next === 'next_target'
+  return !decision.ok && SHARE_RECIPIENT_ERROR_CLASSES.has(decision.errorClass ?? '') && !decision.lockUntil && res.next === 'next_target'
     && (res.campaign?.effect ?? 'none') === 'none' && (res.account?.effect ?? 'none') === 'none'
 }
 
@@ -242,9 +246,9 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
   }
 
   // Mỗi lỗi khác nhau in một lần trong lô: "⚠️ <thao tác>: <câu>" (recordZaloShareActionDetail của Desktop).
-  // Lỗi lẻ (chỉ đóng đúng data đó, lô chạy tiếp, vd Z119 / Z126) không in: lô nào cũng có vài người như vậy nên khách tưởng lô nào cũng
-  // lỗi (anh chốt 27/11/2026). Giữ lại và chỉ in khi lô dừng; số người lỗi vẫn ở dòng 📨, lý do từng người ở lịch sử hành động.
-  // Lỗi có hiệu ứng ngoài data đó (khoá thao tác, tạm dừng chiến dịch / tài khoản, dừng lượt, data về hàng đợi) in ngay như trước.
+  // Lỗi lẻ phía người nhận (Z119, Z126…, lô chạy tiếp) không in: lô nào cũng có vài người như vậy nên khách tưởng lô nào cũng lỗi (anh
+  // chốt 27/11/2026). Giữ lại và chỉ in khi lô dừng; số người lỗi vẫn ở dòng 📨, lý do từng người ở lịch sử hành động.
+  // Lỗi khác (mạng, không rõ đã tới, khoá thao tác, tạm dừng chiến dịch / tài khoản, dừng lượt) in ngay như trước.
   const printed = new Set<string>()
   const held = new Map<string, number | null>()
   const showFailure = (decision: OutcomeDecision, res: ReportSuccess, inputDataId: number | null): void => {
