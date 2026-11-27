@@ -488,29 +488,58 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
    * data đang chạy để bước kết bạn không tra lại.
    */
   let otherAccountCache: { runId: StepContext['targetRunId']; uid: string; value: boolean } | null = null
+  /** UID thuộc tài khoản Zalo khác cùng tổ chức (cổng uidBelongsToOtherAccount); không tra được thì false, không nhớ. */
+  const uidOfOtherAccount = async (ctx: StepContext, uid: string): Promise<boolean> => {
+    const target = String(uid || '').trim()
+    if (!target || !port.uidBelongsToOtherAccount) return false
+    if (otherAccountCache && otherAccountCache.runId === ctx.targetRunId && otherAccountCache.uid === target) return otherAccountCache.value
+    let other = false
+    try {
+      other = await port.uidBelongsToOtherAccount(ctx, target) === true
+    } catch (error) {
+      if (ctx.signal.aborted) throw error
+      port.trace?.({ type: 'uid_other_account_lookup_failed', inputDataId: ctx.target.id, error: errorMessage(error) })
+      return false
+    }
+    otherAccountCache = { runId: ctx.targetRunId, uid: target, value: other }
+    return other
+  }
+  const OTHER_ACCOUNT_SIGNAL = { kind: 'engine', code: 'uid_other_account', message: 'UID được quét bằng tài khoản Zalo khác' } as const
   const otherAccountOutcome = async (ctx: StepContext, uid: string, outcome: RawOutcome): Promise<RawOutcome> => {
     if (outcome.ok || !uidType || !port.uidBelongsToOtherAccount) return outcome
     if (outcome.signal.kind !== 'zalo_code' || String(outcome.signal.code ?? '') !== '114') return outcome
-    const target = String(uid || '').trim()
-    if (!target) return outcome
-    let other = false
-    if (otherAccountCache && otherAccountCache.runId === ctx.targetRunId && otherAccountCache.uid === target) {
-      other = otherAccountCache.value
-    } else {
-      try {
-        other = await port.uidBelongsToOtherAccount(ctx, target) === true
-      } catch (error) {
-        if (ctx.signal.aborted) throw error
-        port.trace?.({ type: 'uid_other_account_lookup_failed', inputDataId: ctx.target.id, error: errorMessage(error) })
-        return outcome
-      }
-      otherAccountCache = { runId: ctx.targetRunId, uid: target, value: other }
-    }
-    if (!other) return outcome
+    if (!await uidOfOtherAccount(ctx, uid)) return outcome
     return {
       ...outcome,
-      signal: { kind: 'engine', code: 'uid_other_account', message: 'UID được quét bằng tài khoản Zalo khác' },
+      signal: { ...OTHER_ACCOUNT_SIGNAL },
       evidence: { ...(outcome.evidence ?? {}), zaloCode: '114', ...(outcome.signal.message ? { zaloMessage: outcome.signal.message } : {}) }
+    }
+  }
+  /**
+   * Loại trừ gửi không xác định được khách (EXC02) ở chiến dịch theo UID khi không có Zalo global ID. Hai nguyên nhân đã gặp ngày
+   * 27/11/2026, cả hai đều theo cả danh sách / cả tài khoản chứ không theo từng người nhận, nên không giữ từng data với EXC02:
+   *  - UID của tài khoản Zalo khác (khách đổi tài khoản chạy chiến dịch; 53605 bị giữ 155 data): tra như sau khi Zalo trả 114, đúng thì
+   *    DAT04 ngay ở cổng (chưa gọi Zalo), 4 data liền thì tạm dừng chiến dịch.
+   *  - Đọc hồ sơ Zalo không ra (63333: tài khoản 1828 từ 11:55 VN không đọc được hồ sơ nào): tín hiệu profile_unavailable (EXC06, V677;
+   *    anh chốt: giữ data như EXC02 nhưng cộng chuỗi lỗi, 4 data liền thì tạm dừng chiến dịch, nên một người hỏng lẻ không dừng chiến dịch).
+   * Không phải hai trường hợp trên (có hồ sơ mà vẫn không xác định được) thì giữ EXC02.
+   */
+  const exclusionUnknownOutcome = async (ctx: StepContext, uid: string, globalId: string, outcome: RawOutcome): Promise<RawOutcome> => {
+    if (outcome.ok || !uidType || globalId) return outcome
+    if (outcome.signal.kind !== 'engine' || outcome.signal.code !== 'send_exclusion_unknown') return outcome
+    const target = String(uid || '').trim()
+    const evidence = { ...(outcome.evidence ?? {}), sendExclusion: 'unknown', ...(outcome.signal.message ? { sendExclusionNote: outcome.signal.message } : {}) }
+    if (port.uidBelongsToOtherAccount && await uidOfOtherAccount(ctx, target)) {
+      return { ok: false, phase: 'before_send', signal: { ...OTHER_ACCOUNT_SIGNAL }, data: { ...(outcome.data ?? {}), uid: target }, evidence }
+    }
+    const profileError = typeof ctx.state.profileUnavailable === 'string' ? ctx.state.profileUnavailable : ''
+    if (!profileError) return outcome
+    return {
+      ok: false,
+      phase: 'before_send',
+      signal: { kind: 'engine', code: 'profile_unavailable', message: `Không đọc được hồ sơ Zalo của người nhận: ${profileError}` },
+      data: { ...(outcome.data ?? {}), uid: target },
+      evidence: { ...evidence, profileError }
     }
   }
 
@@ -578,15 +607,20 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
         }
       }
       let target = zaloTargetFromInput(uid, inputData(ctx), {}, true)
+      // Đọc hồ sơ không ra (Zalo báo lỗi, hoặc không trả hồ sơ cho UID): ghi lại cho cổng loại trừ (EXC06 khi cần Zalo global ID).
+      let profileUnavailable: string | null = null
       try {
-        target = mergeZaloProfileTarget(target, await port.getUserProfile(ctx, uid))
+        const profile = await port.getUserProfile(ctx, uid)
+        if (!profile) profileUnavailable = 'Zalo không trả hồ sơ'
+        target = mergeZaloProfileTarget(target, profile)
       } catch (error) {
         // Đọc hồ sơ bị treo: Desktop không có hạn riêng, hạn bước cắt rồi data về hàng đợi (chưa gửi khi chưa kiểm được từ chối nhận
         // tin theo global ID). Cổng có hạn riêng (runtime Fly) báo DeadlineError để ra cùng kết quả; lỗi khác vẫn giữ mục tiêu từ data.
         if (ctx.signal.aborted || error instanceof DeadlineError) throw error
-        port.trace?.({ type: 'get_user_profile_failed', inputDataId: ctx.target.id, error: errorMessage(error) })
+        profileUnavailable = errorMessage(error) || 'Lỗi không xác định'
+        port.trace?.({ type: 'get_user_profile_failed', inputDataId: ctx.target.id, error: profileUnavailable })
       }
-      return { ok: true, state: { zaloTarget: target } }
+      return { ok: true, state: { zaloTarget: target, ...(profileUnavailable ? { profileUnavailable } : {}) } }
     }
   }
 
@@ -669,7 +703,10 @@ export function buildZaloMessagePhoneSteps(campaign: ZaloMessagePhoneCampaign, p
         const exclusion = await checkZaloSendExclusion(port, ctx, { campaign, uid: firstString(target.uid, ctx.target.uid) ?? '',
           globalId: globalId || undefined, phone: firstString(target.phone, ctx.target.phone) ?? undefined,
           profileTarget: exclusionProfileTarget(target, uidType !== null), labelContextRunId: ctx.targetRunId })
-        if (exclusion.kind === 'blocked') { flush(); return exclusion.outcome }
+        if (exclusion.kind === 'blocked') {
+          flush()
+          return exclusionUnknownOutcome(ctx, firstString(target.uid, ctx.target.uid) ?? '', globalId, exclusion.outcome)
+        }
         if (exclusion.warning) warnings.push(exclusion.warning)
       }
       // Như prepareZaloMessageOptOutLink: chỉ khi có global ID; người nhận đã từ chối thì chặn; tạo link lỗi thì cảnh báo và vẫn gửi

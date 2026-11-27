@@ -317,11 +317,14 @@ async function main() {
       const A = id(); await acc(A)
       await zu(A, 'uA-m1', GOWN, { zalo_name: 'Mai' }) // người M1 ở Zalo A (dòng ghi đúng hay sai đều không được khớp M2)
       const c = await campaign(J, 'zalo_message_group_member', { blocklistIds: [bl] })
+      // V676: danh sách của chính J (cùng nick) so thẳng Zalo ID riêng là đủ, không đòi Global ID (trước V676: cần, rồi không gửi).
+      const v676 = (await one(`SELECT to_regclass('supabase_migrations.schema_migrations') IS NOT NULL
+        AND EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE name LIKE 'migration\\_v676\\_%') e`)).e
       const a = await match(c, J, null, null, 'uJ-m1', false)
-      assert.equal(a.match, null); assert.equal(a.globalId, null); assert.equal(a.needGlobalId, true)
-      // Sau khi đọc hồ sơ: Zalo trả Global ID của chính nick ⇒ bỏ, vẫn không xác định ⇒ không gửi (unknown), không loại nhầm.
+      assert.equal(a.match, null); assert.equal(a.globalId, null); assert.equal(a.needGlobalId, !v676)
+      // Sau khi đọc hồ sơ: Zalo trả Global ID của chính nick ⇒ bỏ, không loại nhầm; trước V676 vẫn không xác định ⇒ không gửi (unknown).
       const b = await match(c, J, null, GOWN, 'uJ-m1', true)
-      assert.equal(b.match, null); assert.equal(b.unknown, 'Chưa xác định được khách để kiểm tra loại trừ.')
+      assert.equal(b.match, null); assert.equal(b.unknown ?? null, v676 ? null : 'Chưa xác định được khách để kiểm tra loại trừ.')
       // Danh sách của chính J có M2: data M2 (cùng Zalo ID) bị loại dù không có Global ID dùng được.
       const m2 = await match(c, J, null, null, 'uJ-m2', false)
       assert.equal(m2.match?.note, 'Thuộc danh sách Zalo ID loại trừ “DS của J”.')
