@@ -102,3 +102,8 @@ Sửa ở hợp đồng dùng chung (chép lại từ WebApp, md5 trùng): ngày
 
 Desktop khác Web, có chủ ý: chiến dịch tuần / tháng chưa có ngày kết thúc thì form Desktop điền sẵn hôm nay + 7 khi mở sửa (Web để trống
 bắt chọn); mốc kết thúc đang lưu không phải cuối ngày thì Desktop giữ nguyên mốc đó khi khách không đổi ngày (có dòng báo dưới ô).
+
+Trạng thái (27/11/2026): đã merge `dev_3` qua [#825](https://github.com/aligoinc/akaAgent/pull/825) và WebApp `dev_1` qua
+[aligoinc/akaAgentWebApp#336](https://github.com/aligoinc/akaAgentWebApp/pull/336); chưa deploy API/Web, chưa build Desktop.
+27/11 có 4 chiến dịch Facebook (8529, 62002, 62688, 63501) tạo / sửa hôm đó trên Desktop bản cũ với ngày kết thúc đã qua và ngày chạy
+là hôm đó: chạy hết ngày, lượt cập nhật lịch ngày mới mới dừng (chỗ hở đã biết của V674: hai hàm nhận lượt không xét ngày kết thúc).
