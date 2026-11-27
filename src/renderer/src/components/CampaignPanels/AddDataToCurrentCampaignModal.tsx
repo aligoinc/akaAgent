@@ -27,7 +27,7 @@ import {
 import { pendingRowsExportMatrix } from '../../../../shared/campaignImportVerification'
 import { createImportMatrixWorkbook } from '../../../../shared/campaignImportWorkbook'
 import { useUiStore } from '../../stores/uiStore'
-import { dropGuardBlockedRows, uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
+import { uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
 import { checkUidAccountGuard, showUidAccountGuard } from '../../lib/uidAccountGuardPrompt'
 import { useAuthStore } from '../../stores/authStore'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
@@ -658,20 +658,13 @@ export default function AddDataToCurrentCampaignModal({
         return
       }
 
-      // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): kiểm trước khi thêm. Không kiểm được thì cho thêm.
+      // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): bị chặn thì không thêm. Không kiểm được thì cho thêm.
       if (campaign.accountId && uidAccountGuardApplies(campaign.actionId, campaign.dataTargetSourceMode)) {
-        const check = await checkUidAccountGuard({
+        const blockedMessage = await checkUidAccountGuard({
           action: 'check', actionId: campaign.actionId, accountIds: [campaign.accountId], uids: rows.map(row => row.uid ?? null)
         })
-        if (check?.verdict) {
-          const blockedUids = check.blockedUids
-          showUidAccountGuard({ showAlert, showConfirm: useUiStore.getState().showConfirm }, check.verdict, {
-            onSkip: () => {
-              const kept = dropGuardBlockedRows(rows, blockedUids)
-              setRows(kept)
-              showAlert(`Đã bỏ ${count(rows.length - kept.length)} người tài khoản này không gửi được. Bấm Thêm để thêm phần còn lại.`, 'info')
-            }
-          })
+        if (blockedMessage) {
+          showUidAccountGuard({ showAlert }, blockedMessage)
           return
         }
       }

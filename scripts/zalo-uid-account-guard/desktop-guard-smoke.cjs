@@ -1,7 +1,7 @@
 // Smoke test phần Desktop của chặn danh sách Zalo quét bằng tài khoản khác (DAT04, V679; docs/ZALO_UID_ACCOUNT_GUARD_PLAN.md):
 // - src/shared/campaignUidAccountGuard.ts trùng từng byte bản gốc WebApp (đặt WEBAPP_REPO để so),
-// - dịch vụ tiến trình chính (campaignUidAccountGuardService): chia lượt UID, gộp kết quả, kênh IPC, "Bỏ N người này" dùng một lần,
-//   đổi tài khoản / Tiếp tục / Thêm data, không kiểm được thì cho lưu.
+// - dịch vụ tiến trình chính (campaignUidAccountGuardService): chia lượt UID, gộp kết quả, kênh IPC, một câu chung khi chặn
+//   (không tên, không số, không có cách bỏ người sai), đổi tài khoản / Tiếp tục / Thêm data, không kiểm được thì cho lưu.
 // Chạy: node scripts/zalo-uid-account-guard/desktop-guard-smoke.cjs   (WEBAPP_REPO=../akaAgentWebApp để so md5)
 const assert = require('node:assert/strict')
 const { createHash } = require('node:crypto')
@@ -74,102 +74,95 @@ async function main() {
       throw new Error('mode lạ')
     })
 
-    // 1. Theo danh sách: chuẩn hoá + bỏ trùng, chặn, câu đúng.
+    const MESSAGE = 'Danh sách người nhận được quét bằng tài khoản Zalo khác nên tài khoản đang chọn không gửi được. Hãy chọn đúng tài khoản đã quét danh sách, hoặc quét lại danh sách bằng tài khoản này.'
+    const blockedResult = { ok: true, data: { blocked: true, message: MESSAGE } }
+    const allowedResult = { ok: true, data: { blocked: false, message: null } }
+
+    // 1. Theo danh sách: chuẩn hoá + bỏ trùng, chặn bằng câu chung.
     let result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11], uids: ['c', 'd ', 'd_0', null] })
-    assert.equal(result.ok, true)
-    assert.equal(result.data.verdict.kind, 'all')
-    assert.equal(result.data.verdict.message, 'Danh sách 2 người nhận được quét bằng tài khoản Zalo "van khanh 1". Zalo cấp cho mỗi tài khoản một mã riêng của từng người, nên chỉ tài khoản đã quét danh sách mới gửi được.')
+    assert.deepEqual(result, blockedResult)
     assert.deepEqual(calls.at(-1), { mode: 'uids', accountIds: [11], uids: ['c', 'd'] })
-    assert.equal(result.data.verdict.suggestedAccountId, 15)
-    ok('cả danh sách của tài khoản khác: chặn, gợi ý tài khoản đã quét')
+    ok('cả danh sách của tài khoản khác: chặn, câu chung')
 
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11], uids: ['a', 'b', 'c', 'zz'] })
-    assert.equal(result.data.verdict.kind, 'partial')
-    assert.deepEqual(result.data.blockedUids, ['c'])
-    ok('danh sách lẫn: chặn, cho "Bỏ N người này", trả UID cần bỏ')
+    assert.deepEqual(result, blockedResult)
+    ok('danh sách lẫn: cũng chặn cả lần lưu')
 
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11], uids: ['a', 'zz'] })
-    assert.equal(result.data.verdict, null)
+    assert.deepEqual(result, allowedResult)
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_phone', accountIds: [11], uids: ['c'] })
-    assert.equal(result.data.verdict, null)
+    assert.deepEqual(result, allowedResult)
     ok('gửi được / không rõ / loại chiến dịch khác: cho lưu')
 
-    // 2. Chia lượt 2.000 + gộp.
+    // 2. Chia lượt 2.000.
     calls.length = 0
     const many = Array.from({ length: 4500 }, (_, i) => `u${i}`).concat(['c'])
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_friend', accountIds: [11], uids: many })
     assert.deepEqual(calls.map(call => call.uids.length), [2000, 2000, 501])
-    assert.equal(result.data.verdict.blocked, 1)
-    assert.equal(result.data.verdict.total, 4501)
-    ok('chia lượt 2.000 UID và gộp số')
+    assert.deepEqual(result, blockedResult)
+    ok('chia lượt 2.000 UID, một người sai ở lượt cuối vẫn chặn')
 
     // 3. Chia người nhận cho từng tài khoản (assignments) và nhiều tài khoản chung danh sách.
     calls.length = 0
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member',
       assignments: [{ accountId: 11, uids: ['a'] }, { accountId: 12, uids: ['c'] }] })
     assert.deepEqual(calls.map(call => call.accountIds), [[11], [12]])
-    assert.equal(result.data.verdict.accountId, 12)
+    assert.deepEqual(result, blockedResult)
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11, 12], uids: ['c', 'd'] })
-    assert.equal(result.data.verdict.kind, 'shared')
-    assert.equal(result.data.verdict.title, 'Danh sách này chỉ gửi được bằng tài khoản "van khanh 1".')
+    assert.deepEqual(result, blockedResult)
     ok('chia cho từng tài khoản / nhiều tài khoản chung một danh sách')
 
     // 4. Không kiểm được: cho lưu.
     for (const failure of ['missing', 'timeout']) {
       mode = failure
       result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11], uids: ['c'] })
-      assert.equal(result.data.verdict, null)
-      assert.deepEqual(await mod.guardAppendRows({ id: 61799, actionId: 'zalo_message_group_member', accountId: 11 }, [{ uid: 'c' }]), [{ uid: 'c' }])
+      assert.deepEqual(result, allowedResult)
+      await mod.guardAppendRows({ id: 61799, actionId: 'zalo_message_group_member', accountId: 11 }, [{ uid: 'c' }])
     }
     mode = 'ok'
     enabled = false
     result = await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_group_member', accountIds: [11], uids: ['c'] })
-    assert.equal(result.data.verdict, null)
+    assert.deepEqual(result, allowedResult)
     enabled = true
     ok('DB chưa có hàm / hết giờ / công tắc tắt: cho lưu')
 
     // 5. Đổi tài khoản khi sửa (handler DB_UPDATE_CAMPAIGN).
     const campaign = { id: 61799, actionId: 'zalo_message_group_member', accountId: 15, dataTargetSourceMode: 'direct', status: 'tạm dừng' }
+    const blockedError = err => err.name === 'UidAccountGuardBlockedError' && err.message === MESSAGE
     pending.set(61799, { rows: ['c', 'd', 'a'], account: 15 })
-    await assert.rejects(mod.guardAccountChange(campaign, 11), err => err.name === 'UidAccountGuardBlockedError' && err.message.startsWith('Có 2 người tài khoản "thế zus" không gửi được.'))
-    mod.allowSkipOnce(61799, 11)
-    assert.equal(await mod.guardAccountChange(campaign, 11), true)
-    await assert.rejects(mod.guardAccountChange(campaign, 11), /không gửi được/)
-    assert.equal(await mod.guardAccountChange(campaign, 15), false)
-    assert.equal(await mod.guardAccountChange({ ...campaign, dataTargetSourceMode: 'data_group' }, 11), false)
-    pending.set(61799, { rows: ['c', 'd'], account: 15 })
-    mod.allowSkipOnce(61799, 11)
-    await assert.rejects(mod.guardAccountChange(campaign, 11), /Tài khoản "thế zus" không gửi được cho danh sách này/)
-    ok('đổi tài khoản: chặn; "Bỏ N người này" chỉ dùng một lần, không dùng được khi cả danh sách sai; Nhóm data không kiểm')
+    await assert.rejects(mod.guardAccountChange(campaign, 11), blockedError)
+    calls.length = 0
+    await mod.guardAccountChange(campaign, 15)
+    await mod.guardAccountChange({ ...campaign, dataTargetSourceMode: 'data_group' }, 11)
+    assert.equal(calls.length, 0)
+    pending.set(61799, { rows: ['a', 'b'], account: 15 })
+    await mod.guardAccountChange(campaign, 11)
+    assert.equal(calls.some(call => call.mode === 'hold'), false)
+    ok('đổi tài khoản: có người sai thì chặn; không đổi / Nhóm data không kiểm; đúng tài khoản thì lưu')
 
     // 6. Tiếp tục.
     pending.set(61799, { rows: ['c', 'd', 'a'], account: 11 })
     const paused = { ...campaign, accountId: 11 }
-    await assert.rejects(mod.guardResume(paused), err => err.message.startsWith('Chưa chạy tiếp được: 2 người nhận được quét bằng tài khoản Zalo "van khanh 1"'))
+    await assert.rejects(mod.guardResume(paused), blockedError)
     calls.length = 0
-    mod.allowSkipOnce(61799)
-    await mod.guardResume(paused)
-    assert.deepEqual(calls.map(call => call.mode), ['campaign', 'hold'])
     await mod.guardResume({ ...paused, status: 'chờ xử lý' })
+    assert.equal(calls.length, 0)
     result = await mod.handleUidAccountGuardIpc({ action: 'check-resume', campaignId: 61799 })
-    assert.equal(result.data.verdict.kind, 'resume')
-    assert.equal(result.data.verdict.canSkip, true)
-    ok('Tiếp tục: chặn, "Bỏ N người này" giữ lại rồi cho chạy; chiến dịch đang chờ không kiểm')
+    assert.deepEqual(result, blockedResult)
+    ok('Tiếp tục: chặn; chiến dịch đang chờ không kiểm')
 
     // 7. Thêm data.
     const target = { id: 61799, actionId: 'zalo_message_friend', accountId: 11 }
-    await assert.rejects(mod.guardAppendRows(target, [{ uid: 'a' }, { uid: 'c' }]), /Có 1 người tài khoản "thế zus" không gửi được/)
-    mod.allowSkipOnce(61799)
-    assert.deepEqual(await mod.guardAppendRows(target, [{ uid: 'a' }, { uid: 'c ' }, { uid: 'zz' }]), [{ uid: 'a' }, { uid: 'zz' }])
-    ok('Thêm data: chặn, "Bỏ N người này" bỏ đúng người sai')
+    await assert.rejects(mod.guardAppendRows(target, [{ uid: 'a' }, { uid: 'c' }]), blockedError)
+    await mod.guardAppendRows(target, [{ uid: 'a' }, { uid: 'zz' }])
+    ok('Thêm data: có người sai thì chặn, toàn người đúng thì cho thêm')
 
-    // 8. Quyền "Bỏ N người này" hết hạn sau 2 phút; yêu cầu sai khuôn không ném lỗi.
-    mod.allowSkipOnce(61799, null, Date.now() - 121_000)
-    await assert.rejects(mod.guardAppendRows(target, [{ uid: 'c' }]), /không gửi được/)
+    // 8. Yêu cầu sai khuôn / hành động đã bỏ không ném lỗi.
     assert.equal((await mod.handleUidAccountGuardIpc({ action: 'check', actionId: 'zalo_message_friend', accountIds: [], uids: [] })).ok, false)
     assert.equal((await mod.handleUidAccountGuardIpc(null)).ok, false)
-    assert.equal((await mod.handleUidAccountGuardIpc({ action: 'allow-skip', campaignId: 'x' })).ok, false)
-    ok('quyền bỏ qua hết hạn; yêu cầu sai khuôn trả lỗi, không ném')
+    assert.equal((await mod.handleUidAccountGuardIpc({ action: 'allow-skip', campaignId: 61799 })).ok, false)
+    assert.equal(typeof mod.allowSkipOnce, 'undefined')
+    ok('yêu cầu sai khuôn trả lỗi, không ném; không còn đường bỏ người sai')
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

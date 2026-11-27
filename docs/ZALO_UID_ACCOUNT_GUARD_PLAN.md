@@ -2,8 +2,8 @@
 
 Tình trạng 27/11/2026: phần DB đã viết ([V679](../migrations/migration_v679_zalo_uid_account_guard.sql) chặn danh sách,
 [V680](../migrations/migration_v680_notification_campaign_pause_default.sql) thông báo tạm dừng bật sẵn, kèm bản gỡ) và đã
-kiểm thử lặp (mục 5), **chưa apply, chưa đổi gì trên production**. Chưa làm: điểm chặn ở API Web và Desktop (mục 4.2).
-Các quyết định ở mục 3 anh đã chốt cùng ngày. Câu cho khách ở mục 4.3 chờ anh duyệt.
+kiểm thử lặp (mục 5), **chưa apply, chưa đổi gì trên production**. Điểm chặn khi lưu ở API Web và Desktop đã code (mục 5.1).
+Các quyết định ở mục 3 anh đã chốt cùng ngày; câu lúc lưu anh chốt 27/11 là một câu chung, chỉ chặn (mục 4.3).
 
 ## 1. Chuyện đã xảy ra
 
@@ -52,8 +52,9 @@ khác bị thu (Supabase mặc định cấp hàm mới cho `anon` / `authentica
 - `uids`: tài khoản định dùng (tối đa 50) + danh sách UID (tối đa 2.000 mỗi lượt, bên gọi chia lượt). Dùng khi lưu.
 - `campaign`: mã chiến dịch + tài khoản (bỏ trống = tài khoản hiện tại); hàm tự đọc tối đa 5.000 data đang chờ, kể cả
   data đang giữ vì DAT04, trả `truncated` khi còn nữa. Dùng khi bấm Tiếp tục / đổi tài khoản.
-- `hold`: nút "Bỏ N người": đặt các data đang chờ mà tài khoản hiện tại không gửi được sang "tạm dừng" với ghi chú
-  DAT04 (đổi lại đúng tài khoản thì trigger ở mục 4.4 trả về). Từ chối khi chiến dịch đang chạy.
+- `hold`: đặt các data đang chờ mà tài khoản hiện tại không gửi được sang "tạm dừng" với ghi chú DAT04 (đổi lại đúng
+  tài khoản thì trigger ở mục 4.4 trả về). Từ chối khi chiến dịch đang chạy. Viết cho nút "Bỏ N người" đã bỏ (mục 4.3):
+  app không gọi chế độ này.
 
 UID được chuẩn hoá trước khi so (bỏ mọi khoảng trắng kể cả khoảng trắng Unicode, bỏ đuôi `_0`). Mỗi UID thuộc một
 trong ba nhóm:
@@ -86,20 +87,24 @@ Hàm lỗi, hết giờ hoặc DB chưa có hàm thì cho lưu như cũ; lưới
 | Desktop, form thường và form Agent | Kiểm trước khi lưu: tạo, đổi tài khoản, thêm data; chọn nhiều tài khoản thì kiểm từng tài khoản | IPC mới `campaign:uid-account-check` |
 | Desktop, tiến trình chính | Kiểm lại ở `DB_UPDATE_CAMPAIGN` (đổi tài khoản), chèn data, Tiếp tục | đặt ở handler như `contentSyntaxGuard`, không đặt trong repository vì bộ lập lịch gọi thẳng repository |
 
-API trả 400 `campaign_uid_account_mismatch` kèm tên tài khoản, số người chặn / tổng, tên tài khoản đã quét. Web và
-Desktop hiện hộp thoại ở mục 4.3; iOS bản đang phát hành hiện nguyên câu của API. Desktop bản cũ không có điểm chặn
+API trả 400 `campaign_uid_account_mismatch` với câu chung ở mục 4.3. Web và Desktop hiện hộp báo chỉ có nút Đóng; iOS bản đang phát hành hiện nguyên câu của API. Desktop bản cũ không có điểm chặn
 khi lưu, dựa vào mục 4.4 và 4.5.
 
-### 4.3 Câu cho khách (chờ anh duyệt)
+### 4.3 Câu cho khách
 
-Ví dụ lấy theo ca 61799. Không dùng chữ "UID".
+Lúc lưu, thêm data, bấm Tiếp tục (anh chốt 27/11 qua hộp chọn, "Câu chung, không tên, không số"): có người nhận nào
+quét bằng tài khoản khác thì chặn cả lần lưu, kể cả khi chỉ vài người sai hay nhiều tài khoản chung một danh sách.
+Không nêu tên tài khoản đã quét, không nêu số người; không có nút "Bỏ N người này" / "Dùng tài khoản X", chỉ nút Đóng.
+
+> Danh sách người nhận được quét bằng tài khoản Zalo khác nên tài khoản đang chọn không gửi được. Hãy chọn đúng tài khoản đã quét danh sách, hoặc quét lại danh sách bằng tài khoản này.
+
+Câu nằm ở `UID_GUARD_MESSAGE` (akaAgentWebApp `packages/control-api/src/campaignUidAccountGuard.ts`, Desktop chép nguyên văn).
+Bản đề xuất trước (có tên, số và nút) đã bỏ.
+
+Lúc chạy (dữ liệu V679, không đổi):
 
 | Tình huống | Câu |
 |---|---|
-| Lưu, cả danh sách sai | **Tài khoản "thế zus" không gửi được cho danh sách này.** Danh sách 881 người nhận được quét bằng tài khoản Zalo "van khanh 1". Zalo cấp cho mỗi tài khoản một mã riêng của từng người, nên chỉ tài khoản đã quét danh sách mới gửi được. Nút: [Dùng tài khoản "van khanh 1"] [Quét lại danh sách bằng "thế zus"] [Đóng] |
-| Lưu, danh sách lẫn | **Có 12 người tài khoản "thế zus" không gửi được.** 12 trong 881 người nhận được quét bằng tài khoản Zalo "van khanh 1". Bỏ 12 người này ra thì lưu được. Nút: [Bỏ 12 người này] [Đóng] |
-| Lưu, nhiều tài khoản chung một danh sách | **Danh sách này chỉ gửi được bằng tài khoản "van khanh 1".** Các tài khoản "thế zus", "Minh Anh 3.10" không gửi được vì danh sách được quét bằng "van khanh 1". Mỗi tài khoản cần danh sách do chính nó quét. |
-| Bấm Tiếp tục | Chưa chạy tiếp được: danh sách người nhận được quét bằng tài khoản Zalo "van khanh 1" nên "thế zus" không gửi được. Mở Sửa chiến dịch để chọn lại tài khoản "van khanh 1", hoặc quét lại danh sách bằng "thế zus". |
 | Lúc chạy, từng người (thay câu DAT04 hiện nay "UID được quét bằng tài khoản Zalo khác nên tài khoản này không gửi được") | Người này nằm trong danh sách quét bằng tài khoản Zalo khác nên tài khoản này không gửi được |
 | Lúc chạy, ghi chú khi chiến dịch dừng (cũng là nội dung thông báo) | Danh sách người nhận được quét bằng tài khoản Zalo khác nên tài khoản này không gửi được. Hãy sửa chiến dịch: chọn lại tài khoản đã quét danh sách, hoặc quét lại danh sách bằng tài khoản này |
 
@@ -177,31 +182,28 @@ Electron và trên DB thật (V679 chưa apply).
 
 ### 5.1 Điểm chặn khi lưu ở API Web và Desktop (code 27/11)
 
-Anh đồng ý 27/11 ("Cho làm tiếp phần chặn khi lưu ở Web và Desktop"). Câu cho khách lấy theo bản đề xuất ở mục 4.3 (dựng
-ở một chỗ: akaAgentWebApp `packages/control-api/src/campaignUidAccountGuard.ts`, Desktop chép nguyên văn
-`src/shared/campaignUidAccountGuard.ts`; sửa câu ở WebApp rồi chép lại). Nút của hộp báo:
-"Bỏ N người này" khi danh sách lẫn, "Dùng tài khoản X" khi một tài khoản của chính khách đã quét cả phần bị chặn,
-còn lại chỉ "Đóng" (nút "Quét lại danh sách" chưa làm, câu đã nói cách làm).
+Anh đồng ý 27/11 ("Cho làm tiếp phần chặn khi lưu ở Web và Desktop"), rồi chốt chỉ chặn, một câu chung (mục 4.3). Câu ở một
+chỗ: akaAgentWebApp `packages/control-api/src/campaignUidAccountGuard.ts`, Desktop chép nguyên văn
+`src/shared/campaignUidAccountGuard.ts` (sửa ở WebApp rồi chép lại). Hộp báo chỉ có nút Đóng.
 
 - API Web (`apps/api/.../campaignUidAccountGuard.ts`, gọi `aka_agent_control_campaign_uid_account_check`):
   - `POST /campaigns/uid-account-check` (chỉ đọc): Web hỏi trước khi lưu, vì Web tạo chiến dịch rỗng rồi mới gửi người nhận theo
     từng lượt 5.000 dòng; chặn ở đường thêm data thì chiến dịch rỗng đã tạo.
   - Kiểm lại ở đường ghi: tạo chiến dịch có người nhận, sửa có đổi tài khoản hoặc thêm người, Thêm data, Tiếp tục (một chiến dịch
-    thì trả 400 `campaign_uid_account_mismatch` kèm `details`; nhiều chiến dịch thì bỏ qua chiến dịch sai, lý do ở `skippedReasons`).
-    Nhân bản ở máy chủ không kiểm (bản sao tạm dừng, chặn ở lần Tiếp tục). Body `uidAccountGuard: "skip_blocked"` = khách chọn
-    "Bỏ N người này": tạo / thêm data thì bỏ người sai, đổi tài khoản hoặc Tiếp tục thì lưu rồi gọi chế độ `hold`.
+    thì trả 400 `campaign_uid_account_mismatch`, câu chung, `details` chỉ có tài khoản / số người để chẩn đoán; nhiều chiến dịch thì
+    bỏ qua chiến dịch sai, lý do ở `skippedReasons`). Nhân bản ở máy chủ không kiểm (bản sao tạm dừng, chặn ở lần Tiếp tục).
 - Web: form tạo / sửa (`CampaignFormPage`), nút Tiếp tục (`CampaignsPage`), cửa sổ Thêm data; hộp báo ở
   `features/uidAccountGuardPrompt.ts`. iOS bản đang phát hành hiện nguyên câu của API.
-- Desktop: IPC `campaign:uid-account-guard` (`check` / `check-resume` / `allow-skip`,
+- Desktop: IPC `campaign:uid-account-guard` (`check` / `check-resume`, trả `{ blocked, message }`,
   [campaignUidAccountGuardService.ts](../src/main/services/campaignUidAccountGuardService.ts)); hai form (thường + Agent) hỏi trước
   khi lưu, chia người nhận cho từng tài khoản đúng như lúc lưu (`assignments`); nút Tiếp tục và cửa sổ Thêm data hỏi trước.
   Tiến trình chính kiểm lại ở `DB_UPDATE_CAMPAIGN` (đổi tài khoản, Tiếp tục kể cả Tiếp tục hàng loạt) và
-  `DB_ADD_CAMPAIGN_INPUT_DATA_ROWS`; "Bỏ N người này" là quyền dùng một lần trong RAM (2 phút) cho đúng chiến dịch + tài khoản.
+  `DB_ADD_CAMPAIGN_INPUT_DATA_ROWS`.
   Dòng data của chiến dịch mới (`createCampaignInputDataBatch`) chỉ được kiểm ở form, không kiểm lại ở tiến trình chính.
 - Không kiểm được (DB chưa có V679, lỗi, hết giờ, công tắc `off`): cho lưu như cũ, lúc chạy lưới DAT04 vẫn giữ người sai lại.
 
-Kiểm: WebApp `packages/control-api` `campaignUidAccountGuard.test.ts` (12), API `aka-agent-control.service.test.ts` mục DAT04
-(11), Desktop `WEBAPP_REPO=<akaAgentWebApp> node scripts/zalo-uid-account-guard/desktop-guard-smoke.cjs` (11, có so md5 hợp đồng).
+Kiểm: WebApp `packages/control-api` `campaignUidAccountGuard.test.ts` (8), API `aka-agent-control.service.test.ts` mục DAT04
+(10), Desktop `WEBAPP_REPO=<akaAgentWebApp> node scripts/zalo-uid-account-guard/desktop-guard-smoke.cjs` (11, có so md5 hợp đồng).
 Chưa có bài kiểm giao diện cho hộp báo.
 
 ## 6. Thứ tự đưa lên và cách gỡ
@@ -224,7 +226,5 @@ do lượt bật sẵn tạo). Sinh lại V680: `python3 scripts/zalo-uid-accoun
 
 ## 7. Còn mở
 
-- Anh xem lại câu ở mục 4.3 (đang dùng bản đề xuất; đổi câu lúc lưu: sửa hợp đồng ở WebApp rồi chép sang Desktop; câu lúc chạy:
-  sửa dữ liệu V679).
 - Chạy bộ kịch bản engine với chính sách DAT04 mới; thử trên Electron và Web thật sau khi apply V679.
 - Apply V679, V680 (chờ anh bảo), rồi deploy API/Web, build Desktop.
