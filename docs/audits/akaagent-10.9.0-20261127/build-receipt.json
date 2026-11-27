@@ -1,0 +1,1901 @@
+{
+  "version": "10.9.0",
+  "request": "Anh: \"ok bắt đầu deploy và build đi\" (27/11/2026): build Desktop Windows x64, macOS ARM64, macOS Intel và App Server nội bộ từ dev_3 mới nhất.",
+  "source_root": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.9.0",
+  "worktree_used": true,
+  "source_branch": "codex/release-10.9.0",
+  "source_commit": "1e2690fb0a6b2056c0d7f927555ec6ca7100b8eb",
+  "source_base_commit": "e076fca9c0f51543cf0a4a39e14cb3b6faa4fbf0",
+  "source_base_ref": "origin/dev_3 (sau PR #835)",
+  "version_commit_files": [
+    "package.json",
+    "package-lock.json",
+    "version.txt"
+  ],
+  "version_note": "Commit 1e2690fb chỉ đổi version 10.8.0 → 10.9.0.",
+  "new_since_1080_round_2": [
+    "#818 dò sớm FB02 khi đăng nhóm (V673, chỉ dữ liệu)",
+    "#819 version + biên nhận 10.8.0 lần 2 (tài liệu)",
+    "#820 ngày kết thúc = dừng hẳn (V674, chỉ dữ liệu)",
+    "#821 / #824 / #827 / #828 / #831 / #832 / #834 ghi chú và biên nhận (tài liệu)",
+    "#822 ba chỗ còn thiếu của \"Chạy cùng lúc\" (Lý do đang chờ, Fly)",
+    "#823 V675 trả quyền sequence auto_zalo_api_error_logs (chỉ dữ liệu)",
+    "#825 lịch tuần / tháng bắt buộc ngày kết thúc hợp lệ, tới ngày đó chiến dịch dừng hẳn (form Desktop)",
+    "#826 Bot sự kiện (V672; Desktop + App Server chạy bot, trang nhúng Web)",
+    "#829 EXC02 hàng loạt khi UID của tài khoản khác / đọc hồ sơ Zalo không ra (DAT04, EXC06; V676 / V677)",
+    "#830 lô chia sẻ Zalo không in dòng ⚠️ cho lỗi lẻ phía người nhận",
+    "#833 App Server ghi [ServerHealth] mỗi phút vào server.log",
+    "#835 tài khoản không kẹt \"đang chạy\" khi còn dấu giữ lượt cũ (V681 + bộ lập lịch Desktop / App Server)"
+  ],
+  "dependencies": "npm ci trong worktree 27/11 (exit 0, 01-npm-ci.log); better-sqlite3 dựng lại cho Electron arm64, checksum ced697fcad5f7ba0…",
+  "build_window_vn": "2026-11-27 17:27:30 - 17:33:24",
+  "build_input_manifest": {
+    "files": 2136,
+    "scope": "file Git theo dõi dưới src/, scripts/, build/, packages/ và 9 file cấu hình gốc",
+    "sha256_before": "8cd682cee4cf0037f3430602adfed672295338a1bf4eac43f5fdeb8c5ef35735",
+    "sha256_after": "8cd682cee4cf0037f3430602adfed672295338a1bf4eac43f5fdeb8c5ef35735",
+    "identical": true
+  },
+  "checks_summary": {
+    "steps": 200,
+    "passed": 170,
+    "failed_explained": 30,
+    "same_as_1080_round_2": 26,
+    "note": "Bộ kiểm dừng giữa chừng lúc 17:58 VN (phiên chạy nền kết thúc), chạy tiếp từ engagement-chaos-sim bằng run-checks-rest.sh; 03-checks-summary.log ghi nối cả hai lượt."
+  },
+  "checks_passed": [
+    "typecheck-node",
+    "typecheck-web",
+    "snapshot-smoke",
+    "idle-reads-smoke",
+    "listener-stop-smoke",
+    "media-timeout-smoke",
+    "engine-desktop-smoke",
+    "renewal-reminder-smoke",
+    "member-matches-smoke",
+    "zalo-server-on-fly-login-smoke",
+    "account-snapshot-chat-sync-smoke",
+    "result-actions-service-smoke",
+    "result-actions-ui-smoke",
+    "aff-partner-smoke",
+    "engine-check-all",
+    "repeat-v561-smoke",
+    "repeat-ui-smoke",
+    "fb-sql-smoke",
+    "fb-copy-smoke",
+    "fb-core-smoke",
+    "fb-error-signs-smoke",
+    "fb-policy-parity-smoke",
+    "fb-legacy-catalog-smoke",
+    "fb-v563-smoke",
+    "fb-desktop-fb-smoke",
+    "fb-workflow-hooks-smoke",
+    "fb-page-trace-smoke",
+    "fb-screenshots-smoke",
+    "fb-autocheck-smoke",
+    "fb-wait-reason-smoke",
+    "fb-scenarios",
+    "engine-scenarios-fb-repeat",
+    "fb-v564-smoke",
+    "zalo-qr-proxy-reject-smoke",
+    "sleep-guard-smoke",
+    "fb-v575-smoke",
+    "fb-progress-format-smoke",
+    "fb-electron-real-smoke",
+    "fb-scenarios-prod-db",
+    "fb-search-admins-smoke",
+    "fb-search-export-logic-smoke",
+    "found-data-export-ui-smoke",
+    "fb-search-card-parser-smoke",
+    "fb-search-card-service-smoke",
+    "engine-scenarios-prod-db",
+    "target-check-v571-smoke",
+    "fb-v572-smoke",
+    "send-exclusion-v573-smoke",
+    "fb-error-watch-smoke",
+    "fb-error-watch-agent-smoke",
+    "orphan-runs-v576-smoke",
+    "v581-smoke",
+    "fb-business-token-v589-smoke",
+    "ai-chat-desktop-image-smoke",
+    "ai-chat-edge-image-smoke",
+    "ai-chat-images-ui-smoke",
+    "fb-clock-rollback-smoke",
+    "multi-slot-v585-smoke",
+    "repeat-v561-with-v585-smoke",
+    "error-review-v588-smoke",
+    "engine-error-review-ui-smoke",
+    "upgrade-portal-ui-smoke",
+    "fb-v591-smoke",
+    "fb-scenarios-interrupt",
+    "error-watch-v593-smoke",
+    "error-watch-v594-smoke",
+    "error-watch-v599-smoke",
+    "error-watch-v602-smoke",
+    "fb-v598-smoke",
+    "fb-v597-smoke",
+    "fb-v603-smoke",
+    "facebook-messages-smoke",
+    "data-scan-browser-help-smoke",
+    "engine-v601-smoke",
+    "facebook-tab-login-probe-smoke",
+    "fb-v607-smoke",
+    "find-data-app-smoke",
+    "find-data-v608-test",
+    "find-data-group-admin-smoke",
+    "find-data-form-bundle-ui-smoke",
+    "find-data-form-group-admin-ui-smoke",
+    "account-actions-smoke",
+    "limit-progress-smoke",
+    "engagement-config-bound-smoke",
+    "engagement-config-bound-real-fetch",
+    "engagement-chaos-sim",
+    "engagement-v615-smoke",
+    "fb-v616-smoke",
+    "fb-v617-smoke",
+    "web-scan-v618-smoke",
+    "web-scan-runner-smoke",
+    "web-scan-push-smoke",
+    "web-scan-form-ui-smoke",
+    "server-rest-smoke-patched",
+    "post-bump-fixes-smoke-patched",
+    "post-bump-rotation-smoke-patched",
+    "upgrade-portal-smoke-patched",
+    "akabiz-auto-sync-desktop-smoke",
+    "akabiz-auto-sync-ui-smoke",
+    "notification-toast-smoke",
+    "notification-toast-ui-smoke",
+    "notification-v621-smoke",
+    "notification-v622-smoke",
+    "notification-v624-smoke",
+    "campaign-result-groups-desktop-smoke",
+    "campaign-result-groups-ui-smoke",
+    "journey-web-embed-electron-smoke",
+    "fb-ai-filter-form-helpers-smoke",
+    "fb-ai-filter-v641-blocks-smoke",
+    "fb-ai-filter-v643-schema-check",
+    "zalo-partial-send-log-smoke",
+    "zalo-stranger-media-pacing-smoke",
+    "zalo-stranger-media-pacing-ui-smoke",
+    "content-syntax-desktop-smoke",
+    "content-syntax-fuzz",
+    "campaign-schedule-fixes-smoke",
+    "recurring-refresh-v650-smoke",
+    "schedule-fixes-sim",
+    "email-prompt-desktop-smoke",
+    "email-prompt-v652-sql",
+    "zalo-received-marks-smoke",
+    "send-exclusion-multi-zalo-smoke",
+    "send-exclusion-v654-smoke",
+    "send-exclusion-v655-smoke",
+    "send-exclusion-v657-smoke",
+    "fb-v658-smoke",
+    "fb-v659-smoke",
+    "error-watch-v661-smoke",
+    "zalo-tag-runtime-smoke",
+    "zalo-tag-runtime-fuzz",
+    "zalo-tag-fly-fuzz",
+    "sheet-sync-rows-smoke",
+    "sheet-sync-test-v662",
+    "sheet-sync-test-v664",
+    "proxy-shared-desktop-smoke",
+    "proxy-v665-sql",
+    "fb-v663-electron-smoke",
+    "send-exclusion-v666-smoke",
+    "send-exclusion-v657-with-v666",
+    "send-exclusion-runtime-smoke",
+    "send-exclusion-smoke-test",
+    "engine-v504-smoke",
+    "server-runtime-v667-smoke",
+    "server-runtime-runner-smoke",
+    "server-runtime-scheduler-smoke",
+    "zalo-group-member-gid-smoke",
+    "send-exclusion-gid-trust-smoke",
+    "parallel-run-v670-smoke",
+    "parallel-run-v670-apply-smoke",
+    "parallel-run-desktop-smoke",
+    "parallel-run-desktop-runner-smoke",
+    "parallel-run-ui-smoke",
+    "parallel-run-scenarios",
+    "zalo-tag-cach-a-engine-fuzz",
+    "zalo-tag-cach-a-policy-fuzz",
+    "engine-v671-smoke",
+    "engine-desktop-smoke-r2",
+    "facebook-messages-menu-ui-smoke",
+    "fb-v673-smoke",
+    "end-date-v674-smoke",
+    "v675-sequence-grants",
+    "schedule-end-smoke",
+    "schedule-end-ui-smoke",
+    "event-bot-desktop-runtime-smoke",
+    "send-exclusion-v676-smoke",
+    "send-exclusion-v657-with-v676",
+    "server-health-monitor-smoke",
+    "account-hold-v681-smoke",
+    "stale-running-account-smoke",
+    "engine-scenarios-account-hold"
+  ],
+  "checks_failed_explained": {
+    "share-repeat-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-share-repeat-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-share-repeat-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm do #784: handleCampaignCompletion gọi thêm handleRecurringRefreshAfterCompletion mà harness dựng lại hàm của bộ lập lịch không có hàm này (TypeError: this.handleRecurringRefreshAfterCompletion is not a function). Bản chép patched-repeat/ thêm hàm giả trả false cạnh hàm giả handleRerunAfterCompletion có sẵn (ca của bài đều là lịch hằng ngày nên hàm thật cũng trả false): đạt (03-reruns-summary.log).",
+    "server-rest-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-server-rest-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-server-rest-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm như 10.3.0 → 10.5.0, thông báo giống hệt 10.5.0 (so log). Bản chép đã vá chạy ngay trong run-checks (server-rest-smoke-patched): đạt.",
+    "session-clock-skew-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-session-clock-skew-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-session-clock-skew-smoke.log): Mới ở 10.8.0, lỗi của bài kiểm do #804: supabaseClient.ts import thêm ../../shared/campaignSendExclusion mà bài chưa giả module này (mọi khẳng định trước bước HTTP thật đều đạt). Bản chép patched-session/ thêm mock: 15/15 đạt (03r-session-clock-skew-smoke-patched.log).",
+    "message-status-sync-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-message-status-sync-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-message-status-sync-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Hỏng sẵn, thông báo giống hệt 10.5.0 (so log); có từ trước 10.2.0.",
+    "repeat-scheduler-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-repeat-scheduler-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-repeat-scheduler-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm do #784: handleCampaignCompletion gọi thêm handleRecurringRefreshAfterCompletion mà harness dựng lại hàm của bộ lập lịch không có hàm này (TypeError: this.handleRecurringRefreshAfterCompletion is not a function). Bản chép patched-repeat/ thêm hàm giả trả false cạnh hàm giả handleRerunAfterCompletion có sẵn (ca của bài đều là lịch hằng ngày nên hàm thật cũng trả false): đạt (03-reruns-summary.log).",
+    "repeat-runtime-e2e": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-repeat-runtime-e2e.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-repeat-runtime-e2e.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm do #784: handleCampaignCompletion gọi thêm handleRecurringRefreshAfterCompletion mà harness dựng lại hàm của bộ lập lịch không có hàm này (TypeError: this.handleRecurringRefreshAfterCompletion is not a function). Bản chép patched-repeat/ thêm hàm giả trả false cạnh hàm giả handleRerunAfterCompletion có sẵn (ca của bài đều là lịch hằng ngày nên hàm thật cũng trả false): đạt (03-reruns-summary.log).",
+    "fb-replay": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-replay.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-replay.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Không chạy được, không tính là đạt: tệp dữ liệu đầu vào (bản chép production chỉ đọc ở scratchpad/replay-inputs: engine-v2-fb-replay-2026-11-16.json, -2026-11-18.json, post-bump-20261118.json) đã bị dọn lúc 00:04 VN 25/11 (ENOENT). Không dựng lại được cùng dữ liệu: đó là lượt chạy bộ cũ 16 / 18/11, từ 18/11 Facebook chạy hết bằng engine.",
+    "fb-replay-20261118": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-replay-20261118.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-replay-20261118.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Không chạy được, không tính là đạt: tệp dữ liệu đầu vào (bản chép production chỉ đọc ở scratchpad/replay-inputs: engine-v2-fb-replay-2026-11-16.json, -2026-11-18.json, post-bump-20261118.json) đã bị dọn lúc 00:04 VN 25/11 (ENOENT). Không dựng lại được cùng dữ liệu: đó là lượt chạy bộ cũ 16 / 18/11, từ 18/11 Facebook chạy hết bằng engine.",
+    "post-bump-fixes-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-post-bump-fixes-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-post-bump-fixes-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm như 10.3.0 → 10.5.0, thông báo giống hệt 10.5.0 (so log). Bản chép đã vá chạy ngay trong run-checks (post-bump-fixes-smoke-patched): đạt.",
+    "post-bump-rotation-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-post-bump-rotation-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-post-bump-rotation-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm như 10.3.0 → 10.5.0, thông báo giống hệt 10.5.0 (so log). Bản chép đã vá chạy ngay trong run-checks (post-bump-rotation-smoke-patched): đạt.",
+    "post-bump-rotation-replay": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-post-bump-rotation-replay.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-post-bump-rotation-replay.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Không chạy được, không tính là đạt: tệp dữ liệu đầu vào (bản chép production chỉ đọc ở scratchpad/replay-inputs: engine-v2-fb-replay-2026-11-16.json, -2026-11-18.json, post-bump-20261118.json) đã bị dọn lúc 00:04 VN 25/11 (ENOENT). Không dựng lại được cùng dữ liệu: đó là lượt chạy bộ cũ 16 / 18/11, từ 18/11 Facebook chạy hết bằng engine.",
+    "upgrade-portal-desktop-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-upgrade-portal-desktop-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-upgrade-portal-desktop-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi của bài kiểm như 10.3.0 → 10.5.0, thông báo giống hệt 10.5.0 (so log). Bản chép đã vá chạy ngay trong run-checks (upgrade-portal-smoke-patched): đạt.",
+    "pending-reason-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-pending-reason-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-pending-reason-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Hỏng sẵn, thông báo giống hệt 10.5.0 (so log); có từ trước 10.2.0.",
+    "engagement-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-engagement-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-engagement-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Hỏng sẵn, thông báo giống hệt 10.5.0 (so log); có từ trước 10.2.0.",
+    "post-bump-rotation-replay-patched": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-post-bump-rotation-replay-patched.log): Như lần 1: Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Không chạy được, không tính là đạt: tệp dữ liệu đầu vào (bản chép production chỉ đọc ở scratchpad/replay-inputs: engine-v2-fb-replay-2026-11-16.json, -2026-11-18.json, post-bump-20261118.json) đã bị dọn lúc 00:04 VN 25/11 (ENOENT). Không dựng lại được cùng dữ liệu: đó là lượt chạy bộ cũ 16 / 18/11, từ 18/11 Facebook chạy hết bằng engine.",
+    "fb-ai-filter-test-v641": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v641.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v641.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "fb-ai-filter-test-v641_paste": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v641_paste.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v641_paste.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "fb-ai-filter-test-v643": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v643.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v643.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "fb-ai-filter-test-v644": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v644.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v644.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "fb-ai-filter-test-v645": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v645.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v645.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "fb-ai-filter-test-v646": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-fb-ai-filter-test-v646.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-fb-ai-filter-test-v646.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Như 10.6.0, thông báo lỗi giống hệt (so log). Lỗi môi trường: bài dựng Postgres bằng initdb -U postgres còn psql kết nối bằng user của máy (role \"lequangnhut\" does not exist); bài viết cho container Linux. Chạy lại với PGUSER=postgres: đạt.",
+    "campaign-schedule-ai-ui-smoke": "Khác 10.8.0 (khi đó hỏng vì SCHEDULE_DAY_TOKEN, bản chép patched-schedule-ai/ đạt). Từ #825 (lịch tuần / tháng bắt buộc ngày kết thúc, chặn ngày đã qua) bài kiểm cũ: dữ liệu mẫu có ngày kết thúc 21/10/2026 nên lúc lưu form báo \"Ngày kết thúc đã qua. Vui lòng chọn ngày kết thúc mới.\" (bài chờ thông báo \"Giờ dừng chạy trong ngày phải sau\", dòng 166), và có ca xoá ngày kết thúc của lịch tuần mà form nay báo \"Vui lòng chọn ngày kết thúc.\". Form làm đúng #825; bản chép patched-schedule-ai/ cũng hỏng ở dòng 167 (03r-campaign-schedule-ai-ui-smoke-patched.log). Bản chép patched-schedule-ai-clock/ (như patched-schedule-ai + đồng hồ trang thử đặt về 14/10/2026 qua date-shim.ts, bỏ ca xoá ngày kết thúc): đạt 6 nhóm (03r-campaign-schedule-ai-ui-smoke-clock.log). Bài trên dev_3 chưa sửa.",
+    "email-prompt-ui-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-email-prompt-ui-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-email-prompt-ui-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Bài mới của #789. Lần chạy trong run-checks: máy không có Chromium riêng của Playwright. Chạy lại bằng Chrome của máy (EMAIL_PROMPT_UI_CHROMIUM, 03r-email-prompt-ui-smoke-chrome.log): 6/7 bước đạt, bước 7 (DB trả email_typo kèm gợi ý thì form hiện gợi ý) hết giờ chờ .email-prompt-typo, ổn định qua 3 lần; cũng hỏng y như vậy ở chính commit merge #789 (6aeb2832), nên có từ trước bản build. Đọc code form / store / errorOf thì gợi ý của DB vẫn tới form; chưa xác định do bài kiểm hay do form, chưa chạy với DB thật.",
+    "zalo-received-marks-fuzz": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-zalo-received-marks-fuzz.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-zalo-received-marks-fuzz.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Bài mới của #790, lỗi môi trường: fuzz-loop mặc định --pgbin /usr/lib/postgresql/16/bin (Linux). Chạy lại với --pgbin PG17 Homebrew (03r-zalo-received-marks-fuzz-pg17.log): đạt, 0 vấn đề.",
+    "send-exclusion-card-ui-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-send-exclusion-card-ui-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-send-exclusion-card-ui-smoke.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Bài mới của #792, lỗi môi trường: máy không có Chromium riêng của Playwright. Chạy lại bằng Chrome của máy qua SX_UI_CHROMIUM (03r-send-exclusion-card-ui-smoke-chrome.log): đạt.",
+    "zalo-tag-v660-sql": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-zalo-tag-v660-sql.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-zalo-tag-v660-sql.log): Như 10.7.0, thông báo lỗi giống hệt (so log). Bài mới của #797, lỗi môi trường: bash 3.2 của Mac báo \"RUN[@]: unbound variable\" với mảng rỗng dưới set -u. Bản chép bash32/v660-smoke.sh (chỉ đổi cách mở rộng mảng và DIR/REPO tuyệt đối) chạy lại đạt: 62 dòng PASS, 0 FAIL, có gỡ + apply lại.",
+    "sheet-sync-ui-smoke": "Như 10.8.0 lần 2 (dòng lỗi đầu tiên giống hệt, so log dist/build-10.8.0-work/03-sheet-sync-ui-smoke.log): Như lần 1 (dòng lỗi đầu tiên giống hệt, so log r1-581826a0/03-sheet-sync-ui-smoke.log): Bài mới của #798, hỏng do môi trường: chỉ nhận /opt/pw-browsers/chromium hoặc Chromium riêng của Playwright, máy build không có. Bản chép patched-sheet-sync/ nhận Chrome của máy: 10/10 đạt (03r-sheet-sync-ui-smoke-chrome.log).",
+    "fb-v663-smoke": "Mới hỏng ở 10.9.0 (10.8.0 lần 2 đạt), lỗi môi trường: hai ca theo thời gian (get_late_button, get_not_hydrated: nút menu có sau 2 giây / 2 giây đầu bấm không mở) hỏng khi máy đang chạy song song bộ kiểm khác và npm run verify của ChatApi (load trung bình 15 phút ~29). Chạy lại lúc máy rảnh (03r-fb-v663-smoke-idle.log): 66/66 đạt. Không đổi code V663 giữa hai bản.",
+    "schedule-end-ui-fuzz": "Bài mới của #825, lỗi môi trường: script đọc WEBAPP_REPO/scripts/campaign-schedule-end-fuzz/oracle.mjs mà bản WebApp dev_1 dùng để kiểm (scratchpad webapp-dev1-1127, chép trước khi WebApp #336 có thư mục này) chưa có (ERR_MODULE_NOT_FOUND). Chép thư mục đó từ WebApp 3cd551b2 rồi chạy lại (03r-schedule-end-ui-fuzz-webapp-scripts.log): đạt.",
+    "event-bot-v672-sql": "Bài mới của #826, lỗi môi trường: v672-smoke.sh dùng \"${RUN[@]}\" với mảng rỗng dưới set -u, bash 3.2 của Mac báo \"RUN[@]: unbound variable\" (như v660-smoke). Bản chép bash32/v672-smoke.sh (03r-event-bot-v672-sql-bash32.log): đạt."
+  },
+  "reruns_outside_run_checks": [
+    {
+      "label": "share-repeat-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-repeat/zalo-share-repeat-smoke-test.cjs (bản chép: thêm hàm giả handleRecurringRefreshAfterCompletion)",
+      "time_vn": "20:05:19-20:05:19",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-scheduler-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-repeat/campaign-repeat-scheduler-smoke.cjs (bản chép: thêm hàm giả handleRecurringRefreshAfterCompletion)",
+      "time_vn": "20:05:19-20:05:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-runtime-e2e-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-repeat/campaign-repeat-runtime-e2e.cjs (bản chép: thêm hàm giả handleRecurringRefreshAfterCompletion)",
+      "time_vn": "20:05:20-20:05:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v641-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v641.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:23-20:05:24",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v641_paste-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v641_paste.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:24-20:05:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v643-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v643.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:25-20:05:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v644-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v644.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:27-20:05:28",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v645-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v645.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:28-20:05:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v646-pguser",
+      "command": "env LC_ALL=C PGUSER=postgres PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v646.py (PGUSER=postgres: initdb tạo user postgres, psql mặc định dùng user của máy)",
+      "time_vn": "20:05:30-20:05:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-schedule-ai-ui-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-schedule-ai/run-campaign-schedule-ai-ui-smoke.cjs (bản chép: thêm SCHEDULE_DAY_TOKEN vào VM)",
+      "time_vn": "20:05:31-20:05:46",
+      "result": "exit=1"
+    },
+    {
+      "label": "email-prompt-ui-smoke-chrome",
+      "command": "env EMAIL_PROMPT_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/staff-email-prompt/run-email-prompt-ui-smoke.cjs (Chrome của máy qua EMAIL_PROMPT_UI_CHROMIUM (máy không có Chromium riêng của Playwright))",
+      "time_vn": "20:05:46-20:06:35",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-card-ui-smoke-chrome",
+      "command": "env SX_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-send-exclusion-card-ui-smoke.cjs (Chrome của máy qua SX_UI_CHROMIUM)",
+      "time_vn": "20:06:35-20:06:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-received-marks-fuzz-pg17",
+      "command": "env LC_ALL=C node scripts/zalo-received-marks/fuzz-loop.cjs --rounds 1 --seed 1 --webapp /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/webapp-dev1-1127 --pgbin /opt/homebrew/opt/postgresql@17/bin (--pgbin PG17 Homebrew (mặc định /usr/lib/postgresql/16/bin))",
+      "time_vn": "20:06:40-20:06:42",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-v660-sql-bash32",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/bash32/v660-smoke.sh (bản chép cho bash 3.2: mảng RUN rỗng dưới set -u)",
+      "time_vn": "20:06:42-20:06:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-fly-fuzz-chat-dev",
+      "command": "node scripts/zalo-tag-sync/fly-tag-sync-fuzz.cjs (CHAT_REPO = bản ChatApi dev d82d9c35 đã npm ci)",
+      "time_vn": "20:06:43-20:06:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "session-clock-skew-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-session/scripts/desktop-session-rls/session-clock-skew-smoke.cjs (bản chép: giả module ../../shared/campaignSendExclusion mà supabaseClient.ts (#804) import thêm)",
+      "time_vn": "20:06:43-20:06:43",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v622-smoke-short-offsets",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-v622/smoke_v622_short_offsets.sh (bản chép mốc +20/+40 phút: bài gốc hỏng theo giờ chạy từ 21:00 VN)",
+      "time_vn": "20:06:43-20:06:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "sheet-sync-ui-smoke-chrome",
+      "command": "env NODE_PATH=/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.9.0/node_modules SHEET_SYNC_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-sheet-sync/run-campaign-sheet-sync-ui-smoke.cjs (bản chép: Chrome của máy qua SHEET_SYNC_UI_CHROMIUM (bài gốc chỉ nhận /opt/pw-browsers/chromium hoặc Chromium riêng của Playwright))",
+      "time_vn": "20:06:45-20:06:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "event-bot-v672-sql-bash32",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/bash32/v672-smoke.sh (bản chép cho bash 3.2: mảng RUN rỗng dưới set -u)",
+      "time_vn": "20:06:48-20:06:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "schedule-end-ui-fuzz-webapp-scripts",
+      "command": "env SCHEDULE_END_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/campaign-schedule-end-ui-fuzz.cjs 1 (WEBAPP_REPO có thêm scripts/campaign-schedule-end-fuzz của 3cd551b2)",
+      "time_vn": "20:06:51-20:07:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v663-smoke-idle",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v663-smoke.cjs (chạy lại khi máy không chạy bài nặng khác)",
+      "time_vn": "20:07:48-20:08:35",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-schedule-ai-ui-smoke-clock",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-schedule-ai-clock/run-campaign-schedule-ai-ui-smoke.cjs (bản chép: như patched-schedule-ai + đồng hồ trang thử 14/10/2026 vì #825 chặn ngày kết thúc đã qua, bỏ ca xoá ngày kết thúc vì #825 bắt buộc ngày kết thúc lịch tuần / tháng)",
+      "time_vn": "20:26-20:27:21",
+      "result": "exit=0"
+    }
+  ],
+  "reruns_note": "campaign-schedule-ai-ui-smoke-patched (bản chép của 10.8.0) hỏng vì #825; thay bằng campaign-schedule-ai-ui-smoke-clock (đạt). Mọi bước chạy lại khác đều đạt.",
+  "desktop": {
+    "checks": {
+      "typecheck_node": "passed",
+      "typecheck_renderer": "passed",
+      "packaged_output_parity": "passed",
+      "desktop_secret_absence": "passed",
+      "source_markers": "passed",
+      "existing_installers_preserved": 11,
+      "host_native_restored": true
+    },
+    "source_markers_kept": "Dấu giữ từ 9.9.0 (ghi cứng trong verify-build.cjs) + dấu mới của 10.8.0 lần 1 và lần 2",
+    "markers_prev_files_missing": [
+      "dist/build-10.0.0-work/markers-new.json",
+      "dist/build-10.1.0-work/markers-new.json",
+      "dist/build-10.2.0-work/markers-new.json",
+      "dist/build-10.3.0-work/markers-new.json",
+      "dist/build-10.4.0-work/markers-new.json",
+      "dist/build-10.5.0-work/markers-new.json",
+      "dist/build-10.6.0-work/markers-new.json",
+      "dist/build-10.7.0-work/markers-new.json"
+    ],
+    "source_markers_new": [
+      {
+        "where": "renderer",
+        "marker": "Bot tự gửi tin khi khách có sinh nhật, được gắn / gỡ tag Zalo, vào / ra nhóm điều kiện.",
+        "pr": "#826 Bot sự kiện (Desktop + App Server, trang nhúng Web)"
+      },
+      {
+        "where": "main",
+        "marker": "Không đăng nhập được {title} bằng tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.",
+        "pr": "#826 Bot sự kiện (Desktop + App Server, trang nhúng Web)"
+      },
+      {
+        "where": "main",
+        "marker": "Phiên {title} không khớp tài khoản akaAgent. Vui lòng đăng nhập lại akaAgent.",
+        "pr": "#826 Bot sự kiện (Desktop + App Server, trang nhúng Web)"
+      },
+      {
+        "where": "renderer",
+        "marker": "Hết ngày này chiến dịch dừng hẳn. Data chưa gửi sẽ không gửi nữa.",
+        "pr": "#825 ngày kết thúc bắt buộc cho lịch tuần / tháng"
+      },
+      {
+        "where": "renderer",
+        "marker": "Ngày kết thúc đã qua. Vui lòng chọn ngày kết thúc mới.",
+        "pr": "#825 ngày kết thúc bắt buộc cho lịch tuần / tháng"
+      },
+      {
+        "where": "renderer",
+        "marker": "Vui lòng chọn ngày kết thúc.",
+        "pr": "#825 ngày kết thúc bắt buộc cho lịch tuần / tháng"
+      },
+      {
+        "where": "main",
+        "marker": "Zalo không trả hồ sơ",
+        "pr": "#829 EXC02 / DAT04 / EXC06 khi UID của tài khoản khác hoặc đọc hồ sơ không ra"
+      },
+      {
+        "where": "main",
+        "marker": "account_restricted",
+        "pr": "#830 lô chia sẻ không in dòng ⚠️ cho lỗi lẻ phía người nhận"
+      },
+      {
+        "where": "main",
+        "marker": "EventBotRuntime",
+        "pr": "#826 Bot sự kiện (Desktop + App Server, trang nhúng Web)",
+        "note": "thêm tay: tên hàm / mã riêng của PR (dấu tự chọn là mảnh code giữa hai dấu nháy, đã bỏ)"
+      },
+      {
+        "where": "main",
+        "marker": "isLoneShareFailure",
+        "pr": "#830 lô chia sẻ không in dòng ⚠️ cho lỗi lẻ phía người nhận",
+        "note": "thêm tay: tên hàm / mã riêng của PR (dấu tự chọn là mảnh code giữa hai dấu nháy, đã bỏ)"
+      },
+      {
+        "where": "main",
+        "marker": "staleRunningEngineCampaigns",
+        "pr": "#835 tài khoản không kẹt \"đang chạy\" (V681 + bộ lập lịch)",
+        "note": "thêm tay: tên hàm / mã riêng của PR (dấu tự chọn là mảnh code giữa hai dấu nháy, đã bỏ)"
+      },
+      {
+        "where": "main",
+        "marker": "profile_unavailable",
+        "pr": "#829 EXC02 / DAT04 / EXC06 khi UID của tài khoản khác hoặc đọc hồ sơ không ra",
+        "note": "thêm tay: tên hàm / mã riêng của PR (dấu tự chọn là mảnh code giữa hai dấu nháy, đã bỏ)"
+      }
+    ],
+    "baseline": "out/main/index.js và .js của out/renderer giải nén từ app.asar Mac ARM64 của worktree release-10.8.0-r2 (cùng lần build với akaAgent.dmg 7ba6c477…)",
+    "artifacts": [
+      {
+        "id": "win",
+        "platform": "Windows x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.9.0/dist/akaAgent-Setup-10.9.0.exe",
+        "version": "10.9.0",
+        "resource_version": "10.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 627,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 42,
+        "new_markers_absent_in_1050": true,
+        "windows_execution_tested": false,
+        "pe_versions": {
+          "installer": {
+            "version": "10.9.0",
+            "file_version_ms": 655369,
+            "string_file_version": [
+              "10.9.0"
+            ],
+            "string_product_version": [
+              "10.9.0"
+            ],
+            "machine": "14c",
+            "authenticode_present": false
+          },
+          "app": {
+            "version": "10.9.0",
+            "file_version_ms": 655369,
+            "string_file_version": [
+              "10.9.0"
+            ],
+            "string_product_version": [
+              "10.9.0.0"
+            ],
+            "machine": "8664",
+            "authenticode_present": false
+          }
+        },
+        "installer_payload_parity": true,
+        "bytes": 153567540,
+        "sha256": "d4fb2c369adca45a5af8c47319cc2c6400d40757d8368b611aae0218dab2dc40",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0/akaAgent-Setup-10.9.0.exe"
+      },
+      {
+        "id": "arm",
+        "platform": "macOS ARM64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.9.0/dist/akaAgent.dmg",
+        "version": "10.9.0",
+        "resource_version": "10.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 42,
+        "new_markers_absent_in_1050": true,
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "arm64",
+          "bundle_short_version": "10.9.0",
+          "bundle_version": "10.9.0",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 183300665,
+        "sha256": "9a41c89c5ba829b4a71939282abd1cccc86a0b16630f5e0d9fb6fb9fae8666fb",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0/akaAgent.dmg"
+      },
+      {
+        "id": "intel",
+        "platform": "macOS Intel x64",
+        "path": "/Users/lequangnhut/Repos/akaAgent/.claude/worktrees/release-10.9.0/dist/akaAgentIntel.dmg",
+        "version": "10.9.0",
+        "resource_version": "10.9.0",
+        "main": "./out/main/index.js",
+        "packaged_output_files": 108,
+        "credential_scan_files": 631,
+        "credential_checks": {
+          "server_private_resource_absent": true,
+          "service_role_jwt_absent": true,
+          "supabase_secret_token_absent": true,
+          "previous_anon_absent": true
+        },
+        "source_markers_checked": 42,
+        "new_markers_absent_in_1050": true,
+        "windows_execution_tested": false,
+        "native_modules_checked": 2,
+        "mac_checks": {
+          "architecture": "x86_64",
+          "bundle_short_version": "10.9.0",
+          "bundle_version": "10.9.0",
+          "signature": "ad-hoc verified",
+          "native_sqlite_load": true,
+          "dmg_checksum": true,
+          "mounted_payload_parity": true,
+          "apple_notarized": false
+        },
+        "bytes": 190474030,
+        "sha256": "66f9f5aeab1b83f112a01986fb12c5630a8f7ece66d608a926df7031120a8e47",
+        "archived_path": "/Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0/akaAgentIntel.dmg"
+      }
+    ]
+  },
+  "app_server": {
+    "built": true,
+    "file": "dist-server/akaAgent-Zalo-Server-Internal-Setup-10.9.0.exe",
+    "bytes": 140676766,
+    "sha256": "6fdab4bb1dc0ef4089b4a35ad58a986a8394e8a765d2ca7595d269913958b4b3",
+    "private_evidence": "dist-server/private/2026-11-27T10-32-24-784Z",
+    "previous_server": {
+      "version": "10.8.0",
+      "source_commit": "5f91bbfc",
+      "installed_on_vps": "khoảng 21:45 VN 26/11"
+    },
+    "graph_files": 275,
+    "changed_since_server_1080": [
+      "packages/campaign-engine/src/eventBot/index.ts",
+      "packages/campaign-engine/src/index.ts",
+      "packages/campaign-engine/src/progress.ts",
+      "packages/campaign-engine/src/zalo/materialize.ts",
+      "packages/campaign-engine/src/zalo/messagePhone.ts",
+      "packages/campaign-engine/src/zalo/share.ts",
+      "packages/campaign-engine/src/zalo/tagAutoAdd.ts",
+      "src/main/data/repositories/eventBotRepository.ts",
+      "src/main/engineAdapters/desktopEngineJournal.ts",
+      "src/main/services/campaignScheduler.ts",
+      "src/main/services/eventBotHost.ts",
+      "src/main/services/eventBotRuntime.ts",
+      "src/main/services/staleRunningAccount.ts",
+      "src/main/services/zaloTagSyncRuntime.ts",
+      "src/server/main/index.ts",
+      "src/server/main/serverFileLogger.ts",
+      "src/server/main/serverHealthMonitor.ts",
+      "src/server/main/zaloServerRuntimeManager.ts",
+      "src/shared/zaloTagAutoAdd.ts"
+    ],
+    "checks": {
+      "windows_x64": true,
+      "installer_payload_parity": true,
+      "clean_host_credential_loading": true,
+      "server_main_parity": true,
+      "credential_absent_from_source_desktop_and_js": true,
+      "source_and_output_files_scanned": 5574,
+      "git_ignored": true,
+      "existing_server_installers_unchanged": true,
+      "host_native_restored": true
+    },
+    "installed_on_vps": false,
+    "note": "Bộ cài App Server có sẵn khoá backend: chỉ cài lên VPS, không phát hành."
+  },
+  "existing_installers": {
+    "checked_unchanged": 11,
+    "note": "Bộ cài .exe/.dmg còn trong dist/ và dist-server/ của repo chính giữ nguyên checksum sau build"
+  },
+  "main_checkout": {
+    "note": "Không sửa code, không commit, không đổi nhánh checkout chính.",
+    "before": {
+      "head": "e076fca9c0f51543cf0a4a39e14cb3b6faa4fbf0",
+      "branch": "dev_3",
+      "claude_md_sha256": "f1c05872cceb779ad1524bf8bed780b1268dcd9fc84b2878ed67379902314092",
+      "status_short": "M CLAUDE.md"
+    },
+    "after": {
+      "head": "e076fca9c0f51543cf0a4a39e14cb3b6faa4fbf0",
+      "branch": "dev_3",
+      "claude_md_sha256": "f1c05872cceb779ad1524bf8bed780b1268dcd9fc84b2878ed67379902314092",
+      "status_short": "M CLAUDE.md"
+    }
+  },
+  "commands": [
+    {
+      "label": "typecheck-node",
+      "command": "npx tsc --noEmit -p tsconfig.node.json",
+      "time_vn": "17:35:44-17:35:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "typecheck-web",
+      "command": "npx tsc --noEmit -p tsconfig.web.json",
+      "time_vn": "17:35:47-17:35:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "snapshot-smoke",
+      "command": "node scripts/desktop-runtime-snapshot-smoke.cjs",
+      "time_vn": "17:35:49-17:35:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "idle-reads-smoke",
+      "command": "node scripts/desktop-ui-idle-reads-logic-smoke.cjs",
+      "time_vn": "17:35:49-17:35:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "share-repeat-smoke",
+      "command": "node scripts/zalo-share-repeat-smoke-test.cjs",
+      "time_vn": "17:35:49-17:35:49",
+      "result": "exit=1"
+    },
+    {
+      "label": "server-rest-smoke",
+      "command": "node scripts/server-rest-request-reduction-smoke.cjs",
+      "time_vn": "17:35:49-17:35:50",
+      "result": "exit=1"
+    },
+    {
+      "label": "listener-stop-smoke",
+      "command": "node scripts/zalo-listener-stop-retry-smoke.cjs",
+      "time_vn": "17:35:50-17:36:00",
+      "result": "exit=0"
+    },
+    {
+      "label": "session-clock-skew-smoke",
+      "command": "node scripts/desktop-session-rls/session-clock-skew-smoke.cjs",
+      "time_vn": "17:36:00-17:36:01",
+      "result": "exit=1"
+    },
+    {
+      "label": "media-timeout-smoke",
+      "command": "node scripts/campaign-media-timeout-smoke-test.cjs",
+      "time_vn": "17:36:01-17:36:02",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-desktop-smoke",
+      "command": "node scripts/campaign-engine-desktop-smoke.cjs",
+      "time_vn": "17:36:02-17:36:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "renewal-reminder-smoke",
+      "command": "node scripts/renewal-reminder-desktop-smoke.cjs",
+      "time_vn": "17:36:08-17:36:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "member-matches-smoke",
+      "command": "node scripts/data-group-member-matches-service-smoke.cjs",
+      "time_vn": "17:36:08-17:36:09",
+      "result": "exit=0"
+    },
+    {
+      "label": "message-status-sync-smoke",
+      "command": "node scripts/zalo-message-status-sync-smoke.cjs",
+      "time_vn": "17:36:09-17:36:09",
+      "result": "exit=1"
+    },
+    {
+      "label": "zalo-server-on-fly-login-smoke",
+      "command": "node scripts/zalo-server-on-fly-login-smoke.cjs",
+      "time_vn": "17:36:09-17:36:09",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-snapshot-chat-sync-smoke",
+      "command": "node scripts/desktop-account-snapshot-chat-sync-smoke.cjs",
+      "time_vn": "17:36:09-17:36:09",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-service-smoke",
+      "command": "node scripts/campaign-result-actions-service-smoke.cjs",
+      "time_vn": "17:36:09-17:36:10",
+      "result": "exit=0"
+    },
+    {
+      "label": "result-actions-ui-smoke",
+      "command": "node scripts/run-campaign-result-actions-ui-smoke.cjs",
+      "time_vn": "17:36:10-17:36:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "aff-partner-smoke",
+      "command": "node scripts/aff-partner-desktop-smoke.cjs",
+      "time_vn": "17:36:16-17:36:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-check-all",
+      "command": "node scripts/campaign-outcome-engine-check-all.cjs",
+      "time_vn": "17:36:16-17:37:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-scheduler-smoke",
+      "command": "node scripts/campaign-repeat-scheduler-smoke.cjs",
+      "time_vn": "17:37:52-17:37:52",
+      "result": "exit=1"
+    },
+    {
+      "label": "repeat-v561-smoke",
+      "command": "node scripts/campaign-repeat-v561-smoke.cjs",
+      "time_vn": "17:37:52-17:37:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-ui-smoke",
+      "command": "node scripts/run-campaign-repeat-ui-smoke.cjs",
+      "time_vn": "17:37:55-17:38:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-runtime-e2e",
+      "command": "node scripts/campaign-repeat-runtime-e2e.cjs",
+      "time_vn": "17:38:01-17:38:04",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-sql-smoke",
+      "command": "node scripts/engine-v2-facebook/sql-smoke.cjs",
+      "time_vn": "17:38:04-17:38:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-copy-smoke",
+      "command": "node scripts/engine-v2-facebook/copy-smoke.cjs",
+      "time_vn": "17:38:07-17:38:10",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-core-smoke",
+      "command": "node scripts/engine-v2-facebook/core-smoke.cjs",
+      "time_vn": "17:38:10-17:38:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-signs-smoke",
+      "command": "node scripts/engine-v2-facebook/error-signs-smoke.cjs",
+      "time_vn": "17:38:15-17:38:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-policy-parity-smoke",
+      "command": "node scripts/engine-v2-facebook/policy-parity-smoke.cjs",
+      "time_vn": "17:38:15-17:38:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-legacy-catalog-smoke",
+      "command": "node scripts/engine-v2-facebook/legacy-catalog-smoke.cjs",
+      "time_vn": "17:38:23-17:38:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v563-smoke",
+      "command": "node scripts/engine-v2-facebook/v563-smoke.cjs",
+      "time_vn": "17:38:27-17:38:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-desktop-fb-smoke",
+      "command": "node scripts/engine-v2-facebook/desktop-fb-smoke.cjs",
+      "time_vn": "17:38:40-17:40:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-workflow-hooks-smoke",
+      "command": "node scripts/engine-v2-facebook/workflow-hooks-smoke.cjs",
+      "time_vn": "17:40:31-17:40:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-page-trace-smoke",
+      "command": "node scripts/engine-v2-facebook/page-trace-smoke.cjs",
+      "time_vn": "17:40:31-17:40:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-screenshots-smoke",
+      "command": "node scripts/engine-v2-facebook/screenshots-smoke.cjs",
+      "time_vn": "17:40:31-17:40:34",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-autocheck-smoke",
+      "command": "node scripts/engine-v2-facebook/autocheck-smoke.cjs",
+      "time_vn": "17:40:34-17:40:34",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-wait-reason-smoke",
+      "command": "node scripts/engine-v2-facebook/wait-reason-smoke.cjs",
+      "time_vn": "17:40:34-17:40:34",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-replay",
+      "command": "node scripts/engine-v2-facebook/replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/engine-v2-fb-replay-2026-11-16.json",
+      "time_vn": "17:40:34-17:40:34",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-scenarios",
+      "command": "node scripts/engine-v2-facebook/scenarios.cjs",
+      "time_vn": "17:40:34-17:41:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-fb-repeat",
+      "command": "env SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 node scripts/engine-v2-scenarios/run.cjs --skip-general",
+      "time_vn": "17:41:04-17:41:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v564-smoke",
+      "command": "node scripts/engine-v2-facebook/v564-smoke.cjs",
+      "time_vn": "17:41:11-17:41:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-qr-proxy-reject-smoke",
+      "command": "node scripts/zalo-qr-proxy-reject-smoke.cjs",
+      "time_vn": "17:41:15-17:41:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "sleep-guard-smoke",
+      "command": "node scripts/desktop-sleep-guard-smoke.cjs",
+      "time_vn": "17:41:16-17:41:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v575-smoke",
+      "command": "node scripts/engine-v2-facebook/v575-smoke.cjs",
+      "time_vn": "17:41:16-17:41:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-progress-format-smoke",
+      "command": "node scripts/engine-v2-facebook/progress-format-smoke.cjs",
+      "time_vn": "17:41:27-17:41:28",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-electron-real-smoke",
+      "command": "node scripts/engine-v2-facebook/electron-real-smoke.cjs",
+      "time_vn": "17:41:28-17:42:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-replay-20261118",
+      "command": "node scripts/engine-v2-facebook/replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/engine-v2-fb-replay-2026-11-18.json",
+      "time_vn": "17:42:11-17:42:11",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-scenarios-prod-db",
+      "command": "env FB_SCENARIO_ORPHAN_RUNS=1 node scripts/engine-v2-facebook/scenarios.cjs --seeds 20 --crash 0.08 --dbchaos 0.05",
+      "time_vn": "17:42:11-17:46:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-fixes-smoke",
+      "command": "node scripts/post-bump-fixes-smoke.cjs",
+      "time_vn": "17:46:07-17:46:08",
+      "result": "exit=1"
+    },
+    {
+      "label": "post-bump-rotation-smoke",
+      "command": "node scripts/post-bump-content-rotation-smoke.cjs",
+      "time_vn": "17:46:08-17:46:12",
+      "result": "exit=1"
+    },
+    {
+      "label": "post-bump-rotation-replay",
+      "command": "node scripts/post-bump-content-rotation-replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/post-bump-20261118.json --out /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/post-bump-rotation-replay.json",
+      "time_vn": "17:46:12-17:46:13",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-search-admins-smoke",
+      "command": "env LC_ALL=C node scripts/facebook-search-groups/admins-smoke.cjs",
+      "time_vn": "17:46:13-17:47:02",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-export-logic-smoke",
+      "command": "node scripts/facebook-search-groups/export-logic-smoke.cjs",
+      "time_vn": "17:47:02-17:47:02",
+      "result": "exit=0"
+    },
+    {
+      "label": "found-data-export-ui-smoke",
+      "command": "node scripts/run-campaign-found-data-export-ui-smoke.cjs",
+      "time_vn": "17:47:02-17:47:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-card-parser-smoke",
+      "command": "node scripts/facebook-search-groups/card-parser-smoke.cjs",
+      "time_vn": "17:47:11-17:47:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-search-card-service-smoke",
+      "command": "node scripts/facebook-search-groups/card-service-smoke.cjs",
+      "time_vn": "17:47:11-17:47:13",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-prod-db",
+      "command": "env SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_CAMPAIGN_REPEAT=1 SCENARIO_TARGET_CHECK=1 SCENARIO_V575=1 SCENARIO_V581=1 SCENARIO_ORPHAN_RUNS=1 SCENARIO_MULTI_SLOT_ARRAY=1 node scripts/engine-v2-scenarios/run.cjs",
+      "time_vn": "17:47:13-17:47:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "target-check-v571-smoke",
+      "command": "node scripts/engine-v2-target-check-v571-smoke.cjs",
+      "time_vn": "17:47:29-17:47:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v572-smoke",
+      "command": "node scripts/engine-v2-facebook/v572-smoke.cjs",
+      "time_vn": "17:47:33-17:48:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v573-smoke",
+      "command": "node scripts/send-exclusion-v573-smoke.cjs",
+      "time_vn": "17:48:25-17:48:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-watch-smoke",
+      "command": "node scripts/engine-v2-facebook/error-watch-smoke.cjs",
+      "time_vn": "17:48:26-17:48:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-error-watch-agent-smoke",
+      "command": "node scripts/engine-v2-facebook/error-watch-agent-smoke.cjs",
+      "time_vn": "17:48:30-17:48:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "orphan-runs-v576-smoke",
+      "command": "node scripts/engine-v2-orphan-runs-v576-smoke.cjs",
+      "time_vn": "17:48:33-17:48:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "v581-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-outcome-engine-v581-smoke.cjs",
+      "time_vn": "17:48:58-17:49:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-business-token-v589-smoke",
+      "command": "env LC_ALL=C node scripts/facebook-business-token-v589-smoke.cjs",
+      "time_vn": "17:49:05-17:49:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-desktop-image-smoke",
+      "command": "bash scripts/ai-chat/desktop_image_smoke.sh",
+      "time_vn": "17:49:06-17:49:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-edge-image-smoke",
+      "command": "node scripts/ai-chat/edge_agent_image_smoke.mjs",
+      "time_vn": "17:49:07-17:49:07",
+      "result": "exit=0"
+    },
+    {
+      "label": "ai-chat-images-ui-smoke",
+      "command": "env AI_CHAT_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-ai-chat-images-ui-smoke.cjs",
+      "time_vn": "17:49:07-17:49:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-clock-rollback-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/clock-rollback-smoke.cjs",
+      "time_vn": "17:49:12-17:49:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "multi-slot-v585-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-multi-slot-array-v585-smoke.cjs",
+      "time_vn": "17:49:14-17:49:17",
+      "result": "exit=0"
+    },
+    {
+      "label": "repeat-v561-with-v585-smoke",
+      "command": "env WITH_V585=1 LC_ALL=C node scripts/campaign-repeat-v561-smoke.cjs",
+      "time_vn": "17:49:17-17:49:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-review-v588-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-review-v588-smoke.cjs",
+      "time_vn": "17:49:20-17:49:24",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-error-review-ui-smoke",
+      "command": "node scripts/run-engine-error-review-ui-smoke.cjs",
+      "time_vn": "17:49:24-17:49:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "upgrade-portal-desktop-smoke",
+      "command": "node scripts/upgrade-portal-desktop-smoke.cjs",
+      "time_vn": "17:49:26-17:49:26",
+      "result": "exit=1"
+    },
+    {
+      "label": "upgrade-portal-ui-smoke",
+      "command": "env UPGRADE_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-upgrade-portal-ui-smoke.cjs",
+      "time_vn": "17:49:26-17:49:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v591-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v591-smoke.cjs",
+      "time_vn": "17:49:29-17:49:39",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-scenarios-interrupt",
+      "command": "node scripts/engine-v2-facebook/scenarios.cjs --seeds 12 --interrupt 0.08 --pages 3",
+      "time_vn": "17:49:39-17:51:18",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v593-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v593-smoke.cjs",
+      "time_vn": "17:51:18-17:51:21",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v594-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v594-smoke.cjs",
+      "time_vn": "17:51:21-17:51:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v599-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v599-smoke.cjs",
+      "time_vn": "17:51:25-17:51:28",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v602-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v602-smoke.cjs",
+      "time_vn": "17:51:28-17:51:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v598-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v598-smoke.cjs",
+      "time_vn": "17:51:31-17:51:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v597-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v597-smoke.cjs",
+      "time_vn": "17:51:50-17:51:59",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v603-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v603-smoke.cjs",
+      "time_vn": "17:51:59-17:52:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "facebook-messages-smoke",
+      "command": "node scripts/facebook-messages-smoke.cjs",
+      "time_vn": "17:52:14-17:52:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "data-scan-browser-help-smoke",
+      "command": "node scripts/data-scan-browser-help-smoke.cjs",
+      "time_vn": "17:52:15-17:53:03",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-v601-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-outcome-engine-v601-smoke.cjs",
+      "time_vn": "17:53:03-17:53:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "facebook-tab-login-probe-smoke",
+      "command": "node scripts/facebook-tab-login-probe-smoke.cjs",
+      "time_vn": "17:53:04-17:53:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v607-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v607-smoke.cjs",
+      "time_vn": "17:53:06-17:53:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-app-smoke",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin LC_ALL=C node scripts/find-data-push/app-smoke.cjs",
+      "time_vn": "17:53:30-17:53:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-v608-test",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin LC_ALL=C bash scripts/find-data-push/test_v608.sh",
+      "time_vn": "17:53:33-17:53:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-group-admin-smoke",
+      "command": "node scripts/find-data-push/group-admin-data-groups-smoke.cjs",
+      "time_vn": "17:53:38-17:53:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-form-bundle-ui-smoke",
+      "command": "node scripts/find-data-push/run-form-bundle-ui-smoke.cjs",
+      "time_vn": "17:53:40-17:53:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "find-data-form-group-admin-ui-smoke",
+      "command": "node scripts/find-data-push/run-form-group-admin-ui-smoke.cjs",
+      "time_vn": "17:53:48-17:53:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-actions-smoke",
+      "command": "node scripts/campaign-account-actions-smoke.cjs",
+      "time_vn": "17:53:52-17:53:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "limit-progress-smoke",
+      "command": "node scripts/campaign-limit-progress-smoke.cjs",
+      "time_vn": "17:53:52-17:53:53",
+      "result": "exit=0"
+    },
+    {
+      "label": "pending-reason-smoke",
+      "command": "node scripts/campaign-pending-reason-smoke.cjs",
+      "time_vn": "17:53:53-17:53:53",
+      "result": "exit=1"
+    },
+    {
+      "label": "engagement-smoke",
+      "command": "node scripts/zalo-campaign-engagement-smoke-test.cjs",
+      "time_vn": "17:53:53-17:53:55",
+      "result": "exit=1"
+    },
+    {
+      "label": "engagement-config-bound-smoke",
+      "command": "node scripts/zalo-campaign-engagement-config-bound-smoke.cjs",
+      "time_vn": "17:53:55-17:54:00",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-config-bound-real-fetch",
+      "command": "env ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron scripts/zalo-campaign-engagement-config-bound-real-fetch.cjs",
+      "time_vn": "17:54:00-17:54:22",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-chaos-sim",
+      "command": "node scripts/zalo-campaign-engagement-chaos-sim.cjs --seeds 1",
+      "time_vn": "19:20:30-19:43:31",
+      "result": "exit=0"
+    },
+    {
+      "label": "engagement-v615-smoke",
+      "command": "env LC_ALL=C node scripts/run-zalo-engagement-v615-smoke.cjs",
+      "time_vn": "19:43:31-19:43:33",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v616-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v616-smoke.cjs",
+      "time_vn": "19:43:33-19:44:38",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v617-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v617-smoke.cjs",
+      "time_vn": "19:44:38-19:45:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-v618-smoke",
+      "command": "env LC_ALL=C node scripts/web-scan/v618-smoke.cjs",
+      "time_vn": "19:45:51-19:46:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-runner-smoke",
+      "command": "node scripts/web-scan/runner-smoke.cjs",
+      "time_vn": "19:46:01-19:46:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-push-smoke",
+      "command": "env LC_ALL=C node scripts/web-scan/push-smoke.cjs",
+      "time_vn": "19:46:01-19:46:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "web-scan-form-ui-smoke",
+      "command": "node scripts/web-scan/form-ui-smoke.cjs",
+      "time_vn": "19:46:06-19:46:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-rest-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/server-rest-smoke-webplatform.cjs",
+      "time_vn": "19:46:45-19:46:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-fixes-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-post-bump/scripts/post-bump-fixes-smoke.cjs",
+      "time_vn": "19:46:47-19:46:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-rotation-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-post-bump/scripts/post-bump-content-rotation-smoke.cjs",
+      "time_vn": "19:46:48-19:46:56",
+      "result": "exit=0"
+    },
+    {
+      "label": "post-bump-rotation-replay-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/patched-post-bump/scripts/post-bump-content-rotation-replay.cjs /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/replay-inputs/post-bump-20261118.json --out /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/post-bump-rotation-replay.json",
+      "time_vn": "19:46:56-19:46:57",
+      "result": "exit=1"
+    },
+    {
+      "label": "upgrade-portal-smoke-patched",
+      "command": "node /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/upgrade-portal-smoke-extraaction.cjs",
+      "time_vn": "19:46:57-19:46:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "akabiz-auto-sync-desktop-smoke",
+      "command": "env ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron scripts/akabiz-auto-sync-desktop-smoke.cjs",
+      "time_vn": "19:46:57-19:46:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "akabiz-auto-sync-ui-smoke",
+      "command": "env AKABIZ_AUTO_SYNC_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-akabiz-auto-sync-ui-smoke.cjs",
+      "time_vn": "19:46:58-19:47:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-toast-smoke",
+      "command": "node scripts/notification-toast-desktop/smoke.cjs",
+      "time_vn": "19:47:05-19:47:05",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-toast-ui-smoke",
+      "command": "env TOAST_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/notification-toast-desktop/run-toast-ui-smoke.cjs",
+      "time_vn": "19:47:06-19:47:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v621-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/bash32/smoke_v621.sh",
+      "time_vn": "19:47:12-19:47:30",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v622-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/bash32/smoke_v622.sh",
+      "time_vn": "19:47:30-19:47:35",
+      "result": "exit=0"
+    },
+    {
+      "label": "notification-v624-smoke",
+      "command": "env LC_ALL=C NOTIFY_PG_BIN=/opt/homebrew/opt/postgresql@17/bin bash /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/bash32/smoke_v624.sh",
+      "time_vn": "19:47:35-19:47:41",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-result-groups-desktop-smoke",
+      "command": "node scripts/campaign-result-groups-desktop-smoke.cjs",
+      "time_vn": "19:47:41-19:47:41",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-result-groups-ui-smoke",
+      "command": "env CRG_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-result-groups-ui-smoke.cjs",
+      "time_vn": "19:47:41-19:47:47",
+      "result": "exit=0"
+    },
+    {
+      "label": "journey-web-embed-electron-smoke",
+      "command": "node scripts/journey-web-embed-electron-smoke.cjs",
+      "time_vn": "19:47:47-19:47:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-form-helpers-smoke",
+      "command": "node scripts/fb-ai-filter/form-helpers-smoke.cjs",
+      "time_vn": "19:47:50-19:47:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-v641-blocks-smoke",
+      "command": "node scripts/fb-ai-filter/v641-blocks-smoke.cjs",
+      "time_vn": "19:47:51-19:47:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-v643-schema-check",
+      "command": "node scripts/fb-ai-filter/v643-schema-check.cjs",
+      "time_vn": "19:47:51-19:47:52",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-ai-filter-test-v641",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v641.py",
+      "time_vn": "19:47:52-19:47:55",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-ai-filter-test-v641_paste",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v641_paste.py",
+      "time_vn": "19:47:55-19:47:58",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-ai-filter-test-v643",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v643.py",
+      "time_vn": "19:47:58-19:48:01",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-ai-filter-test-v644",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v644.py",
+      "time_vn": "19:48:01-19:48:04",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-ai-filter-test-v645",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v645.py",
+      "time_vn": "19:48:04-19:48:06",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-ai-filter-test-v646",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/fb-ai-filter/test_v646.py",
+      "time_vn": "19:48:06-19:48:09",
+      "result": "exit=1"
+    },
+    {
+      "label": "campaign-schedule-ai-ui-smoke",
+      "command": "env AKA_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-schedule-ai-ui-smoke.cjs",
+      "time_vn": "19:48:09-19:48:51",
+      "result": "exit=1"
+    },
+    {
+      "label": "zalo-partial-send-log-smoke",
+      "command": "node scripts/zalo-partial-send-log-smoke-test.cjs",
+      "time_vn": "19:48:51-19:48:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-stranger-media-pacing-smoke",
+      "command": "node scripts/zalo-stranger-media-pacing-smoke.cjs",
+      "time_vn": "19:48:55-19:48:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-stranger-media-pacing-ui-smoke",
+      "command": "node scripts/run-zalo-stranger-media-pacing-ui-smoke.cjs",
+      "time_vn": "19:48:55-19:49:12",
+      "result": "exit=0"
+    },
+    {
+      "label": "content-syntax-desktop-smoke",
+      "command": "node scripts/content-syntax/desktop-smoke.cjs",
+      "time_vn": "19:49:12-19:49:13",
+      "result": "exit=0"
+    },
+    {
+      "label": "content-syntax-fuzz",
+      "command": "node scripts/content-syntax/fuzz-loop.cjs --seed 1 --cases 3000",
+      "time_vn": "19:49:13-19:51:14",
+      "result": "exit=0"
+    },
+    {
+      "label": "campaign-schedule-fixes-smoke",
+      "command": "node scripts/campaign-schedule-fixes-smoke.cjs",
+      "time_vn": "19:51:14-19:51:15",
+      "result": "exit=0"
+    },
+    {
+      "label": "recurring-refresh-v650-smoke",
+      "command": "env LC_ALL=C PG17_BIN=/opt/homebrew/opt/postgresql@17/bin node scripts/engine-v2-recurring-refresh-v650-smoke.cjs",
+      "time_vn": "19:51:15-19:51:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "schedule-fixes-sim",
+      "command": "env SIM_SEED=1 SIM_PROD=0 SIM_CHATAPI=0 LC_ALL=C PG17_BIN=/opt/homebrew/opt/postgresql@17/bin node scripts/schedule-fixes-sim/run.cjs --out /Users/lequangnhut/Repos/akaAgent/dist/build-10.9.0-work/schedule-fixes-sim",
+      "time_vn": "19:51:23-19:54:37",
+      "result": "exit=0"
+    },
+    {
+      "label": "email-prompt-desktop-smoke",
+      "command": "node scripts/staff-email-prompt/desktop-email-prompt-smoke.cjs",
+      "time_vn": "19:54:37-19:54:37",
+      "result": "exit=0"
+    },
+    {
+      "label": "email-prompt-ui-smoke",
+      "command": "env CHROMIUM_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/staff-email-prompt/run-email-prompt-ui-smoke.cjs",
+      "time_vn": "19:54:37-19:54:38",
+      "result": "exit=1"
+    },
+    {
+      "label": "email-prompt-v652-sql",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin bash scripts/staff-email-prompt/test_v652.sh",
+      "time_vn": "19:54:38-19:54:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-received-marks-smoke",
+      "command": "node scripts/zalo-received-marks-smoke.cjs",
+      "time_vn": "19:54:40-19:54:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-received-marks-fuzz",
+      "command": "node scripts/zalo-received-marks/fuzz-loop.cjs --rounds 1 --seed 1 --webapp /private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/webapp-dev1-1127",
+      "time_vn": "19:54:40-19:54:40",
+      "result": "exit=2"
+    },
+    {
+      "label": "send-exclusion-multi-zalo-smoke",
+      "command": "node scripts/send-exclusion-multi-zalo-smoke.cjs",
+      "time_vn": "19:54:40-19:54:40",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v654-smoke",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v654-smoke.cjs",
+      "time_vn": "19:54:40-19:54:41",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v655-smoke",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v655-smoke.cjs",
+      "time_vn": "19:54:41-19:54:42",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v657-smoke",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v657-smoke.cjs",
+      "time_vn": "19:54:42-19:54:50",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-card-ui-smoke",
+      "command": "env CHROMIUM_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-send-exclusion-card-ui-smoke.cjs",
+      "time_vn": "19:54:50-19:54:51",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-v658-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v658-smoke.cjs",
+      "time_vn": "19:54:51-19:55:08",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v659-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v659-smoke.cjs",
+      "time_vn": "19:55:08-19:55:39",
+      "result": "exit=0"
+    },
+    {
+      "label": "error-watch-v661-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/error-watch-v661-smoke.cjs",
+      "time_vn": "19:55:39-19:55:57",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-v660-sql",
+      "command": "env PGBIN=/opt/homebrew/opt/postgresql@17/bin bash scripts/zalo-tag-sync/v660-smoke.sh",
+      "time_vn": "19:55:57-19:55:58",
+      "result": "exit=1"
+    },
+    {
+      "label": "zalo-tag-runtime-smoke",
+      "command": "node scripts/zalo-tag-sync/runtime-smoke.cjs",
+      "time_vn": "19:55:58-19:55:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-runtime-fuzz",
+      "command": "node scripts/zalo-tag-sync/runtime-fuzz.cjs",
+      "time_vn": "19:55:58-19:55:58",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-fly-fuzz",
+      "command": "node scripts/zalo-tag-sync/fly-tag-sync-fuzz.cjs",
+      "time_vn": "19:55:58-19:55:59",
+      "result": "exit=0"
+    },
+    {
+      "label": "sheet-sync-rows-smoke",
+      "command": "node scripts/campaign-sheet-sync/rows-smoke.cjs",
+      "time_vn": "19:55:59-19:56:00",
+      "result": "exit=0"
+    },
+    {
+      "label": "sheet-sync-ui-smoke",
+      "command": "env CHROMIUM_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-sheet-sync-ui-smoke.cjs",
+      "time_vn": "19:56:00-19:56:01",
+      "result": "exit=1"
+    },
+    {
+      "label": "sheet-sync-test-v662",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/campaign-sheet-sync/test_v662.py",
+      "time_vn": "19:56:01-19:56:13",
+      "result": "exit=0"
+    },
+    {
+      "label": "sheet-sync-test-v664",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin python3 scripts/campaign-sheet-sync/test_v664.py",
+      "time_vn": "19:56:13-19:57:23",
+      "result": "exit=0"
+    },
+    {
+      "label": "proxy-shared-desktop-smoke",
+      "command": "node scripts/proxy-shared-desktop-smoke.cjs",
+      "time_vn": "19:57:23-19:57:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "proxy-v665-sql",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin bash scripts/test-v665-proxy-shared-runtime.sh",
+      "time_vn": "19:57:25-19:57:29",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v663-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v663-smoke.cjs",
+      "time_vn": "19:57:29-19:58:20",
+      "result": "exit=1"
+    },
+    {
+      "label": "fb-v663-electron-smoke",
+      "command": "node scripts/engine-v2-facebook/v663-electron-smoke.cjs",
+      "time_vn": "19:58:20-19:59:35",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v666-smoke",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v666-smoke.cjs",
+      "time_vn": "19:59:35-19:59:39",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v657-with-v666",
+      "command": "env SX_WITH_V666=1 LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v657-smoke.cjs",
+      "time_vn": "19:59:39-19:59:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-runtime-smoke",
+      "command": "node scripts/send-exclusion-runtime-smoke.cjs",
+      "time_vn": "19:59:44-19:59:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-smoke-test",
+      "command": "node scripts/send-exclusion-smoke-test.cjs",
+      "time_vn": "19:59:44-19:59:44",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-v504-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-outcome-engine-v504-smoke.cjs",
+      "time_vn": "19:59:44-19:59:48",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-runtime-v667-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-server-runtime-v667-smoke.cjs",
+      "time_vn": "19:59:48-19:59:51",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-runtime-runner-smoke",
+      "command": "node scripts/engine-v2-server-runtime-runner-smoke.cjs",
+      "time_vn": "19:59:51-19:59:55",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-runtime-scheduler-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-server-runtime-scheduler-smoke.cjs",
+      "time_vn": "19:59:55-19:59:59",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-group-member-gid-smoke",
+      "command": "node scripts/zalo-group-member-global-id-smoke.cjs",
+      "time_vn": "19:59:59-19:59:59",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-gid-trust-smoke",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-gid-trust-smoke.cjs",
+      "time_vn": "19:59:59-20:00:06",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-v670-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-parallel-run-v670-smoke.cjs",
+      "time_vn": "20:00:06-20:00:10",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-v670-apply-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-parallel-run-v670-apply-smoke.cjs",
+      "time_vn": "20:00:10-20:00:13",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-desktop-smoke",
+      "command": "node scripts/campaign-parallel-run-desktop-smoke.cjs",
+      "time_vn": "20:00:13-20:00:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-desktop-runner-smoke",
+      "command": "node scripts/campaign-parallel-run-desktop-runner-smoke.cjs",
+      "time_vn": "20:00:16-20:02:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-ui-smoke",
+      "command": "env CHROMIUM_PATH=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-parallel-run-ui-smoke.cjs",
+      "time_vn": "20:02:20-20:02:26",
+      "result": "exit=0"
+    },
+    {
+      "label": "parallel-run-scenarios",
+      "command": "env LC_ALL=C node scripts/engine-v2-scenarios/parallel-run.cjs",
+      "time_vn": "20:02:26-20:02:42",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-cach-a-engine-fuzz",
+      "command": "env LC_ALL=C node scripts/zalo-tag-sync/cach-a-engine-fuzz.cjs --seed 1",
+      "time_vn": "20:02:42-20:02:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "zalo-tag-cach-a-policy-fuzz",
+      "command": "env LC_ALL=C node scripts/zalo-tag-sync/cach-a-policy-fuzz.cjs --seed 1",
+      "time_vn": "20:02:45-20:03:09",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-v671-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-lock-keep/v671-smoke.cjs",
+      "time_vn": "20:03:09-20:03:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-desktop-smoke-r2",
+      "command": "node scripts/campaign-engine-desktop-smoke.cjs",
+      "time_vn": "20:03:11-20:03:16",
+      "result": "exit=0"
+    },
+    {
+      "label": "facebook-messages-menu-ui-smoke",
+      "command": "env FB_MENU_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-facebook-messages-menu-ui-smoke.cjs",
+      "time_vn": "20:03:16-20:03:20",
+      "result": "exit=0"
+    },
+    {
+      "label": "fb-v673-smoke",
+      "command": "env LC_ALL=C node scripts/engine-v2-facebook/v673-smoke.cjs",
+      "time_vn": "20:03:20-20:03:25",
+      "result": "exit=0"
+    },
+    {
+      "label": "end-date-v674-smoke",
+      "command": "env LC_ALL=C node scripts/campaign-end-date-v674-smoke.cjs",
+      "time_vn": "20:03:25-20:03:27",
+      "result": "exit=0"
+    },
+    {
+      "label": "v675-sequence-grants",
+      "command": "env LC_ALL=C PG_TEST_BINDIR=/opt/homebrew/opt/postgresql@17/bin bash scripts/test-v675-zalo-api-error-logs-sequence-grants.sh",
+      "time_vn": "20:03:27-20:03:39",
+      "result": "exit=0"
+    },
+    {
+      "label": "schedule-end-smoke",
+      "command": "node scripts/campaign-schedule-end-smoke.cjs",
+      "time_vn": "20:03:39-20:03:39",
+      "result": "exit=0"
+    },
+    {
+      "label": "schedule-end-ui-smoke",
+      "command": "env SCHEDULE_END_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/run-campaign-schedule-end-ui-smoke.cjs",
+      "time_vn": "20:03:39-20:03:45",
+      "result": "exit=0"
+    },
+    {
+      "label": "schedule-end-ui-fuzz",
+      "command": "env SCHEDULE_END_UI_CHROMIUM=/Applications/Google Chrome.app/Contents/MacOS/Google Chrome node scripts/campaign-schedule-end-ui-fuzz.cjs 1",
+      "time_vn": "20:03:45-20:03:45",
+      "result": "exit=1"
+    },
+    {
+      "label": "event-bot-desktop-runtime-smoke",
+      "command": "node scripts/event-bot/desktop/runtime-smoke.cjs",
+      "time_vn": "20:03:45-20:03:46",
+      "result": "exit=0"
+    },
+    {
+      "label": "event-bot-v672-sql",
+      "command": "env LC_ALL=C PGBIN=/opt/homebrew/opt/postgresql@17/bin bash scripts/event-bot/db/v672-smoke.sh",
+      "time_vn": "20:03:46-20:03:46",
+      "result": "exit=1"
+    },
+    {
+      "label": "send-exclusion-v676-smoke",
+      "command": "env LC_ALL=C PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node scripts/send-exclusion-v676-smoke.cjs",
+      "time_vn": "20:03:46-20:03:49",
+      "result": "exit=0"
+    },
+    {
+      "label": "send-exclusion-v657-with-v676",
+      "command": "env LC_ALL=C PG_BIN=/opt/homebrew/opt/postgresql@17/bin PG_MODULE_DIR=/private/tmp/claude-501/-Users-lequangnhut-Repos-akaAgent/b7084d6b-0a73-40dc-81b3-a630e51cdb5b/scratchpad/chat-verify-1127 node -r ./scripts/send-exclusion-v676-preload.cjs scripts/send-exclusion-v657-smoke.cjs",
+      "time_vn": "20:03:49-20:03:53",
+      "result": "exit=0"
+    },
+    {
+      "label": "server-health-monitor-smoke",
+      "command": "env ELECTRON_RUN_AS_NODE=1 node_modules/.bin/electron scripts/server-health-monitor-smoke.cjs",
+      "time_vn": "20:03:53-20:04:01",
+      "result": "exit=0"
+    },
+    {
+      "label": "account-hold-v681-smoke",
+      "command": "env LC_ALL=C node scripts/engine-account-hold-rule-v681-smoke.cjs",
+      "time_vn": "20:04:01-20:04:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "stale-running-account-smoke",
+      "command": "node scripts/stale-running-account-smoke.cjs",
+      "time_vn": "20:04:04-20:04:04",
+      "result": "exit=0"
+    },
+    {
+      "label": "engine-scenarios-account-hold",
+      "command": "env SCENARIO_ACCOUNT_HOLD=1 SCENARIO_PARALLEL_RUN=1 SCENARIO_ORPHAN_RUNS=1 SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_TARGET_CHECK=1 node scripts/engine-v2-scenarios/run.cjs --skip-general",
+      "time_vn": "20:04:04-20:04:11",
+      "result": "exit=0"
+    },
+    {
+      "label": "win",
+      "command": "npm run build:win",
+      "time_vn": "2026-11-27 17:27:30 - 2026-11-27 17:29:18",
+      "result": "exit=0"
+    },
+    {
+      "label": "arm",
+      "command": "npm run build:mac",
+      "time_vn": "2026-11-27 17:29:18 - 2026-11-27 17:30:37",
+      "result": "exit=0"
+    },
+    {
+      "label": "intel",
+      "command": "npm run build:mac:intel",
+      "time_vn": "2026-11-27 17:30:37 - 2026-11-27 17:32:24",
+      "result": "exit=0"
+    },
+    {
+      "label": "server",
+      "command": "npm run build:server:win:private",
+      "time_vn": "2026-11-27 17:32:24 - 2026-11-27 17:33:24",
+      "result": "exit=0"
+    }
+  ],
+  "uploaded": "anh tự tải lên",
+  "published": {
+    "by": "anh",
+    "feed_version": "10.9.0",
+    "uploaded_gmt": "2026-11-27 10:46:46–10:46:58 (17:46 VN)",
+    "same_bytes_as_build": true,
+    "checked_at_vn": "2026-11-27 20:31",
+    "note": "Chỉ so số byte (content-length) với bộ cài đã build, không tải về so checksum. 20:31 VN: 13 nhân viên đã chạy 10.9.0 (2 Mac, 11 Windows; máy đầu tiên 17:50 VN)."
+  },
+  "database_changed": false,
+  "services_deployed_by_build": false,
+  "limitations": [
+    "Windows chưa ký Authenticode, chưa cài / chạy trên Windows thật. Mac ký ad-hoc, chưa notarize.",
+    "Chưa chạy luồng đăng nhập, chiến dịch hay Facebook / Zalo thật trên bộ cài.",
+    "Bộ cài được phát hành lúc 17:46 VN, trước khi bộ kiểm chạy xong (xong 20:08 VN, bước chạy lại cuối 20:27 VN); không bước nào chỉ ra lỗi của app.",
+    "App Server 10.9.0 chưa cài VPS (chưa kiểm).",
+    "Bài DB V621 / V622 / V624 / V660 / V672 chạy bản chép cho bash 3.2 của Mac."
+  ]
+}
