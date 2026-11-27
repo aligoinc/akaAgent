@@ -2,7 +2,7 @@
 
 Tình trạng 27/11/2026: phần DB đã viết ([V679](../migrations/migration_v679_zalo_uid_account_guard.sql) chặn danh sách,
 [V680](../migrations/migration_v680_notification_campaign_pause_default.sql) thông báo tạm dừng bật sẵn, kèm bản gỡ) và đã
-kiểm thử lặp (mục 5), **chưa apply, chưa đổi gì trên production**. Điểm chặn khi lưu ở API Web và Desktop đã code (mục 5.1).
+kiểm thử lặp (mục 5), **đã apply akachat 27/11: V679 17:32:45 VN, V680 17:34:15 VN** ([biên nhận](../migrations/snapshots/zalo-uid-account-guard-v679-v680/apply-receipt.json)); chưa deploy API/Web, chưa build Desktop. Điểm chặn khi lưu ở API Web và Desktop đã code (mục 5.1).
 Các quyết định ở mục 3 anh đã chốt cùng ngày; câu lúc lưu anh chốt 27/11 là một câu chung, chỉ chặn (mục 4.3).
 
 ## 1. Chuyện đã xảy ra
@@ -227,4 +227,4 @@ do lượt bật sẵn tạo). Sinh lại V680: `python3 scripts/zalo-uid-accoun
 ## 7. Còn mở
 
 - Chạy bộ kịch bản engine với chính sách DAT04 mới; thử trên Electron và Web thật sau khi apply V679.
-- Apply V679, V680 (chờ anh bảo), rồi deploy API/Web, build Desktop.
+- Deploy API/Web, build Desktop (V679, V680 đã apply 27/11).
