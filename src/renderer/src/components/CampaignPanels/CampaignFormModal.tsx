@@ -26,6 +26,7 @@ import CampaignLimitsAi from './CampaignLimitsAi'
 import { limitsAiWindowSnapshot, type LimitsAiPatch } from '../../../../shared/campaignLimitsAi'
 import { getDailyTimeSlotMinutes, parseDailyTimeSlots } from '../../../../shared/campaignTimeSlots'
 import { applyScheduleAiPatch, scheduleAiSnapshot, formatScheduleVietnam, scheduleVietnamToIso } from '../../../../shared/campaignScheduleAi'
+import { SCHEDULE_END_HINT, scheduleEndError } from '../../../../shared/campaignScheduleEnd'
 import FacebookRestBrowseSettings from './FacebookRestBrowseSettings'
 import NewsfeedMessageRequestSettings from './NewsfeedMessageRequestSettings'
 import { facebookRestBrowseSettings, supportsFacebookRestBrowse, validateFacebookRestBrowse } from '../../../../shared/facebookRestBrowse'
@@ -7517,6 +7518,18 @@ export default function CampaignFormModal({
         : null)
       if (repeatError) {
         showAlert(repeatError, 'error')
+        return
+      }
+    }
+    // Lịch tuần / tháng luôn phải có ngày kết thúc (tới ngày đó chiến dịch dừng hẳn): chặn ô trống, ngày trước ngày chạy, ngày đã qua.
+    if (!isMobileManagedSmsCampaign && !isZaloMessageGroupRealtimeCampaign && formData.scheduleType !== 'daily') {
+      const scheduleEndProblem = scheduleEndError({
+        date: formData.scheduleEndDate || '',
+        runDate: String(formData.schedule || '').slice(0, 10),
+        today: formatScheduleVietnam(new Date()).slice(0, 10)
+      })
+      if (scheduleEndProblem) {
+        showAlert(scheduleEndProblem, 'error')
         return
       }
     }
@@ -17954,11 +17967,13 @@ export default function CampaignFormModal({
                       <div className="stepper-form-group schedule-end-date-field">
                         <label>Ngày kết thúc</label>
                         <input
-                          type="date"
+                          type="date" aria-label="Ngày kết thúc"
+                          min={String(formData.schedule || '').slice(0, 10) || undefined}
                           value={formData.scheduleEndDate}
                           onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
                           className="stepper-input"
                         />
+                        <span className="schedule-hint">{SCHEDULE_END_HINT}</span>
                         {preservedDraftSchedule?.end && <span className="schedule-hint">
                           Giữ thời điểm kết thúc: {new Date(preservedDraftSchedule.end.iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (giờ Việt Nam).
                         </span>}

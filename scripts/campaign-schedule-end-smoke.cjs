@@ -1,5 +1,5 @@
-// "Đặt ngày kết thúc" (V674): luật dùng chung src/shared/campaignScheduleEnd.ts (bản chép nguyên văn của akaAgentWebApp
-// packages/control-api/src/campaignScheduleEnd.ts) và bản vá applyScheduleAiPatch. Không cần DB.
+// Ngày kết thúc bắt buộc của lịch tuần / tháng: luật dùng chung src/shared/campaignScheduleEnd.ts (bản chép nguyên văn của
+// akaAgentWebApp packages/control-api/src/campaignScheduleEnd.ts). Không cần DB.
 // Chạy: node scripts/campaign-schedule-end-smoke.cjs   (WEBAPP_REPO=<checkout akaAgentWebApp> để so md5 hai bản)
 const assert = require('node:assert/strict')
 const crypto = require('node:crypto')
@@ -35,53 +35,20 @@ if (fs.existsSync(original)) {
 assert.equal(end.defaultScheduleEndDate('2026-11-27'), '2026-12-04', 'mặc định hôm nay + 7 ngày')
 assert.equal(end.defaultScheduleEndDate('2026-12-28'), '2027-01-04', 'qua năm')
 assert.equal(end.defaultScheduleEndDate(''), '')
-assert.deepEqual(end.initialScheduleEnd(null, { today: '2026-11-27' }), { date: '2026-12-04', legacyDate: '' }, 'chiến dịch mới: đặt sẵn +7 ngày')
-assert.deepEqual(end.initialScheduleEnd(null), { date: '', legacyDate: '' })
-assert.deepEqual(end.initialScheduleEnd({ scheduleEndDate: null, scheduleEndStrict: true }, { today: '2026-11-27' }), { date: '', legacyDate: '' },
-  'đang sửa chiến dịch chưa có ngày kết thúc: ô trống, lúc lưu phải chọn')
-assert.deepEqual(end.initialScheduleEnd({ scheduleEndDate: '2026-11-26T16:59:59.000Z', scheduleEndStrict: false }),
-  { date: '2026-11-26', legacyDate: '2026-11-26' }, 'chiến dịch cũ: ngày theo giờ Việt Nam, nhớ ngày kiểu cũ')
-assert.deepEqual(end.initialScheduleEnd({ scheduleEndDate: '2026-11-26T16:59:59.000Z', scheduleEndStrict: true }),
-  { date: '2026-11-26', legacyDate: '' }, 'chiến dịch đã dừng đúng ngày: không có ngày kiểu cũ')
-assert.deepEqual(end.initialScheduleEnd({ scheduleEndDate: '2026-11-26T16:59:59.000Z', scheduleEndStrict: false }, { clone: true }),
-  { date: '2026-11-26', legacyDate: '' }, 'bản nhân bản là chiến dịch mới')
+assert.equal(end.initialScheduleEndDate(null, { isNew: true, today: '2026-11-27' }), '2026-12-04', 'chiến dịch mới: đặt sẵn +7 ngày')
+assert.equal(end.initialScheduleEndDate('2026-11-26T16:59:59.000Z', { isNew: false, today: '2026-11-27' }), '2026-11-26', 'đang sửa: ngày đã lưu theo giờ Việt Nam')
+assert.equal(end.initialScheduleEndDate(null, { isNew: false, today: '2026-11-27' }), '', 'đang sửa chiến dịch chưa có ngày: ô trống')
 assert.equal(end.scheduleEndDateKey('2026-11-26T17:00:00.000Z'), '2026-11-27', '17:00 UTC là 00:00 hôm sau giờ Việt Nam')
 assert.equal(end.scheduleEndDateKey('không phải ngày'), '')
 ok('giá trị ô lúc mở form')
 
-// Giá trị lưu.
-const legacy = end.initialScheduleEnd({ scheduleEndDate: '2026-11-26T16:59:59.000Z', scheduleEndStrict: false })
-assert.deepEqual(end.scheduleEndForSave(legacy), { date: '2026-11-26', strict: false }, 'chiến dịch cũ không đổi ngày: giữ cách chạy cũ')
-assert.deepEqual(end.scheduleEndForSave({ ...legacy, date: '2026-12-10' }), { date: '2026-12-10', strict: true }, 'đổi ngày: dừng đúng ngày')
-assert.deepEqual(end.scheduleEndForSave({ date: '2026-12-10', legacyDate: '' }), { date: '2026-12-10', strict: true })
-assert.deepEqual(end.scheduleEndForSave({ date: '', legacyDate: '' }), { date: null, strict: false })
-ok('giá trị lưu: chiến dịch cũ giữ kiểu cũ, chiến dịch mới / đổi ngày thì dừng đúng ngày')
-
 // Kiểm tra lúc lưu. Ca của khách 27/11: ngày chạy 27/11, ngày kết thúc 26/11.
-const check = (state, runDate, today) => end.scheduleEndError({ state, runDate, today })
-assert.equal(check({ date: '', legacyDate: '' }, '2026-11-27', '2026-11-27'), end.SCHEDULE_END_REQUIRED_ERROR, 'luôn phải có ngày kết thúc')
-assert.equal(check(legacy, '2026-11-27', '2026-11-27'), end.SCHEDULE_END_BEFORE_RUN_ERROR, 'ca 27/11: ngày kết thúc trước ngày chạy bị chặn')
-assert.equal(check({ date: '2026-11-26', legacyDate: '' }, '2026-11-20', '2026-11-27'), end.SCHEDULE_END_PAST_ERROR, 'ngày kết thúc đã qua')
-assert.equal(check({ date: '2026-11-27', legacyDate: '' }, '2026-11-27', '2026-11-27'), null, 'ngày kết thúc = ngày chạy = hôm nay: hợp lệ')
-assert.equal(check({ date: '2026-12-01', legacyDate: '' }, '2026-11-27', '2026-11-27'), null)
+const check = (date, runDate, today) => end.scheduleEndError({ date, runDate, today })
+assert.equal(check('', '2026-11-27', '2026-11-27'), end.SCHEDULE_END_REQUIRED_ERROR, 'luôn phải có ngày kết thúc')
+assert.equal(check('2026-11-26', '2026-11-27', '2026-11-27'), end.SCHEDULE_END_BEFORE_RUN_ERROR, 'ca 27/11: ngày kết thúc trước ngày chạy bị chặn')
+assert.equal(check('2026-11-26', '2026-11-20', '2026-11-27'), end.SCHEDULE_END_PAST_ERROR, 'ngày kết thúc đã qua')
+assert.equal(check('2026-11-27', '2026-11-27', '2026-11-27'), null, 'ngày kết thúc = ngày chạy = hôm nay: hợp lệ')
+assert.equal(check('2026-12-01', '2026-11-27', '2026-11-27'), null)
 ok('kiểm tra lúc lưu (thiếu ngày, trước ngày chạy, đã qua)')
-
-// Dòng giải thích và nhãn.
-assert.equal(end.scheduleEndHint({ date: '2026-12-10', legacyDate: '' }), end.SCHEDULE_END_STRICT_HINT)
-assert.equal(end.scheduleEndHint(legacy), end.SCHEDULE_END_LEGACY_HINT)
-assert.equal(end.scheduleEndHint({ ...legacy, date: '2026-12-10' }), end.SCHEDULE_END_STRICT_HINT)
-const past = { scheduleEndDate: '2026-11-26T16:59:59.000Z', scheduleType: 'weekly', status: 'chờ xử lý', dataTargetSourceMode: 'direct' }
-const now = Date.parse('2026-11-27T03:00:00.000Z')
-assert.equal(end.isRunningPastLegacyScheduleEnd(past, now), true)
-assert.equal(end.isRunningPastLegacyScheduleEnd({ ...past, scheduleEndStrict: true }, now), false, 'dừng đúng ngày: DB tự đóng, không cần nhãn')
-assert.equal(end.isRunningPastLegacyScheduleEnd({ ...past, status: 'hoàn thành' }, now), false)
-assert.equal(end.isRunningPastLegacyScheduleEnd({ ...past, status: 'tạm dừng' }, now), false)
-assert.equal(end.isRunningPastLegacyScheduleEnd({ ...past, scheduleType: 'daily' }, now), false)
-assert.equal(end.isRunningPastLegacyScheduleEnd({ ...past, dataTargetSourceMode: 'data_group' }, now), false)
-assert.equal(end.isRunningPastLegacyScheduleEnd(past, Date.parse('2026-11-26T10:00:00.000Z')), false, 'chưa qua ngày kết thúc')
-assert.equal(end.scheduleEndDetailSuffix({ scheduleEndDate: 'x', scheduleEndStrict: true }), end.SCHEDULE_END_DETAIL_STRICT)
-assert.equal(end.scheduleEndDetailSuffix({ scheduleEndDate: 'x' }), end.SCHEDULE_END_DETAIL_LEGACY)
-assert.equal(end.scheduleEndDetailSuffix({ scheduleEndDate: null }), '')
-ok('dòng giải thích, nhãn chạy nốt data, dòng chi tiết')
 
 console.log(`${cases} nhóm đạt`)

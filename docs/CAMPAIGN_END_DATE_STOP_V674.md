@@ -55,3 +55,36 @@ Chạy `CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/campaign-end-date-v674
    Chiến dịch "đang chạy" lúc dọn sẽ được bảo trì ngày hôm sau đóng.
 
 Chiến dịch "tạm dừng" đã qua ngày kết thúc không bị đụng. Nếu khách bấm Tiếp tục, chiến dịch chạy tới lượt bảo trì kế tiếp rồi dừng.
+
+## Form: ngày kết thúc bắt buộc (27/11/2026)
+
+Anh chốt 27/11: tới ngày kết thúc là dừng hẳn (cách V674 ở trên), và lịch Theo tuần / Theo tháng luôn phải có ngày kết thúc vì chiến dịch
+không thể lặp lại mãi. Phần này chỉ sửa form, không đổi database và không đổi bộ chạy.
+
+**Tình trạng:** nhánh `claude/sweet-wozniak-w133vw` ở akaAgent và akaAgentWebApp, chưa merge, chưa deploy API / Web, chưa build Desktop.
+Câu cho khách ở `src/shared/campaignScheduleEnd.ts` chờ anh duyệt.
+
+- Ô "Ngày kết thúc" của lịch tuần / tháng giữ như trước (chiến dịch mới đặt sẵn hôm nay + 7 ngày), thêm dòng dưới ô: "Hết ngày này
+  chiến dịch dừng hẳn. Data chưa gửi sẽ không gửi nữa."
+- Lúc lưu, form chặn: ô trống ("Vui lòng chọn ngày kết thúc."), ngày kết thúc trước ngày chạy ("Ngày kết thúc phải từ ngày chạy trở
+  đi.", đúng ca của khách tổ chức 2172), ngày kết thúc đã qua ("Ngày kết thúc đã qua. Vui lòng chọn ngày kết thúc mới."). Trước đây chỉ
+  lịch Hàng ngày bật lặp mới kiểm "từ ngày chạy trở đi".
+- Luật và câu chữ ở một module dùng chung: bản gốc `akaAgentWebApp/packages/control-api/src/campaignScheduleEnd.ts`, Desktop chép nguyên
+  văn sang `src/shared/campaignScheduleEnd.ts` (sửa ở WebApp trước rồi chép lại). Desktop dùng ở `CampaignFormModal.tsx` và
+  `CampaignAgentFormModal.tsx`.
+- Lịch Hàng ngày không đổi (chỉ có ngày kết thúc của "Lặp lại sau khi chạy xong").
+
+Kiểm (27/11): `node scripts/campaign-schedule-end-smoke.cjs` (3 nhóm, so md5 với bản WebApp),
+`SCHEDULE_END_UI_CHROMIUM=/opt/pw-browsers/chromium node scripts/run-campaign-schedule-end-ui-smoke.cjs` (5 ca trên form Desktop thật với
+IPC giả, chạy bằng Chromium của Playwright), hai typecheck 0 lỗi. Chưa chạy trong Electron thật, chưa thử form Agent trên giao diện.
+
+Hệ quả cần biết:
+
+- Chiến dịch mới để nguyên ngày đặt sẵn (+7 ngày) sẽ dừng sau 7 ngày và data chưa gửi bị đóng. 27/11: trong 8 ngày tới có 71 chiến
+  dịch / 28 tổ chức / khoảng 20.250 data chờ có ngày kết thúc đúng bằng mặc định +7 ngày.
+- Chiến dịch đã qua ngày kết thúc khi mở ra sửa phải chọn ngày kết thúc mới mới lưu được. Data đã bị đóng "Chưa gửi vì chiến dịch đã
+  hết ngày kết thúc" không tự mở lại khi lùi ngày.
+- Production 27/11 có 3 / 2.435 chiến dịch tuần / tháng (1 tổ chức) không có ngày kết thúc: vẫn chạy như cũ, form Desktop điền sẵn +7
+  ngày khi mở sửa.
+- Phương án "chiến dịch cũ chạy nốt data, chỉ chiến dịch lưu từ form mới mới dừng" (cột `schedule_end_strict`) đã viết thử trên nhánh
+  này rồi gỡ theo quyết định của anh; không còn file nào của nó.
