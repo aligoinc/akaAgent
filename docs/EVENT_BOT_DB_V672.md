@@ -2,7 +2,7 @@
 
 Phần DB của [hợp đồng](EVENT_BOT_TECH.md) (mục 7a ghi các chi tiết thêm so với bản hợp đồng đầu). **Chưa apply production.**
 
-- Migration: [migration_v672_event_bot.sql](../migrations/migration_v672_event_bot.sql) (~101 KB, md5 file `d8277aba0a1d229ce8a0ef7fff01c094`), gỡ: [rollback_v672_event_bot.sql](../migrations/rollback_v672_event_bot.sql).
+- Migration: [migration_v672_event_bot.sql](../migrations/migration_v672_event_bot.sql) (~104 KB, md5 file `a29d091d893dbdc74079db3f97475c17`), gỡ: [rollback_v672_event_bot.sql](../migrations/rollback_v672_event_bot.sql).
 - Kiểm: `bash scripts/event-bot/db/v672-smoke.sh` (PG16/17 cục bộ; fixture `v672-fixture.sql` theo cột production đọc chỉ
   đọc 26/11/2026, chạy V660 thật rồi V672).
 
@@ -47,7 +47,7 @@ Postflight kiểm bảng, 3 trigger, md5 thân mới, công tắc off, quyền.
 
 - DDL + CREATE TRIGGER trên `auto_account_contact_group_member_origins` (≈ 4 triệu dòng, 6 trigger sẵn có) và bảng sổ
   tag: PostgREST nạp lại schema; apply buổi tối, ngoài giờ cao điểm.
-- File ~101 KB: gửi qua MCP có thể quá nặng (xem pitfall V525 trong CLAUDE.md: bảng tạm + `EXECUTE`), hoặc dán SQL
+- File ~104 KB: gửi qua MCP có thể quá nặng (xem pitfall V525 trong CLAUDE.md: bảng tạm + `EXECUTE`), hoặc dán SQL
   Editor bản tự ghi sổ (`node scripts/make-migration-ledger-apply.cjs`).
 - Sau apply: công tắc vẫn `off`. Mở dần: `admin_akabiz` → `orgs` → `all`.
 
@@ -69,6 +69,59 @@ sai token, báo lại, `no_msg_id` 30 phút, 120 24 giờ, 221 60 phút, mã kh�
 muộn, 90 ngày), nhóm điều kiện (ngoài job lọc, vào, `no_uid`, tài khoản khác, true → true, ra, `left_group`, vào lại,
 `min_gap` theo chiều), sinh nhật + App Server (sync, khoá năm VN, hạn 23:59:59 VN, gọi lại, sai nơi chạy), độc lập với
 chiến dịch, quyền theo vai.
+
+## Kiểm thử ngẫu nhiên lặp (27/11/2026)
+
+Theo yêu cầu "Kiểm thử và cải tiến … cho đến khi ít nhất 3 vòng không còn vấn đề". Bộ thử ở `scripts/event-bot/fuzz/`:
+
+- `db-fuzz.cjs`: dựng thế giới ngẫu nhiên (3–4 tổ chức, nhân viên nghỉ / xoá / admin, tài khoản Zalo QR / trình duyệt /
+  Server / xoá / sai nền tảng / akaChat / đi Fly, danh bạ có UID nhóm, UID trống, SĐT nhiều kiểu, tag, danh sách không
+  gửi, nhóm điều kiện có / không bộ lọc động) rồi chạy hàng trăm thao tác qua đúng đường production gọi: sổ tag qua
+  `aka_agent_sync_zalo_tags` / `aka_agent_desktop_sync_zalo_tags` thật của V660; vào / ra nhóm bằng đúng các câu ghi của
+  `aka_agent_process_data_group_dynamic_filters_core` (đọc production 27/11, chỉ đọc); sinh nhật, hỏi việc, báo kết quả
+  (Desktop theo phiên, App Server, Fly), job dọn, lưu / dừng / loại trừ / nhật ký / báo cáo của trang; chạy đồng thời trên
+  4 kết nối; thời gian trôi bằng cách lùi mọi mốc giờ; dữ liệu sai cố ý (quy tắc rác ghi thẳng vào bảng, payload sai kiểu,
+  công tắc JSON hỏng, khoảng trắng Unicode, emoji, số ngoài khoảng). Mỗi thao tác so với mô hình độc lập (`model.cjs`,
+  `save-model.cjs`, viết lại từ hợp đồng, luật kiểm theo `validateEventBotRule` của TS) và kiểm bất biến (một việc
+  `sending` mỗi tài khoản, không gửi UID nhóm, không đụng bảng chiến dịch, báo sai token không đổi gì…). Cùng lúc so
+  `normalizeEventBotPhone` (TS) với `aka_agent_event_bot_norm_phone` (DB) và phân trang nhật ký.
+- `runtime-fuzz.cjs`: `EventBotRuntime` thật (bản Desktop và App Server) + lõi gửi thật với V672 thật, Zalo giả; chèn lỗi
+  RPC trước / sau khi DB ghi, mất phiên, máy ngủ, app dừng / chết ngay sau khi Zalo nhận lệnh, danh sách bạn bè sai khuôn;
+  kiểm mỗi lệnh gửi ứng với đúng một việc `sending`, không gửi hai lần, không gửi người bị loại trừ / tài khoản đang tạm
+  dừng, kết quả DB khớp Zalo giả; dựng nội dung từ 400 mẫu tin thật.
+- Một vòng: `PG_MODULE_DIR=<thư mục có node_modules/pg> EVENT_BOT_POOL=<mẫu thật ngoài repo> bash
+  scripts/event-bot/fuzz/fuzz-round.sh <hạt giống> [số DB] [số vòng chạy] [ops]`. Mẫu thật mỗi vòng lấy mới bằng
+  `tablesample … repeatable (<n>)` (SĐT / UID đã che trong SQL, tên, ngày sinh, tag, nội dung tin của chiến dịch) rồi tách bằng
+  `extract-pool.py`; không commit mẫu.
+
+Lỗi tìm ra và đã sửa trong V672 (chưa apply nên sửa thẳng file):
+
+1. Nội dung chỉ gồm xuống dòng / tab / khoảng trắng Unicode (NBSP, U+3000, BOM) vẫn lưu được vì `btrim` chỉ cắt dấu cách;
+   trang chặn (JS `trim`). Thêm `private.aka_agent_event_bot_blank`, dùng ở kiểm quy tắc và lúc nhận việc.
+2. Báo kết quả lần hai cho việc đã báo `unknown` (lý do NULL) bị ghi đè: `j.reason_code = 'runner_lost'` ra NULL nên
+   điều kiện "đã báo rồi" không chặn. Sửa `COALESCE`.
+3. Quy tắc nhóm điều kiện thiếu `onEnter` / `onLeave` lưu được với `enabled: null` (vượt kiểm "bật ít nhất một tin", trang
+   đọc sai kiểu). Sửa `COALESCE(…, false)`.
+4. Cả tag bị thay hết người trong một lần đọc thì việc "gỡ tag" bị đánh `tag_deleted` (trigger câu xoá chạy trước câu thêm
+   người mới). Thêm `private.aka_agent_event_bot_tag_alive`: có bảng tạm `v660_snapshot` của lần đọc thì xét theo nó.
+5. API Web nhận tới 5.000 mục loại trừ mỗi lượt, DB chỉ 500 → dán quá 500 dòng ra "Yêu cầu không hợp lệ". DB nay nhận 5.000.
+6. `position` ngoài khoảng integer (gửi sai) làm `save` ném lỗi tràn số chưa bắt (API trả 503). Ngoài ±1.000.000 thì dùng
+   vị trí trong danh sách.
+
+Các vòng (mỗi vòng: smoke 153 kiểm + các hạt giống DB + hạt giống vòng chạy, mẫu thật mới):
+
+| Vòng | Mẫu thật | DB | Vòng chạy | Kết quả |
+|---|---|---|---|---|
+| thử bộ | 27/11 lần đầu | ~60 hạt giống × 150–900 | 6 | lỗi 1–4 (và lỗi của chính bộ thử) |
+| 1 | `repeatable (201)` | 16 × 800 | 8 (571 lệnh gửi) | lỗi 6 |
+| 2 | `repeatable (202)` | 16 × 800 | 8 (656) | 3 cảnh báo của bộ thử (lượt cố ý sai nhân viên), sửa phép kiểm; thêm kiểm phân trang nhật ký |
+| 3 | `repeatable (203)` | 16 × 800 | 8 (404) | sạch |
+| 4 | `repeatable (204)` | 24 × 1.000 | 12 (888) | sạch |
+| 5 | `repeatable (205)` | 24 × 1.000 | 12 (1.006) | sạch |
+
+Đối chứng: chạy bộ thử trên bản V672 trước khi sửa (`V672_FILE=<bản cũ>`) thì cả 5 hạt giống thử đều hỏng (`tag_job_diff`,
+`save_mismatch`, `report_changed_on_reject`). Bộ thử cần `initdb -E UTF8` (cụm `SQL_ASCII` đếm `char_length` theo byte nên
+emoji làm lệch giới hạn 2.000 ký tự); `v672-smoke.sh` vẫn dựng cụm mặc định.
 
 ## Giới hạn
 

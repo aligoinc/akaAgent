@@ -71,6 +71,8 @@ DROP FUNCTION IF EXISTS private.aka_agent_event_bot_group_trigger();
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_tag_trigger();
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_create_ctx(bigint, jsonb);
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_gap_hit(bigint, text, text, integer);
+DROP FUNCTION IF EXISTS private.aka_agent_event_bot_blank(text);
+DROP FUNCTION IF EXISTS private.aka_agent_event_bot_tag_alive(bigint, text);
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_excluded(bigint, bigint[], text, text);
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_norm_phone(text);
 DROP FUNCTION IF EXISTS private.aka_agent_event_bot_runs_on(bigint);

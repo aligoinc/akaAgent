@@ -167,6 +167,9 @@ Mọi `accountId` phải là tài khoản Zalo chưa xoá của chính nhân vi�
   `account_on_akachat`, `runtime_not_supported`, `blocklist_not_found`, `rule_not_found`, `rule_invalid`,
   `data_group_not_found`, `data_group_no_filter`, `duplicate_group`, `exclusion_invalid`, `exclusion_limit`, `job_not_found`.
 - `get` của tài khoản chưa có dòng settings trả `revision: 0`; `save` đầu tiên gửi `revision: 0`.
+- `exclusion_add` tối đa 5.000 mục mỗi lượt (= trần mỗi tài khoản, khớp API Web). Nội dung tin rỗng theo `trim` của JS
+  (cả xuống dòng, tab, khoảng trắng Unicode) bị từ chối như trang. `position` ngoài ±1.000.000 dùng vị trí trong danh sách.
+  Quy tắc nhóm thiếu `onEnter` / `onLeave` coi như tắt chiều đó (`enabled: false`). (Sửa sau kiểm thử lặp 27/11/2026.)
 - `save` bật bot bị chặn khi `runsOn` là `akachat` (`account_on_akachat`) hoặc nơi chạy có runtime tắt, ví dụ `fly`
   (`runtime_not_supported`). Nhóm điều kiện phải là Nhóm data `zalo_person` của nhân viên (gắn đúng tài khoản hoặc không
   gắn) và có Bộ lọc động; mỗi nhóm một quy tắc mỗi tài khoản. `save` và `stop` trả thêm `data.closedJobs`: việc chờ bị

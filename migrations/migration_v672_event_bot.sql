@@ -333,6 +333,17 @@ AS $function$
               AND ac.contact_type = 'person' AND NOT COALESCE(ac.is_delete, false) AND btrim(ac.uid) = btrim(p_uid)));
 $function$;
 
+-- Chuỗi rỗng theo String.prototype.trim của JS (src/shared/eventBot.ts): khoảng trắng ASCII và Unicode (NBSP, U+3000, BOM…).
+-- btrim của Postgres chỉ cắt dấu cách nên "\n", "\t", "\u00a0" lọt qua (bộ thử ngẫu nhiên 27/11/2026).
+CREATE FUNCTION private.aka_agent_event_bot_blank(p_value text)
+RETURNS boolean
+LANGUAGE sql
+IMMUTABLE
+SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+  SELECT p_value IS NULL OR p_value !~ '[^\t\n\v\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]';
+$function$;
+
 -- Đã có tin `sent` cùng quy tắc + người nhận (+ chiều, với nhóm) trong p_minutes phút.
 CREATE FUNCTION private.aka_agent_event_bot_gap_hit(p_rule_id bigint, p_uid text, p_direction text, p_minutes integer)
 RETURNS boolean
@@ -380,6 +391,26 @@ $function$;
 -- ---------------------------------------------------------------------------------------------------------------------
 -- Tạo việc: thêm / gỡ tag (trigger câu lệnh trên sổ tag V660)
 -- ---------------------------------------------------------------------------------------------------------------------
+
+-- Tag còn người sau lần đọc này không. Trigger gỡ tag chạy sau câu xoá của aka_agent_zalo_tag_sync_core (V660), trước câu thêm, nên
+-- bảng sổ chưa có người mới: khi bảng tạm v660_snapshot của lần đọc còn đó thì xét theo nó (đổi hết người của tag không phải xoá tag).
+CREATE FUNCTION private.aka_agent_event_bot_tag_alive(p_account_id bigint, p_tag_id text)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path TO 'pg_catalog', 'pg_temp'
+AS $function$
+DECLARE
+  v boolean;
+BEGIN
+  IF to_regclass('pg_temp.v660_snapshot') IS NOT NULL THEN
+    EXECUTE 'SELECT EXISTS (SELECT 1 FROM pg_temp.v660_snapshot s WHERE s.tag_id = $1)' INTO v USING p_tag_id;
+    IF v THEN RETURN true; END IF;
+  END IF;
+  RETURN EXISTS (SELECT 1 FROM public.auto_zalo_tag_members tm WHERE tm.account_id = p_account_id AND tm.tag_id = p_tag_id);
+END;
+$function$;
 
 -- Mỗi dòng sổ tag khớp quy tắc đứng đầu (position, id) cùng chiều có tag đó. > 20 dòng cùng tài khoản + tag + chiều trong một
 -- câu lệnh = gắn / gỡ hàng loạt: ghi từng dòng `skipped bulk_tag`. Gỡ ≥ 2 người mà tag không còn ai = tag bị xoá: `tag_deleted`.
@@ -439,8 +470,7 @@ BEGIN
       ) ct ON true
       CROSS JOIN LATERAL (SELECT CASE
         WHEN left(m.member_uid, 1) = 'g' THEN 'not_person'
-        WHEN m.kind = 'remove' AND m.n_group >= 2 AND NOT EXISTS (
-          SELECT 1 FROM public.auto_zalo_tag_members tm WHERE tm.account_id = v_acc AND tm.tag_id = m.tag_id) THEN 'tag_deleted'
+        WHEN m.kind = 'remove' AND m.n_group >= 2 AND NOT private.aka_agent_event_bot_tag_alive(v_acc, m.tag_id) THEN 'tag_deleted'
         WHEN m.n_group > 20 THEN 'bulk_tag'
         WHEN private.aka_agent_event_bot_excluded(v_acc, c.blocklist_ids, m.member_uid, ct.phone) THEN 'excluded'
         WHEN private.aka_agent_event_bot_gap_hit(m.rule_id, m.member_uid, m.dir, m.min_gap_minutes) THEN 'min_gap'
@@ -828,7 +858,7 @@ BEGIN
           ELSIF j.direction = 'leave' AND COALESCE((SELECT o.is_current FROM public.auto_account_contact_group_member_origins o
               WHERE o.id = CASE WHEN j.source_ref ~ '^[0-9]{1,18}$' THEN j.source_ref::bigint END), false) THEN
             v_status := 'skipped'; v_reason := 'back_in_group';
-          ELSIF NULLIF(btrim(COALESCE(j.message_template, '')), '') IS NULL OR NULLIF(btrim(COALESCE(j.recipient_uid, '')), '') IS NULL THEN
+          ELSIF private.aka_agent_event_bot_blank(j.message_template) OR private.aka_agent_event_bot_blank(j.recipient_uid) THEN
             v_status := 'skipped'; v_reason := 'rule_changed';
           END IF;
         END IF;
@@ -884,7 +914,7 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'code', 'claim_lost', 'message', 'Việc này không còn do nơi chạy này giữ.');
   END IF;
   -- Đã báo rồi (hoặc job dọn đã đóng mà không phải "mất nơi chạy"): trả lại kết quả cũ.
-  IF NOT (j.status = 'sending' OR (j.status = 'unknown' AND j.reason_code = 'runner_lost')) THEN
+  IF NOT (j.status = 'sending' OR (j.status = 'unknown' AND COALESCE(j.reason_code, '') = 'runner_lost')) THEN
     SELECT CASE WHEN st.paused_until > v_now THEN st.paused_until END INTO v_until
     FROM public.auto_event_bot_settings st WHERE st.account_id = j.account_id;
     RETURN jsonb_build_object('ok', true, 'status', j.status, 'pausedUntil', v_until, 'replay', true);
@@ -1399,8 +1429,8 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.auto_account_contact_group_dynamic_filters f WHERE f.group_id = v_group) THEN
       PERFORM private.aka_agent_event_bot_fail('data_group_no_filter', jsonb_build_object('index', p_index, 'field', 'dataGroupId'));
     END IF;
-    v_enter := jsonb_build_object('enabled', v_c->'onEnter'->'enabled' = 'true'::jsonb, 'message', COALESCE(v_c->'onEnter'->>'message', ''));
-    v_leave := jsonb_build_object('enabled', v_c->'onLeave'->'enabled' = 'true'::jsonb, 'message', COALESCE(v_c->'onLeave'->>'message', ''));
+    v_enter := jsonb_build_object('enabled', COALESCE(v_c->'onEnter'->'enabled' = 'true'::jsonb, false), 'message', COALESCE(v_c->'onEnter'->>'message', ''));
+    v_leave := jsonb_build_object('enabled', COALESCE(v_c->'onLeave'->'enabled' = 'true'::jsonb, false), 'message', COALESCE(v_c->'onLeave'->>'message', ''));
     IF NOT ((v_enter->>'enabled')::boolean OR (v_leave->>'enabled')::boolean) THEN
       PERFORM private.aka_agent_event_bot_fail('rule_invalid', jsonb_build_object('index', p_index, 'field', 'onEnter',
         'message', 'Bật ít nhất một tin: khi vào nhóm hoặc khi ra nhóm'));
@@ -1414,7 +1444,7 @@ BEGIN
     WHERE (v_type <> 'condition_group' AND f = 'message') OR (v_type = 'condition_group' AND f <> 'message' AND m IS NOT NULL)
   LOOP
     v_issue := CASE
-      WHEN NULLIF(btrim(COALESCE(v_msg, '')), '') IS NULL THEN 'Nhập nội dung tin'
+      WHEN private.aka_agent_event_bot_blank(v_msg) THEN 'Nhập nội dung tin'
       WHEN char_length(v_msg) > 2000 THEN 'Nội dung tối đa 2000 ký tự'
       WHEN v_msg ~* '#\{\s*INPUT_' THEN 'Bot không điền được biến cột file (#{INPUT_…})'
     END;
@@ -1433,7 +1463,8 @@ BEGIN
     'id', private.aka_agent_event_bot_int(p_rule->'id'),
     'eventType', v_type, 'name', v_name,
     'enabled', COALESCE(p_rule->'enabled' <> 'false'::jsonb, true),
-    'position', COALESCE(private.aka_agent_event_bot_int(p_rule->'position'), p_index),
+    -- Thứ tự ngoài ±1.000.000 (gửi sai) dùng vị trí trong danh sách, không để tràn cột integer.
+    'position', COALESCE((SELECT x FROM (SELECT private.aka_agent_event_bot_int(p_rule->'position') AS x) q WHERE x BETWEEN -1000000 AND 1000000), p_index),
     'config', v_cfg, 'dataGroupId', v_group, 'minGapMinutes', v_gap);
 END;
 $function$;
@@ -1675,7 +1706,8 @@ BEGIN
     RETURN jsonb_build_object('ok', true, 'data', private.aka_agent_event_bot_get(p_staff_id, p_organization_id, v_acc) || jsonb_build_object('closedJobs', v_n));
 
   ELSIF p_action = 'exclusion_add' THEN
-    IF jsonb_typeof(v_payload->'items') IS DISTINCT FROM 'array' OR jsonb_array_length(v_payload->'items') > 500 THEN
+    -- Tối đa 5.000 mục mỗi lượt (= trần mỗi tài khoản, khớp API Web); trang gửi mọi dòng dán vào trong một lượt.
+    IF jsonb_typeof(v_payload->'items') IS DISTINCT FROM 'array' OR jsonb_array_length(v_payload->'items') > 5000 THEN
       PERFORM private.aka_agent_event_bot_fail('invalid_request');
     END IF;
     WITH raw AS (
@@ -1797,6 +1829,8 @@ REVOKE ALL ON FUNCTION
   private.aka_agent_event_bot_runs_on(bigint),
   private.aka_agent_event_bot_norm_phone(text),
   private.aka_agent_event_bot_excluded(bigint, bigint[], text, text),
+  private.aka_agent_event_bot_blank(text),
+  private.aka_agent_event_bot_tag_alive(bigint, text),
   private.aka_agent_event_bot_gap_hit(bigint, text, text, integer),
   private.aka_agent_event_bot_create_ctx(bigint, jsonb),
   private.aka_agent_event_bot_tag_trigger(),
