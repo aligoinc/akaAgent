@@ -1,5 +1,12 @@
 # "Đặt ngày kết thúc": dừng chiến dịch đúng ngày (V674)
 
+> **DỪNG, KHÔNG APPLY các file V674 của nhánh này (ghi 10:30 VN 27/11/2026).** Lúc 10:09:58 VN 27/11 một phiên khác đã apply lên
+> production `migration_v674_campaign_end_date_close_pending` (sổ `20261127030958`): cùng số 674, cùng sửa `aka_agent_finalize_campaign`
+> (md5 `8a189852…` → `d7254364…`) và `aka_agent_finalize_zalo_server_maintenance_campaign`. Bản đó dừng hẳn MỌI chiến dịch data trực
+> tiếp đã qua ngày kết thúc và đóng data còn chờ ("Chưa gửi vì chiến dịch đã hết ngày kết thúc"), không phân biệt chiến dịch cũ / mới;
+> 10:10–10:11 VN đã đóng 132 chiến dịch / 61 tổ chức / 38.743 data. Cách đó khác phương án A của tài liệu này. p2 của nhánh này sẽ tự
+> dừng ở bước kiểm md5; p1 thì không bị chặn (thêm cột không ai dùng), nên đừng chạy. Chờ anh chốt hướng rồi viết lại migration với số mới.
+
 27/11/2026. Anh chốt phương án A sau khi xem ca của nhân viên 2398 (chiến dịch 59210: ngày kết thúc 26/11 mà 27/11 vẫn chạy).
 
 **Tình trạng:** đã code ở nhánh `claude/sweet-wozniak-w133vw` (akaAgent và akaAgentWebApp). Chưa merge, chưa apply V674, chưa deploy API / Web,
