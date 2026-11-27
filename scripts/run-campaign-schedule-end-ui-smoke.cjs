@@ -1,4 +1,4 @@
-// "Đặt ngày kết thúc" (V674): ô tích trên form Desktop thật, chạy trong Chromium của Playwright với IPC giả lập, chặn mọi request http.
+// Ngày kết thúc bắt buộc của lịch tuần / tháng: ô ngày trên form Desktop thật, chạy trong Chromium của Playwright với IPC giả lập, chặn mọi request http.
 // Chạy: node scripts/run-campaign-schedule-end-ui-smoke.cjs   (SCHEDULE_END_UI_CHROMIUM=<đường dẫn Chrome> nếu Playwright chưa có Chromium;
 // SCHEDULE_END_UI_SHOTS=<thư mục> để chụp màn hình phần Lịch chạy)
 const assert = require('node:assert/strict')
@@ -29,7 +29,6 @@ async function main() {
     await page.waitForFunction(() => window.scheduleEndSmoke)
     const open = (...args) => page.evaluate(a => window.scheduleEndSmoke.open(...a), args)
     const settle = async () => { await page.getByText('Lịch chạy', { exact: false }).first().waitFor(); await page.waitForTimeout(400) }
-    const box = page.getByRole('checkbox', { name: TEXT.SCHEDULE_END_TOGGLE_LABEL })
     const endInput = page.getByLabel('Ngày kết thúc', { exact: true })
     const alerts = () => page.evaluate(() => window.scheduleEndSmoke.state.alerts.map(a => a.message))
     // Chụp hàng Giờ chạy / Ngày chạy / Ngày kết thúc khi có; không thì chụp cả trang.
@@ -55,31 +54,28 @@ async function main() {
       await page.getByRole('checkbox', { name: 'Thứ 2', exact: true }).check()
     }
 
-    // 1. Chiến dịch mới, lịch tuần: ô không tích, không có ô ngày, lưu không có ngày kết thúc.
+    // 1. Chiến dịch mới, lịch tuần: ô ngày luôn hiện, đặt sẵn hôm nay + 7 ngày, không có ô tích; lưu là dừng đúng ngày.
     await open('new')
     await settle()
     await weekly()
-    await box.waitFor()
-    assert.equal(await box.isChecked(), false, 'chiến dịch mới: không tích sẵn')
-    assert.equal(await endInput.count(), 0, 'không tích: không có ô ngày')
-    await page.getByText(TEXT.SCHEDULE_END_OFF_HINT).waitFor()
-    await shot('01-moi-khong-tich')
-    const none = await save('Tuần không ngày kết thúc')
-    assert.ok(none.created, `lưu không tích phải tạo được chiến dịch (${none.alert})`)
-    assert.equal(none.created.scheduleEndDate, null, 'không tích: ngày kết thúc null')
-    assert.equal(none.created.scheduleEndStrict, false, 'không tích: không dừng đúng ngày')
+    await endInput.waitFor()
+    assert.equal(await endInput.inputValue(), dateKey(7), 'chiến dịch mới: đặt sẵn hôm nay + 7 ngày')
+    assert.equal(await page.getByRole('checkbox', { name: 'Đặt ngày kết thúc' }).count(), 0, 'không còn ô tích')
+    await page.getByText(TEXT.SCHEDULE_END_STRICT_HINT).waitFor()
+    await shot('01-moi-mac-dinh')
+    const preset = await save('Tuần mặc định')
+    assert.ok(preset.created, `lưu với ngày đặt sẵn phải tạo được chiến dịch (${preset.alert})`)
+    assert.equal(preset.created.scheduleEndDate, new Date(`${dateKey(7)}T23:59:59+07:00`).toISOString(), 'ngày kết thúc = cuối ngày giờ Việt Nam')
+    assert.equal(preset.created.scheduleEndStrict, true, 'chiến dịch mới: dừng đúng ngày')
     cases++
 
-    // 2. Tích mà chưa chọn ngày → báo lỗi; ngày trước ngày chạy → báo lỗi; ngày hợp lệ → lưu dừng đúng ngày.
+    // 2. Xoá ngày → báo lỗi bắt buộc; ngày trước ngày chạy → báo lỗi; ngày hợp lệ → lưu dừng đúng ngày.
     await open('new')
     await settle()
     await weekly()
-    await box.check()
-    await endInput.waitFor()
-    assert.equal(await endInput.inputValue(), '', 'tích: ô ngày trống, không đặt sẵn +7 ngày')
-    await page.getByText(TEXT.SCHEDULE_END_STRICT_HINT).waitFor()
+    await endInput.fill('')
     const missing = await save('Tuần thiếu ngày')
-    assert.equal(missing.created, null)
+    assert.equal(missing.created, null, 'thiếu ngày kết thúc: không lưu')
     assert.equal(missing.alert, TEXT.SCHEDULE_END_REQUIRED_ERROR)
     await endInput.fill(dateKey(-1))
     const before = await save('Tuần ngày trước ngày chạy')
@@ -87,43 +83,28 @@ async function main() {
     assert.equal(before.alert, TEXT.SCHEDULE_END_BEFORE_RUN_ERROR)
     const end = dateKey(10)
     await endInput.fill(end)
-    await shot('02-moi-co-ngay')
+    await shot('02-moi-doi-ngay')
     const strict = await save('Tuần dừng đúng ngày')
     assert.ok(strict.created, `lưu có ngày kết thúc phải tạo được (${strict.alert})`)
-    assert.equal(strict.created.scheduleEndDate, new Date(`${end}T23:59:59+07:00`).toISOString(), 'ngày kết thúc = cuối ngày giờ Việt Nam')
-    assert.equal(strict.created.scheduleEndStrict, true, 'chiến dịch mới có ngày kết thúc: dừng đúng ngày')
+    assert.equal(strict.created.scheduleEndDate, new Date(`${end}T23:59:59+07:00`).toISOString())
+    assert.equal(strict.created.scheduleEndStrict, true)
     cases++
 
-    // 3. Bỏ tích sau khi đã chọn ngày: xoá ngày, lưu không có ngày kết thúc.
-    await open('new')
-    await settle()
-    await weekly()
-    await box.check()
-    await endInput.fill(dateKey(5))
-    await box.uncheck()
-    assert.equal(await endInput.count(), 0)
-    const cleared = await save('Tuần bỏ tích')
-    assert.ok(cleared.created, `bỏ tích phải lưu được (${cleared.alert})`)
-    assert.equal(cleared.created.scheduleEndDate, null)
-    assert.equal(cleared.created.scheduleEndStrict, false)
-    cases++
-
-    // 4. Lịch Hàng ngày: không có ô.
+    // 3. Lịch Hàng ngày: không có ô ngày kết thúc, lưu không có ngày kết thúc.
     await open('new')
     await settle()
     await page.getByRole('radio', { name: 'Hàng ngày' }).check()
-    assert.equal(await box.count(), 0, 'lịch Hàng ngày: không có ô "Đặt ngày kết thúc"')
+    assert.equal(await endInput.count(), 0, 'lịch Hàng ngày: không có ô Ngày kết thúc')
     const daily = await save('Hàng ngày')
     assert.ok(daily.created, `lịch Hàng ngày phải lưu được (${daily.alert})`)
     assert.equal(daily.created.scheduleEndDate, null)
     assert.equal(daily.created.scheduleEndStrict, false)
     cases++
 
-    // 5. Sửa chiến dịch cũ (có ngày kết thúc, chưa dừng đúng ngày): tích sẵn, dòng giải thích kiểu cũ; đổi ngày thì thành dừng đúng ngày.
+    // 4. Sửa chiến dịch cũ (có ngày kết thúc, chưa dừng đúng ngày): dòng giải thích kiểu cũ; đổi ngày thì thành dừng đúng ngày.
     await open('edit', 'weekly', '2035-02-10T16:59:59.000Z', false)
     await settle()
-    await box.waitFor()
-    assert.equal(await box.isChecked(), true, 'chiến dịch cũ có ngày kết thúc: ô đang tích')
+    await endInput.waitFor()
     assert.equal(await endInput.inputValue(), '2035-02-10')
     await page.getByText(TEXT.SCHEDULE_END_LEGACY_HINT).waitFor()
     await shot('03-sua-chien-dich-cu')
@@ -134,20 +115,21 @@ async function main() {
     await page.getByText(TEXT.SCHEDULE_END_LEGACY_HINT).waitFor()
     cases++
 
-    // 6. Sửa chiến dịch đã dừng đúng ngày: dòng giải thích dừng đúng ngày.
+    // 5. Sửa chiến dịch đã dừng đúng ngày: dòng giải thích dừng đúng ngày.
     await open('edit', 'weekly', '2035-02-10T16:59:59.000Z', true)
     await settle()
-    assert.equal(await box.isChecked(), true)
+    assert.equal(await endInput.inputValue(), '2035-02-10')
     await page.getByText(TEXT.SCHEDULE_END_STRICT_HINT).waitFor()
     cases++
 
-    // 7. Sửa chiến dịch tuần chưa có ngày kết thúc: không tích.
+    // 6. Sửa chiến dịch tuần chưa có ngày kết thúc: ô trống (không tự điền), form vẫn mở được.
     await open('edit', 'weekly', null, false)
     await settle()
-    assert.equal(await box.isChecked(), false)
+    await endInput.waitFor()
+    assert.equal(await endInput.inputValue(), '', 'chiến dịch đang sửa chưa có ngày kết thúc: ô trống, lúc lưu phải chọn')
     cases++
 
-    // 8. Chi tiết chiến dịch: ghi rõ kiểu dừng.
+    // 7. Chi tiết chiến dịch: ghi rõ kiểu dừng.
     await open('info', 'weekly', '2035-02-10T16:59:59.000Z', true)
     await page.getByText(`(${TEXT.SCHEDULE_END_DETAIL_STRICT})`, { exact: false }).waitFor()
     await open('info', 'weekly', '2035-02-10T16:59:59.000Z', false)
@@ -159,7 +141,7 @@ async function main() {
 
     const errors = await page.evaluate(() => window.scheduleEndSmoke.state.errors)
     assert.deepEqual(errors, [], 'không có lỗi trên trang')
-    console.log(`PASS Đặt ngày kết thúc trên form Desktop: ${cases} ca`)
+    console.log(`PASS Ngày kết thúc trên form Desktop: ${cases} ca`)
   } finally {
     await browser.close()
     rmSync(directory, { recursive: true, force: true })

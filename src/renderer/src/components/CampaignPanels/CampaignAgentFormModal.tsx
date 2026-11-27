@@ -179,7 +179,7 @@ import {
   campaignRepeatError, campaignRepeatUnits, campaignRepeatVisible, parseCampaignRepeatInteger, readCampaignRepeat, type CampaignRepeatUnit
 } from '../../../../shared/campaignRepeat'
 import { CAMPAIGN_PARALLEL_RUN_HINT, CAMPAIGN_PARALLEL_RUN_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
-import { SCHEDULE_END_TOGGLE_LABEL, initialScheduleEnd, scheduleEndError, scheduleEndForSave, scheduleEndHint } from '../../../../shared/campaignScheduleEnd'
+import { initialScheduleEnd, scheduleEndError, scheduleEndForSave, scheduleEndHint } from '../../../../shared/campaignScheduleEnd'
 import { campaignRepeatFromLegacyRerun } from '../../../../shared/campaignRepeatDesktop'
 import { useDesktopPollingStore } from '../../stores/desktopPollingStore'
 import { clampFacebookCommentCount, DEFAULT_FACEBOOK_MAX_COMMENTS } from '../../../../shared/desktopUiReads'
@@ -1926,13 +1926,14 @@ export default function CampaignAgentFormModal({
           ? 'manual'
           : 'group')
     : 'group'
-  // "Đặt ngày kết thúc" (V674): lịch tuần / tháng không còn đặt sẵn ngày tạo + 7 ngày. Chiến dịch đang sửa giữ ngày đã lưu; bản nhân bản
-  // là chiến dịch mới nên lưu là dừng đúng ngày. Lịch Hàng ngày dùng ngày kết thúc của "Lặp lại sau khi chạy xong" (repeatEndDate).
+  // Ngày kết thúc của lịch tuần / tháng luôn bắt buộc (anh chốt 27/11/2026). Chiến dịch mới đặt sẵn hôm nay + 7 ngày; chiến dịch đang
+  // sửa giữ ngày đã lưu; bản nhân bản là chiến dịch mới nên lưu là dừng đúng ngày. Lịch Hàng ngày dùng ngày kết thúc của "Lặp lại sau
+  // khi chạy xong" (repeatEndDate).
   const initialScheduleEndState = initialScheduleEnd(
     campaign && (campaign.scheduleType || 'daily') !== 'daily'
       ? { scheduleEndDate: campaign.scheduleEndDate, scheduleEndStrict: campaign.scheduleEndStrict }
       : null,
-    { clone: Boolean(cloneFromId) }
+    { clone: Boolean(cloneFromId), today: formatScheduleVietnam(new Date()).slice(0, 10) }
   )
   const [formData, setFormData, contentStore] = useCampaignContentFormData(draftPayload, draftValuesRef, {
     name: campaign?.name || '',
@@ -1947,7 +1948,6 @@ export default function CampaignAgentFormModal({
     schedule: initSchedule(),
     scheduleType: (campaign?.scheduleType || 'daily') as 'daily' | 'weekly' | 'monthly',
     scheduleEndDate: initialScheduleEndState.date,
-    scheduleEndEnabled: initialScheduleEndState.enabled,
     // Ngày kết thúc kiểu cũ (chưa dừng đúng ngày) của chiến dịch đang sửa: khách không đổi ngày thì giữ cách chạy cũ.
     scheduleEndLegacyDate: initialScheduleEndState.legacyDate,
     useDailyStopTime: campaign ? !!savedDailyStopTime : false,
@@ -2198,8 +2198,7 @@ export default function CampaignAgentFormModal({
     : preserveCampaignSchedule(formData, cloneFromId ? undefined : campaign?.schedule, campaign?.scheduleEndDate))
   const preservedDraftSchedule = getPreservedCampaignDraftSchedule(preservedScheduleSnapshot, formData)
   const scheduleEndState = {
-    enabled: formData.scheduleEndEnabled === true,
-    date: formData.scheduleEndEnabled === true ? formData.scheduleEndDate : '',
+    date: formData.scheduleEndDate || '',
     // Chiến dịch Nhóm data vốn dừng đúng ngày kết thúc nên không có kiểu cũ.
     legacyDate: formData.dataTargetSourceMode === 'data_group' ? '' : (formData.scheduleEndLegacyDate || '')
   }
@@ -3625,7 +3624,7 @@ export default function CampaignAgentFormModal({
   const visibleScheduleFields: StepDef['fields'] = [
     ...(isMobileManagedSmsCampaign ? [] : [{ key: 'scheduleType', label: 'Loại lịch' }]),
     { key: 'schedule', label: 'Ngày chạy' },
-    ...(isMobileManagedSmsCampaign || formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign || !formData.scheduleEndEnabled ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
+    ...(isMobileManagedSmsCampaign || formData.scheduleType === 'daily' || isZaloMessageGroupRealtimeCampaign ? [] : [{ key: 'scheduleEndDate', label: 'Ngày kết thúc' }]),
     ...(!isMobileManagedSmsCampaign && formData.scheduleType === 'weekly' ? [{ key: 'scheduleWeekDays', label: 'Lịch tuần' }] : []),
     ...(!isMobileManagedSmsCampaign && formData.scheduleType === 'monthly' ? [{ key: 'scheduleDays', label: 'Lịch tháng' }] : []),
     ...(isMobileManagedSmsCampaign ? [] : [{ key: 'dailyStopTime', label: 'Giờ dừng' }])
@@ -16390,7 +16389,7 @@ export default function CampaignAgentFormModal({
         rows: [] },
       campaignLinks: Object.fromEntries(Object.entries(AGENT_CAMPAIGN_LINKS).filter(([, spec]) => spec.actions.includes(formData.actionId)).map(([key]) => [key, (formData as unknown as Record<string, number[]>)[key]])),
       form: scalar, sections: Array.from(available), lockedFields, directDataEditable, facebook,
-      ...(formData.actionId ? { schedule: { context: { actionId: formData.actionId, dataTargetSourceMode: formData.dataTargetSourceMode }, schedule: scheduleAiSnapshot({ ...formData, scheduleEndDate: formData.scheduleEndEnabled ? formData.scheduleEndDate : '' }) } } : {}),
+      ...(formData.actionId ? { schedule: { context: { actionId: formData.actionId, dataTargetSourceMode: formData.dataTargetSourceMode }, schedule: scheduleAiSnapshot(formData) } } : {}),
       ...(limitsAvailable ? { limits: { context: { actionId: formData.actionId, dataTargetSourceMode: formData.dataTargetSourceMode, accountGroupOverrides: selectedAccountGroupNames.length > 0 },
         limits: { sleepBetweenActions: formData.sleepBetweenActions, continueWhenActionLimitReached: formData.continueWhenActionLimitReached,
           postsPerTarget: formData.postsPerTarget, actions: (selectedCampaignAction?.limitCheckActionCodes || []).filter(isAgentEditableLimitAction).map(actionCode => ({
@@ -18023,7 +18022,7 @@ export default function CampaignAgentFormModal({
                   <span className="stepper-section-title">Lịch chạy</span>
                   {formAiAvailable(formAiAvailability, FORM_AI_SECTIONS.schedule, formData.actionId) && <CampaignScheduleAi
                     context={{ actionId: formData.actionId, dataTargetSourceMode: isDataGroupSource ? 'data_group' : 'direct' }}
-                    schedule={scheduleAiSnapshot({ ...formData, scheduleEndDate: formData.scheduleEndEnabled ? formData.scheduleEndDate : '' })}
+                    schedule={scheduleAiSnapshot(formData)}
                     disabled={saveBusy || facebookAiBusy || exclusionAiBusy || contentAiBusy || limitsAiBusy || loadingDetails || !formData.actionId}
                     authScope={`${authUser?.organizationId || ''}:${authUser?.staffId || ''}`}
                     zIndex={Math.max(3100, (modalZIndex || 3000) + 100)}
@@ -18091,23 +18090,16 @@ export default function CampaignAgentFormModal({
                     )}
                     {formData.scheduleType !== 'daily' && !isZaloMessageGroupRealtimeCampaign && !isMobileManagedSmsCampaign && (
                       <div className="stepper-form-group schedule-end-date-field">
-                        <label className="schedule-checkbox-label">
-                          <input
-                            type="checkbox"
-                            checked={formData.scheduleEndEnabled === true}
-                            onChange={e => setFormData(p => ({ ...p, scheduleEndEnabled: e.target.checked, ...(e.target.checked ? {} : { scheduleEndDate: '' }) }))}
-                          />
-                          <span>{SCHEDULE_END_TOGGLE_LABEL}</span>
-                        </label>
-                        {formData.scheduleEndEnabled === true && <input
+                        <label>Ngày kết thúc</label>
+                        <input
                           type="date" aria-label="Ngày kết thúc"
                           min={String(formData.schedule || '').slice(0, 10) || undefined}
                           value={formData.scheduleEndDate} data-agent-field="scheduleEndDate" data-agent-filled={agent.changed('scheduleEndDate')}
                           onChange={e => setFormData(p => ({ ...p, scheduleEndDate: e.target.value }))}
                           className="stepper-input"
-                        />}
+                        />
                         <span className="schedule-hint">{scheduleEndHint(scheduleEndState)}</span>
-                        {formData.scheduleEndEnabled === true && preservedDraftSchedule?.end && <span className="schedule-hint">
+                        {preservedDraftSchedule?.end && <span className="schedule-hint">
                           Giữ thời điểm kết thúc: {new Date(preservedDraftSchedule.end.iso).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })} (giờ Việt Nam).
                         </span>}
                       </div>
@@ -18690,7 +18682,7 @@ export default function CampaignAgentFormModal({
           actionName={selectedCampaignAction?.name}
           accountIds={formData.accountIds}
           duplicateCheck={inputDuplicateCheck}
-          sheetSync={!isEditingSavedCampaign && !isFindDataSearchCampaign ? { campaignEndDate: formData.scheduleType !== 'daily' && formData.scheduleEndEnabled ? (formData.scheduleEndDate || null) : null } : undefined}
+          sheetSync={!isEditingSavedCampaign && !isFindDataSearchCampaign ? { campaignEndDate: formData.scheduleEndDate || null } : undefined}
           onClose={() => { setIsDataUploadModalOpen(false); setAgentDataImport(undefined) }}
           onInsert={(rows, mode, duplicates, sheetSync) => {
             if (agentDataImport && agentDataImport.actionId !== formData.actionId) throw new Error('Loại chiến dịch đã thay đổi. Hãy mở lại dữ liệu.')
