@@ -123,6 +123,39 @@ Các vòng (mỗi vòng: smoke 153 kiểm + các hạt giống DB + hạt giốn
 `save_mismatch`, `report_changed_on_reject`). Bộ thử cần `initdb -E UTF8` (cụm `SQL_ASCII` đếm `char_length` theo byte nên
 emoji làm lệch giới hạn 2.000 ký tự); `v672-smoke.sh` vẫn dựng cụm mặc định.
 
+## Giả lập sự kiện Zalo (27/11/2026)
+
+`PG_MODULE_DIR=… node scripts/event-bot/fuzz/zalo-events-sim.cjs [--only tag|group|birthday] [--verbose]` chạy 72 ca có kết quả mong
+đợi, đi qua đúng code production từ chỗ Zalo đổi tới tin bot gửi (Zalo giả, Postgres cục bộ, ~3 giây):
+
+- Tag: `ZaloTagSyncRuntime` thật (Desktop + App Server) đọc `getLabels` giả đúng khuôn zca-js (`{version, labelData:[{id, text,
+  conversations}]}` qua `peekLabels`) → V660 thật → trigger V672 → `EventBotRuntime` thật gửi.
+- Nhóm điều kiện: dữ liệu đổi theo cách app ghi (quét bạn bè → `is_friend`, quét thành viên nhóm → `zalo_group_members`, tag trong
+  Chat → `chat_zalo_account_conversation_tag`, chiến dịch gắn tag → `extra_data.zaloTagIds`, tag akaBiz) → trigger hàng đợi + job Bộ
+  lọc động chép nguyên văn production ([dynfilter-prod-20261127.sql](../scripts/event-bot/db/dynfilter-prod-20261127.sql), 16 hàm
+  + 3 trigger đọc chỉ đọc 27/11, sinh bằng `scripts/event-bot/fuzz/build-dynfilter-fixture.py` từ JSON để ngoài repo; phần bảng / cột
+  thiếu viết tay ở `dynfilter-schema.sql`) → trigger V672 → bot gửi.
+- Sinh nhật: `EventBotRuntime` đọc `getAllFriends` giả (trang 500, sdob `dd/mm/yyyy`, `dd/mm`, rỗng, null như mẫu thật) → RPC sinh
+  nhật → bot gửi.
+
+Kết quả 27/11: 60 đạt, 0 lỗi, 12 ca là giới hạn đã biết của thiết kế (in `KNOWN`):
+
+| Ca | Điều xảy ra |
+|---|---|
+| T00, T16, T19 | Lần đọc tag đầu sau khi bật quy tắc, sau khi mất phiên > 30 phút, sau khi tắt / bật lại bot: chỉ lấy mốc, không gửi bù (T19 cố ý: `auto_zalo_tag_sync_resets`) |
+| T05 | Chuyển người từ tag có quy tắc "bị gỡ" sang tag có quy tắc "được gắn": người đó nhận 2 tin cùng lúc |
+| T08 | Dựa vào Zalo tăng `version` khi đổi người trong tag; chưa kiểm với Zalo thật |
+| T13 | Xoá tag chỉ có 1 người không phân biệt được với gỡ tag: người đó nhận tin "bị gỡ" (≥ 2 người thì `tag_deleted`) |
+| T21 | Zalo trình duyệt không được hỏi tag: quy tắc tag không chạy |
+| T22 | Mã hội thoại là số JS sẽ mất chính xác; zca-js trả chuỗi nên không gặp |
+| G08 | Xoá liên hệ trong app làm người đó rời nhóm điều kiện: bot gửi tin rời |
+| G10 | Gắn / gỡ tag ngay trong Zalo của tài khoản không có akaChat không đổi nhóm điều kiện "Tag Zalo" (Bộ lọc động chỉ đọc tag do chiến dịch gắn, chỉ thêm, hoặc tag của Chat; chưa đọc sổ V660) |
+| G14b | Xoá tag akaBiz: người đang trong nhóm chỉ được xét lại khi liên hệ đó đổi |
+| G16 | Nhóm không gắn tài khoản: người của tài khoản khác vào nhóm thì chỉ quy tắc của chính tài khoản đó chạy |
+| G20 | Người đã ở trong nhóm qua nguồn khác (tải file) vẫn nhận tin vào / rời khi bộ lọc đổi |
+
+Gửi tin lỗi / mất mạng / app chết giữa lúc gửi nằm ở `runtime-fuzz.cjs` (mục trên), không lặp lại ở đây.
+
 ## Giới hạn
 
 - Danh sách không gửi dùng chung so theo UID Zalo của liên hệ trong danh sách; danh sách của tài khoản khác chỉ khớp khi
