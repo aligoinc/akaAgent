@@ -525,7 +525,7 @@ async function groupSuite(cluster) {
   m = await env.mark()
   await c.query(`UPDATE auto_account_contacts SET is_delete=true WHERE account_id=$1 AND uid=$2`, [ACC.qr, uidOf(ACC.qr, 4)])
   await step(); jobs = await env.jobsSince(m)
-  G('G08', 'Liên hệ bị xoá trong app → rời nhóm điều kiện → bot vẫn gửi tin tạm biệt', pick(jobs, j => j.direction === 'leave').length >= 1, { jobs: summarize(jobs) }, true)
+  G('G08', 'Liên hệ bị xoá trong app → rời nhóm điều kiện nhưng không gửi tin tạm biệt', pick(jobs, j => j.direction === 'leave').length === 0, { jobs: summarize(jobs) })
 
   // G09: tag do chiến dịch gắn (chép vào extra_data.zaloTagIds, chỉ thêm, không bao giờ gỡ).
   m = await env.mark(); s = env.sends.length

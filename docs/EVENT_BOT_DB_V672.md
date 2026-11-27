@@ -138,23 +138,43 @@ emoji làm lệch giới hạn 2.000 ký tự); `v672-smoke.sh` vẫn dựng c�
 - Sinh nhật: `EventBotRuntime` đọc `getAllFriends` giả (trang 500, sdob `dd/mm/yyyy`, `dd/mm`, rỗng, null như mẫu thật) → RPC sinh
   nhật → bot gửi.
 
-Kết quả 27/11: 60 đạt, 0 lỗi, 12 ca là giới hạn đã biết của thiết kế (in `KNOWN`):
+Kết quả 27/11: 61 đạt, 0 lỗi, 11 ca là giới hạn đã biết của thiết kế (in `KNOWN`; lần chạy đầu 60 / 12, G08 đã sửa, xem dưới):
 
 | Ca | Điều xảy ra |
 |---|---|
 | T00, T16, T19 | Lần đọc tag đầu sau khi bật quy tắc, sau khi mất phiên > 30 phút, sau khi tắt / bật lại bot: chỉ lấy mốc, không gửi bù (T19 cố ý: `auto_zalo_tag_sync_resets`) |
 | T05 | Chuyển người từ tag có quy tắc "bị gỡ" sang tag có quy tắc "được gắn": người đó nhận 2 tin cùng lúc |
-| T08 | Dựa vào Zalo tăng `version` khi đổi người trong tag; chưa kiểm với Zalo thật |
+| T08 | Dựa vào Zalo tăng `version` khi đổi người trong tag (đã kiểm bằng dữ liệu Zalo thật, mục dưới) |
 | T13 | Xoá tag chỉ có 1 người không phân biệt được với gỡ tag: người đó nhận tin "bị gỡ" (≥ 2 người thì `tag_deleted`) |
 | T21 | Zalo trình duyệt không được hỏi tag: quy tắc tag không chạy |
 | T22 | Mã hội thoại là số JS sẽ mất chính xác; zca-js trả chuỗi nên không gặp |
-| G08 | Xoá liên hệ trong app làm người đó rời nhóm điều kiện: bot gửi tin rời |
 | G10 | Gắn / gỡ tag ngay trong Zalo của tài khoản không có akaChat không đổi nhóm điều kiện "Tag Zalo" (Bộ lọc động chỉ đọc tag do chiến dịch gắn, chỉ thêm, hoặc tag của Chat; chưa đọc sổ V660) |
 | G14b | Xoá tag akaBiz: người đang trong nhóm chỉ được xét lại khi liên hệ đó đổi |
 | G16 | Nhóm không gắn tài khoản: người của tài khoản khác vào nhóm thì chỉ quy tắc của chính tài khoản đó chạy |
 | G20 | Người đã ở trong nhóm qua nguồn khác (tải file) vẫn nhận tin vào / rời khi bộ lọc đổi |
 
 Gửi tin lỗi / mất mạng / app chết giữa lúc gửi nằm ở `runtime-fuzz.cjs` (mục trên), không lặp lại ở đây.
+
+Anh chốt 27/11 (đồng ý cả ba đề xuất): G08 sửa (trigger nhóm không tạo việc `leave` khi liên hệ đã `is_delete`; mô hình
+`model.cjs` cùng luật; `db-fuzz` + `runtime-fuzz` vòng 6000 sạch, bài kiểm V672 153 PASS); G10 để sau (nối Bộ lọc động với sổ
+tag V660 là việc riêng, đụng Nhóm data đang chạy); T05 giữ (2 tin).
+
+## Dữ liệu Zalo thật (27/11/2026)
+
+Runtime Fly ghi mỗi lần đọc `getLabels` thành sự kiện `account_tags_snapshot` (`payload.version`, `tags[].conversationZaloIds`)
+trong `chat_zalo_runtime_event` (giữ 7 ngày). Đo chỉ đọc 20 giờ tới 27/11 09:25 VN, 446 tài khoản đang nối, 1.406 lần đọc:
+
+- 602 lần người trong tag đổi giữa hai lần đọc liên tiếp: 601 lần `version` tăng; 1 lần (tài khoản Fly 149, 26/11 14:09 VN)
+  Zalo trả danh sách sai cùng `version` và `lastUpdateTime` (tag 131 hội thoại: 80 người thay bằng 80 nhóm), lần đọc sau 33 giây
+  trả lại đúng. 0 lần `version` tăng mà không có gì đổi giữa các lần đọc gần nhau (đổi tên tag / màu thì `version` vẫn tăng).
+- Giả định T08 đúng. Lượt trả sai đó sẽ bị bỏ qua cả lô vì > 20 người cùng tag (`bulk_tag`); lượt trả sai ≤ 20 người thì bot
+  sẽ gửi nhầm (chưa thấy lần nào).
+
+Phát lại qua bot: `PG_MODULE_DIR=… node scripts/event-bot/fuzz/tag-replay.cjs <tệp.json>…` (mẫu che mã hội thoại bằng md5 có
+muối, để ngoài repo; câu xuất: mỗi phiên bản ảnh đọc đầu tiên, seq 1 đầy đủ, seq sau là phần đổi). Chuỗi ảnh thật → getLabels
+giả → `ZaloTagSyncRuntime` thật → V660 → V672 → `EventBotRuntime` thật, so với kết quả tính độc lập từ hai ảnh liên tiếp. Lần
+27/11: 17 tài khoản (có "Khánh akabiz", 30 ngày; còn lại 22 giờ), 472 phiên bản, 0 chỗ lệch; 490 việc gửi, 172 bỏ `not_person`,
+211 `bulk_tag`, 6 `tagged_again` lúc gửi (gỡ rồi gắn lại trước giờ gửi vì bộ phát lại không gửi giữa các bước), 484 tin, 0 trùng.
 
 ## Giới hạn
 

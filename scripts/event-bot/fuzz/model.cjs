@@ -170,6 +170,8 @@ function expectGroupJobs(S, origin, groupId, contact, now, dedupeMs) {
   const dir = origin.is_current ? 'enter' : 'leave'
   const all = [...S.rules.values()].flat().filter(r => Number(r.data_group_id) === Number(groupId) && r.event_type === 'condition_group' && r.enabled && !r.is_delete)
   if (all.length === 0 || !contact) return []
+  // Liên hệ bị xoá trong app nên rời nhóm: không gửi tin rời.
+  if (dir === 'leave' && contact.is_delete) return []
   const rules = all.filter(r => Number(r.account_id) === Number(contact.account_id)).sort((a, b) => (a.position - b.position) || (Number(a.id) - Number(b.id)))
   const out = []
   for (const r of rules) {

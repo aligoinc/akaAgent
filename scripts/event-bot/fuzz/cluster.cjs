@@ -39,8 +39,16 @@ async function startCluster({ port = 50000 + (process.pid % 9000), patches = [] 
   fs.chmodSync(tmp, 0o777)
   run(path.join(bin, 'initdb'), ['-D', path.join(tmp, 'data'), '-U', 'postgres', '-A', 'trust', '-E', 'UTF8', '--locale=C'])
   run(path.join(bin, 'pg_ctl'), ['-D', path.join(tmp, 'data'), '-o', `-k ${tmp} -p ${port} -c listen_addresses='' -c timezone=UTC -c max_connections=60 -c fsync=off -c synchronous_commit=off`, '-l', path.join(tmp, 'log'), '-w', 'start'])
-  const stop = () => { try { run(path.join(bin, 'pg_ctl'), ['-D', path.join(tmp, 'data'), 'stop', '-m', 'immediate']) } catch { /* bỏ qua */ } }
+  // Dừng cụm rồi xoá thư mục tạm (mỗi lần chạy ~40 MB; không xoá thì bộ kiểm lặp làm đầy ổ).
+  let stopped = false
+  const stop = () => {
+    if (stopped) return
+    stopped = true
+    try { run(path.join(bin, 'pg_ctl'), ['-D', path.join(tmp, 'data'), 'stop', '-m', 'immediate']) } catch { /* bỏ qua */ }
+    if (!process.env.FUZZ_KEEP_TMP) { try { fs.rmSync(tmp, { recursive: true, force: true }) } catch { /* bỏ qua */ } }
+  }
   process.on('exit', stop)
+  for (const sig of ['SIGINT', 'SIGTERM']) process.once(sig, () => process.exit(130))
   const connect = async (database, user = 'postgres') => {
     const c = new pg.Client({ host: tmp, port, user, database })
     await c.connect()

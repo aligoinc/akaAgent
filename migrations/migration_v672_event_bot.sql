@@ -535,9 +535,12 @@ BEGIN
         AND l.classid::bigint = ((v_key >> 32) & 4294967295) AND l.objid::bigint = (v_key & 4294967295)) THEN
       RETURN NULL;
     END IF;
-    SELECT ac.id, ac.account_id, NULLIF(btrim(ac.uid), '') AS uid, ac.name, ac.phone, ac.contact_type INTO ct
+    SELECT ac.id, ac.account_id, NULLIF(btrim(ac.uid), '') AS uid, ac.name, ac.phone, ac.contact_type,
+      COALESCE(ac.is_delete, false) AS is_delete INTO ct
     FROM public.auto_account_contacts ac WHERE ac.id = v_contact;
     IF ct.id IS NULL THEN RETURN NULL; END IF;
+    -- Liên hệ bị xoá trong app nên rời nhóm: không phải người đó rời điều kiện, không gửi tin rời (anh chốt 27/11/2026).
+    IF v_dir = 'leave' AND ct.is_delete THEN RETURN NULL; END IF;
     v_cfg := private.aka_agent_event_bot_config();
 
     FOR r IN
