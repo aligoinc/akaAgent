@@ -1,4 +1,6 @@
 import { assertCampaignContentSyntax, changedCampaignContentFields, getContentSyntaxGuardMode, touchesCampaignContent } from '../../services/contentSyntaxGuard'
+import { guardAccountChange, guardAppendRows, guardResume } from '../../services/campaignUidAccountGuardService'
+import { uidAccountGuardApplies } from '../../../shared/campaignUidAccountGuard'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 import { CampaignConfigSaveError } from '../../../shared/campaignConfigSave'
 import { CAMPAIGN_DRAFT_IPC, type SaveCampaignDraftRequest, type CompleteCampaignDraftRequest } from '../../../shared/campaignDrafts'
@@ -166,6 +168,11 @@ export function registerCampaignHandlers(
       && (payload.status === 'tạm dừng' || payload.status === 'chờ xử lý')
     ) {
       await assertCanUpdateCampaignFromRenderer(supabase, id, payload)
+      // Tiếp tục: danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679) thì chưa cho chạy tiếp.
+      if (payload.status === 'chờ xử lý') {
+        const before = await supabase.getCampaignConfig(id).catch(() => null)
+        if (before) await guardResume(before)
+      }
       const campaign = await campaignStatusController.requestCampaignStatus(id, payload.status)
       realtimeRefreshController?.refreshSoon(
         payload.status === 'tạm dừng' ? 'campaign-paused' : 'campaign-resumed'
@@ -194,6 +201,14 @@ export function registerCampaignHandlers(
       assertCampaignContentSyntax(changedCampaignContentFields(
         String(payload.actionId ?? before?.actionId ?? ''), payload, before
       ))
+    }
+    // Đổi tài khoản: danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679) thì chặn lưu.
+    if (payload.accountId !== undefined && payload.accountId !== null) {
+      const before = ready !== undefined ? ready : await supabase.getCampaignConfig(id).catch(() => null)
+      const nextActionId = typeof payload.actionId === 'string' ? payload.actionId : before?.actionId
+      if (before && uidAccountGuardApplies(nextActionId, before.dataTargetSourceMode)) {
+        await guardAccountChange(before, Number(payload.accountId), nextActionId)
+      }
     }
     // "Nội dung up tin" đổi thì chép sang các chiến dịch up tin đã tạo; cần bản trước khi lưu để biết khách có đổi.
     const touchesPostBumpContent = !!payload.extraSettings && 'postBumpContent' in payload.extraSettings
@@ -303,6 +318,11 @@ export function registerCampaignHandlers(
     request: AddCampaignInputDataRowsRequest,
     progressRequestId?: string
   ) => {
+    // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): có người sai thì không thêm.
+    if (request?.campaignId && Array.isArray(request.rows) && request.rows.length > 0) {
+      const campaign = await supabase.getCampaignConfig(request.campaignId).catch(() => null)
+      if (campaign) await guardAppendRows(campaign, request.rows)
+    }
     return supabase.addCampaignInputDataRows(
       request,
       createCampaignInputDataProgressEmitter(event, progressRequestId)

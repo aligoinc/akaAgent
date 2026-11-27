@@ -20,6 +20,7 @@ import { CAMPAIGN_RUN_REPORT_IPC, type CampaignRunReportIpcRequest, type Campaig
 import {
   CAMPAIGN_RESULT_ACTIONS_IPC, type CampaignResultActionsIpcRequest, type CampaignResultActionsIpcResponses, type CampaignResultActionsIpcResult
 } from '../shared/campaignResultActionsIpc'
+import { CAMPAIGN_UID_ACCOUNT_GUARD_IPC, type UidAccountGuardIpcRequest, type UidAccountGuardIpcResult } from '../shared/campaignUidAccountGuardIpc'
 import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
@@ -821,6 +822,9 @@ const electronAPI = {
   campaignResultActions: <R extends CampaignResultActionsIpcRequest>(request: R): Promise<CampaignResultActionsIpcResult<CampaignResultActionsIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(CAMPAIGN_RESULT_ACTIONS_IPC, request),
 
+  // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): kiểm trước khi lưu; không ném lỗi.
+  campaignUidAccountGuard: (request: UidAccountGuardIpcRequest): Promise<UidAccountGuardIpcResult> =>
+    ipcRenderer.invoke(CAMPAIGN_UID_ACCOUNT_GUARD_IPC, request),
   // Upload dữ liệu → "Lọc trùng dữ liệu" (V491/V493): công tắc và một lượt đối chiếu ≤ 2.000 SĐT; không ném lỗi.
   campaignInputDuplicates: <R extends CampaignInputDuplicatesIpcRequest>(request: R): Promise<CampaignInputDuplicatesIpcResult<CampaignInputDuplicatesIpcResponses[R['kind']]>> =>
     ipcRenderer.invoke(CAMPAIGN_INPUT_DUPLICATES_IPC, request),

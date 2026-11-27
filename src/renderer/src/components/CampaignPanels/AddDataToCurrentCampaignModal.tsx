@@ -27,6 +27,8 @@ import {
 import { pendingRowsExportMatrix } from '../../../../shared/campaignImportVerification'
 import { createImportMatrixWorkbook } from '../../../../shared/campaignImportWorkbook'
 import { useUiStore } from '../../stores/uiStore'
+import { uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
+import { checkUidAccountGuard, showUidAccountGuard } from '../../lib/uidAccountGuardPrompt'
 import { useAuthStore } from '../../stores/authStore'
 import DataScanModal, { type DataScanAction } from '../DataScan/DataScanModal'
 import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
@@ -656,6 +658,16 @@ export default function AddDataToCurrentCampaignModal({
         return
       }
 
+      // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): bị chặn thì không thêm. Không kiểm được thì cho thêm.
+      if (campaign.accountId && uidAccountGuardApplies(campaign.actionId, campaign.dataTargetSourceMode)) {
+        const blockedMessage = await checkUidAccountGuard({
+          action: 'check', actionId: campaign.actionId, accountIds: [campaign.accountId], uids: rows.map(row => row.uid ?? null)
+        })
+        if (blockedMessage) {
+          showUidAccountGuard({ showAlert }, blockedMessage)
+          return
+        }
+      }
       const result = await onSubmit({
         campaignId: campaign.id,
         rows,

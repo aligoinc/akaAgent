@@ -105,6 +105,8 @@ import { canUsePlatform } from '../../utils/entitlements'
 import { isZaloWebAccount } from '../../utils/accountLabels'
 import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
 import AddDataToCurrentCampaignModal, { isAddDataSupportedForCampaign } from './AddDataToCurrentCampaignModal'
+import { uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
+import { checkUidAccountGuard, showUidAccountGuard } from '../../lib/uidAccountGuardPrompt'
 
 export interface CampaignDiagnosticActionRequest {
   campaign: CampaignListItem
@@ -2846,6 +2848,14 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
     if (!canResumeCampaign(campaign.status)) {
       showAlert('Chỉ có thể tiếp tục chiến dịch khi trạng thái là "tạm dừng".', 'info')
       return false
+    }
+    // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): không cho chạy tiếp (tiến trình chính kiểm lại lúc lưu).
+    if (uidAccountGuardApplies(campaign.actionId, campaign.dataTargetSourceMode)) {
+      const blockedMessage = await checkUidAccountGuard({ action: 'check-resume', campaignId: campaign.id })
+      if (blockedMessage) {
+        showUidAccountGuard({ showAlert }, blockedMessage)
+        return false
+      }
     }
     try {
       await updateCampaign(campaign.id, { status: 'chờ xử lý' })

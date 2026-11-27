@@ -1,0 +1,19 @@
+{
+  "requestedBy": "anh, 27/11/2026: \"Apply luôn\"",
+  "project": "cgjbsmqtfhqvttudyjzq",
+  "method": "MCP execute_sql: nguyên văn file gửi với dấu \\ thay bằng ký hiệu tạm, DB đổi lại, kiểm md5 = file rồi EXECUTE và ghi sổ trong cùng giao dịch",
+  "preflight": "17:30 VN: sổ chưa có V679/V680; capture_campaign 28c58b14…, seed_defaults 1af8d8da…, auto_error 172 và chính sách 426 đúng bản đọc sáng 27/11. Phiên khác apply V681 (engine_account_hold_rule) 16:51 VN, không đụng DAT04 / chính sách 426.",
+  "applied": [
+    { "name": "migration_v679_zalo_uid_account_guard", "version": "20261127103245", "atVN": "17:32:45", "ledgerMd5": "4475a4f22bae4fdab8e0c3dd4fb53660", "fileMd5": "4475a4f22bae4fdab8e0c3dd4fb53660" },
+    { "name": "migration_v680_notification_campaign_pause_default", "version": "20261127103415", "atVN": "17:34:15", "ledgerMd5": "52d21dc81841a6954fb6eb2fc017ff1e", "fileMd5": "52d21dc81841a6954fb6eb2fc017ff1e" }
+  ],
+  "postCheck": {
+    "uidGuardNorm": "' 12\\u00a03\\u200b45_0 ' -> '12345', 's1s' -> 's1s'",
+    "policy426": "target_effect hold, revision 2",
+    "settings": { "campaign.uid_account_guard": "block", "notifications.default_campaign_pause": "{\"audience\":\"all\",\"batch\":1000}" },
+    "trigger": "trg_aka_agent_uid_account_release có",
+    "userPauseNote": "NBSP-only true, ' Chờ data mới ' true, câu hệ thống false",
+    "edgeLogs": "10:28–10:34 UTC: 0 lỗi 503, 0–1 lỗi 5xx mỗi phút như trước; phút 10:32 có 377 request > 1 s (nạp lại schema)"
+  },
+  "notApplied": "Chưa deploy API/Web, chưa build Desktop: điểm chặn khi lưu chưa chạy. Chính sách giữ người nhận lúc chạy (hold) và câu DAT04 mới có hiệu lực ngay. Bật sẵn thông báo tạm dừng chạy ở lượt dọn hằng giờ kế tiếp của bộ lập lịch thông báo."
+}

@@ -109,6 +109,8 @@ import { CampaignSheetSyncFormNote } from '../CampaignSheetSync/CampaignSheetSyn
 import { campaignSheetSyncErrorMessage, type CampaignSheetSyncDraft } from '../../../../shared/campaignSheetSync'
 import { InputDuplicateFormNote } from './InputDuplicateFormNote'
 import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
+import { uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
+import { checkUidAccountGuard, showUidAccountGuard } from '../../lib/uidAccountGuardPrompt'
 import {
   campaignDataSplitAvailable, campaignDataSplitDedupeNotice, campaignDataSplitTooFewMessage, dedupeCampaignDataForSplit,
   resolveSplitDataAcrossAccounts, sharedCampaignDataConfirmMessage, sharedCampaignDataConfirmTitle,
@@ -7870,6 +7872,28 @@ export default function CampaignFormModal({
         { title: sharedCampaignDataConfirmTitle, confirmText: 'Vẫn gửi cả danh sách', cancelText: 'Quay lại' }
       )
       return
+    }
+
+    // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): kiểm trước khi tạo / đổi tài khoản, bị chặn thì không lưu.
+    if (!isDataGroupSource && !hasPendingDirectDataGroupSnapshots && uidAccountGuardApplies(formData.actionId) && formData.accountIds.length > 0) {
+      const editingId = isEditingSavedCampaign ? campaign?.id ?? null : null
+      const accountChanged = !!editingId && !!campaign?.accountId && formData.accountIds[0] !== campaign.accountId
+      const uidRows = isEditingSavedCampaign || hideDetailsSection ? [] : validDetails
+      if (accountChanged || uidRows.length > 0) {
+        const chunks = splitsDetailsForSave ? splitCampaignDataAcrossAccounts(uidRows, formData.accountIds.length) : null
+        const messages = await Promise.all([
+          accountChanged && editingId ? checkUidAccountGuard({ action: 'check', campaignId: editingId, accountId: formData.accountIds[0] }) : null,
+          uidRows.length === 0 ? null : checkUidAccountGuard(chunks
+            ? { action: 'check', actionId: formData.actionId, assignments: formData.accountIds.map((accountId, index) => ({ accountId, uids: (chunks[index] || []).map(row => row.uid ?? null) })) }
+            : { action: 'check', actionId: formData.actionId, accountIds: formData.accountIds, uids: uidRows.map(row => row.uid ?? null) })
+        ])
+        if (saveSignal.aborted) return
+        const blockedMessage = messages.find(message => message)
+        if (blockedMessage) {
+          showUidAccountGuard({ showAlert }, blockedMessage)
+          return
+        }
+      }
     }
 
     if (!isDataGroupSource && !isEditingSavedCampaign && !hideDetailsSection) {
