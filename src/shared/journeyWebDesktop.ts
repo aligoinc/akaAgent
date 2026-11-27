@@ -13,11 +13,34 @@ export const JOURNEY_WEB_EXPIRED_TITLE = 'akaAgent: cần đăng nhập lại'
 
 export type JourneyWebTheme = 'light' | 'dark'
 
+/**
+ * Trang Web nhúng cùng phiên (cùng phân vùng, cùng lần đăng nhập native): `automation` = thẻ Tự động hóa › Quy trình (như cũ),
+ * `eventBot` = mục menu Bot sự kiện (docs/EVENT_BOT_TECH.md mục 8). Mỗi trang một webview, một đường mặc định, một tiêu đề trong câu báo.
+ */
+export type JourneyWebView = 'automation' | 'eventBot'
+
+export const JOURNEY_WEB_VIEWS: Record<JourneyWebView, { defaultPath: string; title: string }> = {
+  automation: { defaultPath: '/automation', title: 'Tự động hóa' },
+  eventBot: { defaultPath: '/automation/event-bot', title: 'Bot sự kiện' }
+}
+
+export function journeyWebView(value: unknown): JourneyWebView {
+  return value === 'eventBot' ? 'eventBot' : 'automation'
+}
+
+/** Trang nhúng của một địa chỉ trong khung (Bot sự kiện có đường riêng, còn lại là Quy trình). */
+export function journeyWebViewOfPath(path: string): JourneyWebView {
+  const pathname = path.split(/[?#]/, 1)[0]
+  return pathname === '/automation/event-bot' || pathname.startsWith('/automation/event-bot/') ? 'eventBot' : 'automation'
+}
+
 export interface JourneyWebState {
   revision: number
   /** Đổi khi trang bị sập phải dựng webview mới. */
   webviewGeneration: number
   status: 'connecting' | 'ready' | 'error' | 'closed'
+  /** Trang nhúng của trạng thái này; thiếu = `automation` (bản cũ chỉ có một trang). */
+  view?: JourneyWebView
   partition: string
   /** Địa chỉ webview nạp lúc dựng (đường trong `/automation`, kèm `?embed=desktop&theme=`). */
   url: string
@@ -31,15 +54,15 @@ export function journeyWebInsidePath(path: string): boolean {
   return pathname === '/automation' || pathname.startsWith('/automation/')
 }
 
-/** Đường an toàn để mở trong khung: chỉ `/automation…`, không giao thức, không `..`. Sai thì về `/automation`. */
-export function journeyWebStartPath(path: string | null | undefined): string {
+/** Đường an toàn để mở trong khung: chỉ `/automation…`, không giao thức, không `..`. Sai thì về đường mặc định (`/automation`). */
+export function journeyWebStartPath(path: string | null | undefined, fallback = '/automation'): string {
   const value = typeof path === 'string' ? path.trim() : ''
-  if (!value.startsWith('/') || value.startsWith('//') || value.includes('..') || value.length > 300 || !journeyWebInsidePath(value)) return '/automation'
+  if (!value.startsWith('/') || value.startsWith('//') || value.includes('..') || value.length > 300 || !journeyWebInsidePath(value)) return fallback
   return value
 }
 
-export function journeyWebUrl(origin: string, path: string | null | undefined, theme: JourneyWebTheme): string {
-  const url = new URL(journeyWebStartPath(path), origin)
+export function journeyWebUrl(origin: string, path: string | null | undefined, theme: JourneyWebTheme, fallback = '/automation'): string {
+  const url = new URL(journeyWebStartPath(path, fallback), origin)
   url.searchParams.set('embed', 'desktop')
   url.searchParams.set('theme', theme)
   return url.href

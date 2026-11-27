@@ -8,6 +8,7 @@ import BrowserPage, { type BrowserOpenRequest } from './pages/BrowserPage'
 import EffectivenessReportsHub from './components/EffectivenessReports/EffectivenessReportsHub'
 import type { EffectivenessNavigation } from './components/EffectivenessReports/effectivenessApi'
 import AutomationHub from './pages/AutomationHub'
+import EventBotPage from './pages/EventBotPage'
 import { useAutomationNavStore } from './stores/automationNavStore'
 import ContentTemplatePage from './pages/ContentTemplatePage'
 import LoginPage from './pages/LoginPage'
@@ -311,6 +312,11 @@ export default function App() {
   useEffect(() => {
     if (!facebookMessagesKey && activePage === 'fb-messages') setActivePage('campaigns')
   }, [facebookMessagesKey, activePage])
+
+  const canOpenEventBot = Boolean(user && canUsePlatform('zalo', user.entitlements))
+  useEffect(() => {
+    if (!canOpenEventBot && activePage === 'event-bot') setActivePage('campaigns')
+  }, [canOpenEventBot, activePage])
 
   // Snap workflow-editor -> campaigns if user loses workflow access (e.g. after switching account).
   useEffect(() => {
@@ -640,6 +646,10 @@ export default function App() {
 
           <div style={{ display: activePage === 'automations' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
             <AutomationHub isActive={activePage === 'automations'} onNewCampaign={openNewCampaignForm} />
+          </div>
+
+          <div style={{ display: activePage === 'event-bot' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+            <EventBotPage isActive={activePage === 'event-bot'} />
           </div>
 
           <div style={{ display: activePage === 'content-templates' ? 'flex' : 'none', flex: 1, minHeight: 0, overflow: 'hidden' }}>

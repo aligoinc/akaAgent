@@ -3,6 +3,7 @@ import {
   ArrowUp,
   BarChart3,
   Badge,
+  Bot,
   ChevronLeft,
   ChevronRight,
   ContactRound,
@@ -50,7 +51,7 @@ import FacebookMessagesNavTooltip from '../FacebookMessages/FacebookMessagesNavT
 
 const appIconUrl = new URL('../../assets/app-icon.png', import.meta.url).href
 
-export type AppPage = 'campaigns' | 'automations' | 'workflow-editor' | 'browsers' | 'fb-messages' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
+export type AppPage = 'campaigns' | 'automations' | 'event-bot' | 'workflow-editor' | 'browsers' | 'fb-messages' | 'content-templates' | 'reports' | 'chat' | 'crm' | 'admin' | 'staff-management' | 'notifications'
 
 interface TopBarProps {
   activePage: AppPage
@@ -124,6 +125,8 @@ export default function TopBar({
   const canOpenCrm = user?.organizationId === 1
   const canOpenAdmin = canAccessAdmin(user)
   const canOpenFacebookMessages = canUsePlatform('facebook', user?.entitlements)
+  // Bot sự kiện chỉ gửi tin Zalo: hiện khi có gói Zalo (công tắc event_bot do trang Web kiểm).
+  const canOpenEventBot = canUsePlatform('zalo', user?.entitlements)
   const facebookUnread = useFacebookMessagesUnreadStore(state => state.summary)
   const updateButtonLabel = checkingUpdate
     ? 'Đang kiểm tra'
@@ -199,6 +202,13 @@ export default function TopBar({
         active: activePage === 'automations',
         onClick: () => onPageChange('automations')
       },
+      ...(canOpenEventBot ? [{
+        key: 'event-bot',
+        label: 'Bot sự kiện',
+        icon: <Bot size={18} />,
+        active: activePage === 'event-bot',
+        onClick: () => onPageChange('event-bot')
+      }] : []),
       {
         key: 'content-templates',
         label: 'Mẫu nội dung',
@@ -261,6 +271,7 @@ export default function TopBar({
     activePage,
     canOpenAdmin,
     canOpenFacebookMessages,
+    canOpenEventBot,
     facebookUnread,
     canOpenWorkflowEditor,
     canOpenChat,

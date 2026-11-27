@@ -174,7 +174,7 @@ function positiveCount(value: unknown): number {
 }
 
 /** Như normalizeZaloFriendProfile của Desktop. */
-function friendProfile(raw: JsonObject): { uid: string; name: string; phone: string; sdob: string; raw: JsonObject } | null {
+export function friendProfile(raw: JsonObject): { uid: string; name: string; phone: string; sdob: string; raw: JsonObject } | null {
   const uid = firstString(raw.userId, raw.uid, raw.id)
   if (!uid) return null
   return {
