@@ -150,6 +150,13 @@ async function bootstrap(db, notes) {
     await setup.installLive(db, notes)
     if (parallelRun === '1') await setup.applyV670(db, notes)
   }
+  // V681 (engine v2 không để tài khoản kẹt "đang chạy": release / close_stale theo luật dấu bộ cũ của bước nhận lượt, dọn một lần lúc
+  // apply): SCENARIO_ACCOUNT_HOLD=1 (kèm SCENARIO_PARALLEL_RUN=1) apply V681 sau V670. Chạy bộ kịch bản có / không biến này để so.
+  if (process.env.SCENARIO_ACCOUNT_HOLD === '1') {
+    if (parallelRun !== '1') throw new Error('SCENARIO_ACCOUNT_HOLD=1 cần SCENARIO_PARALLEL_RUN=1 (V681 dựng trên release / close_stale sau V670)')
+    await db.query(require('../build-v681-sql.cjs').migration)
+    notes.push('V681 (release / close_stale theo luật dấu bộ cũ của bước nhận lượt, dọn một lần): đã apply')
+  }
 }
 
 module.exports = { bootstrap }

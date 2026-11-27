@@ -117,6 +117,7 @@ import {
 import { BlockExecutor } from '../v2/runtime/blockExecutor'
 import { PageTrace, tracePage } from '../engineAdapters/facebook/pageTrace'
 import { monotonicNow } from '../../shared/monotonicNow'
+import { ENGINE_STALE_STATUS_PROBE_MS, staleRunningEngineCampaigns } from './staleRunningAccount'
 import { resolveEngineStep, type ResolvedEngineStep } from '../engineAdapters/facebook/stepCatalog'
 import { blockFailureOutcome, detailInputOutcome, facebookPageStateSignal, interruptedOutcome, FACEBOOK_STATUS_VALUES, type MilestoneOutcome } from '../engineAdapters/facebook/milestoneOutcomes'
 import { hasPageSigns, pickFacebookErrorSign, PAGE_SIGN_TEXTS_SCRIPT, PAGE_SIGN_TIMEOUT_MS, rewriteFacebookSignMessage, type FacebookErrorSign } from '../engineAdapters/facebook/errorSigns'
@@ -1062,6 +1063,8 @@ export class CampaignScheduler {
   private preclaimLimitSkips = new Map<number, PreclaimLimitSkip>()
   /** Engine v2: lần nhận lượt gần nhất mà chiến dịch còn phải chờ (RAM, theo chiến dịch), cho nút "Lý do đang chờ". */
   private engineObservations = new Map<number, EngineClaimObservation>()
+  /** Tài khoản "đang chạy" không do máy này → mốc (đồng hồ đơn điệu) được hỏi DB lại bằng lượt engine (staleRunningAccount.ts). */
+  private readonly engineStaleStatusProbes = new Map<number, number>()
   private loggedNewsfeedMilestoneKeys = new Set<string>()
   private explicitMilestoneWrites = new Map<number, Map<string, {
     signature: string; write: Promise<CampaignDetail | null>; helperDetail?: ZaloActionDetailOutput | null
@@ -1360,13 +1363,7 @@ export class CampaignScheduler {
         return limit ? this.buildLimitPreflightNote(limit) : null
       },
       // Chỉ RAM: kết quả nhận lượt gần nhất của engine cho đúng chiến dịch + tài khoản này (không gọi support() để khỏi nạp danh mục).
-      engineReason: (account, campaign) => {
-        const observation = this.engineObservations.get(campaign.id)
-        if (!observation || observation.accountId !== account.id) return null
-        const label = account.flatformType === 'facebook' ? 'Facebook' : isWebAccountPlatform(account.flatformType) ? 'Website'
-          : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
-        return engineWaitMessage(observation, Date.now(), label)
-      }
+      engineReason: (account, campaign) => this.engineWaitNote(account, campaign)
     }
   }
 
@@ -2097,7 +2094,22 @@ export class CampaignScheduler {
 
         // "Chạy cùng lúc" (V670): tài khoản "đang chạy" vì làn riêng của chính máy này vẫn nhận chiến dịch cho hàng đợi chính.
         // Không có làn riêng thì statusReady = "chờ xử lý" như trước.
+        // Tài khoản "đang chạy" mà máy này không chạy gì cho nó (hàng đợi, thao tác, lướt đã loại ở trên; không có làn riêng): chiến dịch
+        // chạy bằng engine v2 để hàm nhận lượt của DB quyết định, không tin trạng thái có thể đã lệch (sự cố 27/11/2026). Tối đa một lần mỗi
+        // ENGINE_STALE_STATUS_PROBE_MS cho mỗi tài khoản, chỉ chiến dịch engine (bộ cũ đòi "chờ xử lý").
+        if (account.status !== 'đang chạy') this.engineStaleStatusProbes.delete(account.id)
+        const staleRunningCampaigns = this.engineRunner ? staleRunningEngineCampaigns({
+          status: account.status,
+          loginStatus: account.loginStatus,
+          hasLocalRun: this.hasActiveLaneRun(account.id),
+          probeDue: this.isEngineStaleStatusProbeDue(account.id),
+          campaigns,
+          dueNow: campaign => this.isWithinCampaignDispatchSchedule(campaign, new Date(accountClock.dbNow)),
+          engineSupports: campaign => this.engineRunner?.support(account, campaign).ok === true
+        }) : null
         const statusReady = account.status === 'chờ xử lý' || account.status === 'đang chạy' && this.hasActiveLaneRun(account.id)
+          || staleRunningCampaigns !== null
+        const queueCampaigns = staleRunningCampaigns ?? campaigns
         if (!statusReady || account.loginStatus !== 'đã đăng nhập') {
           // Q21: đến lịch quá lâu mà chưa chạy được thì nói ra (bộ cũ bỏ qua im lặng).
           const waitReason = account.status === 'tạm dừng' ? 'Tài khoản đang tạm dừng'
@@ -2114,23 +2126,24 @@ export class CampaignScheduler {
         if (account.flatformType === 'zalo' && account.isZaloShowWeb && this.zaloRuntime
           && !this.zaloRuntime.hasVerifiedWebSession(account.id)) continue
 
-        const hasScheduledCampaign = campaigns.some(c => this.isWithinCampaignDispatchSchedule(c, new Date(accountClock.dbNow)))
+        const hasScheduledCampaign = queueCampaigns.some(c => this.isWithinCampaignDispatchSchedule(c, new Date(accountClock.dbNow)))
         const browsing = this.webEnrichment?.tryRun(account, hasScheduledCampaign)
         if (browsing) { void browsing; continue }
-        if (campaigns.length === 0 && !account.facebookRandomRunEnabled) continue
+        if (queueCampaigns.length === 0 && !account.facebookRandomRunEnabled) continue
 
         // Browserless campaigns such as Zalo API flows do not mount a webview tab.
-        const hasBrowserCampaigns = campaigns.some(campaign => !this.isBrowserlessCampaign(campaign))
+        const hasBrowserCampaigns = queueCampaigns.some(campaign => !this.isBrowserlessCampaign(campaign))
           || (account.flatformType === 'zalo' && account.isZaloShowWeb === true)
         if (hasBrowserCampaigns && !this.webviewRegistry.isRegistered(account.id)) {
           this.sendLog(`⚠️ Tài khoản "${account.name}" chưa mở tab trình duyệt. Bỏ qua.`)
-          await this.noteOverdueCampaignWaits(campaigns.filter(campaign => !this.isBrowserlessCampaign(campaign)),
+          await this.noteOverdueCampaignWaits(queueCampaigns.filter(campaign => !this.isBrowserlessCampaign(campaign)),
             'Tài khoản chưa mở tab trình duyệt', accountClock.dbNow)
           continue
         }
 
         if (accountOperationRegistry.has(account.id) || this.externalAccountRuns.has(account.id)) continue
-        this.startAccountCampaignQueue(account, campaigns)
+        if (staleRunningCampaigns) this.markEngineStaleStatusProbe(account.id)
+        this.startAccountCampaignQueue(account, queueCampaigns)
       }
 
       if (this.schedulerConnectivityIssueActive) {
@@ -2195,6 +2208,25 @@ export class CampaignScheduler {
         this.boundaryStoppedAccountQueues.delete(account.id)
         if (isZaloAccount) this.activeZaloAccountRuns.delete(account.id)
       })
+  }
+
+  /** Tài khoản "đang chạy" không do máy này: đã tới lúc hỏi DB lại chưa (ENGINE_STALE_STATUS_PROBE_MS, đồng hồ đơn điệu). */
+  private isEngineStaleStatusProbeDue(accountId: number): boolean {
+    const next = this.engineStaleStatusProbes.get(accountId)
+    return next === undefined || monotonicNow() >= next
+  }
+
+  private markEngineStaleStatusProbe(accountId: number): void {
+    this.engineStaleStatusProbes.set(accountId, monotonicNow() + ENGINE_STALE_STATUS_PROBE_MS)
+  }
+
+  /** Câu chờ cho khách theo lần nhận lượt engine gần nhất của chiến dịch trên tài khoản này (cùng câu nút "Lý do đang chờ"). */
+  private engineWaitNote(account: AutoAccount, campaign: Campaign): string | null {
+    const observation = this.engineObservations.get(campaign.id)
+    if (!observation || observation.accountId !== account.id) return null
+    const label = account.flatformType === 'facebook' ? 'Facebook' : isWebAccountPlatform(account.flatformType) ? 'Website'
+      : account.isZaloShowWeb ? 'Zalo trình duyệt' : 'Zalo'
+    return engineWaitMessage(observation, Date.now(), label)
   }
 
   /** "Chạy cùng lúc" (V670): tài khoản có hàng đợi làn riêng đang chạy trên máy này. */
@@ -2266,8 +2298,11 @@ export class CampaignScheduler {
     if (this.legacyRunAccounts.has(account.id)) return
     const laneCampaigns = [...lanes.values()].flat()
     // Tài khoản "đang chạy" vì chính máy này đang chạy hàng đợi chính hoặc làn khác thì làn mới vẫn nhận được (DB xét chồng thao tác).
-    const statusReady = account.status === 'chờ xử lý'
-      || account.status === 'đang chạy' && (this.activeAccountRuns.has(account.id) || this.hasActiveLaneRun(account.id))
+    // "Đang chạy" mà máy này không chạy gì cho nó: làn chỉ chạy engine v2, để DB quyết định (như hàng đợi chính, staleRunningAccount.ts).
+    const ownRun = this.activeAccountRuns.has(account.id) || this.hasActiveLaneRun(account.id)
+    const staleProbe = account.status === 'đang chạy' && !ownRun && account.loginStatus === 'đã đăng nhập'
+      && this.isEngineStaleStatusProbeDue(account.id)
+    const statusReady = account.status === 'chờ xử lý' || account.status === 'đang chạy' && ownRun || staleProbe
     if (!statusReady || account.loginStatus !== 'đã đăng nhập') {
       const waitReason = account.status === 'tạm dừng' ? 'Tài khoản đang tạm dừng' : !statusReady ? null : 'Tài khoản chưa đăng nhập'
       if (waitReason) await this.noteOverdueCampaignWaits(laneCampaigns, waitReason, dbNow)
@@ -2278,6 +2313,7 @@ export class CampaignScheduler {
       await this.noteOverdueCampaignWaits(laneCampaigns, 'Tài khoản chưa mở tab trình duyệt', dbNow)
       return
     }
+    if (staleProbe) this.markEngineStaleStatusProbe(account.id)
     for (const [lane, list] of lanes) this.startParallelLaneQueue(account, lane, list)
   }
 
@@ -2588,6 +2624,12 @@ export class CampaignScheduler {
           if (this.runtimeCampaignByAccount.get(account.id) === currentCampaign.id) this.runtimeCampaignByAccount.delete(account.id)
         }
         if (engineResult) this.observeEngineResult(account, currentCampaign, engineResult)
+        // Q21 (R17): DB báo tài khoản đang bị giữ (lượt khác, bộ cũ, thao tác tài khoản) thì chiến dịch quá lịch ghi câu chờ, không đứng im
+        // không lý do. Cùng câu nút "Lý do đang chờ"; noteOverdueCampaignWaits chỉ ghi trên Desktop, khi quá lịch và câu đổi.
+        if (engineResult && (engineResult.reason === 'legacy_busy' || engineResult.reason === 'busy')) {
+          const note = this.engineWaitNote(account, currentCampaign)
+          if (note) await this.noteOverdueCampaignWaits([currentCampaign], note, runtimeClock.dbNow)
+        }
         if (engineResult?.reason === 'wait' && !(await this.completeEngineNewsfeedDailyWhenLimited(account, currentCampaign, engineResult))) {
           await this.rememberEngineWait(account, currentCampaign, engineResult)
         }
@@ -2611,6 +2653,8 @@ export class CampaignScheduler {
       // "Chạy cùng lúc" (V670): làn riêng đang giữ tài khoản ("đang chạy") thì claim của bộ cũ từ chối (aka_agent_claim_campaign_runtime_checked
       // đòi tài khoản "chờ xử lý"): bỏ qua, khỏi đọc DB; bộ cũ chạy khi các làn riêng xong. Không ai tích thì không có làn riêng nào.
       if (this.hasActiveLaneRun(account.id)) continue
+      // Hàng đợi mở cho tài khoản "đang chạy" không do máy này (staleRunningAccount.ts) chỉ để engine hỏi DB: không chạy bộ cũ.
+      if (account.status === 'đang chạy') continue
       this.runtimeCampaignByAccount.set(account.id, currentCampaign.id)
       this.legacyRunAccounts.add(account.id)
       let outcome: Awaited<ReturnType<typeof this.executeCampaign>>

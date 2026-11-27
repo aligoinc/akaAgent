@@ -9,6 +9,8 @@
 //   - bộ cũ còn giữ tài khoản lúc bật công tắc: engine chờ (legacy_busy), không gửi; bộ cũ xong thì engine chạy phần còn lại, không gửi lại
 //   - nhiều nhân viên trong một tiến trình: mỗi lượt đúng nhân viên, tổ chức không bật vẫn đi bộ cũ
 //   - App Server dừng runtime giữa lượt (như stopRuntime) rồi khởi động lại: chạy tiếp, không gửi trùng
+//   - tài khoản "đang chạy" bị sót (sự cố 27/11/2026, staleRunningAccount.ts): lượt quét vẫn đưa chiến dịch engine cho DB nhận lượt, tối
+//     đa 2 phút một lần; bộ cũ / tổ chức chưa bật không chạy; DB còn giữ tài khoản thì không gửi
 // Chạy: CHAT_REPO=<thư mục có node_modules/pg> LC_ALL=C node scripts/engine-v2-server-runtime-scheduler-smoke.cjs (tự chạy lại dưới Electron)
 'use strict'
 const assert = require('node:assert/strict')
@@ -191,6 +193,7 @@ async function main() {
     // ------------------------------------------------------------------ facade SupabaseService (phần đường engine của App Server dùng)
     const progress = []
     const facadeCalls = []
+    let tickAccountIds = []
     const facade = new Proxy({
       getRuntimeClock: async () => {
         const now = new Date()
@@ -198,6 +201,11 @@ async function main() {
         return { dbNow: now.toISOString(), vietnamDateKey: vn, nextVietnamMidnight: new Date(Date.parse(`${vn}T00:00:00+07:00`) + 24 * 60 * MIN).toISOString() }
       },
       getCampaign: async id => { const r = await one('SELECT * FROM public.auto_campaigns WHERE id = $1', [id]); return r ? mod.mapCampaignFromDB(r) : null },
+      // Lượt quét (tick): tài khoản của tiến trình (tickAccountIds) và chiến dịch tới lịch của từng tài khoản (rút gọn getPendingCampaigns).
+      getEligibleAccounts: async () => (await q('SELECT * FROM public.auto_accounts WHERE id = ANY($1::bigint[]) ORDER BY id', [tickAccountIds]))
+        .map(mod.mapAccountFromDB),
+      getPendingCampaigns: async accountId => (await q(`SELECT * FROM public.auto_campaigns WHERE account_id = $1 AND status = 'chờ xử lý'
+        AND is_delete = false AND schedule <= now() ORDER BY schedule, id`, [accountId])).map(mod.mapCampaignFromDB),
       getAccount: async id => { const r = await one('SELECT * FROM public.auto_accounts WHERE id = $1', [id]); return r ? mod.mapAccountFromDB(r) : null },
       appendCampaignLog: async (id, message) => {
         progress.push({ campaignId: Number(id), message })
@@ -508,6 +516,105 @@ async function main() {
       for (const phone of phones) assert.equal(textSends([r1, r2], phone), 1, `${phone} gửi ${textSends([r1, r2], phone)} lần`)
       for (const phone of phones) assert.equal(await inputStatus(c.ids[phone]), 'hoàn thành', phone)
       assert.equal(await liveLeases(acc.id), 0, 'tiến trình mới nhả lease')
+    })
+
+    // ------------------------------------------------------------------ tài khoản "đang chạy" bị sót (27/11/2026)
+    // Lượt quét thật (tick) với một tài khoản: trạng thái tài khoản lấy từ DB như getEligibleAccounts của App Server.
+    const tickOnce = async (scheduler, user, accountIds) => {
+      tickAccountIds = accountIds
+      await mod.runWithCurrentUser(user, () => scheduler.tick())
+      assert.equal(await scheduler.waitForIdle(30_000), true, 'hàng đợi xong')
+    }
+    const accountStatus = async id => (await one(`SELECT status FROM public.auto_accounts WHERE id = $1`, [id])).status
+    const setRunning = id => db.query(`UPDATE public.auto_accounts SET status = 'đang chạy' WHERE id = $1`, [id])
+
+    await check('tài khoản "đang chạy" bị sót (không lease, không dấu bộ cũ): lượt quét chạy chiến dịch engine, gửi đủ, tài khoản về chờ xử lý', async () => {
+      await setting(JSON.stringify({ mode: 'orgs', organizationIds: [ORG, ORG_B] }))
+      await gate.refresh()
+      const runtime = fakeRuntime()
+      const { scheduler, legacy } = makeScheduler(runtime)
+      const acc = await makeAccount(STAFF, ORG)
+      const c = await makeCampaign(acc, ['0944000101', '0944000102'], { name: 'Sót đang chạy' })
+      await setRunning(acc.id)
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.deepEqual(legacy, [], 'không gọi bộ cũ')
+      assert.deepEqual(runtime.sent, ['find:0944000101', 'text:uid-0944000101', 'find:0944000102', 'text:uid-0944000102'])
+      for (const id of Object.values(c.ids)) assert.equal(await inputStatus(id), 'hoàn thành')
+      assert.equal(await accountStatus(acc.id), 'chờ xử lý', 'nhả lượt trả tài khoản về chờ xử lý')
+      assert.equal(await liveLeases(acc.id), 0)
+    })
+
+    await check('tài khoản "đang chạy" bị sót: hỏi lại tối đa 2 phút một lần (lượt quét ngay sau không nhận lượt), quá hạn thì chạy', async () => {
+      const runtime = fakeRuntime()
+      const { scheduler, legacy } = makeScheduler(runtime)
+      const acc = await makeAccount(STAFF, ORG)
+      await makeCampaign(acc, ['0944000111'], { name: 'Lần 1' })
+      await setRunning(acc.id)
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(textSends([runtime], '0944000111'), 1)
+      // Lượt sau lại sót "đang chạy" (như release cũ để lại) và có chiến dịch mới tới lịch.
+      const c2 = await makeCampaign(acc, ['0944000112'], { name: 'Lần 2' })
+      await setRunning(acc.id)
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(textSends([runtime], '0944000112'), 0, 'chưa tới lượt hỏi lại: không nhận lượt')
+      assert.equal(await inputStatus(c2.ids['0944000112']), 'chờ xử lý')
+      assert.ok(scheduler.engineStaleStatusProbes.has(acc.id), 'có mốc hỏi lại')
+      scheduler.engineStaleStatusProbes.set(acc.id, 0)   // như đã qua 2 phút (đồng hồ đơn điệu)
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(textSends([runtime], '0944000112'), 1, 'quá hạn: hỏi DB, chạy')
+      assert.equal(await inputStatus(c2.ids['0944000112']), 'hoàn thành')
+      assert.deepEqual(legacy, [])
+      // Tài khoản về chờ xử lý thì bỏ mốc (lần sót sau hỏi ngay).
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(scheduler.engineStaleStatusProbes.has(acc.id), false)
+    })
+
+    await check('DB còn giữ tài khoản (token thao tác bộ cũ còn sống): lượt quét hỏi DB, không gửi, không gọi bộ cũ, tài khoản vẫn "đang chạy"', async () => {
+      const runtime = fakeRuntime()
+      const { scheduler, legacy } = makeScheduler(runtime)
+      const acc = await makeAccount(STAFF, ORG)
+      const c = await makeCampaign(acc, ['0944000121'], { name: 'Bị giữ' })
+      await db.query(`UPDATE public.auto_accounts SET status = 'đang chạy', runtime_operation_claim_token = gen_random_uuid() WHERE id = $1`, [acc.id])
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.deepEqual(runtime.sent, [])
+      assert.deepEqual(legacy, [])
+      assert.equal(await inputStatus(c.ids['0944000121']), 'chờ xử lý')
+      assert.equal(await accountStatus(acc.id), 'đang chạy', 'không ai đổi trạng thái của tài khoản đang bị giữ')
+      // Khoá theo id chiến dịch như bộ lập lịch đọc lại (pg trả bigint dạng chuỗi).
+      const seen = scheduler.engineObservations.get(c.campaign.id)
+      assert.equal(seen?.reason, 'legacy_busy', JSON.stringify(seen))
+      // App Server không ghi câu chờ (chỉ Desktop): ghi chú chiến dịch giữ nguyên.
+      assert.equal((await one(`SELECT note FROM public.auto_campaigns WHERE id = $1`, [c.campaign.id])).note, null)
+      // Lượt quét ngay sau không hỏi lại (một lần nhận lượt / 2 phút / tài khoản).
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(scheduler.engineObservations.get(c.campaign.id)?.at, seen.at, 'không nhận lượt lại trong 2 phút')
+      // Thao tác xong (bộ cũ nhả token, trả tài khoản): chạy ngay ở lượt quét sau.
+      await db.query(`UPDATE public.auto_accounts SET status = 'chờ xử lý', runtime_operation_claim_token = NULL WHERE id = $1`, [acc.id])
+      await tickOnce(scheduler, userOf(STAFF, ORG), [acc.id])
+      assert.equal(textSends([runtime], '0944000121'), 1)
+      assert.equal(await inputStatus(c.ids['0944000121']), 'hoàn thành')
+    })
+
+    await check('tổ chức chưa bật engine: tài khoản "đang chạy" bị sót vẫn đứng như trước (bộ cũ đòi chờ xử lý), không gửi, không gọi bộ cũ', async () => {
+      const runtime = fakeRuntime()
+      const { scheduler, legacy } = makeScheduler(runtime)
+      const acc = await makeAccount(STAFF_OFF, ORG_OFF)
+      const c = await makeCampaign(acc, ['0944000131'], { name: 'Bộ cũ sót' })
+      await setRunning(acc.id)
+      await tickOnce(scheduler, userOf(STAFF_OFF, ORG_OFF), [acc.id])
+      assert.deepEqual(legacy, [])
+      assert.deepEqual(runtime.sent, [])
+      assert.equal(scheduler.engineStaleStatusProbes.has(acc.id), false, 'không có chiến dịch engine: không đánh dấu hỏi lại')
+      assert.equal(await inputStatus(c.ids['0944000131']), 'chờ xử lý')
+      // Hàng đợi mở với tài khoản "đang chạy" (đường phòng hờ trong runAccountCampaignQueue): chiến dịch không chạy được bằng engine thì bỏ qua.
+      const now = mod.mapAccountFromDB(await one('SELECT * FROM public.auto_accounts WHERE id = $1', [acc.id]))
+      assert.equal(now.status, 'đang chạy')
+      await runQueue(scheduler, userOf(STAFF_OFF, ORG_OFF), now, [c.campaign])
+      assert.deepEqual(legacy, [], 'hàng đợi của tài khoản "đang chạy" không chạy bộ cũ')
+      // Tài khoản chờ xử lý: bộ cũ chạy như trước.
+      await db.query(`UPDATE public.auto_accounts SET status = 'chờ xử lý' WHERE id = $1`, [acc.id])
+      await tickOnce(scheduler, userOf(STAFF_OFF, ORG_OFF), [acc.id])
+      assert.deepEqual(legacy, [Number(c.campaign.id)])
     })
 
     const rpcErrors = unknownCalls.filter(c => c[0] === 'rpc_error')
