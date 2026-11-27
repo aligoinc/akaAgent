@@ -105,6 +105,7 @@ import { canUsePlatform } from '../../utils/entitlements'
 import { isZaloWebAccount } from '../../utils/accountLabels'
 import { createDataGroupRequestId } from '../DataGroups/dataGroupApi'
 import AddDataToCurrentCampaignModal, { isAddDataSupportedForCampaign } from './AddDataToCurrentCampaignModal'
+import { SCHEDULE_END_LEGACY_RUNNING_LABEL, isRunningPastLegacyScheduleEnd } from '../../../../shared/campaignScheduleEnd'
 
 export interface CampaignDiagnosticActionRequest {
   campaign: CampaignListItem
@@ -6081,6 +6082,7 @@ export default function CampaignPanel({ onOpenAccountSettings, diagnosticActionR
                             <RefreshCw size={13} aria-hidden="true" /></span>
                         })()}</div>
                         <div className="campaign-meta-line">{actionLabel}</div>
+                        {isRunningPastLegacyScheduleEnd(campaign) && <div className="campaign-note-line">{SCHEDULE_END_LEGACY_RUNNING_LABEL}</div>}
                         {displayedNote ? <div className="campaign-note-line">{displayedNote}</div> : canCheckCampaignPendingReason(campaign) && (
                           <button
                             type="button"

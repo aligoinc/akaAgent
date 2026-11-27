@@ -815,6 +815,11 @@ export interface Campaign {
    * chạy bằng engine v2 trên tài khoản Zalo. Đọc theo bản ghi đầy đủ; DB chưa có cột thì false.
    */
   parallelRunEnabled?: boolean
+  /**
+   * "Đặt ngày kết thúc" (V674, auto_campaigns.schedule_end_strict): true = khách chủ động đặt ngày kết thúc trên form mới, hết ngày đó DB
+   * đóng chiến dịch kể cả còn data chờ. false = chiến dịch cũ (ngày kết thúc chỉ ngừng làm mới data). DB chưa có cột thì false.
+   */
+  scheduleEndStrict?: boolean
   log: string
   note?: string | null
   content?: string

@@ -194,7 +194,10 @@ export function scheduleAiSnapshot(form: Omit<ScheduleAiFields, 'startDate' | 's
 
 export function applyScheduleAiPatch<T extends { schedule: string }>(form: T, patch: ScheduleAiPatch): T {
   const { startDate, startTime, ...rest } = patch
-  return { ...form, ...rest, schedule: startDate !== undefined || startTime !== undefined
+  // "Đặt ngày kết thúc" (V674): AI điền ngày kết thúc thì tích ô, AI xoá ngày ('') thì bỏ tích. Form không có ô này thì bỏ qua.
+  const endToggle = rest.scheduleEndDate !== undefined && 'scheduleEndEnabled' in form
+    ? { scheduleEndEnabled: rest.scheduleEndDate !== '' } : {}
+  return { ...form, ...rest, ...endToggle, schedule: startDate !== undefined || startTime !== undefined
     ? `${startDate ?? form.schedule.split('T')[0]}T${startTime ?? form.schedule.split('T')[1]?.slice(0, 5)}` : form.schedule }
 }
 

@@ -19,6 +19,7 @@ import { isRecentDeliveryCooldownEnabled } from '../../../../shared/campaignDeli
 import { campaignRepeatIntervalLabel, readCampaignRepeat } from '../../../../shared/campaignRepeat'
 import { normalizeAdvancedContentItems } from '../../../../shared/advancedContent'
 import { CAMPAIGN_PARALLEL_RUN_SHORT_LABEL, canShowCampaignParallelRun } from '../../../../shared/campaignParallelRun'
+import { scheduleEndDetailSuffix } from '../../../../shared/campaignScheduleEnd'
 import { useAuthStore } from '../../stores/authStore'
 
 interface CampaignInfoViewProps {
@@ -847,7 +848,10 @@ export default function CampaignInfoView({ campaign, account, action, campaigns,
           { label: 'Loại lịch', value: formatScheduleType(scheduleType) },
           { label: 'Ngày chạy trong tuần', value: formatWeekDays(campaign.scheduleWeekDays), hidden: scheduleType !== 'weekly' },
           { label: 'Ngày chạy trong tháng', value: formatMonthDays(campaign.scheduleDays), hidden: scheduleType !== 'monthly' },
-          { label: 'Ngày kết thúc', value: campaign.scheduleEndDate ? formatDateTime(campaign.scheduleEndDate) : 'Không giới hạn' },
+          // "Đặt ngày kết thúc" (V674): lịch tuần / tháng ghi rõ dừng đúng ngày hay chiến dịch cũ chạy nốt data. Nhóm data có hạn riêng.
+          { label: 'Ngày kết thúc', value: campaign.scheduleEndDate
+            ? `${formatDateTime(campaign.scheduleEndDate)}${scheduleType !== 'daily' && campaign.dataTargetSourceMode !== 'data_group' ? ` (${scheduleEndDetailSuffix(campaign)})` : ''}`
+            : 'Không giới hạn' },
           { label: 'Giờ dừng trong ngày', value: formatTime(campaign.dailyStopTime) },
           { label: 'Gửi lặp lại', value: onOff(true), hidden: extra.zaloShareRepeatEnabled !== true },
           { label: 'Lặp lại sau mỗi', value: `${Number(extra.zaloShareRepeatAfterMinutes) || 60} phút, tính từ lúc gửi xong lượt trước`, hidden: extra.zaloShareRepeatEnabled !== true },

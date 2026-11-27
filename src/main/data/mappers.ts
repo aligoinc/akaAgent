@@ -225,6 +225,7 @@ export function mapCampaignFromDB(row: Record<string, unknown>): Campaign {
     continueNextDay: (row.continue_next_day as boolean) ?? false,
     refreshData: (row.refresh_data as boolean) ?? false,
     parallelRunEnabled: row.parallel_run_enabled === true,
+    scheduleEndStrict: row.schedule_end_strict === true,
     content: (row.content as string) || '',
     extraSettings: (row.extra_settings as Campaign['extraSettings']) || {},
     images: (row.images as Campaign['images']) || [],
