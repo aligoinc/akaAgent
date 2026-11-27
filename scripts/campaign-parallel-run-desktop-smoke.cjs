@@ -3,7 +3,8 @@
 //   1. Không chiến dịch nào tích: một hàng đợi như trước, không đọc danh sách loại được bật, không mở làn riêng.
 //   2. Có tích: chiến dịch phụ chạy ở làn riêng cùng lúc với hàng đợi chính; cùng loại thì lần lượt trong một làn.
 //   3. Loại chưa được bật / engine không chạy được / tài khoản Server / App Server: về hàng đợi chính.
-//   4. Hàng đợi chính gặp parallel_wait thì dừng, giữ thứ tự lịch; tài khoản "đang chạy" vì làn riêng của máy này vẫn nhận hàng đợi chính.
+//   4. Hàng đợi chính gặp parallel_wait thì dừng, giữ thứ tự lịch; tài khoản "đang chạy" vì làn riêng của máy này vẫn nhận hàng đợi chính;
+//      tài khoản "đang chạy" sót lại (máy này không chạy gì cho nó) thì chiến dịch engine cho DB nhận lượt, 2 phút một lần, bộ cũ không chạy.
 //   5. Bộ cũ và làn riêng chờ nhau (claim bộ cũ đòi tài khoản "chờ xử lý"); chờ dừng, giữ tài khoản cho việc ngoài, ảnh chụp heartbeat.
 //   6. Nút "Lý do đang chờ": chiến dịch ở làn riêng không bị coi là bận vì hàng đợi chính; câu chờ đúng câu anh duyệt.
 // Chạy: node scripts/campaign-parallel-run-desktop-smoke.cjs
@@ -215,13 +216,26 @@ async function main() {
     assert.ok(mainCall, 'tài khoản "đang chạy" vì làn riêng của máy này: hàng đợi chính vẫn nhận chiến dịch')
     assert.ok(overlap(mainCall, slow.calls.find(c => c.campaignId === lane.id)), 'chạy cùng lúc với làn riêng')
 
+    // "Đang chạy" mà máy này không chạy gì cho nó (sót lại sau lượt engine, sự cố 27/11/2026): chiến dịch engine (cả làn riêng) đưa cho
+    // claim của DB quyết định, tối đa một lần mỗi 2 phút mỗi tài khoản; bộ cũ vẫn đòi "chờ xử lý". Trước bản sửa: không nhận gì.
     const stale = account(10, { status: 'đang chạy' })
-    const third = makeScheduler({ accounts: [stale], campaigns: [campaign(10, 'zalo_message_phone'), campaign(10, 'zalo_join_group_link', { parallelRunEnabled: true })],
-      engine: fakeEngine() })
+    const staleLegacy = campaign(10, 'zalo_message_friend')
+    const third = makeScheduler({ accounts: [stale], campaigns: [campaign(10, 'zalo_message_phone'), campaign(10, 'zalo_join_group_link', { parallelRunEnabled: true }),
+      staleLegacy], engine: fakeEngine({ support: (_a, c) => ({ ok: c.id !== staleLegacy.id }) }) })
     await tick(third.scheduler)
     await idle(third.scheduler)
-    assert.equal(third.scheduler.engineRunner.calls.length, 0, '"đang chạy" không do máy này: không nhận gì, như trước')
-    pass('parallel_wait giữ thứ tự lịch; "đang chạy" vì làn riêng vẫn nhận hàng đợi chính, "đang chạy" sót lại thì không')
+    assert.deepEqual(third.scheduler.engineRunner.calls.map(c => c.lane).sort(), ['main', 'zalo_join_group_link'],
+      '"đang chạy" sót lại: chiến dịch engine (làn chính + làn riêng) cho DB nhận lượt')
+    assert.deepEqual(third.db.legacy, [], '"đang chạy" sót lại: bộ cũ không chạy')
+    await tick(third.scheduler)
+    await idle(third.scheduler)
+    assert.equal(third.scheduler.engineRunner.calls.length, 2, 'lượt quét ngay sau: không hỏi lại (tối đa 2 phút một lần)')
+    third.scheduler.engineStaleStatusProbes.set(stale.id, 0) // như đã qua 2 phút
+    await tick(third.scheduler)
+    await idle(third.scheduler)
+    assert.equal(third.scheduler.engineRunner.calls.length, 4, 'quá 2 phút: hỏi lại')
+    assert.deepEqual(third.db.legacy, [])
+    pass('parallel_wait giữ thứ tự lịch; "đang chạy" vì làn riêng vẫn nhận hàng đợi chính; "đang chạy" sót lại thì đưa chiến dịch engine cho DB (2 phút một lần), bộ cũ không chạy')
   }
 
   // ---- 5. Bộ cũ, chờ dừng, việc ngoài, ảnh chụp --------------------------------------------------------------------------------------

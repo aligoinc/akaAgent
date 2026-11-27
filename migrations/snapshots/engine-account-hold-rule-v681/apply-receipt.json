@@ -1,0 +1,94 @@
+{
+  "migration": "migration_v681_engine_account_hold_rule",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "Chạy thử rồi apply (27/11/2026)",
+  "file": "migrations/migration_v681_engine_account_hold_rule.sql",
+  "file_md5": "8d7ef48e92612fc31b73195ad3e4f6a2",
+  "generator": "node scripts/build-v681-sql.cjs",
+  "rollback_file": "migrations/rollback_v681_engine_account_hold_rule.sql",
+  "rollback_md5": "27c3c472734243d09c8c144ce8bd26c2",
+  "preflight_16_47_vn": {
+    "ledger_has_v681": false,
+    "ledger_top": "20261127082507 migration_v678_notification_email_pacing",
+    "release_def_md5": "85ee6d8541b0d5cd0462063dc11bccf0",
+    "release_src_md5": "d47d1828addaaf816451d2f3a53c3990",
+    "close_stale_def_md5": "b4e2c1664e90212edec6fa2bfd036009",
+    "close_stale_src_md5": "09dfc2d77a89efc497131d78444c9f35",
+    "helpers_present": false,
+    "result": "khớp bản sau V670 mà bộ sinh đối chiếu"
+  },
+  "scan_before": {
+    "at": "2026-11-27T09:49:40Z",
+    "command": "node scripts/engine-v2-stuck-accounts.cjs --json",
+    "running": 403,
+    "by_holder": { "lease": 325, "operation": 77, "none": 1 },
+    "stuck_A": [{ "account_id": 1197, "platform": "facebook", "note": "bản app cũ, kẹt từ 07/10; bước dọn một lần cố ý không đụng" }],
+    "operation_held_B": 74
+  },
+  "dry_run": {
+    "at_vn": "2026-11-27 16:51:07",
+    "method": "bản sao migration, COMMIT cuối thay bằng khối DO luôn RAISE EXCEPTION mang báo cáo (giao dịch huỷ); chạy bằng supabase db query --linked -f",
+    "elapsed_ms": 118,
+    "once_cleanup": { "cleared_tokens": 0, "reset_accounts": 0, "once_ms": 22 },
+    "tokens_before": 215,
+    "running_accounts_before_incl_deleted": 421,
+    "release_def_md5_after": "806a6564e85d100e7cec6e053a00a61a",
+    "close_stale_def_md5_after": "205a9972f3813796fcc35661675d83b7",
+    "holder_after": { "lease": 310, "operation": 78, "none": 1 },
+    "grants_holder": { "service_role": true, "aka_agent_chat_api": true, "aka_agent_desktop": false, "anon": false, "authenticated": false },
+    "close_stale_probe": { "closedTargets": 0, "orphanTargets": 0, "releasedLeases": 0, "finalizedTargets": 0 },
+    "release_probe_fake_lease": { "ok": false, "reason": "ownership_lost" }
+  },
+  "apply": {
+    "at_vn": "2026-11-27 16:51:23 – 16:51:25",
+    "method": "node scripts/make-migration-ledger-apply.cjs (dòng sổ chèn trước COMMIT, cùng giao dịch) rồi supabase db query --linked --workdir <akaAgent> -f",
+    "ledger_version": "20261127095123",
+    "ledger_statements_md5": "8d7ef48e92612fc31b73195ad3e4f6a2",
+    "ledger_created_by": null,
+    "exit_code": 0,
+    "once_cleanup": "0 dấu / 0 tài khoản (như chạy thử; lần gỡ tay 15:21 VN đã dọn hết)",
+    "do_not_reapply": true
+  },
+  "postflight_16_52_vn": {
+    "release_def_md5": "806a6564e85d100e7cec6e053a00a61a",
+    "close_stale_def_md5": "205a9972f3813796fcc35661675d83b7",
+    "legacy_hold_src_md5": "69f3f078b5261b34fd2b293f5056ab3a",
+    "holder_src_md5": "ca68fb7555920b1ed0928ee711358740",
+    "release_attrs": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres|true|v|search_path=\"\" (không đổi)",
+    "close_stale_attrs": "{postgres=X/postgres,service_role=X/postgres}|postgres|true|v|search_path=\"\" (không đổi)",
+    "helpers_execute": { "service_role": true, "aka_agent_chat_api": true, "aka_agent_desktop": false, "anon": false, "authenticated": false, "public": false },
+    "close_stale_job_first_run_new_body": { "at_vn": "16:52:00", "status": "succeeded", "ms": 31 },
+    "holder_running_not_deleted": { "lease": 302, "operation": 78, "none": 1 },
+    "stale_server_tokens_remaining": {
+      "count": 142,
+      "note": "đều trên tài khoản Zalo Server đã xoá (90 tài khoản), 0 data đang chạy, giữ lượt 18/08–21/11; legacy_hold_v1 bỏ qua; bước dọn một lần cố ý không đụng tài khoản đã xoá"
+    }
+  },
+  "postgrest": {
+    "reload_message_utc": "09:51:20",
+    "schema_cache_queried_ms": 4976.4,
+    "edge_rest_10s_buckets_09_51_00_to_09_52_10": { "e503": 0, "e5xx_total": 3, "slow_over_1s_at_09_51_20": 431 },
+    "warp_thread_killed_09_51": "1 dòng (nền 09:21–09:49: 3–135 dòng / phút)"
+  },
+  "rpc_after_apply": {
+    "window_before": "09:41:23–09:51:23 UTC",
+    "window_after": "09:51:23–~09:54 UTC",
+    "release_v1": { "before_ok": 1368, "before_5xx": 0, "after_ok": 219, "after_5xx": 0 },
+    "claim_target_v1": { "before_ok": 4001, "before_5xx": 10, "after_ok": 618, "after_5xx": 3, "note": "claim không đổi ở V681; 500 là Desktop hết 3 giây, 2 lượt rơi đúng lúc nạp lại schema" },
+    "report_v1": { "before_ok": 5043, "before_5xx": 0, "after_ok": 722, "after_5xx": 0 },
+    "postgres_errors_helpers": 0
+  },
+  "scan_after": {
+    "at": "2026-11-27T09:52:52Z",
+    "holder_function_detected": true,
+    "running": 385,
+    "by_holder": { "lease": 305, "operation": 79, "none": 1 },
+    "stuck_A": [1197],
+    "operation_held_B": 74
+  },
+  "not_done": [
+    "commit / PR akaAgent (claude/engine-account-self-heal) và ChatApi (feat/engine-account-self-heal)",
+    "deploy ChatApi worker (nhánh (C) tự bật khi thấy V681)",
+    "build Desktop + App Server (bộ lập lịch không cần V681)"
+  ]
+}

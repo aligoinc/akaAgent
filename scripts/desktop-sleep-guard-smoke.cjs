@@ -358,7 +358,7 @@ function machine({ platform = 'mac', idle = () => 3600 } = {}) {
   }
   const tick = between('  private async tick(): Promise<void> {', '    if (this.dispatching) {')
   assert.match(tick, new RegExp(`if \\(${held.source}\\) return`))
-  assert.match(between('  private async tick(): Promise<void> {', 'this.startAccountCampaignQueue(account, campaigns)'),
+  assert.match(between('  private async tick(): Promise<void> {', 'this.startAccountCampaignQueue(account, queueCampaigns)'),
     new RegExp(`for \\(const account of accounts\\) \\{\\s*if \\(!this\\.running \\|\\| ${held.source}\\) break`))
   const queue = between('  private async runAccountCampaignQueue(', 'const liveAccount = account.flatformType')
   assert.match(queue, new RegExp(`if \\(${held.source}\\) break`))
