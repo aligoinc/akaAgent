@@ -1,5 +1,8 @@
 # Bot sự kiện: DB V672
 
+> **Đã apply akachat 12:53:55 VN 27/11/2026** (sổ `20261127055355`, md5 sổ = file `4b798fb6…`; không apply lại). Công tắc `event_bot` = `{"audience":"all","organizationIds":[],"runtimes":{"desktop":true,"server":true,"fly":false},"pollSeconds":30}` từ 12:54:23 VN (tắt: `audience` `off`). Job dọn `aka-agent-event-bot-maintenance` id 137. [Biên nhận](../migrations/snapshots/event-bot-v672/apply-receipt.json). Sửa DB từ nay phải là migration mới, dựng trên thân đang chạy.
+
+
 Phần DB của [hợp đồng](EVENT_BOT_TECH.md) (mục 7a ghi các chi tiết thêm so với bản hợp đồng đầu). **Chưa apply production.**
 
 - Migration: [migration_v672_event_bot.sql](../migrations/migration_v672_event_bot.sql) (~104 KB, md5 file `a29d091d893dbdc74079db3f97475c17`), gỡ: [rollback_v672_event_bot.sql](../migrations/rollback_v672_event_bot.sql).

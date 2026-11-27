@@ -1,0 +1,38 @@
+{
+  "migration": "migration_v673_engine_facebook_group_post_frequency_early",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "apply đi (27/11/2026, sau khi duyệt \"Dò sớm FB02\" qua hộp chọn; câu 9004 của hộp thư lỗi)",
+  "applied_at_vn": "2026-11-27 06:15:52",
+  "ledger_version": "20261126231551",
+  "how": "node scripts/make-migration-ledger-apply.cjs (dòng sổ ghi trong cùng giao dịch) rồi supabase db query --linked --workdir <repo chính> -f <file bọc>; chạy 1 giây, rc 0",
+  "file_md5": "e821a3d66bdc9dc1dc0243bb0c137173",
+  "ledger_statements_md5": "e821a3d66bdc9dc1dc0243bb0c137173",
+  "preflight_live_06_15_43": {
+    "ledger_v673_rows": 0,
+    "max_migration": "migration_v671_engine_action_lock_keep_longer",
+    "block_2871_md5": "f981cac703a91dc6c9f8a49176a61bba",
+    "block_2624_md5": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "step_4": { "reviewed_code_md5": "f981cac703a91dc6c9f8a49176a61bba", "commit_level": 1 },
+    "steps_of_block_2871": 1,
+    "element_GroupPostFrequencyLimitNotice": 0,
+    "fb02_runs_24h": 277
+  },
+  "postflight_live": {
+    "block_2871_md5": "2ce23f2d9453593e9527065ba5a9b4c5",
+    "legacy_block_2624_md5_unchanged": "e433ac1a58ac08535c53010fdc5e9ba7",
+    "step_4_reviewed_code_md5": "2ce23f2d9453593e9527065ba5a9b4c5",
+    "element_GroupPostFrequencyLimitNotice_id": 1823,
+    "element_xpath_matches_generator": true,
+    "classify_signal_after_send": "\"Lỗi đăng bài vào <nhóm>: Facebook báo giới hạn tần suất bạn đăng bài\" vẫn ra err_group_post_frequency_limit (FB02)"
+  },
+  "logs_23_12_to_23_16_utc": "edge_logs: 0 lỗi 5xx (6.900–7.300 req/phút); postgres_logs: 0 dòng ERROR / FATAL / PANIC",
+  "schema_reload": "không (chỉ dữ liệu)",
+  "smoke_before_apply": "CHROMIUM_PATH=<Chrome> LC_ALL=C CHAT_REPO=<akaAgentChatApi> node scripts/engine-v2-facebook/v673-smoke.cjs: 21/21; XPath mới trên DOM thật yêu cầu 44 / 45 khớp 1 phần tử đang hiện, DOM FB49 / FB50 (22, 27, 28, 31) khớp 0; hai typecheck sạch",
+  "baseline_before": "12 lượt FB02 mẫu 26–27/11: verify_submit 56,0–57,3 giây; 277 lượt FB02 / 24 giờ (38 tài khoản, 22 tổ chức)",
+  "rollback": "migrations/rollback_v673_engine_facebook_group_post_frequency_early.sql (chỉ chạy khi block 2871 còn đúng bản V673)",
+  "not_verified": [
+    "Chưa có lượt thật nào chạy bản block mới (Desktop nhận block / element mới ở lần nạp danh mục kế tiếp).",
+    "Chữ giới hạn tần suất hiện ra từ giây thứ mấy sau cú bấm Đăng: ảnh / DOM đều chụp lúc hết giờ.",
+    "Chưa có bản tiếng Anh của câu; tài khoản giao diện tiếng Anh vẫn như cũ (FB42 khi hết giờ)."
+  ]
+}

@@ -82,6 +82,32 @@ async function main() {
     assert.equal(shared.normalizeFacebookUnreadCount('3'), null)
   })
 
+  await check('tổng cho menu: chỉ cộng tài khoản đã đăng nhập và đã đếm xong', () => {
+    const accounts = [
+      { id: 1, name: 'fb LD', loggedIn: true },
+      { id: 2, name: 'fb QN', loggedIn: true },
+      { id: 3, name: 'fb AB', loggedIn: false },
+      { id: 4, name: '  ', loggedIn: true }
+    ]
+    // Tài khoản 3 còn số cũ từ lúc còn đăng nhập: không được cộng.
+    const summary = shared.summarizeFacebookUnread(accounts, new Map([[1, 5], [2, 7], [3, 4]]))
+    assert.equal(summary.total, 12)
+    assert.deepEqual(summary.accounts.map(row => [row.id, row.name, row.state, row.unread]), [
+      [1, 'fb LD', 'counted', 5],
+      [2, 'fb QN', 'counted', 7],
+      [3, 'fb AB', 'logged_out', 0],
+      [4, 'Tài khoản 4', 'loading', 0]
+    ])
+    assert.deepEqual(shared.summarizeFacebookUnread([], new Map([[1, 3]])), { total: 0, accounts: [] })
+    assert.equal(shared.summarizeFacebookUnread(accounts.slice(0, 2), new Map([[1, 0], [2, 0]])).total, 0)
+  })
+
+  await check('nhãn đọc của mục menu', () => {
+    assert.equal(shared.facebookUnreadMenuLabel(0), 'Tin nhắn Facebook')
+    assert.equal(shared.facebookUnreadMenuLabel(12), 'Tin nhắn Facebook, 12 đoạn chat chưa đọc')
+    assert.equal(shared.facebookUnreadMenuLabel(100), 'Tin nhắn Facebook, hơn 99 đoạn chat chưa đọc')
+  })
+
   await check('script đếm là JS hợp lệ (regex còn dấu \\)', () => {
     assert.ok(shared.FACEBOOK_UNREAD_COUNT_SCRIPT.includes('/^\\/messages\\/(e2ee\\/)?t\\/?$/'))
     // eslint-disable-next-line no-new-func

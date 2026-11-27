@@ -69,3 +69,55 @@ export function normalizeFacebookUnreadCount(value: unknown): number | null {
 export function formatFacebookUnreadBadge(count: number): string {
   return count > 99 ? '99+' : String(count)
 }
+
+/**
+ * Tổng hợp số đoạn chat chưa đọc cho mục "Tin nhắn Facebook" trên menu bên trái.
+ * Chỉ tính các tài khoản đã chọn ở trang Tin nhắn Facebook. Tài khoản chưa đăng nhập
+ * và tài khoản chưa đếm xong không được cộng vào tổng; ô hiện khi rê chuột ghi trạng thái.
+ */
+export type FacebookUnreadAccountState = 'counted' | 'loading' | 'logged_out'
+
+export interface FacebookUnreadAccountSummary {
+  id: number
+  name: string
+  state: FacebookUnreadAccountState
+  unread: number
+}
+
+export interface FacebookUnreadSummary {
+  total: number
+  accounts: FacebookUnreadAccountSummary[]
+}
+
+export interface FacebookUnreadAccountInput {
+  id: number
+  name: string
+  loggedIn: boolean
+}
+
+export function summarizeFacebookUnread(
+  accounts: readonly FacebookUnreadAccountInput[],
+  unreadById: ReadonlyMap<number, number>
+): FacebookUnreadSummary {
+  let total = 0
+  const rows = accounts.map((account): FacebookUnreadAccountSummary => {
+    const name = String(account.name || '').trim() || `Tài khoản ${account.id}`
+    if (!account.loggedIn) return { id: account.id, name, state: 'logged_out', unread: 0 }
+    const unread = unreadById.get(account.id)
+    if (unread === undefined) return { id: account.id, name, state: 'loading', unread: 0 }
+    total += unread
+    return { id: account.id, name, state: 'counted', unread }
+  })
+  return { total, accounts: rows }
+}
+
+/** Nhãn đọc cho trình đọc màn hình của mục menu. */
+export function facebookUnreadMenuLabel(total: number): string {
+  if (total <= 0) return 'Tin nhắn Facebook'
+  return total > 99
+    ? 'Tin nhắn Facebook, hơn 99 đoạn chat chưa đọc'
+    : `Tin nhắn Facebook, ${total} đoạn chat chưa đọc`
+}
+
+/** Số tài khoản hiện trong ô rê chuột; quá số này thì ghi "+N tài khoản khác". */
+export const FACEBOOK_UNREAD_TOOLTIP_MAX_ACCOUNTS = 8
