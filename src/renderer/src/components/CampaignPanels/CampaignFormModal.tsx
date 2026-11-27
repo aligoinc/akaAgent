@@ -109,6 +109,8 @@ import { CampaignSheetSyncFormNote } from '../CampaignSheetSync/CampaignSheetSyn
 import { campaignSheetSyncErrorMessage, type CampaignSheetSyncDraft } from '../../../../shared/campaignSheetSync'
 import { InputDuplicateFormNote } from './InputDuplicateFormNote'
 import { supportsInputDuplicateCheck } from '../../../../shared/campaignInputDuplicates'
+import { dropGuardBlockedRows, uidAccountGuardApplies } from '../../../../shared/campaignUidAccountGuard'
+import { allowUidAccountGuardSkip, checkUidAccountGuard, showUidAccountGuard } from '../../lib/uidAccountGuardPrompt'
 import {
   campaignDataSplitAvailable, campaignDataSplitDedupeNotice, campaignDataSplitTooFewMessage, dedupeCampaignDataForSplit,
   resolveSplitDataAcrossAccounts, sharedCampaignDataConfirmMessage, sharedCampaignDataConfirmTitle,
@@ -4114,6 +4116,8 @@ export default function CampaignFormModal({
     () => showSplitDataOption && splitDataAcrossAccounts ? dedupeCampaignDataForSplit(formData.actionId, details) : null,
     [showSplitDataOption, splitDataAcrossAccounts, formData.actionId, details])
   const sharedDataConfirmedRef = useRef(false)
+  // "Bỏ N người này" khi đổi tài khoản (DAT04): lần lưu kế tiếp cùng cấu hình không hỏi lại.
+  const uidGuardSkipRef = useRef<string | null>(null)
   const contentWarningAcceptedRef = useRef<string | null>(null)
   const [detailsPage, setDetailsPage] = useState(1)
   const detailsPageCount = Math.max(1, Math.ceil(details.length / CAMPAIGN_DETAILS_PAGE_SIZE))
@@ -7870,6 +7874,49 @@ export default function CampaignFormModal({
         { title: sharedCampaignDataConfirmTitle, confirmText: 'Vẫn gửi cả danh sách', cancelText: 'Quay lại' }
       )
       return
+    }
+
+    // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): kiểm trước khi tạo / đổi tài khoản.
+    if (!isDataGroupSource && !hasPendingDirectDataGroupSnapshots && uidAccountGuardApplies(formData.actionId) && formData.accountIds.length > 0) {
+      const editingId = isEditingSavedCampaign ? campaign?.id ?? null : null
+      const accountChanged = !!editingId && !!campaign?.accountId && formData.accountIds[0] !== campaign.accountId
+      const uidRows = isEditingSavedCampaign || hideDetailsSection ? [] : validDetails
+      const guardKey = JSON.stringify({ accounts: formData.accountIds, editingId, uids: uidRows.map(row => row.uid ?? null), split: splitsDetailsForSave })
+      if ((accountChanged || uidRows.length > 0) && uidGuardSkipRef.current !== guardKey) {
+        const chunks = splitsDetailsForSave ? splitCampaignDataAcrossAccounts(uidRows, formData.accountIds.length) : null
+        const [campaignCheck, rowsCheck] = await Promise.all([
+          accountChanged && editingId ? checkUidAccountGuard({ action: 'check', campaignId: editingId, accountId: formData.accountIds[0] }) : null,
+          uidRows.length === 0 ? null : checkUidAccountGuard(chunks
+            ? { action: 'check', actionId: formData.actionId, assignments: formData.accountIds.map((accountId, index) => ({ accountId, uids: (chunks[index] || []).map(row => row.uid ?? null) })) }
+            : { action: 'check', actionId: formData.actionId, accountIds: formData.accountIds, uids: uidRows.map(row => row.uid ?? null) })
+        ])
+        if (saveSignal.aborted) return
+        const verdict = campaignCheck?.verdict || rowsCheck?.verdict
+        if (verdict) {
+          const blockedUids = rowsCheck?.verdict ? rowsCheck.blockedUids : []
+          showUidAccountGuard({ showAlert, showConfirm }, verdict, {
+            onSkip: async () => {
+              if (blockedUids.length > 0) {
+                const kept = dropGuardBlockedRows(details, blockedUids)
+                setDetails(kept)
+                showAlert(`Đã bỏ ${(details.length - kept.length).toLocaleString('vi-VN')} người tài khoản này không gửi được. Bấm Lưu chiến dịch để lưu.`, 'info')
+                return
+              }
+              if (editingId) {
+                await allowUidAccountGuardSkip(editingId, formData.accountIds[0])
+                uidGuardSkipRef.current = guardKey
+                window.setTimeout(() => { void handleSave() }, 0)
+              }
+            },
+            onUseAccount: formData.accountIds.length === 1 ? (accountId) => {
+              selectSingleAccount(accountId)
+              showAlert(`Đã chọn tài khoản "${verdict.suggestedAccountName || ''}". Bấm Lưu chiến dịch để lưu.`, 'info')
+            } : undefined
+          })
+          return
+        }
+      }
+      uidGuardSkipRef.current = null
     }
 
     if (!isDataGroupSource && !isEditingSavedCampaign && !hideDetailsSection) {

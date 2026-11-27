@@ -14,6 +14,8 @@ import { requireCurrentUser } from '../../data/currentUser'
 import { callAiUsing } from '../../services/aiRuntimeService'
 import { imageImportRows, type ImportImageSource, type ImportTableSource } from '../../../shared/campaignImportVerification'
 import { importWorkbookTables, readImportWorkbook } from '../../../shared/campaignImportWorkbook'
+import { CAMPAIGN_UID_ACCOUNT_GUARD_IPC } from '../../../shared/campaignUidAccountGuardIpc'
+import { handleUidAccountGuardIpc } from '../../services/campaignUidAccountGuardService'
 import { CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest } from '../../../shared/campaignInputDuplicatesIpc'
 import { handleCampaignInputDuplicatesRequest } from '../../services/campaignInputDuplicatesService'
 import { DATA_GROUP_MEMBER_MATCHES_IPC, type DataGroupMemberMatchesIpcRequest } from '../../../shared/dataGroupMemberMatchesIpc'
@@ -362,6 +364,11 @@ function normalizeImportedRows(rows: unknown[], platform: CampaignImportPlatform
 }
 
 export function registerCampaignImportHandlers(): void {
+  // Danh sách người nhận quét bằng tài khoản Zalo khác (DAT04, V679): kiểm trước khi lưu; {ok,data}|{ok:false,message}, không ném lỗi.
+  ipcMain.handle(CAMPAIGN_UID_ACCOUNT_GUARD_IPC, async (_, request: unknown) => {
+    try { return await handleUidAccountGuardIpc(request) }
+    catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'Không kiểm tra được danh sách người nhận.' } }
+  })
   // "Lọc trùng dữ liệu" của cửa sổ Upload (V491/V493): công tắc + một lượt ≤ 2.000 SĐT; {ok,data}|{ok:false,code,message}, không ném lỗi.
   ipcMain.handle(CAMPAIGN_INPUT_DUPLICATES_IPC, (_, request: CampaignInputDuplicatesIpcRequest) => handleCampaignInputDuplicatesRequest(request))
   // Nhóm data → "Bỏ data đã có trong nhóm này / ở nhóm data khác" (V519/V522): công tắc + một lượt ≤ 2.000 định danh; không ném lỗi.

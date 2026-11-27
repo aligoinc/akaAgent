@@ -172,8 +172,37 @@ Sau khi đổi số V678/V679 thành V679/V680 chạy lại hạt giống 401–
 3.818 lượt thành công 24 giờ 0 chặn nhầm, DAT04 8 ngày 29/29, ghi chú tạm dừng của engine 30 ngày 390/390 được coi là
 hệ thống dừng.
 
-Chưa kiểm: bộ kịch bản engine với chính sách DAT04 mới (data giữ lại, đổi tài khoản thì gửi, không trùng), API Web,
-Desktop.
+Chưa kiểm: bộ kịch bản engine với chính sách DAT04 mới (data giữ lại, đổi tài khoản thì gửi, không trùng); chạy thật trên
+Electron và trên DB thật (V679 chưa apply).
+
+### 5.1 Điểm chặn khi lưu ở API Web và Desktop (code 27/11)
+
+Anh đồng ý 27/11 ("Cho làm tiếp phần chặn khi lưu ở Web và Desktop"). Câu cho khách lấy theo bản đề xuất ở mục 4.3 (dựng
+ở một chỗ: akaAgentWebApp `packages/control-api/src/campaignUidAccountGuard.ts`, Desktop chép nguyên văn
+`src/shared/campaignUidAccountGuard.ts`; sửa câu ở WebApp rồi chép lại). Nút của hộp báo:
+"Bỏ N người này" khi danh sách lẫn, "Dùng tài khoản X" khi một tài khoản của chính khách đã quét cả phần bị chặn,
+còn lại chỉ "Đóng" (nút "Quét lại danh sách" chưa làm, câu đã nói cách làm).
+
+- API Web (`apps/api/.../campaignUidAccountGuard.ts`, gọi `aka_agent_control_campaign_uid_account_check`):
+  - `POST /campaigns/uid-account-check` (chỉ đọc): Web hỏi trước khi lưu, vì Web tạo chiến dịch rỗng rồi mới gửi người nhận theo
+    từng lượt 5.000 dòng; chặn ở đường thêm data thì chiến dịch rỗng đã tạo.
+  - Kiểm lại ở đường ghi: tạo chiến dịch có người nhận, sửa có đổi tài khoản hoặc thêm người, Thêm data, Tiếp tục (một chiến dịch
+    thì trả 400 `campaign_uid_account_mismatch` kèm `details`; nhiều chiến dịch thì bỏ qua chiến dịch sai, lý do ở `skippedReasons`).
+    Nhân bản ở máy chủ không kiểm (bản sao tạm dừng, chặn ở lần Tiếp tục). Body `uidAccountGuard: "skip_blocked"` = khách chọn
+    "Bỏ N người này": tạo / thêm data thì bỏ người sai, đổi tài khoản hoặc Tiếp tục thì lưu rồi gọi chế độ `hold`.
+- Web: form tạo / sửa (`CampaignFormPage`), nút Tiếp tục (`CampaignsPage`), cửa sổ Thêm data; hộp báo ở
+  `features/uidAccountGuardPrompt.ts`. iOS bản đang phát hành hiện nguyên câu của API.
+- Desktop: IPC `campaign:uid-account-guard` (`check` / `check-resume` / `allow-skip`,
+  [campaignUidAccountGuardService.ts](../src/main/services/campaignUidAccountGuardService.ts)); hai form (thường + Agent) hỏi trước
+  khi lưu, chia người nhận cho từng tài khoản đúng như lúc lưu (`assignments`); nút Tiếp tục và cửa sổ Thêm data hỏi trước.
+  Tiến trình chính kiểm lại ở `DB_UPDATE_CAMPAIGN` (đổi tài khoản, Tiếp tục kể cả Tiếp tục hàng loạt) và
+  `DB_ADD_CAMPAIGN_INPUT_DATA_ROWS`; "Bỏ N người này" là quyền dùng một lần trong RAM (2 phút) cho đúng chiến dịch + tài khoản.
+  Dòng data của chiến dịch mới (`createCampaignInputDataBatch`) chỉ được kiểm ở form, không kiểm lại ở tiến trình chính.
+- Không kiểm được (DB chưa có V679, lỗi, hết giờ, công tắc `off`): cho lưu như cũ, lúc chạy lưới DAT04 vẫn giữ người sai lại.
+
+Kiểm: WebApp `packages/control-api` `campaignUidAccountGuard.test.ts` (12), API `aka-agent-control.service.test.ts` mục DAT04
+(11), Desktop `WEBAPP_REPO=<akaAgentWebApp> node scripts/zalo-uid-account-guard/desktop-guard-smoke.cjs` (11, có so md5 hợp đồng).
+Chưa có bài kiểm giao diện cho hộp báo.
 
 ## 6. Thứ tự đưa lên và cách gỡ
 
@@ -195,6 +224,7 @@ do lượt bật sẵn tạo). Sinh lại V680: `python3 scripts/zalo-uid-accoun
 
 ## 7. Còn mở
 
-- Anh duyệt các câu ở mục 4.3 (câu lúc chạy trong V679 viết theo bản đề xuất, đổi lại chỉ cần sửa dữ liệu).
-- Code điểm chặn ở API Web và Desktop (mục 4.2), chạy bộ kịch bản engine với chính sách DAT04 mới.
-- Apply V679, V680 (chờ anh bảo).
+- Anh xem lại câu ở mục 4.3 (đang dùng bản đề xuất; đổi câu lúc lưu: sửa hợp đồng ở WebApp rồi chép sang Desktop; câu lúc chạy:
+  sửa dữ liệu V679).
+- Chạy bộ kịch bản engine với chính sách DAT04 mới; thử trên Electron và Web thật sau khi apply V679.
+- Apply V679, V680 (chờ anh bảo), rồi deploy API/Web, build Desktop.
