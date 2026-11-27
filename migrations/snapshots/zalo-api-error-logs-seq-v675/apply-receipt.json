@@ -1,0 +1,43 @@
+{
+  "migration": "migration_v675_zalo_api_error_logs_sequence_grants",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "\"Apply V675\" (27/11/2026, anh bấm nút trả lời ở phiên điều phối; phiên điều phối chuyển nguyên văn sang phiên này, chỉ duyệt apply, chưa duyệt commit / đẩy nhánh / PR)",
+  "applied_at_vn": "2026-11-27 10:32:16",
+  "ledger_version": "20261127033216",
+  "how": "MCP apply_migration (Management API), tên migration_v675_zalo_api_error_logs_sequence_grants, query = nguyên văn tệp; created_by là email tài khoản Supabase như các bản apply qua MCP; trả {\"success\":true}",
+  "file_md5": "35b43d22c8e2a5ea5f5a5a7773c5a4cd",
+  "ledger_statements_md5": "35b43d22c8e2a5ea5f5a5a7773c5a4cd",
+  "file_bytes": 6903,
+  "cause": "V525 (sổ 20261125114212, 18:42:12 VN 25/11/2026) khối $grants$ REVOKE ALL mọi sequence 'auto\\_zalo\\_%' ở private + public từ anon, authenticated, service_role, aka_agent_desktop, aka_agent_chat_api; trúng public.auto_zalo_api_error_logs_id_seq. Mất 41.987 lần ghi qua PostgREST (Desktop / App Server) + 134 lần ghi của ChatApi tới 10:08 VN 27/11; chiến dịch không bị ảnh hưởng (cả hai nơi gọi bắt lỗi).",
+  "preflight_live_10_31_05": {
+    "seq_acl": "{postgres=rwU/postgres}",
+    "table_max_id": 2691603,
+    "table_last_row_at_utc": "2026-11-25 11:42:10.39721",
+    "ledger_last": "migration_v674_campaign_end_date_close_pending (20261127030958)",
+    "ledger_v675_rows": 0,
+    "branches_with_v675": 0,
+    "run_as": "postgres (không phải superuser, là chủ sequence, có quyền cấp)",
+    "permission_denied_03_20_to_03_31_utc": { "authenticator": 61, "aka_agent_chat_api": 2 }
+  },
+  "postflight_live": {
+    "seq_acl": "{postgres=rwU/postgres,service_role=rwU/postgres,aka_agent_desktop=U/postgres,aka_agent_chat_api=rU/postgres}",
+    "v525_private_seq_acls_unchanged": "{postgres=rwU/postgres} {postgres=rwU/postgres}",
+    "v660_seq_acl_unchanged": "{postgres=rwU/postgres,anon=rwU/postgres,authenticated=rwU/postgres,service_role=rwU/postgres}",
+    "table_acl_unchanged": "{postgres=arwdDxtm/postgres,service_role=arwdDxtm/postgres,aka_agent_chat_api=a/postgres}",
+    "smoke": "migrations/tests/migration_v675_zalo_api_error_logs_sequence_grants_smoke.sql qua MCP execute_sql: không lỗi (ROLLBACK)"
+  },
+  "traffic_after_apply": {
+    "first_new_row": "id 2691604 lúc 03:32:21 UTC (5 giây sau apply), Desktop (auto_account_logs source desktop)",
+    "chat_api_first_new_row": "id 2691632 lúc 03:38:30 UTC (10:38:30 VN): chiến dịch Fly 61396, tài khoản Zalo Server 12678, zalo_message_stranger mã 122, campaign_detail_id 18580557 (detail 'thất bại'); dòng auto_account_logs source chat_api 03:38:30.934",
+    "rows_until_03_39_00_utc": "30 dòng mới = 1 lỗi Zalo của ChatApi + 29 của Desktop (auto_account_logs zalo_error sau apply), khớp 1:1",
+    "last_permission_denied_utc": "03:32:13.344 (trước apply)",
+    "permission_denied_after_apply": 0,
+    "other_errors_after_apply": "invalid input syntax for type json, facebook_access_denied: đều có từ trước (từ 01:30 UTC), không liên quan"
+  },
+  "schema_reload": "không: postgrest_logs lần nạp lại gần nhất 03:09:59 UTC (V674), không có lần nào quanh 03:32",
+  "local_tests_before_apply": "scripts/test-v675-zalo-api-error-logs-sequence-grants.sh 23/23 trên PostgreSQL 17.11 và 16.15 (postgres không phải superuser như Supabase; có ca kết nối mở sẵn + câu đã PREPARE ghi được ngay sau V675, và ca V675 xong 0 giây khi giao dịch ghi đang giữ khoá)",
+  "rollback": "migrations/rollback_v675_zalo_api_error_logs_sequence_grants.sql (trả về trạng thái hỏng sau V525; chỉ dùng khi chính V675 gây vấn đề)",
+  "not_verified": [
+    "Không lấy lại được các dòng nhật ký đã mất từ 18:42 VN 25/11 tới 10:32 VN 27/11 (postgres_logs không giữ tham số)."
+  ]
+}
