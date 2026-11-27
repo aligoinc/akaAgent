@@ -162,6 +162,16 @@ báo đạt. `server-rest-smoke-webplatform.cjs` cần thêm hàm giả `hasActi
 21:31 VN 26/11 và 06:14 VN 27/11): `verify-build.cjs` của lần 2 bỏ qua `markers-new.json` không còn và ghi danh sách vào biên nhận. Chọn dấu mới:
 `dist/build-10.8.0-work/gen-markers.cjs`; PR chỉ xoá code thì thêm chuỗi bị xoá vào `MARKERS_ABSENT`.
 
+**Build 10.9.0 (27/11/2026 tối, Desktop + App Server, cùng đợt deploy ChatApi + Chat Web + Web).** `dist/build-10.9.0-work/`, script sinh từ
+10.8.0 lần 2 (đối chứng dấu nguồn là bundle 10.8.0 lần 2). Bộ kiểm chạy trong một phiên nền mà phiên đó kết thúc giữa chừng: tách phần còn lại
+thành `run-checks-rest.sh` (đầu `run-checks.sh` + các bước từ chỗ dừng), ghi nối vào cùng `03-checks-summary.log`. So lỗi với lần trước bằng
+dòng lỗi đầu tiên sau khi thay tên worktree / thư mục work (`compare-failures.cjs` so đuôi log nên báo khác chỉ vì đường dẫn đổi). Bài kiểm có ngày
+cố định hỏng khi tính năng mới chặn ngày đã qua (#825: `run-campaign-schedule-ai-ui-smoke.cjs` có ngày kết thúc 21/10/2026): bản chép
+`patched-schedule-ai-clock/` dựng một entry mới import `date-shim.ts` trước tệp gốc để đặt `Date` của trang thử về ngày dữ liệu mẫu. Bài theo
+thời gian (`v663-smoke`) hỏng khi máy chạy song song `npm run verify` của ChatApi: chạy lại lúc máy rảnh. Bài DB mới dùng `"${ARR[@]}"` rỗng dưới
+`set -u` (V672) hỏng trên bash 3.2: chép vào `bash32/`. Anh có thể phát hành ngay sau khi build, trước khi bộ kiểm xong (27/11: 17:46 VN):
+kiểm feed trước khi ghi "chưa phát hành" vào biên nhận.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
