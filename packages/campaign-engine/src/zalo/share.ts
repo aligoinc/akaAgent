@@ -9,8 +9,9 @@
  * - phần chữ: một lệnh chia sẻ cho mọi người chưa lỗi tệp (forwardMessageToUsers / Groups, mforward);
  * - cả lô báo một lần (report_batch_v1): DB chọn chế độ cho từng người như policyHandling của Desktop và tạm dừng chiến dịch khi cả lô
  *   thất bại.
- * Dòng tiến trình như Desktop: không "▶️" / "✅" từng người; mỗi lỗi khác nhau in một lần "⚠️ <thao tác>: <câu>"; cuối lô
- * "📨 Kết quả chia sẻ tin nhắn Zalo: tổng N, thành công X, thất bại Y" và "⏸ Kết thúc batch: …" khi dừng. Nghỉ giữa hai lô không in.
+ * Dòng tiến trình: không "▶️" / "✅" từng người; mỗi lỗi khác nhau in một lần "⚠️ <thao tác>: <câu>", riêng lỗi lẻ phía người nhận
+ * (Z119, Z126…, lô chạy tiếp) chỉ in khi lô dừng (khác Desktop, anh chốt 27/11/2026); cuối lô "📨 Kết quả chia sẻ tin nhắn Zalo: tổng N,
+ * thành công X, thất bại Y" và "⏸ Dừng gửi: …" khi dừng. Nghỉ giữa hai lô không in.
  * Đặc tả: docs/engine-v2-specs/zalo-other-types.md §3, zalo-media.md §3.4 / §4.2.
  */
 import type { OutcomeDecision, RawOutcome, ReportSuccess } from '../contracts.js'
@@ -175,6 +176,19 @@ function endReason(next: ReportSuccess['next']): BatchStop['reason'] {
   return next === 'next_target' || next === 'next_step' ? 'end_unit' : next
 }
 
+/** Nhóm lỗi phía người nhận: người nhận chặn / từ chối (Z119, Z112, Z122), Zalo từ chối tin tới người đó (Z126, Z127). */
+const SHARE_RECIPIENT_ERROR_CLASSES = new Set(['target_permanent', 'account_restricted'])
+
+/**
+ * Lỗi lẻ phía người nhận trong lô: lỗi thuộc nhóm phía người nhận, lô chạy tiếp, không khoá thao tác, không tạm dừng chiến dịch / tài
+ * khoản. Dòng ⚠️ của lỗi lẻ chỉ in khi lô dừng (anh chốt 27/11/2026). Lỗi mạng (NET01) và không rõ đã tới (UNK01) không phải lỗi lẻ, vẫn in
+ * ngay (anh chốt cùng ngày): trong lô có người nhận được, DB bỏ khoá và vẫn báo target.done nên không dựa vào hiệu ứng để giữ chúng lại.
+ */
+export function isLoneShareFailure(decision: OutcomeDecision, res: ReportSuccess): boolean {
+  return !decision.ok && SHARE_RECIPIENT_ERROR_CLASSES.has(decision.errorClass ?? '') && !decision.lockUntil && res.next === 'next_target'
+    && (res.campaign?.effect ?? 'none') === 'none' && (res.account?.effect ?? 'none') === 'none'
+}
+
 interface ShareState {
   marked: Set<number>
   reported: Set<number>
@@ -232,13 +246,29 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
   }
 
   // Mỗi lỗi khác nhau in một lần trong lô: "⚠️ <thao tác>: <câu>" (recordZaloShareActionDetail của Desktop).
-  const shown = new Set<string>()
-  const showFailure = (decision: OutcomeDecision, inputDataId: number | null): void => {
+  // Lỗi lẻ phía người nhận (Z119, Z126…, lô chạy tiếp) không in: lô nào cũng có vài người như vậy nên khách tưởng lô nào cũng lỗi (anh
+  // chốt 27/11/2026). Giữ lại và chỉ in khi lô dừng; số người lỗi vẫn ở dòng 📨, lý do từng người ở lịch sử hành động.
+  // Lỗi khác (mạng, không rõ đã tới, khoá thao tác, tạm dừng chiến dịch / tài khoản, dừng lượt) in ngay như trước.
+  const printed = new Set<string>()
+  const held = new Map<string, number | null>()
+  const showFailure = (decision: OutcomeDecision, res: ReportSuccess, inputDataId: number | null): void => {
     if (decision.ok || decision.errorCode === CANCELLED_ERROR_CODE) return
     const text = `⚠️ ${formatActionLog(decision.actionName || step.actionName, decision.log)}`
-    if (shown.has(text)) return
-    shown.add(text)
+    if (printed.has(text)) return
+    if (isLoneShareFailure(decision, res)) {
+      if (!held.has(text)) held.set(text, inputDataId)
+      return
+    }
+    held.delete(text)
+    printed.add(text)
     api.progress(text, 'warning', inputDataId)
+  }
+  const showHeldFailures = (): void => {
+    for (const [text, inputDataId] of held) {
+      printed.add(text)
+      api.progress(text, 'warning', inputDataId)
+    }
+    held.clear()
   }
   /** Data báo riêng ngoài lô (từ chối nhận tin, mục tiêu đã nhớ): in như lượt thường. */
   const showSingle = (res: ReportSuccess, item: BatchItem): void => {
@@ -253,7 +283,8 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
     reported.add(first.targetRunId)
     const res = await api.reportOne(first, step, raw)
     if ('stop' in res) return res
-    for (const decision of res.outcomes) showFailure(decision, first.target.id)
+    for (const decision of res.outcomes) showFailure(decision, res, first.target.id)
+    showHeldFailures()
     if (res.campaign.note) api.progress(`⚠️ ${res.campaign.note}`, 'warning')
     await bail()
     return { stop: true, reason: endReason(res.next) }
@@ -455,7 +486,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
             immediateFailures++
             const res = await api.reportOne(v.item, step, raw)
             if ('stop' in res) return res
-            for (const decision of res.outcomes) showFailure(decision, v.item.target.id)
+            for (const decision of res.outcomes) showFailure(decision, res, v.item.target.id)
             if (res.next !== 'next_target') {
               mediaStop = { stop: true, reason: endReason(res.next) }
               stopNote = res.campaign.note ?? res.target.note ?? null
@@ -573,7 +604,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
       failed += entries.length - res.summary.succeeded
       for (const row of res.items) {
         const entry = entries.find(candidate => candidate.item.targetRunId === row.targetRunId)
-        for (const decision of row.response.outcomes) showFailure(decision, entry?.item.target.id ?? null)
+        for (const decision of row.response.outcomes) showFailure(decision, row.response, entry?.item.target.id ?? null)
         // Dòng lịch sử đã ghi: đăng ký nguồn tương tác (recordCampaignEngagementDetail của Desktop / bộ ghi tương tác của Fly).
         if (entry?.raw.ok) registerZaloEngagement(port, row.response.outcomes, entry.raw.data)
       }
@@ -587,6 +618,7 @@ async function shareBatchBody(campaign: ZaloMessagePhoneCampaign, port: ZaloShar
         }
       }
     }
+    if (next.stop) showHeldFailures()
     api.progress(`📨 Kết quả chia sẻ tin nhắn Zalo: tổng ${batchSize}, thành công ${succeeded}, thất bại ${failed}`, 'info')
     blocklistLine()
     if (next.stop && stopNote) api.progress(`⏸ Dừng gửi: ${stopNote}`, 'info')

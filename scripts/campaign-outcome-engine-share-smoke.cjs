@@ -79,21 +79,25 @@ async function main() {
   try {
     await buildFixture(db, [])
     for (const sql of [MIGRATION, v499.migration, V500, v501.migration, v503.migration, v601.migration]) await db.query(sql)
-    // Mã thử gắn mã Zalo 9001 (lỗi thường, không hiệu ứng phụ) và 9002 (khoá thao tác 30 phút) cho thao tác chia sẻ.
-    for (const [code, pub] of [['err_test_share_plain', 'TST21'], ['err_test_share_lock', 'TST22']]) {
+    // Mã thử gắn mã Zalo 9001 (lỗi thường, không hiệu ứng phụ), 9002 (khoá thao tác 30 phút) và 9003 (lỗi phía người nhận, nhóm
+    // target_permanent như Z119) cho thao tác chia sẻ.
+    for (const [code, pub, cls] of [['err_test_share_plain', 'TST21', 'transient'], ['err_test_share_lock', 'TST22', 'transient'],
+      ['err_test_share_recipient', 'TST23', 'target_permanent']]) {
       await db.query(`INSERT INTO public.auto_error SELECT (jsonb_populate_record(NULL::public.auto_error,
-          to_jsonb(e) || jsonb_build_object('id', (SELECT max(id) + 1 FROM public.auto_error), 'error_code', $1::text, 'public_code', $2::text, 'error_class', 'transient'))).*
-        FROM public.auto_error e WHERE e.error_code = 'err_engine_unknown_delivery'`, [code, pub])
+          to_jsonb(e) || jsonb_build_object('id', (SELECT max(id) + 1 FROM public.auto_error), 'error_code', $1::text, 'public_code', $2::text, 'error_class', $3::text))).*
+        FROM public.auto_error e WHERE e.error_code = 'err_engine_unknown_delivery'`, [code, pub, cls])
     }
     const failedId = (await db.query(`SELECT id FROM public.auto_status WHERE code = 'campaign_detail_failed' AND component_type = 'campaign_detail' ORDER BY id LIMIT 1`)).rows[0].id
     await db.query(`INSERT INTO public.auto_outcome_policies (error_code, detail_mode, detail_status_id, log_template, quota_effect, target_streak_effect, target_effect,
         remaining_steps, lock_action_codes, lock_mode, lock_minutes, run_effect, pace_mode, campaign_effect, account_effect, login_effect, source, description)
       VALUES ('err_test_share_plain', 'write', $1, 'Lỗi thử chia sẻ', 'count', 'increment', 'complete', 'skip', '{}', NULL, NULL, 'continue', 'none', 'none', 'none', 'none', 'test', 'test'),
-             ('err_test_share_lock', 'write', $1, 'Khoá thử chia sẻ', 'no_count', 'increment', 'complete', 'skip', '{zalo_message_friend,zalo_message_group}', 'fixed_minutes', 30, 'end_unit', 'none', 'none', 'none', 'none', 'test', 'test')`,
+             ('err_test_share_lock', 'write', $1, 'Khoá thử chia sẻ', 'no_count', 'increment', 'complete', 'skip', '{zalo_message_friend,zalo_message_group}', 'fixed_minutes', 30, 'end_unit', 'none', 'none', 'none', 'none', 'test', 'test'),
+             ('err_test_share_recipient', 'write', $1, 'Người nhận thử chặn', 'count', 'ignore', 'complete', 'skip', '{}', NULL, NULL, 'continue', 'none', 'none', 'none', 'none', 'test', 'test')`,
       [failedId])
     await db.query(`INSERT INTO public.auto_outcome_signal_rules (platform, action_code, phase, signal_kind, pattern, priority, error_code, source, note) VALUES
       ('zalo', NULL, NULL, 'zalo_code', '9001', 300, 'err_test_share_plain', 'test', 'test'),
-      ('zalo', NULL, NULL, 'zalo_code', '9002', 300, 'err_test_share_lock', 'test', 'test')`)
+      ('zalo', NULL, NULL, 'zalo_code', '9002', 300, 'err_test_share_lock', 'test', 'test'),
+      ('zalo', NULL, NULL, 'zalo_code', '9003', 300, 'err_test_share_recipient', 'test', 'test')`)
 
     const rpc = async (sql, args) => (await db.query(sql, args)).rows[0].r
     const rows = async (sql, args = []) => (await db.query(sql, args)).rows
@@ -219,10 +223,37 @@ async function main() {
     assert.equal(d3[1].log, 'Đã gửi file nhưng gửi nội dung thất bại. Khoá thử chia sẻ (TST22)')
     assert.equal(d3[1].counts_toward_limit, true, 'giao một phần luôn tính lượt')
     assert.equal((await locks(s3)).length, 0, 'lô có người nhận được: lỗi của người khác không khoá thao tác')
-    assert.ok(r3.lines.includes('⚠️ Nhắn tin bạn bè: Đã gửi file nhưng gửi nội dung thất bại. Khoá thử chia sẻ (TST22)'))
+    // Lỗi không thuộc phía người nhận (ở đây nhóm transient, như NET01) vẫn in ⚠️ ngay dù lô chạy tiếp (anh chốt 27/11/2026).
+    assert.ok(r3.lines.includes('⚠️ Nhắn tin bạn bè: Đã gửi file nhưng gửi nội dung thất bại. Khoá thử chia sẻ (TST22)'), JSON.stringify(r3.lines))
     assert.ok(r3.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 1, thất bại 1'))
     assert.deepEqual((await inputs(s3)).map(i => i.status), ['hoàn thành', 'hoàn thành'], 'đã nhận tệp: không gửi lại')
-    pass('giao một phần (đã nhận tệp, chữ lỗi): "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không gửi lại; lô có người nhận được nên không khoá')
+    pass('giao một phần (đã nhận tệp, chữ lỗi): "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không gửi lại; lô có người nhận được nên không khoá; lỗi không phải phía người nhận vẫn in ⚠️')
+
+    // S3b: lô chạy tiếp có một lỗi phía người nhận (nhóm target_permanent, như Z119) và một lỗi thường: chỉ in lỗi thường; lỗi phía người
+    // nhận chỉ còn số ở dòng 📨 (anh chốt 27/11/2026: lô nào cũng có vài người như vậy nên khách tưởng lô nào cũng lỗi).
+    const s3b = await make({ actionId: FRIEND, targets: [{ name: 'Cúc', uid: '33' }, { name: 'Dung', uid: '34' }, { name: 'Em', uid: '35' }] })
+    const r3b = await run(s3b, { forwardCodes: { 34: 9003, 35: 9001 } })
+    assert.deepEqual((await details(s3b)).map(d => d.status), ['thành công', 'thất bại', 'thất bại'])
+    assert.ok(!r3b.lines.some(l => l.includes('(TST23)')), JSON.stringify(r3b.lines))
+    assert.ok(r3b.lines.includes('⚠️ Nhắn tin bạn bè: Lỗi thử chia sẻ (TST21)'), JSON.stringify(r3b.lines))
+    assert.ok(r3b.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 3, thành công 1, thất bại 2'))
+    assert.notEqual((await camp(s3b)).status, 'tạm dừng')
+    const base = { next: 'next_target', target: { done: true }, campaign: { effect: 'none' }, account: { effect: 'none' } }
+    for (const cls of ['target_permanent', 'account_restricted']) {
+      assert.equal(E.isLoneShareFailure({ ok: false, errorClass: cls, lockUntil: null }, base), true, cls)
+    }
+    for (const [label, decision, res] of [
+      ['lỗi mạng (NET01)', { ok: false, errorClass: 'transient', lockUntil: null }, {}],
+      ['không rõ đã tới (UNK01)', { ok: false, errorClass: 'unknown_delivery', lockUntil: null }, {}],
+      ['không có nhóm lỗi', { ok: false, errorClass: null, lockUntil: null }, {}],
+      ['khoá thao tác', { ok: false, errorClass: 'target_permanent', lockUntil: '2026-11-27T04:00:00Z' }, {}],
+      ['dừng lượt', { ok: false, errorClass: 'target_permanent', lockUntil: null }, { next: 'end_unit' }],
+      ['tạm dừng chiến dịch', { ok: false, errorClass: 'account_restricted', lockUntil: null }, { campaign: { effect: 'pause' } }],
+      ['tạm dừng tài khoản', { ok: false, errorClass: 'account_restricted', lockUntil: null }, { account: { effect: 'pause' } }]
+    ]) {
+      assert.equal(E.isLoneShareFailure(decision, { ...base, ...res }), false, label)
+    }
+    pass('lô chạy tiếp: lỗi phía người nhận (Z119, Z126…) không in ⚠️, lỗi khác (mạng, không rõ đã tới, khoá, tạm dừng) vẫn in')
 
     // S4: cả lô không ai nhận được (chỉ chữ, mọi người lỗi thường): tạm dừng chiến dịch, ghi chú kèm lý do (V601), "⏸ Dừng gửi".
     const s4 = await make({ targets: [{ name: 'X', uid: '41' }, { name: 'Y', uid: '42' }] })
@@ -232,6 +263,8 @@ async function main() {
     assert.equal(c4.note, 'Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.')
     assert.ok(r4.lines.includes('⚠️ Nhắn tin group: Lỗi thử chia sẻ (TST21)'), 'lỗi giống nhau chỉ in một lần')
     assert.equal(r4.lines.filter(l => l.startsWith('⚠️ Nhắn tin group')).length, 1)
+    assert.ok(r4.lines.indexOf('⚠️ Nhắn tin group: Lỗi thử chia sẻ (TST21)') < r4.lines.indexOf('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'),
+      'dòng ⚠️ trước dòng 📨')
     assert.ok(r4.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'))
     assert.ok(r4.lines.includes('⏸ Dừng gửi: Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.'), JSON.stringify(r4.lines))
     // Dòng riêng kèm tên sau các dòng của lô (anh chốt 18/11/2026), đúng một lần.
@@ -240,6 +273,16 @@ async function main() {
     assert.equal(r4.lines.filter(l => l.includes('đã được tạm dừng')).length, 1)
     assert.equal(r4.result.reason, 'stop_campaign')
     pass('cả lô không ai nhận được: tạm dừng chiến dịch "Cả N nhóm đều gửi không thành công: <lý do>…", mỗi lỗi khác nhau in một lần, "⏸ Dừng gửi: …", rồi "⏸ Chiến dịch … đã được tạm dừng."')
+
+    // S4b: cả lô không ai nhận được vì lỗi phía người nhận: lô dừng nên lỗi đã giữ lại vẫn in, trước dòng 📨 (anh chốt 27/11/2026).
+    const s4b = await make({ targets: [{ name: 'X', uid: '43' }, { name: 'Y', uid: '44' }] })
+    const r4b = await run(s4b, { forwardCodes: { 43: 9003, 44: 9003 } })
+    assert.equal((await camp(s4b)).status, 'tạm dừng')
+    const held4b = r4b.lines.filter(l => l.startsWith('⚠️') && l.includes('(TST23)'))
+    assert.equal(held4b.length, 1, JSON.stringify(r4b.lines))
+    assert.ok(r4b.lines.indexOf(held4b[0]) < r4b.lines.indexOf('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'), JSON.stringify(r4b.lines))
+    assert.ok(r4b.lines.some(l => l.startsWith('⏸ Dừng gửi: Cả 2 nhóm đều gửi không thành công')), JSON.stringify(r4b.lines))
+    pass('cả lô thất bại vì lỗi phía người nhận: lô dừng nên dòng ⚠️ đã giữ lại vẫn in một lần, trước dòng 📨')
 
     // S5: không ai nhận được, người thứ hai có lỗi khoá: chỉ người đó áp đủ chính sách (khoá), rồi vẫn tạm dừng "toàn bộ thất bại".
     const s5 = await make({ targets: [{ name: 'X', uid: '51' }, { name: 'Y', uid: '52' }] })
