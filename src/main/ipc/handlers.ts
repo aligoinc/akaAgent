@@ -23,6 +23,8 @@ import { FacebookLoginService } from '../services/facebookLoginService'
 import { registerFacebookLoginHandlers } from './handlers/facebookLoginHandlers'
 import { ZaloRuntimeService } from '../services/zaloRuntimeService'
 import { ZaloRealtimeGroupCampaignManager } from '../services/zaloRealtimeGroupCampaignManager'
+import { createDesktopEventBot } from '../services/eventBotHost'
+import type { EventBotRuntime } from '../services/eventBotRuntime'
 import { EmailRuntimeService } from '../services/emailRuntimeService'
 import { ZaloServerClient } from '../services/zaloServerClient'
 import { ZaloChatApiClient, isServerOnFlyRealtimeUser, serverAccountsUseChatApi } from '../services/zaloChatApiClient'
@@ -220,6 +222,7 @@ export function registerIpcHandlers(
   let runtimeCredentials: { username: string; password: string } | null = null
   let forceFullDesktopMaintenance = false
   let zaloRealtimeGroupManager: ZaloRealtimeGroupCampaignManager | null = null
+  let eventBotRuntime: EventBotRuntime | null = null
   const emitZaloLoginQrEvent = (event: ZaloLoginQrEvent): void => {
     try {
       mainWindow.webContents.send(IPC_EVENTS.ZALO_LOGIN_QR_EVENT, event)
@@ -439,6 +442,9 @@ export function registerIpcHandlers(
     { zaloRuntimeTarget: 'server' }
   )
   zaloRealtimeGroupManager = new ZaloRealtimeGroupCampaignManager(supabase, zaloRuntime, mainWindow)
+  eventBotRuntime = createDesktopEventBot(zaloRuntime, { canStartWork: () => sleepGuard.canStartWork() })
+  const desktopEventBot = eventBotRuntime
+  desktopRuntimeSnapshot.attachEventBot(() => desktopEventBot.snapshot())
 
   let restartRequiredActivation: Promise<void> | null = null
   let desktopZaloOwnershipRelinquished = false
@@ -621,6 +627,7 @@ export function registerIpcHandlers(
     contactLoader.blockZaloRuntimeForRestart()
     accountPollerController?.blockZaloRuntime()
     zaloRealtimeGroupManager?.stop()
+    eventBotRuntime?.stop()
     stopZaloRemoteClients()
 
     const activation = (async () => {
@@ -886,8 +893,11 @@ export function registerIpcHandlers(
       accountPollerController?.blockZaloRuntime()
       stopZaloRemoteClients()
       zaloRealtimeGroupManager?.stop()
+      eventBotRuntime?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
       await restartRequiredActivation?.catch(() => {})
+      // Việc bot đang gửi dở: chờ có kết quả và báo DB trước khi xoá phiên Zalo.
+      await eventBotRuntime?.waitForIdle(15_000)
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await runScopedRecovery('logout')
@@ -1066,10 +1076,15 @@ export function registerIpcHandlers(
       zaloLocalChatSync?.start()
       if (agentQr) zaloRealtimeGroupManager?.start()
       else zaloRealtimeGroupManager?.stop()
+      // Bot sự kiện: tài khoản Zalo QR / trình duyệt của nhân viên (qr gồm cả trình duyệt). Không có tài khoản bật bot thì chỉ có lượt đọc
+      // cài đặt 2 phút một lần.
+      if (agentQr) eventBotRuntime?.start()
+      else eventBotRuntime?.stop()
       return
     }
 
     zaloRealtimeGroupManager?.stop()
+    eventBotRuntime?.stop()
     // Existing producers keep their transport/claim until the cleanup receipt settles.
     if (user?.appAccess?.separateAccess && user.appAccess.staff.stopping) return
     zaloLocalChatSync?.stop()
@@ -1084,6 +1099,7 @@ export function registerIpcHandlers(
     contactLoader.blockZaloRuntimeForRestart()
     accountPollerController?.blockZaloRuntime()
     zaloRealtimeGroupManager?.stop()
+    eventBotRuntime?.stop()
     zaloRuntime.clearAll()
     console.info('[RuntimeHandoff] Zalo local is waiting for the app server to hand off safely.')
     return localHandoffGeneration
@@ -1360,8 +1376,11 @@ export function registerIpcHandlers(
         accountPollerController?.blockZaloRuntime()
         stopZaloRemoteClients()
         zaloRealtimeGroupManager?.stop()
+        eventBotRuntime?.stop()
         await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
         await restartRequiredActivation?.catch(() => {})
+        // Việc bot đang gửi dở: chờ có kết quả và báo DB trước khi xoá phiên Zalo.
+        await eventBotRuntime?.waitForIdle(15_000)
         zaloRuntime.clearAll()
         emailRuntime.clearAll()
         await runScopedRecovery('quit')
@@ -1495,6 +1514,7 @@ export function registerIpcHandlers(
         accountPollerController?.blockZaloRuntime()
         stopZaloRemoteClients()
         zaloRealtimeGroupManager?.stop()
+        eventBotRuntime?.stop()
         await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait()).catch(() => {})
         const cleanupIdle = await Promise.all([
           campaignScheduler.waitForIdle(30_000),
@@ -1535,8 +1555,11 @@ export function registerIpcHandlers(
       accountPollerController?.blockZaloRuntime()
       stopZaloRemoteClients()
       zaloRealtimeGroupManager?.stop()
+      eventBotRuntime?.stop()
       await (accountZaloOperations?.stopAll() ?? zaloRuntime.cancelAllLoginQrAndWait())
       await restartRequiredActivation?.catch(() => {})
+      // Việc bot đang gửi dở: chờ có kết quả và báo DB trước khi xoá phiên Zalo.
+      await eventBotRuntime?.waitForIdle(15_000)
       zaloRuntime.clearAll()
       emailRuntime.clearAll()
       await runScopedRecovery('logout')

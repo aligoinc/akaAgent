@@ -38,6 +38,7 @@ import { ProxyRuntimeService } from '../../main/services/proxyRuntimeService'
 import { SupabaseService } from '../../main/services/supabase'
 import { ZaloRealtimeGroupCampaignManager } from '../../main/services/zaloRealtimeGroupCampaignManager'
 import { ZaloRuntimeService } from '../../main/services/zaloRuntimeService'
+import { createServerEventBot } from '../../main/services/eventBotHost'
 import type { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerSessionRestorer } from './zaloServerSessionRestorer'
 
@@ -154,12 +155,34 @@ export class ZaloServerRuntimeManager {
   private readonly operations = new Map<string, ZaloServerOperationSnapshot>()
   private snapshotNotifyTimer: ReturnType<typeof setTimeout> | null = null
 
+  /**
+   * Bot sự kiện (docs/EVENT_BOT_TECH.md mục 8): một vòng cho cả tiến trình, gom tài khoản Zalo Server đang có phiên của mọi nhân viên
+   * đang chạy vào một lượt hỏi (`p_source = 'server'`). Không giữ tài khoản nào thì không gọi DB.
+   */
+  private readonly eventBot = createServerEventBot({
+    resolve: accountId => {
+      for (const runtime of this.runtimes.values()) {
+        if (runtime.state !== 'running' || !runtime.zaloRuntime) continue
+        if (runtime.zaloRuntime.cachedAccountIds().includes(accountId)) return { zaloRuntime: runtime.zaloRuntime, user: runtime.user }
+      }
+      return null
+    },
+    listAccounts: () => {
+      const ids: number[] = []
+      for (const runtime of this.runtimes.values()) {
+        if (runtime.state === 'running' && runtime.zaloRuntime) ids.push(...runtime.zaloRuntime.cachedAccountIds())
+      }
+      return ids
+    }
+  })
+
   constructor(private readonly options: ZaloServerRuntimeManagerOptions) {}
 
   async start(): Promise<void> {
     if (this.state === 'running' || this.state === 'starting') return
     this.state = 'starting'
     this.notifySnapshot()
+    this.eventBot.start()
     this.reconcileTimer = setInterval(() => {
       void this.runReconcileCycle()
     }, RECONCILE_INTERVAL_MS)
@@ -189,7 +212,10 @@ export class ZaloServerRuntimeManager {
     // Stop retries before awaiting that queue, or stopRuntime cannot reach its
     // own stop signal. In-flight claims and Zalo work still drain below.
     for (const staffId of this.runtimes.keys()) accountOperationRegistry.stop(staffId)
+    // Bot sự kiện: không nhận việc mới; việc đang gửi chờ có kết quả và báo DB trước khi dừng runtime Zalo.
+    this.eventBot.stop()
     this.notifySnapshot()
+    await this.eventBot.waitForIdle(15_000)
     await this.reconcilePromise?.catch(() => {})
     await Promise.allSettled(Array.from(this.lifecycleTails.values()))
     await Promise.allSettled(Array.from(this.runtimes.keys()).map(staffId => this.stopRuntimeSerialized(staffId)))

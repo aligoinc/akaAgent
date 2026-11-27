@@ -43,6 +43,7 @@ const http = require('node:http')
 const { join } = require('node:path')
 const assert = require('node:assert/strict')
 
+let guest = null
 const state = { logins: 0, token: null, valid: true, loginBodies: [], logouts: [] }
 const EXPIRED = 'akaAgent: cần đăng nhập lại'
 const PAGE = '<!doctype html><meta charset="utf-8"><title>Tự động hóa</title><body><div id="out">...</div>'
@@ -108,7 +109,6 @@ app.whenReady().then(async () => {
     const win = new BrowserWindow({ show: false, width: 1000, height: 700, webPreferences: { webviewTag: true, nodeIntegration: true, contextIsolation: false } })
     await win.loadURL('data:text/html,<body><script>window.navOut=[];require("electron").ipcRenderer.on("journey-web:navigate-out",(e,t)=>window.navOut.push(t))</script></body>')
     const service = new JourneyWebService(win, 7, 9)
-    let guest = null
     win.webContents.on('did-attach-webview', (_e, contents) => { guest = contents })
 
     // 1. Mở thẻ: đăng nhập native một lần, cookie httpOnly trong phân vùng riêng, mật khẩu chỉ đi trong thân yêu cầu.
@@ -152,6 +152,24 @@ app.whenReady().then(async () => {
     assert.equal(blocked, 'blocked')
     assert.equal(state.logins, 1)
     ok('trang nhúng không gọi được đăng nhập (chỉ main đăng nhập)')
+
+    // 5b. Bot sự kiện: trang thứ hai cùng phiên (không đăng nhập lại), webview riêng, trang Quy trình vẫn sống.
+    const automationGuest = guest
+    const bot = await service.prepare('dark', null, 'eventBot')
+    assert.equal(bot.status, 'ready')
+    assert.equal(bot.view, 'eventBot')
+    assert.equal(bot.partition, ready.partition)
+    assert.equal(bot.url, origin + '/automation/event-bot?embed=desktop&theme=dark')
+    assert.equal(state.logins, 1, 'dùng chung phiên')
+    await win.webContents.executeJavaScript('(()=>{const w=document.createElement("webview");w.setAttribute("partition",' + JSON.stringify(bot.partition) + ');w.setAttribute("src",' + JSON.stringify(bot.url) + ');w.style.width="800px";w.style.height="600px";document.body.appendChild(w)})()')
+    await wait(() => guest !== automationGuest && guest && !guest.isDestroyed(), 'webview bot gắn')
+    const botGuest = guest
+    await wait(async () => (await botGuest.executeJavaScript('document.getElementById("out").textContent')) === 'ok:7', 'trang bot đọc /me')
+    assert.ok(!automationGuest.isDestroyed(), 'webview Quy trình không bị đóng')
+    assert.equal((await service.prepare('dark', null)).view, 'automation')
+    assert.equal(state.logins, 1)
+    guest = automationGuest
+    ok('Bot sự kiện: trang thứ hai cùng phiên, webview riêng, Quy trình vẫn sống')
 
     // 6. Phiên hết hạn: trang đổi tiêu đề, main đăng nhập lại một lần rồi nạp lại.
     state.valid = false

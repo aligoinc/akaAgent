@@ -1,0 +1,25 @@
+{
+  "migration": "migrations/migration_v672_event_bot.sql",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested_by_user": "Apply V672 sau đó pr và mege - tính năng cơ bản nên bật cho mọi người (27/11/2026)",
+  "ledger": { "version": "20261127055355", "name": "migration_v672_event_bot", "statements_md5": "4b798fb6bc6b963cabc11c60375500d8", "file_md5": "4b798fb6bc6b963cabc11c60375500d8" },
+  "applied_at_vn": "2026-11-27 12:53:55",
+  "method": "File chép lên bảng tạm private.ops_v672_stage_20261127 theo 8 phần (md5 từng phần và cả file khớp tệp), chạy phần giữa BEGIN/COMMIT bằng EXECUTE trong một giao dịch cùng dòng sổ; bảng tạm đã xoá. MCP đổi các chuỗi \\t \\n \\u trong lúc truyền nên dấu \\ được gửi bằng ký hiệu tạm rồi đổi lại bằng chr(92), md5 xác nhận trước khi chạy.",
+  "preflight": { "ledger_v672": 0, "watched_md5_before": "d21d55c1ea0d6396c6d16e39ca70ff2e" },
+  "postflight": {
+    "tables": ["auto_event_bot_settings", "auto_event_bot_rules", "auto_event_bot_jobs", "auto_event_bot_exclusions"],
+    "watched_md5_after": "4bb3fc3d196074f4a8e6e76fcffa5ac7",
+    "cron_job": { "name": "aka-agent-event-bot-maintenance", "jobid": 137, "schedule": "* * * * *" },
+    "maintenance_call": { "expired": 0, "runnerLost": 0, "deleted": 0 },
+    "edge_5xx_05_50_to_05_54_utc": 0,
+    "edge_slow_over_1s_minute_of_apply": 32,
+    "postgres_event_bot_warnings": 0
+  },
+  "switch": {
+    "key": "event_bot",
+    "set_at_vn": "2026-11-27 12:54:23",
+    "value": { "audience": "all", "organizationIds": [], "runtimes": { "desktop": true, "server": true, "fly": false }, "pollSeconds": 30 },
+    "off": "{\"audience\":\"off\",...} (giữ runtimes); chỉ admin akaBiz: audience admin_akabiz"
+  },
+  "notes": "Khách chỉ dùng được khi có API/Web (akaAgentWebApp) đã deploy và Desktop/App Server bản có EventBotRuntime; tài khoản akaChat và Zalo Server trên Fly chưa chạy được (đợt 2)."
+}

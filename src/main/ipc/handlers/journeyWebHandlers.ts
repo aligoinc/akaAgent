@@ -1,10 +1,10 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from 'electron'
 import { getCurrentUser } from '../../data/currentUser'
 import { JourneyWebService } from '../../services/journeyWebService'
-import { JOURNEY_WEB_IPC, type JourneyWebTheme } from '../../../shared/journeyWebDesktop'
+import { JOURNEY_WEB_IPC, journeyWebView, type JourneyWebTheme } from '../../../shared/journeyWebDesktop'
 
 /**
- * Thẻ Tự động hóa › Quy trình (trang Web nhúng). Dịch vụ tạo khi khách mở thẻ lần đầu, gắn với nhân viên đang đăng nhập;
+ * Trang Web nhúng: thẻ Tự động hóa › Quy trình và mục Bot sự kiện (tham số `view`, thiếu = Quy trình). Dịch vụ tạo khi khách mở thẻ lần đầu, gắn với nhân viên đang đăng nhập;
  * đăng xuất / đổi tài khoản thì `reset()` xoá phiên và cookie của phân vùng.
  */
 export function registerJourneyWebHandlers(mainWindow: BrowserWindow): {
@@ -44,8 +44,8 @@ export function registerJourneyWebHandlers(mainWindow: BrowserWindow): {
   }
 
   const theme = (value: unknown): JourneyWebTheme => value === 'dark' ? 'dark' : 'light'
-  ipcMain.handle(JOURNEY_WEB_IPC.prepare, async (event, themeValue: unknown, path: unknown) =>
-    (await resolve(event)).prepare(theme(themeValue), typeof path === 'string' ? path : null))
-  ipcMain.handle(JOURNEY_WEB_IPC.reload, async event => (await resolve(event)).reload())
+  ipcMain.handle(JOURNEY_WEB_IPC.prepare, async (event, themeValue: unknown, path: unknown, view: unknown) =>
+    (await resolve(event)).prepare(theme(themeValue), typeof path === 'string' ? path : null, journeyWebView(view)))
+  ipcMain.handle(JOURNEY_WEB_IPC.reload, async (event, view: unknown) => (await resolve(event)).reload(journeyWebView(view)))
   return { reset, credentialsChanged: () => service?.credentialsChanged() }
 }

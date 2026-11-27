@@ -35,6 +35,16 @@ export interface DesktopSleepReleasePayload {
   awakeSeconds: number
 }
 
+/**
+ * Bot sự kiện (docs/EVENT_BOT_TECH.md mục 8): trạng thái vòng gửi của bot trên máy này. Có khoá là app đã có bot (Web dựa vào để báo
+ * "cần cập nhật app"). Đứng sau `accounts` để phần cũ của payload giữ nguyên từng byte; Web bỏ qua khoá lạ.
+ */
+export interface DesktopEventBotPayload {
+  state: 'stopped' | 'off' | 'idle' | 'running'
+  accounts: number[]
+  lastClaimAt: string | null
+}
+
 export interface DesktopRuntimeSnapshotPayload {
   v: 1
   scheduler: { state: DesktopSchedulerState; since: string }
@@ -49,6 +59,8 @@ export interface DesktopRuntimeSnapshotPayload {
     runningCampaignId: number | null
     progress: null
   }>
+  /** Chỉ có khi app đã nối bot sự kiện (attachEventBot). */
+  eventBot?: DesktopEventBotPayload
 }
 
 /** RPC giới hạn 32 KB; 200 tài khoản ~20 KB. */
@@ -86,6 +98,7 @@ export class DesktopRuntimeSnapshot {
   private source: (() => DesktopRuntimeSnapshotSource | null) | null = null
   private sleepHoldSource: (() => DesktopSleepHoldPayload | null) | null = null
   private sleepReleaseSource: (() => DesktopSleepReleasePayload | null) | null = null
+  private eventBotSource: (() => DesktopEventBotPayload | null) | null = null
   private maintenanceWaitingSince: string | null = null
   private lastState: DesktopSchedulerState | null = null
   private lastStateSince: string | null = null
@@ -104,6 +117,11 @@ export class DesktopRuntimeSnapshot {
   /** Lần thôi giữ gần nhất (systemSleepGuard.releaseSnapshot); lỗi thì bỏ qua. */
   attachSleepRelease(source: () => DesktopSleepReleasePayload | null): void {
     this.sleepReleaseSource = source
+  }
+
+  /** Trạng thái bot sự kiện (EventBotRuntime.snapshot); lỗi thì bỏ khoá. */
+  attachEventBot(source: () => DesktopEventBotPayload | null): void {
+    this.eventBotSource = source
   }
 
   /** Cổng bảo trì ngày mới đang chờ lượt chạy hôm trước settle. */
@@ -137,6 +155,8 @@ export class DesktopRuntimeSnapshot {
     try { sleepHold = this.sleepHoldSource?.() ?? null } catch { sleepHold = null }
     let sleepRelease: DesktopSleepReleasePayload | null = null
     try { sleepRelease = this.sleepReleaseSource?.() ?? null } catch { sleepRelease = null }
+    let eventBot: DesktopEventBotPayload | null = null
+    try { eventBot = this.eventBotSource?.() ?? null } catch { eventBot = null }
     return {
       v: 1,
       scheduler: { state, since: this.lastStateSince || this.now().toISOString() },
@@ -152,7 +172,9 @@ export class DesktopRuntimeSnapshot {
           runningCampaignId: source!.runningCampaigns.get(account.id) ?? null,
           progress: null
         }
-      })
+      }),
+      ...(eventBot ? { eventBot: { state: eventBot.state, accounts: eventBot.accounts.slice(0, MAX_DESKTOP_RUNTIME_ACCOUNTS),
+        lastClaimAt: eventBot.lastClaimAt } } : {})
     }
   }
 }

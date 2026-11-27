@@ -24,7 +24,7 @@ import {
   CAMPAIGN_INPUT_DUPLICATES_IPC, type CampaignInputDuplicatesIpcRequest, type CampaignInputDuplicatesIpcResponses,
   type CampaignInputDuplicatesIpcResult
 } from '../shared/campaignInputDuplicatesIpc'
-import { JOURNEY_WEB_IPC, type JourneyWebOutside, type JourneyWebState, type JourneyWebTheme } from '../shared/journeyWebDesktop'
+import { JOURNEY_WEB_IPC, type JourneyWebOutside, type JourneyWebState, type JourneyWebTheme, type JourneyWebView } from '../shared/journeyWebDesktop'
 import {
   CAMPAIGN_RESULT_GROUPS_IPC, type CampaignResultGroupsDesktopAction, type CampaignResultGroupsIpcResult
 } from '../shared/campaignResultGroupsDesktop'
@@ -137,9 +137,10 @@ const electronAPI = {
   prepareChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_PREPARE),
   reloadChatWeb: (): Promise<ChatWebState> => ipcRenderer.invoke(IPC_EVENTS.CHAT_WEB_RELOAD),
   // Tự động hóa › Quy trình: trang Web nhúng; main đăng nhập và đặt cookie phiên trong phân vùng riêng.
-  journeyWebPrepare: (theme: JourneyWebTheme, path?: string | null): Promise<JourneyWebState> =>
-    ipcRenderer.invoke(JOURNEY_WEB_IPC.prepare, theme, path ?? null),
-  journeyWebReload: (): Promise<JourneyWebState> => ipcRenderer.invoke(JOURNEY_WEB_IPC.reload),
+  // Bot sự kiện dùng cùng dịch vụ nhúng với `view: 'eventBot'` (đường /automation/event-bot).
+  journeyWebPrepare: (theme: JourneyWebTheme, path?: string | null, view?: JourneyWebView): Promise<JourneyWebState> =>
+    ipcRenderer.invoke(JOURNEY_WEB_IPC.prepare, theme, path ?? null, view ?? 'automation'),
+  journeyWebReload: (view?: JourneyWebView): Promise<JourneyWebState> => ipcRenderer.invoke(JOURNEY_WEB_IPC.reload, view ?? 'automation'),
   onJourneyWebState: (callback: (state: JourneyWebState) => void): (() => void) => {
     const handler = (_event: Electron.IpcRendererEvent, state: JourneyWebState) => callback(state)
     ipcRenderer.on(JOURNEY_WEB_IPC.state, handler)
