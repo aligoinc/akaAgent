@@ -8,12 +8,38 @@ import type BetterSqlite3 from 'better-sqlite3'
 import { app } from 'electron'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
+import { performance } from 'perf_hooks'
 import type { JournalEntry, LocalJournal } from '../../../packages/campaign-engine/src/index'
 
 const JOURNAL_DIR = 'local-data'
 const JOURNAL_FILE = 'campaign_engine_journal.db'
 
 let handle: BetterSqlite3.Database | null = null
+
+// better-sqlite3 chạy đồng bộ trên luồng chính (synchronous = FULL chờ ghi xong xuống đĩa): App Server báo lại thời gian này
+// trong dòng [ServerHealth] mỗi phút (src/server/main/serverHealthMonitor.ts). Desktop không đọc.
+const opStats = { count: 0, totalMs: 0, maxMs: 0 }
+
+function timed<T>(run: () => T): T {
+  const startedAt = performance.now()
+  try {
+    return run()
+  } finally {
+    const elapsedMs = performance.now() - startedAt
+    opStats.count += 1
+    opStats.totalMs += elapsedMs
+    if (elapsedMs > opStats.maxMs) opStats.maxMs = elapsedMs
+  }
+}
+
+/** Số lệnh nhật ký, tổng / lâu nhất (ms) từ lần đọc trước; đọc xong là đặt lại. */
+export function takeEngineJournalStats(): { count: number; totalMs: number; maxMs: number } {
+  const stats = { ...opStats }
+  opStats.count = 0
+  opStats.totalMs = 0
+  opStats.maxMs = 0
+  return stats
+}
 
 function db(): BetterSqlite3.Database {
   if (handle) return handle
@@ -43,20 +69,20 @@ export class SqliteEngineJournal implements LocalJournal {
   constructor(private readonly scope: string) {}
 
   async append(entry: JournalEntry): Promise<void> {
-    db().prepare('INSERT OR IGNORE INTO engine_journal (scope, id, entry, created_at) VALUES (?, ?, ?, ?)')
-      .run(this.scope, entry.id, JSON.stringify(entry), entry.createdAt)
+    timed(() => db().prepare('INSERT OR IGNORE INTO engine_journal (scope, id, entry, created_at) VALUES (?, ?, ?, ?)')
+      .run(this.scope, entry.id, JSON.stringify(entry), entry.createdAt))
   }
 
   async update(entry: JournalEntry): Promise<void> {
-    db().prepare('UPDATE engine_journal SET entry = ? WHERE scope = ? AND id = ?').run(JSON.stringify(entry), this.scope, entry.id)
+    timed(() => db().prepare('UPDATE engine_journal SET entry = ? WHERE scope = ? AND id = ?').run(JSON.stringify(entry), this.scope, entry.id))
   }
 
   async remove(id: string): Promise<void> {
-    db().prepare('DELETE FROM engine_journal WHERE scope = ? AND id = ?').run(this.scope, id)
+    timed(() => db().prepare('DELETE FROM engine_journal WHERE scope = ? AND id = ?').run(this.scope, id))
   }
 
   async pending(): Promise<JournalEntry[]> {
-    const rows = db().prepare('SELECT entry FROM engine_journal WHERE scope = ? ORDER BY created_at, id').all(this.scope) as Array<{ entry: string }>
+    const rows = timed(() => db().prepare('SELECT entry FROM engine_journal WHERE scope = ? ORDER BY created_at, id').all(this.scope)) as Array<{ entry: string }>
     return rows.map(row => JSON.parse(row.entry) as JournalEntry)
   }
 }

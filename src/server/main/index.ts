@@ -11,7 +11,9 @@ import {
   hasLiveZaloServerRealtimeCapability
 } from '../../main/data/repositories/serverRuntimeRepository'
 import { ZALO_SERVER_IPC } from '../../shared/zaloServerProtocol'
-import { installServerFileLogger, type ServerFileLogger } from './serverFileLogger'
+import { installServerFileLogger, takeServerFileLogStats, type ServerFileLogger } from './serverFileLogger'
+import { startServerHealthMonitor } from './serverHealthMonitor'
+import { takeEngineJournalStats } from '../../main/engineAdapters/desktopEngineJournal'
 import { ServerRuntimeOwnershipStore } from './serverRuntimeOwnershipStore'
 import { ZaloServerGateway } from './zaloServerGateway'
 import { ZaloServerRuntimeManager } from './zaloServerRuntimeManager'
@@ -206,6 +208,14 @@ async function shutdown(): Promise<void> {
 
 if (gotSingleInstanceLock) {
   serverFileLogger = installServerFileLogger(join(serverDataPath, 'logs', 'server.log'))
+  // Mỗi phút một dòng [ServerHealth] trong server.log (độ trễ luồng chính, CPU, bộ nhớ, GC, ghi đĩa, HTTP); không gọi DB.
+  startServerHealthMonitor({
+    sources: {
+      logWrites: takeServerFileLogStats,
+      journalWrites: takeEngineJournalStats,
+      appMetrics: () => (app.isReady() ? app.getAppMetrics() : [])
+    }
+  })
   app.commandLine.appendSwitch('disable-background-timer-throttling')
 
   app.on('second-instance', () => {
