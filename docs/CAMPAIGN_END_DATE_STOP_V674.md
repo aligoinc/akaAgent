@@ -88,3 +88,17 @@ Hệ quả cần biết:
   ngày khi mở sửa.
 - Phương án "chiến dịch cũ chạy nốt data, chỉ chiến dịch lưu từ form mới mới dừng" (cột `schedule_end_strict`) đã viết thử trên nhánh
   này rồi gỡ theo quyết định của anh; không còn file nào của nó.
+
+### Kiểm thử lặp (27/11/2026)
+
+Theo yêu cầu kiểm thử lặp tới khi 3 vòng liền không còn lỗi. Bộ kiểm và kết quả ghi ở akaAgentWebApp `docs/CAMPAIGN_SCHEDULE_END.md`
+mục "Kiểm thử lặp" (một vòng: `AKA_AGENT_REPO=<checkout này> bash scripts/campaign-schedule-end-fuzz/round.sh <hạt giống> [<json dữ liệu thật>]`
+trong checkout WebApp). Phần Desktop: `WEBAPP_REPO=<checkout WebApp> node scripts/campaign-schedule-end-ui-fuzz.cjs <hạt giống> [<số ca>]`
+chạy form Desktop thật trên Chromium với đồng hồ giả từng ca và hai múi giờ máy; fixture `scripts/campaign-schedule-end-ui-smoke.tsx` nay
+giả cả lượt sửa chiến dịch (`updateCampaign`, hộp chọn trạng thái sau khi lưu luôn chọn tạm dừng).
+
+Sửa ở hợp đồng dùng chung (chép lại từ WebApp, md5 trùng): ngày không có thật (`2026-13-01`, `2026-02-30`) coi như chưa chọn (trước:
+`2026-13-01` lọt qua rồi form văng lỗi lúc lưu); mốc ngoài năm 0001–9999 không còn làm `scheduleEndDateKey` ném lỗi.
+
+Desktop khác Web, có chủ ý: chiến dịch tuần / tháng chưa có ngày kết thúc thì form Desktop điền sẵn hôm nay + 7 khi mở sửa (Web để trống
+bắt chọn); mốc kết thúc đang lưu không phải cuối ngày thì Desktop giữ nguyên mốc đó khi khách không đổi ngày (có dòng báo dưới ô).

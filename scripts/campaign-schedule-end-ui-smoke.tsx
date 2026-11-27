@@ -6,6 +6,7 @@ import { useCampaignStore } from '../src/renderer/src/stores/campaignStore'
 import { useAuthStore } from '../src/renderer/src/stores/authStore'
 import { useUiStore } from '../src/renderer/src/stores/uiStore'
 import { normalizeEntitlements } from '../src/renderer/src/utils/entitlements'
+import { campaignEdit } from '../src/renderer/src/components/CampaignPanels/campaignEdit'
 import '../src/renderer/src/styles/global.css'
 
 const accounts = [11].map(id => ({ id, name: `Zalo ${id}`, flatformType: 'zalo', isActive: true, isDelete: false,
@@ -13,7 +14,7 @@ const accounts = [11].map(id => ({ id, name: `Zalo ${id}`, flatformType: 'zalo',
 const actions = [
   { id: 'zalo_cancel_sent_friend_request', name: 'Huỷ lời mời kết bạn', flatformType: 'zalo', isActive: true, isDelete: false }
 ]
-const state: any = { calls: [], errors: [], created: [], alerts: [] }
+const state: any = { calls: [], errors: [], created: [], updated: [], alerts: [] }
 const handlers: Record<string, any> = {
   platform: 'darwin', fileExists: () => true,
   getCampaignInputDataLimit: () => 10000,
@@ -38,6 +39,8 @@ window.electronAPI = new Proxy(handlers, { get(target, key: string) {
     return key in target ? target[key](...args) : key.startsWith('get') ? null : []
   }
 } }) as any
+// Sửa chiến dịch: form hỏi lưu xong để tạm dừng hay chạy; bài kiểm luôn chọn tạm dừng.
+;(campaignEdit as any).chooseSaveStatus = async () => 'tạm dừng'
 window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
 useUiStore.setState({ showAlert: (message: any, type: any) => { state.alerts.push({ message, type }) }, showConfirm: (_message, confirm) => { void confirm() } })
@@ -46,7 +49,8 @@ useAuthStore.setState({ user: { staffId: 7, organizationId: 9, campaignEngineV2:
   entitlements: normalizeEntitlements({ zalo: true }), zaloAccountCapabilities: { qr: true, web: true, server: true } } as any })
 useCampaignStore.setState({ accounts: accounts as any, campaignActions: actions as any,
   campaigns: [], loadCampaigns: async () => {}, loadAccountGroups: async () => {}, loadAccounts: async () => {}, loadCampaignActions: async () => {},
-  createCampaign: async (data: any) => { state.created.push(data); return { ...data, id: 900 + state.created.length, log: '', isDelete: false } } } as any)
+  createCampaign: async (data: any) => { state.created.push(data); return { ...data, id: 900 + state.created.length, log: '', isDelete: false } },
+  updateCampaign: async (id: number, data: any) => { state.updated.push({ id, data }); return { id, ...data } } } as any)
 
 interface Selection { key: number; mode: 'new' | 'edit'; scheduleType: string; endDate: string | null; schedule: string }
 function App() {
@@ -55,7 +59,7 @@ function App() {
     setSelection(old => ({ key: old.key + 1, mode, scheduleType, endDate, schedule })) }
   const base: any = { id: 7, name: 'Ngày kết thúc fixture', actionId: 'zalo_cancel_sent_friend_request', accountId: 11, accountName: 'Zalo 11',
     schedule: selection.schedule, originalSchedule: selection.schedule, content: '', status: 'tạm dừng', images: [],
-    scheduleType: selection.scheduleType, scheduleWeekDays: '2,3,4', scheduleEndDate: selection.endDate,
+    scheduleType: selection.scheduleType, scheduleWeekDays: '2,3,4', scheduleDays: '5,15', scheduleEndDate: selection.endDate,
     continueNextDay: true, refreshData: true, dataTargetSourceMode: 'direct', extraSettings: {}, isDelete: false, editVersion: 'v', editReady: true }
   return <CampaignFormModal key={selection.key} onClose={() => {}} campaign={selection.mode === 'edit' ? base : null}
     lockedActionId="zalo_cancel_sent_friend_request" initialAccountIds={[11]} />

@@ -20,22 +20,44 @@ export const SCHEDULE_END_PAST_ERROR = 'Ngày kết thúc đã qua. Vui lòng ch
 
 const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/
 
-/** Ngày (yyyy-mm-dd) theo giờ Việt Nam của một mốc thời gian; không đọc được thì chuỗi rỗng. */
-export function scheduleEndDateKey(value: string | Date | null | undefined): string {
-  if (!value) return ''
-  if (typeof value === 'string' && DATE_KEY.test(value)) return value
-  const time = value instanceof Date ? value.getTime() : Date.parse(value)
+/** yyyy-mm-dd là một ngày có thật trên lịch (loại 2026-02-30, 2026-13-01; năm 0001–9999). */
+export function isScheduleEndDateKey(value: unknown): value is string {
+  if (typeof value !== 'string' || !DATE_KEY.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false
+  const date = new Date(Date.UTC(2000, month - 1, day))
+  date.setUTCFullYear(year)
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+}
+
+/** yyyy-mm-dd (UTC) của một mốc ms; ngoài năm 0001–9999 hoặc không đọc được thì chuỗi rỗng. */
+function utcDateKey(time: number): string {
   if (!Number.isFinite(time)) return ''
-  // Giờ Việt Nam cố định UTC+7, không đổi giờ theo mùa.
-  return new Date(time + 7 * 3_600_000).toISOString().slice(0, 10)
+  const date = new Date(time)
+  const year = date.getUTCFullYear()
+  if (!Number.isFinite(year) || year < 1 || year > 9999) return ''
+  return `${String(year).padStart(4, '0')}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
+}
+
+/** Ngày (yyyy-mm-dd) theo giờ Việt Nam của một mốc thời gian; không đọc được, không phải ngày có thật hoặc ngoài năm 0001–9999 thì chuỗi rỗng. */
+export function scheduleEndDateKey(value: string | Date | null | undefined): string {
+  if (typeof value === 'string') {
+    if (DATE_KEY.test(value)) return isScheduleEndDateKey(value) ? value : ''
+    if (!value.trim()) return ''
+    // Giờ Việt Nam cố định UTC+7, không đổi giờ theo mùa.
+    return utcDateKey(Date.parse(value) + 7 * 3_600_000)
+  }
+  if (value instanceof Date) return utcDateKey(value.getTime() + 7 * 3_600_000)
+  return ''
 }
 
 /** Ngày kết thúc đặt sẵn của chiến dịch mới: `today` (yyyy-mm-dd, giờ Việt Nam) + SCHEDULE_END_DEFAULT_DAYS; không đọc được thì rỗng. */
 export function defaultScheduleEndDate(today: string): string {
-  if (!DATE_KEY.test(today)) return ''
-  const time = Date.parse(`${today}T00:00:00Z`)
-  if (!Number.isFinite(time)) return ''
-  return new Date(time + SCHEDULE_END_DEFAULT_DAYS * 86_400_000).toISOString().slice(0, 10)
+  if (!isScheduleEndDateKey(today)) return ''
+  const [year, month, day] = today.split('-').map(Number)
+  const date = new Date(Date.UTC(2000, month - 1, day))
+  date.setUTCFullYear(year)
+  return utcDateKey(date.getTime() + SCHEDULE_END_DEFAULT_DAYS * 86_400_000)
 }
 
 export interface ScheduleEndInitialOptions {
@@ -65,8 +87,8 @@ export interface ScheduleEndCheckInput {
 
 /** Lỗi của ô ngày kết thúc lúc lưu (lịch Theo tuần / Theo tháng); null khi hợp lệ. */
 export function scheduleEndError(input: ScheduleEndCheckInput): string | null {
-  if (!DATE_KEY.test(input.date)) return SCHEDULE_END_REQUIRED_ERROR
-  if (DATE_KEY.test(input.runDate) && input.date < input.runDate) return SCHEDULE_END_BEFORE_RUN_ERROR
-  if (DATE_KEY.test(input.today) && input.date < input.today) return SCHEDULE_END_PAST_ERROR
+  if (!isScheduleEndDateKey(input.date)) return SCHEDULE_END_REQUIRED_ERROR
+  if (isScheduleEndDateKey(input.runDate) && input.date < input.runDate) return SCHEDULE_END_BEFORE_RUN_ERROR
+  if (isScheduleEndDateKey(input.today) && input.date < input.today) return SCHEDULE_END_PAST_ERROR
   return null
 }
