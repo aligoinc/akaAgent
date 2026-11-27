@@ -206,7 +206,7 @@ Ngoài ra, giả lập A seed 9 tìm ra trường hợp chiến dịch đổi l�
 
 ## Ba chỗ còn thiếu (27/11/2026)
 
-Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps` ở cả ba repo, dựng trên `dev_3` `8cb3c752`, ChatApi `dev` `f2996c9`, WebApp `dev_1` `75f1f469`. Chưa commit, chưa deploy. Không có migration: dùng hàm và cột V670 đã apply.
+Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps` ở cả ba repo, dựng trên `dev_3` `8cb3c752`, ChatApi `dev` `f2996c9`, WebApp `dev_1` `75f1f469`. Commit và mở PR 27/11 theo yêu cầu ("Commit và mở PR"): [#822](https://github.com/aligoinc/akaAgent/pull/822), [aligoinc/akaAgentChatApi#203](https://github.com/aligoinc/akaAgentChatApi/pull/203), [aligoinc/akaAgentWebApp#333](https://github.com/aligoinc/akaAgentWebApp/pull/333). Chưa merge, chưa deploy. Không có migration: dùng hàm và cột V670 đã apply.
 
 **1. "Lý do đang chờ" trên Web / iOS** (WebApp `apps/api/src/modules/aka-agent-control/aka-agent-control.pendingReason.ts`). iOS gọi cùng API (`GET /campaigns/:id/pending-reason`, chỉ khi bấm), nên không cần phát hành app.
 - Chỉ xét khi câu đọc chiến dịch đang bận (có từ trước) thấy tài khoản Zalo có chiến dịch giữ chỗ. Không có chiến dịch giữ chỗ thì không đọc thêm gì.
