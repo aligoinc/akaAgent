@@ -219,10 +219,23 @@ async function main() {
     assert.equal(d3[1].log, 'Đã gửi file nhưng gửi nội dung thất bại. Khoá thử chia sẻ (TST22)')
     assert.equal(d3[1].counts_toward_limit, true, 'giao một phần luôn tính lượt')
     assert.equal((await locks(s3)).length, 0, 'lô có người nhận được: lỗi của người khác không khoá thao tác')
-    assert.ok(r3.lines.includes('⚠️ Nhắn tin bạn bè: Đã gửi file nhưng gửi nội dung thất bại. Khoá thử chia sẻ (TST22)'))
+    // Lỗi lẻ (chỉ đóng data đó, lô chạy tiếp) không in dòng ⚠️, chỉ còn số ở dòng 📨 (anh chốt 27/11/2026).
+    assert.ok(!r3.lines.some(l => l.startsWith('⚠️')), JSON.stringify(r3.lines))
     assert.ok(r3.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 1, thất bại 1'))
     assert.deepEqual((await inputs(s3)).map(i => i.status), ['hoàn thành', 'hoàn thành'], 'đã nhận tệp: không gửi lại')
-    pass('giao một phần (đã nhận tệp, chữ lỗi): "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không gửi lại; lô có người nhận được nên không khoá')
+    assert.equal(E.isLoneShareFailure({ ok: false, lockUntil: null },
+      { next: 'next_target', target: { done: true }, campaign: { effect: 'none' }, account: { effect: 'none' } }), true)
+    for (const [label, decision, res] of [
+      ['khoá thao tác', { ok: false, lockUntil: '2026-11-27T04:00:00Z' }, {}],
+      ['data về hàng đợi', { ok: false, lockUntil: null }, { target: { done: false } }],
+      ['dừng lượt', { ok: false, lockUntil: null }, { next: 'end_unit' }],
+      ['tạm dừng chiến dịch', { ok: false, lockUntil: null }, { campaign: { effect: 'pause' } }],
+      ['tạm dừng tài khoản', { ok: false, lockUntil: null }, { account: { effect: 'pause' } }]
+    ]) {
+      const base = { next: 'next_target', target: { done: true }, campaign: { effect: 'none' }, account: { effect: 'none' } }
+      assert.equal(E.isLoneShareFailure(decision, { ...base, ...res }), false, label)
+    }
+    pass('giao một phần (đã nhận tệp, chữ lỗi): "Đã gửi file nhưng gửi nội dung thất bại. …", tính lượt, không gửi lại; lô có người nhận được nên không khoá; lỗi lẻ không in ⚠️')
 
     // S4: cả lô không ai nhận được (chỉ chữ, mọi người lỗi thường): tạm dừng chiến dịch, ghi chú kèm lý do (V601), "⏸ Dừng gửi".
     const s4 = await make({ targets: [{ name: 'X', uid: '41' }, { name: 'Y', uid: '42' }] })
@@ -232,6 +245,8 @@ async function main() {
     assert.equal(c4.note, 'Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.')
     assert.ok(r4.lines.includes('⚠️ Nhắn tin group: Lỗi thử chia sẻ (TST21)'), 'lỗi giống nhau chỉ in một lần')
     assert.equal(r4.lines.filter(l => l.startsWith('⚠️ Nhắn tin group')).length, 1)
+    assert.ok(r4.lines.indexOf('⚠️ Nhắn tin group: Lỗi thử chia sẻ (TST21)') < r4.lines.indexOf('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'),
+      'lô dừng: lỗi lẻ đã giữ in trước dòng 📨')
     assert.ok(r4.lines.includes('📨 Kết quả chia sẻ tin nhắn Zalo: tổng 2, thành công 0, thất bại 2'))
     assert.ok(r4.lines.includes('⏸ Dừng gửi: Cả 2 nhóm đều gửi không thành công: Lỗi thử chia sẻ (TST21). Chiến dịch đã tạm dừng.'), JSON.stringify(r4.lines))
     // Dòng riêng kèm tên sau các dòng của lô (anh chốt 18/11/2026), đúng một lần.
