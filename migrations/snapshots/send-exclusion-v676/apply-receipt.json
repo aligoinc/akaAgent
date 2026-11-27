@@ -1,0 +1,29 @@
+{
+ "migration": "migration_v676_send_exclusion_own_blocklist_uid",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by": "anh, 27/11/2026: \"apply bây giờ\"",
+ "applied_at_vn": "2026-11-27 14:05:39",
+ "ledger_version": "20261127070539",
+ "ledger_statements_md5": "1623c5b193bd7164f27e52e4c8c940bb",
+ "file_md5": "1623c5b193bd7164f27e52e4c8c940bb",
+ "method": "supabase db query --linked -f (file bọc bằng scripts/make-migration-ledger-apply.cjs, dòng sổ trong cùng giao dịch)",
+ "function": "private.aka_agent_send_exclusion_match(auto_campaigns,bigint,jsonb,text,text,text,boolean)",
+ "md5_before": "86daa2d825167120257250df5b88eaba",
+ "md5_after": "1fdc59611507e67bb6d0db7ea8766b67",
+ "acl_after": "{postgres=X/postgres}",
+ "dry_run_before_apply": "27/11 ~14:00 VN trong giao dịch tự huỷ: preflight / postflight đạt; bản sao pg_temp so 695 quyết định thật của 3 chiến dịch theo UID có loại trừ: 613 'không xác định' → 'gửi được' (đều danh sách của chính tài khoản, không có nguồn cần Global ID), 0 quyết định loại trừ đổi; 63333 hết 'không xác định' ở 251 data chờ + 364 data đang giữ.",
+ "after": {
+  "postgrest_schema_reload_ms": 7423.3,
+  "rest_15s_after": {
+   "window": "07:05:30-07:05:45 UTC",
+   "requests": 5541,
+   "slow_over_1s": 203,
+   "p99_ms": 1675,
+   "http_5xx": 1,
+   "http_503": 0
+  },
+  "recovered_by_utc": "07:05:45"
+ },
+ "rollback": "migrations/rollback_v676_send_exclusion_own_blocklist_uid.sql (thay thân hàm về md5_before; làm PostgREST nạp lại schema)",
+ "not_done": "364 data đang bị giữ 'tạm dừng' của 63333 (và data của 53605 / 63619 / 63668) chưa đưa về 'chờ xử lý': ghi production riêng, cần anh cho phép."
+}

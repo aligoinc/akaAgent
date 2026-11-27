@@ -1,0 +1,22 @@
+{
+ "migration": "migration_v677_zalo_profile_unavailable",
+ "project_ref": "cgjbsmqtfhqvttudyjzq",
+ "requested_by": "anh, 27/11/2026: \"apply bây giờ\"",
+ "applied_at_vn": "2026-11-27 14:05:48",
+ "ledger_version": "20261127070548",
+ "ledger_statements_md5": "9977fe788b5103e0b6783859e2471710",
+ "file_md5": "9977fe788b5103e0b6783859e2471710",
+ "method": "supabase db query --linked -f (file bọc bằng scripts/make-migration-ledger-apply.cjs)",
+ "data_only": true,
+ "result": {
+  "auto_error": "err_engine_zalo_profile_unavailable / EXC06 / target_temporary",
+  "auto_outcome_policies_source_v677": 1,
+  "auto_outcome_signal_rules_source_v677": 1,
+  "classify_engine_profile_unavailable_before_send": "err_engine_zalo_profile_unavailable",
+  "policy": "hold, suppress, no_count, continue, increment, ngưỡng 4, campaign pause, không khoá (zalo_message_stranger / zalo_message_friend × desktop / server / fly)",
+  "policy_lint_rows": "4 (có sẵn trước V677, không thêm)"
+ },
+ "customer_text": "Chưa đọc được hồ sơ Zalo của người nhận nên chưa kiểm tra được điều kiện loại trừ gửi (anh duyệt 27/11)",
+ "effect_note": "Chỉ có tác dụng khi lõi engine mới (PR #829) chạy: Desktop / App Server cần build, Fly cần chép lõi sang ChatApi + deploy worker. Lõi cũ không phát tín hiệu profile_unavailable.",
+ "rollback": "migrations/rollback_v677_zalo_profile_unavailable.sql"
+}
