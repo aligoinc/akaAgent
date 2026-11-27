@@ -6,7 +6,7 @@ Anh chốt 27/11/2026: "Cả DB và app", rồi "Bỏ, dọn một lần": khôn
 - V681 đã apply akachat lúc 16:51:23 VN 27/11 theo yêu cầu ("Chạy thử rồi apply").
   - Sổ `20261127095123`, md5 sổ = file `8d7ef48e…`. Không apply lại.
   - [Biên nhận](../migrations/snapshots/engine-account-hold-rule-v681/apply-receipt.json); kết quả ở mục "Apply 27/11/2026".
-- Chưa commit.
+- Code: [#835](https://github.com/aligoinc/akaAgent/pull/835) vào `dev_3`, [aligoinc/akaAgentChatApi#207](https://github.com/aligoinc/akaAgentChatApi/pull/207) vào `dev` (mở 27/11 theo yêu cầu "Mở PR", chưa merge).
 - Chưa deploy ChatApi `worker`.
 - Chưa build Desktop / App Server.
 
@@ -83,7 +83,7 @@ Nhánh `feat/engine-account-self-heal`, worktree `../akaAgentChatApi-account-sel
   làm lệch trạng thái cần tìm.
 - **(B)** Tài khoản bị token thao tác giữ quá 30 phút.
 
-Production 27/11 17:0x VN: 454 tài khoản "đang chạy", trong đó lease 372, token thao tác 81.
+Production 16:49 VN 27/11, trước khi apply V681: 403 tài khoản "đang chạy", trong đó lease 325, token thao tác 77.
 - (A): 1 tài khoản Facebook bản app cũ, kẹt từ 07/10.
 - (B): 74 tài khoản, nhiều cái từ tháng 9–10 (Facebook, Zalo QR của Desktop), cộng 4 tài khoản Fly mới tạo.
 
