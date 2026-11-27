@@ -182,7 +182,7 @@ Ngoài ra, giả lập A seed 9 tìm ra trường hợp chiến dịch đổi l�
   - Runtime chạy lệnh của một tài khoản lần lượt.
   - Nên khi cùng tài khoản còn lệnh khác đang chạy, hạn chờ = hạn gốc + hạn gốc dài nhất của lệnh đang chạy.
   - Không có lệnh nào khác thì 100 / 190 giây như cũ.
-- Còn hở: worker chờ tối đa 210 giây từ lúc tạo lệnh (`ZALO_CAMPAIGN_COMMAND_TIMEOUT_MS`) và dọn lệnh treo sau 240 giây. Một lệnh làn riêng xếp sau một lệnh media treo (runtime bỏ ở 180 giây), nếu tự nó chạy quá khoảng 25 giây, vẫn ra UNK01. Nâng hai trần đó là đổi cho mọi khách, chưa làm.
+- Tới #199 còn hở: worker chờ tối đa 210 giây từ lúc tạo lệnh (`ZALO_CAMPAIGN_COMMAND_TIMEOUT_MS`) và dọn lệnh treo sau 240 giây. Một lệnh làn riêng xếp sau một lệnh media treo (runtime bỏ ở 180 giây), nếu tự nó chạy quá khoảng 25 giây, vẫn ra UNK01. Đã sửa ở nhánh `claude/parallel-run-gaps` (mục "Ba chỗ còn thiếu"), chưa deploy.
 - Runtime giữ một phiên tag Zalo mỗi tài khoản. Chỉ bật `allow_parallel_run` cho loại không dùng tag (3 loại đang bật không dùng).
 - Đo tải câu tìm chiến dịch (26/11 tối, `DISCOVERY_SCALE_V670=1 node load-tests/campaign-discovery-scale.mjs`, PG17 cục bộ, dữ liệu cùng hình dạng bộ kiểm thử tải 13/11: 681 chủ sở hữu, 1.614 tài khoản Server, ~1.600 chiến dịch đến hạn). Mỗi kịch bản so câu cũ với câu có V670 của cùng bản build, trên cùng dữ liệu, rồi đi hết mọi trang như worker:
   - Chưa ai tích (tài khoản rảnh, hoặc 70% "đang chạy"): câu mới trả đúng từng dòng như câu cũ ở mọi trang (1.585 và 564 dòng). Mỗi trang ~33 ms ở cả hai; khối đọc +0% (rảnh) / +5–6% (70% đang chạy); lập kế hoạch +0–0,3 ms.
@@ -201,10 +201,52 @@ Ngoài ra, giả lập A seed 9 tìm ra trường hợp chiến dịch đổi l�
   - Danh mục / danh sách / chi tiết / cấu hình đọc thêm 2 cột. DB chưa có cột (42703 / PGRST204) thì đọc lại không có cột và nhớ 5 phút.
   - Tạo / sửa chỉ ghi khi body có boolean. Nhân bản chép `true`.
 - Form Web (bản cũ và form 2) và iOS: ô nằm dưới dòng giờ dừng, chỉ hiện khi `canShowCampaignParallelRun` (bước Quy trình không có). Ô ẩn thì không gửi khoá. Chi tiết chiến dịch có dòng "Chạy cùng lúc".
-- Chưa làm:
-  - Bước xem lại của iOS.
-  - Nút "Lý do đang chờ" trên Web / iOS chưa gọi `aka_agent_engine_parallel_wait_v1`.
-  - API không chặn `true` cho loại / tổ chức chưa bật (claim bỏ qua).
+- Chưa làm: bước xem lại của iOS.
+- Nút "Lý do đang chờ" của Web / iOS và chỗ chặn `true` của API: đã sửa ở nhánh `claude/parallel-run-gaps` (mục "Ba chỗ còn thiếu"), chưa deploy.
+
+## Ba chỗ còn thiếu (27/11/2026)
+
+Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps` ở cả ba repo, dựng trên `dev_3` `8cb3c752`, ChatApi `dev` `f2996c9`, WebApp `dev_1` `75f1f469`. Commit và mở PR 27/11 theo yêu cầu ("Commit và mở PR"): [#822](https://github.com/aligoinc/akaAgent/pull/822), [aligoinc/akaAgentChatApi#203](https://github.com/aligoinc/akaAgentChatApi/pull/203), [aligoinc/akaAgentWebApp#333](https://github.com/aligoinc/akaAgentWebApp/pull/333). WebApp #333 (`b491ecf7`) và #822 merge 10:33 VN 27/11 theo yêu cầu ("Merge cả ba"); ChatApi #203 chờ CI. Chưa deploy. Không có migration: dùng hàm và cột V670 đã apply.
+
+**1. "Lý do đang chờ" trên Web / iOS** (WebApp `apps/api/src/modules/aka-agent-control/aka-agent-control.pendingReason.ts`). iOS gọi cùng API (`GET /campaigns/:id/pending-reason`, chỉ khi bấm), nên không cần phát hành app.
+- Chỉ xét khi câu đọc chiến dịch đang bận (có từ trước) thấy tài khoản Zalo có chiến dịch giữ chỗ. Không có chiến dịch giữ chỗ thì không đọc thêm gì.
+- Đọc thêm một câu: chính chiến dịch này và các chiến dịch giữ chỗ, kèm `parallel_run_enabled`. Không chiến dịch nào tích thì câu như trước (“Tài khoản đang bận chạy chiến dịch …”) và không đọc gì thêm.
+- Có chiến dịch tích thì đọc cờ engine v2 của tổ chức và `allow_parallel_run` của các loại liên quan. Tổ chức chưa bật engine v2 (Zalo Server chạy trên VPS hoặc bộ cũ, lần lượt từng chiến dịch) thì câu như trước.
+- Làn như claim của DB. Chiến dịch có làn riêng hoặc tài khoản có làn riêng đang chạy thì gọi `aka_agent_engine_parallel_wait_v1(campaign_id)` (không gửi mã thao tác; hàm tự thêm Tìm SĐT cho "Thêm thành viên"). Có chiến dịch phải chờ thì hiện câu anh đã duyệt (`campaignParallelWaitReasonText`, tên thao tác như Desktop qua `pendingActionName`).
+- Không phải chờ vì việc này:
+  - Chiến dịch ở làn riêng chỉ còn bị coi là bận khi bộ cũ giữ tài khoản (chiến dịch giữ chỗ còn token, DB trả `legacy_busy`).
+  - Chiến dịch làn chính bị coi là bận khi có chiến dịch làn chính khác (hoặc bộ cũ) giữ chỗ, không vì chiến dịch ở làn riêng.
+  - Tài khoản "đang chạy" chỉ vì chiến dịch ở làn khác thì không báo "Tài khoản đang bận", xét tiếp các lý do sau.
+- Đọc lỗi (cả khi DB chưa có cột / hàm) thì câu như trước.
+- Đã gọi thử hàm với quyền `service_role` của API trên production (chỉ đọc): chạy được, trả NULL vì lúc đó không có làn riêng nào.
+
+**2. API không ghi `true` cho loại / tổ chức chưa bật** (WebApp `aka-agent-control.service.ts`, `allowsParallelRun`).
+- Tạo, sửa, nhân bản: `parallelRunEnabled: true` chỉ được ghi khi tài khoản Zalo, loại có `allow_parallel_run` và tổ chức đã bật engine v2 (đúng điều kiện hiện ô).
+- Ngoài ra (form mở từ trước khi akaBiz tắt loại, client cũ, gọi API thẳng) API bỏ khoá: tạo mới là không tích, sửa giữ nguyên giá trị đang lưu. Không báo lỗi, không có câu mới cho khách.
+- `false` luôn được ghi, không đọc cờ.
+- Đọc cờ engine v2 lỗi thì lần lưu báo lỗi như các lần đọc khác của bước lưu.
+- Nhân bản chiến dịch có tích mà loại đã bị tắt thì bản sao không tích.
+- Desktop ghi thẳng DB, không qua chỗ chặn này; form Desktop chỉ gửi khi ô đang hiện. Claim vẫn bỏ qua cột khi loại chưa bật.
+
+**3. Lệnh Fly xếp sau lệnh khác của cùng tài khoản** (ChatApi). Runtime chạy lệnh của một tài khoản lần lượt và chỉ tính hạn từ lúc lệnh bắt đầu chạy.
+- `packages/runtime-protocol/src/campaignCommandTimeout.ts` (mới): hạn gốc (media 190 giây, khác 100 giây) và `campaignCommandQueueAllowanceMs` = tổng hạn gốc của các lệnh khác đang chờ của tài khoản. Worker và `api` dùng chung.
+- Worker `CampaignCommandClient`: nhớ lệnh đang chờ theo tài khoản (mọi lượt chạy trên worker dùng chung một client). Lệnh đã được Chat API nhận (running) mà xếp sau lệnh khác thì chờ thêm phần xếp hàng sau hạn gốc 210 giây. Lệnh còn pending tới hạn gốc thì huỷ như cũ.
+- Dispatcher (`api`): hạn chờ = hạn gốc + tổng hạn gốc các lệnh đang bay của tài khoản (trước là cộng hạn dài nhất, nên lệnh thứ ba trở đi vẫn có thể hết hạn).
+- Job dọn lệnh treo (`markStaleRunningUncertain`, 240 giây) bỏ qua lệnh dispatcher còn đang chờ với hạn đã kéo dài. Không có lệnh như vậy thì câu SQL như cũ. Fly chỉ có một máy `api` (đã xem 27/11), nên dispatcher biết hết lệnh đang bay.
+- Không ai tích thì mỗi tài khoản chỉ có một lệnh chiến dịch đang bay: phần chờ thêm là 0, mọi hạn như cũ.
+- Còn chặn: hạn của bước trong lõi engine trên Fly (`stepTimeoutMs` 450 giây, hạn đọc của bước lấy data đầu lượt 240 giây). Một lệnh xếp sau một lệnh media (chờ tới 400 giây) vẫn nằm trong hạn bước; xếp sau từ hai lệnh mà các lệnh đó đều chạy gần hết hạn thì bước có thể hết hạn trước.
+
+**Kiểm thử (27/11):**
+
+| Lệnh | Kết quả |
+|---|---|
+| WebApp `npx vitest run` (apps/api) | 2.842 đạt. Mới: 15 ca "Lý do đang chờ" (cùng loại, chung Tìm SĐT, làn riêng không chờ chiến dịch thường, chiến dịch thường không chờ làn riêng, bộ cũ giữ tài khoản, tổ chức chưa bật, loại chưa bật, đọc lỗi, DB chưa có cột / hàm, SMS); 10 ca chặn `true` khi tạo / sửa / nhân bản (loại chưa bật, tổ chức chưa bật, đọc cờ lỗi, bỏ tích không đọc cờ, đổi loại khi sửa) |
+| WebApp `npm run typecheck` | Sạch |
+| ChatApi `npm run verify` | Typecheck sạch, 3.333 đạt. Mới: 6 ca hạn chờ worker (chờ thêm khi đã được nhận, pending thì huỷ như cũ, hết phần chờ thêm, một lệnh / khác tài khoản như cũ, lệnh trước xong không tính), ca dispatcher cộng tổng hạn và sweep bỏ qua lệnh xếp hàng, 2 ca SQL của sweep trên PGlite |
+
+**Thứ tự deploy:**
+- WebApp: chỉ API / Web (`aka-agent-web-app`). iOS không cần phát hành.
+- ChatApi: `api` rồi `worker`. Thứ tự nào cũng an toàn (bản cũ của bên còn lại chỉ giữ hạn như hôm nay). Deploy `api` huỷ các lệnh đang chờ một lần như mọi lần deploy nhóm này, nên chọn lúc ít chiến dịch đang gửi.
 
 ## Kiểm thử (26/11 tối, sau khi lên `dev_3` / `dev` / `dev_1` mới)
 
