@@ -206,7 +206,7 @@ Ngoài ra, giả lập A seed 9 tìm ra trường hợp chiến dịch đổi l�
 
 ## Ba chỗ còn thiếu (27/11/2026)
 
-Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps` ở cả ba repo, dựng trên `dev_3` `8cb3c752`, ChatApi `dev` `f2996c9`, WebApp `dev_1` `75f1f469`. Commit và mở PR 27/11 theo yêu cầu ("Commit và mở PR"): [#822](https://github.com/aligoinc/akaAgent/pull/822), [aligoinc/akaAgentChatApi#203](https://github.com/aligoinc/akaAgentChatApi/pull/203), [aligoinc/akaAgentWebApp#333](https://github.com/aligoinc/akaAgentWebApp/pull/333). WebApp #333 (`b491ecf7`) và #822 merge 10:33 VN 27/11 theo yêu cầu ("Merge cả ba"); ChatApi #203 chờ CI. Chưa deploy. Không có migration: dùng hàm và cột V670 đã apply.
+Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps` ở cả ba repo, dựng trên `dev_3` `8cb3c752`, ChatApi `dev` `f2996c9`, WebApp `dev_1` `75f1f469`. Commit và mở PR 27/11 theo yêu cầu ("Commit và mở PR"): [#822](https://github.com/aligoinc/akaAgent/pull/822), [aligoinc/akaAgentChatApi#203](https://github.com/aligoinc/akaAgentChatApi/pull/203), [aligoinc/akaAgentWebApp#333](https://github.com/aligoinc/akaAgentWebApp/pull/333). Đã merge 27/11 theo yêu cầu ("Merge cả ba", "Merge #203 luôn"): WebApp #333 `b491ecf7` 10:33 VN, #822 `568fab9d` 10:34 VN, ChatApi #203 `d1cc7d65` 10:34:57 VN (không chờ CI). Đã deploy 10:48–10:55 VN theo yêu cầu ("Deploy luôn"), xem "Deploy (27/11)" dưới. Không có migration: dùng hàm và cột V670 đã apply.
 
 **1. "Lý do đang chờ" trên Web / iOS** (WebApp `apps/api/src/modules/aka-agent-control/aka-agent-control.pendingReason.ts`). iOS gọi cùng API (`GET /campaigns/:id/pending-reason`, chỉ khi bấm), nên không cần phát hành app.
 - Chỉ xét khi câu đọc chiến dịch đang bận (có từ trước) thấy tài khoản Zalo có chiến dịch giữ chỗ. Không có chiến dịch giữ chỗ thì không đọc thêm gì.
@@ -244,9 +244,12 @@ Theo yêu cầu ("Làm ba chỗ còn thiếu"). Nhánh `claude/parallel-run-gaps
 | WebApp `npm run typecheck` | Sạch |
 | ChatApi `npm run verify` | Typecheck sạch, 3.333 đạt. Mới: 6 ca hạn chờ worker (chờ thêm khi đã được nhận, pending thì huỷ như cũ, hết phần chờ thêm, một lệnh / khác tài khoản như cũ, lệnh trước xong không tính), ca dispatcher cộng tổng hạn và sweep bỏ qua lệnh xếp hàng, 2 ca SQL của sweep trên PGlite |
 
-**Thứ tự deploy:**
-- WebApp: chỉ API / Web (`aka-agent-web-app`). iOS không cần phát hành.
-- ChatApi: `api` rồi `worker`. Thứ tự nào cũng an toàn (bản cũ của bên còn lại chỉ giữ hạn như hôm nay). Deploy `api` huỷ các lệnh đang chờ một lần như mọi lần deploy nhóm này, nên chọn lúc ít chiến dịch đang gửi.
+**Deploy (27/11):**
+- ChatApi: không deploy nguyên `dev` vì còn #200 (Cách A, của dung688; anh chốt để dung688 deploy) và #202 (báo cáo chat, kèm migration). Image `deploy-7bc19c5-20261127` = `972e138` (bản đang chạy) + #203, nhánh `deploy/972e138-parallel-gaps-20261127`; `npm run verify` trên bản này đạt 3.313 ca. `api` 10:48:07–10:48:25 VN; `worker` dừng 10:49:22, chạy lại 10:50:41.
+- Sự cố: lần khởi động `worker` đầu, bước khôi phục lúc khởi động lỗi kết nối DB (lỗi không thuộc loại tạm thời) nên vai trò chiến dịch dừng hẳn, 0 lượt Fly. Khởi động lại `worker` lần hai 10:54:46–10:54:49; lượt Fly đầu tiên 10:55:02. Chiến dịch trên Fly ngừng khoảng 5 phút 40 giây. Có từ trước, không do #203; chi tiết ở ChatApi `docs/DEPLOY_FLY_IO.md`.
+- Hậu kiểm 10:55:36: 151 lượt Fly từ 10:54:49, 0 lượt treo quá 5 phút, 0 UNK01, 0 lệnh `command_result_unknown` từ 10:47. Lúc dừng `worker` lần đầu có 4 lượt RUN01 (data về hàng đợi).
+- Web v150 (`dev_1` `b491ecf7`) 10:50:50–10:51:18 VN; v149 đang chạy trước đó đã có mọi thay đổi trước #333 (so source map 262 tệp). iOS không cần phát hành.
+- Chưa có tài khoản nào chạy làn riêng trên Fly lúc deploy, nên phần chờ thêm và câu "Lý do đang chờ" mới chưa gặp ở lượt thật.
 
 ## Kiểm thử (26/11 tối, sau khi lên `dev_3` / `dev` / `dev_1` mới)
 
