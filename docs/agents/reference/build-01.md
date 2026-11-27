@@ -151,6 +151,17 @@ bài chưa giả module này: bản chép `patched-session/` thêm mock thì 15/
 `npm run build -w @aka-agent/control-api` trước `npm run typecheck` / `npm test`, không thì mọi workspace báo thiếu `@aka-agent/control-api`.
 Trước khi deploy Web, so source map của bản đang chạy với git (bản trên máy có thể do tài khoản Fly khác deploy, 26/11: v145 / v146).
 
+**Build lại 10.8.0 lần 2 (27/11/2026, chỉ Desktop, đã phát hành lần 1).** Bản đã phát hành mà build lại cùng số thì máy đang chạy số đó
+không nhận qua bộ cập nhật: hỏi anh giữ số hay tăng số trước khi build (27/11 anh chốt giữ 10.8.0). Làm như 10.0.0 lần 2: nhánh
+`codex/release-<ver>-r2` từ `dev_3`, cất `dist/build-<ver>` thành `dist/build-<ver>-r1-<nền>` và bằng chứng vào `<work>/r1-<nền>/`; đối chứng là
+bundle lần 1 giải nén từ app.asar của worktree lần 1 (so sha256 dmg với SHA256SUMS lần 1). **Bản chép bài kiểm (`patched-*`, `bash32/`,
+`server-rest-smoke-webplatform.cjs`, `upgrade-portal-smoke-extraaction.cjs`, `patched-v585/make.py`) ghi cứng đường dẫn worktree và thư mục work:**
+chép sang lượt mới phải sửa cả các tệp này (`grep -rlE "worktrees/release-<ver>([^-]|$)"`), không thì chúng kiểm code của worktree cũ mà vẫn
+báo đạt. `server-rest-smoke-webplatform.cjs` cần thêm hàm giả `hasActiveLaneRun` và `legacyRunAccounts` (#805 / #810) cho ca
+`runAccountCampaignQueue`. 27/11 các thư mục `dist/build-9.x … 10.7.0` và `dist/build-10.x-work` của repo chính đã bị xoá (không rõ ai, giữa
+21:31 VN 26/11 và 06:14 VN 27/11): `verify-build.cjs` của lần 2 bỏ qua `markers-new.json` không còn và ghi danh sách vào biên nhận. Chọn dấu mới:
+`dist/build-10.8.0-work/gen-markers.cjs`; PR chỉ xoá code thì thêm chuỗi bị xoá vào `MARKERS_ABSENT`.
+
 **Mẹo hậu kiểm trên máy Mac.** Thử SQLite trong app đóng gói:
 `ELECTRON_RUN_AS_NODE=1 <app>/Contents/MacOS/akaAgent probe.js` và require
 `Resources/app.asar/node_modules/better-sqlite3` (đường `app.asar.unpacked` lỗi `Cannot find module
