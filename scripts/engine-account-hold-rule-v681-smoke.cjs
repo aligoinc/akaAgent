@@ -8,7 +8,7 @@
 //      khác; chỉ tài khoản Zalo Server, đúng luật giữ, apply không chờ dòng bị khoá.
 //   5. Sau V681: release / close_stale trả tài khoản theo luật V527; luật giữ của legacy_hold_v1 trùng quyết định của bước nhận lượt trên
 //      128 tổ hợp dấu bộ cũ; lý do giữ của account_holder_v1; job close_stale không tự gỡ gì (kết quả đúng khoá cũ); câu dò
-//      scripts/engine-v2-stuck-accounts.cjs ra đúng như hàm của V681.
+//      scripts/engine-v2-stuck-accounts.cjs ra đúng như hàm của V681, nhóm (B) xếp đúng chủ token và lý do trên 15 ca.
 //   6. Chạy lại bị chặn; bản gỡ trả hai hàm về bản sau V670 và xoá hai hàm mới; apply lại được.
 // Chạy: LC_ALL=C CHAT_REPO=<akaAgentChatApi> node scripts/engine-account-hold-rule-v681-smoke.cjs (cần PostgreSQL 17 Homebrew và module pg
 // của akaAgentChatApi).
@@ -23,7 +23,7 @@ const { ROOT, startCluster } = require('./fixtures/campaign-outcome-engine/pg-fi
 const { bootstrap } = require('./engine-v2-scenarios/bootstrap.cjs')
 const v670 = require('./build-v670-sql.cjs')
 const v681 = require('./build-v681-sql.cjs')
-const { buildSql: stuckScanSql } = require('./engine-v2-stuck-accounts.cjs')
+const { buildSql: stuckScanSql, HELD_STATE } = require('./engine-v2-stuck-accounts.cjs')
 
 const PORT = Number(process.env.V681_TEST_PORT || 55681)
 let checks = 0
@@ -352,6 +352,65 @@ async function main() {
     pass('job close_stale không tự gỡ: tài khoản "đang chạy" không lease giữ nguyên, kết quả đúng khoá cũ')
 
     // ---- 5e. Câu dò = hàm của V681 --------------------------------------------------------------------------------------------
+    // Bảng production câu dò đọc mà cụm thử chưa có (cột như production 28/11/2026).
+    await db.query(`CREATE TABLE IF NOT EXISTS public.auto_staff_device_presence (instance_id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+        staff_id bigint NOT NULL, organization_id bigint NOT NULL, device_fingerprint_hash text NOT NULL DEFAULT 'v681', device_label text,
+        device_platform text, app_version text, started_at timestamptz NOT NULL, last_seen_at timestamptz NOT NULL, ended_at timestamptz,
+        runtime_state jsonb, runtime_state_at timestamptz)`)
+    await db.query(`CREATE TABLE IF NOT EXISTS public.auto_campaign_logs (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, log text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now())`)
+    // Nhóm (B): mỗi ca một nhân viên riêng vì presence tính theo nhân viên. Lượt bộ cũ gắn token của tài khoản bằng claim token của
+    // chiến dịch (aka_agent_claim_campaign_runtime_v2); thao tác tài khoản là token không chiến dịch nào mang.
+    const B = {}
+    {
+      let staffSeq = STAFF * 10
+      const heldAcc = async ({ server = false, facebook = false, deleted = false, heldAgo = '2 hours' } = {}) => {
+        const id = await account({ server, facebook, deleted })
+        await db.query(`UPDATE public.auto_accounts SET staff_id = $2 WHERE id = $1`, [id, ++staffSeq])
+        await setRunning(id, heldAgo)
+        return id
+      }
+      const bindLegacy = async (accountId, { server = false, logAgo = null, action = null, extra = {} } = {}) => {
+        const cd = await legacy(accountId, { deleted: false, status: 'đang chạy', claimedMin: 120, target: server ? 'server' : 'desktop' })
+        if (action) await db.query(`UPDATE public.auto_campaigns SET action_id = $2, extra_settings = $3::jsonb WHERE id = $1`, [cd, action, JSON.stringify(extra)])
+        await db.query(`UPDATE public.auto_accounts a SET runtime_operation_claim_token = c.runtime_claim_token FROM public.auto_campaigns c
+          WHERE a.id = $1 AND c.id = $2`, [accountId, cd])
+        if (logAgo) await db.query(`INSERT INTO public.auto_campaign_logs(campaign_id, log, created_at) VALUES ($1, 'log', now() - $2::interval)`, [cd, logAgo])
+        return cd
+      }
+      const op = id => db.query(`UPDATE public.auto_accounts SET runtime_operation_claim_token = gen_random_uuid() WHERE id = $1`, [id])
+      const usage = (id, count, daysAgo = 0) => db.query(`UPDATE public.auto_accounts SET zalo_phone_check_usage = jsonb_build_object('date',
+          (timezone('Asia/Ho_Chi_Minh', clock_timestamp())::date - $3::int)::text, 'count', $2::int) WHERE id = $1`, [id, count, daysAgo])
+      const presence = async (accountId, { startedAgo, seenAgo, ended = false }) => db.query(`INSERT INTO public.auto_staff_device_presence(staff_id,
+          organization_id, app_version, started_at, last_seen_at, ended_at, runtime_state)
+        SELECT a.staff_id, $5, '10.9.0', now() - $2::interval, now() - $3::interval, CASE WHEN $4 THEN now() - $3::interval END,
+               '{"scheduler":{"state":"running"}}'::jsonb FROM public.auto_accounts a WHERE a.id = $1`, [accountId, startedAgo, seenAgo, ended, ORG])
+      const desktopOnline = { startedAgo: '5 hours', seenAgo: '20 seconds' }
+      B.running = await heldAcc(); await bindLegacy(B.running, { logAgo: '5 minutes' }); await presence(B.running, desktopOnline)
+      B.newsfeed = await heldAcc({ facebook: true })
+      await bindLegacy(B.newsfeed, { logAgo: '90 minutes', action: 'facebook_newsfeed_interaction', extra: { newsfeedTimeMinutes: 120 } })
+      await presence(B.newsfeed, desktopOnline)
+      B.onlineIdle = await heldAcc(); await bindLegacy(B.onlineIdle, { logAgo: '3 hours' }); await presence(B.onlineIdle, desktopOnline)
+      B.freshLogOffline = await heldAcc(); await bindLegacy(B.freshLogOffline, { logAgo: '40 minutes' })
+      await presence(B.freshLogOffline, { startedAgo: '5 hours', seenAgo: '38 minutes' })
+      B.closed = await heldAcc(); await bindLegacy(B.closed, { logAgo: '3 hours' })
+      await presence(B.closed, { startedAgo: '5 hours', seenAgo: '3 hours', ended: true })
+      const due = await campaign(B.closed)
+      await db.query(`UPDATE public.auto_campaigns SET staff_id = (SELECT staff_id FROM public.auto_accounts WHERE id = $2) WHERE id = $1`, [due, B.closed])
+      B.noPresence = await heldAcc({ facebook: true }); await bindLegacy(B.noPresence)
+      B.reopened = await heldAcc(); await bindLegacy(B.reopened, { logAgo: '3 hours' })
+      await presence(B.reopened, { startedAgo: '30 minutes', seenAgo: '10 seconds' })
+      B.serverRun = await heldAcc({ server: true }); await bindLegacy(B.serverRun, { server: true, logAgo: '2 minutes' })
+      B.serverIdle = await heldAcc({ server: true }); await bindLegacy(B.serverIdle, { server: true, logAgo: '2 hours' })
+      B.phone = await heldAcc({ server: true }); await op(B.phone); await usage(B.phone, 120)
+      B.phoneDone = await heldAcc({ server: true }); await op(B.phoneDone); await usage(B.phoneDone, 600)
+      B.phoneYesterday = await heldAcc({ server: true }); await op(B.phoneYesterday); await usage(B.phoneYesterday, 300, 1)
+      B.deskOp = await heldAcc(); await op(B.deskOp); await presence(B.deskOp, desktopOnline)
+      B.deskPhone = await heldAcc(); await op(B.deskPhone); await usage(B.deskPhone, 10); await presence(B.deskPhone, desktopOnline)
+      B.deskOpOffline = await heldAcc(); await op(B.deskOpOffline); await presence(B.deskOpOffline, { startedAgo: '5 hours', seenAgo: '2 hours' })
+      B.recent = await heldAcc({ server: true, heldAgo: '10 minutes' }); await op(B.recent)
+      B.deleted = await heldAcc({ deleted: true }); await op(B.deleted)
+    }
     {
       const report = await stuckScan()
       assert.equal(report.holderFunction, true)
@@ -365,11 +424,37 @@ async function main() {
         FROM public.auto_accounts WHERE status = 'đang chạy' AND coalesce(is_delete, false) = false GROUP BY 1`)).rows
       assert.deepEqual(Object.fromEntries(byFn.map(r => [r.h, r.n])), Object.fromEntries(Object.entries(report.byHolder).map(([h, n]) => [h, Number(n)])),
         'đếm theo lý do giữ của câu dò = holder_v1')
-      const opIds = report.operationHeld.map(a => Number(a.id))
-      assert.ok(opIds.includes(Number(H.op)) && opIds.includes(Number(S.op)), 'nhóm (B): tài khoản bị token thao tác giữ quá 30 phút')
       assert.ok(report.stuck.every(a => 'lastActionAt' in a), 'nhóm (A) có lần hành động cuối')
+
+      // Nhóm (B): mọi tài khoản holder 'operation' giữ quá 30 phút, xếp theo chủ token.
+      const wantHeld = (await db.query(`SELECT array_agg(id ORDER BY id) AS ids FROM public.auto_accounts
+        WHERE status = 'đang chạy' AND coalesce(is_delete, false) = false AND runtime_operation_claim_token IS NOT NULL
+          AND updated_at < clock_timestamp() - interval '30 minutes'`)).rows[0].ids.map(Number)
+      assert.deepEqual(report.operationHeld.map(a => Number(a.id)).sort((x, y) => x - y), wantHeld, 'nhóm (B) = tài khoản giữ token quá 30 phút')
+      const row = id => report.operationHeld.find(a => Number(a.id) === Number(id))
+      assert.equal(row(B.recent), undefined, 'token giữ 10 phút chưa vào nhóm (B)')
+      assert.equal(row(B.deleted), undefined, 'tài khoản đã xoá không vào nhóm (B)')
+      const expected = {
+        running: ['campaign', 'running'], newsfeed: ['campaign', 'running'], onlineIdle: ['campaign', 'app_online_run_idle'],
+        freshLogOffline: ['campaign', 'app_closed'], closed: ['campaign', 'app_closed'], noPresence: ['campaign', 'app_closed'],
+        reopened: ['campaign', 'reopened_still_held'], serverRun: ['campaign', 'running'], serverIdle: ['campaign', 'server_run_idle'],
+        phone: ['operation', 'phone_check'], phoneDone: ['operation', 'phone_check_limit_reached'], phoneYesterday: ['operation', 'server_operation'],
+        deskOp: ['operation', 'app_online_operation'], deskPhone: ['operation', 'phone_check'], deskOpOffline: ['operation', 'app_closed']
+      }
+      for (const [k, [owner, reason]] of Object.entries(expected)) {
+        const a = row(B[k])
+        assert.ok(a, `nhóm (B) có ca ${k}`)
+        assert.deepEqual([a.owner, a.reason], [owner, reason], `ca ${k}: chủ token / lý do`)
+      }
+      assert.deepEqual([row(H.op).reason, row(S.op).reason], ['app_closed', 'server_operation'], 'token thao tác của 5c / 4: Desktop không presence, Server')
+      for (const a of report.operationHeld) assert.equal(a.state, HELD_STATE[a.reason], `nhóm hiển thị của ${a.reason} khớp HELD_STATE`)
+      assert.equal(row(B.closed).dueCampaigns, 1, 'đếm chiến dịch tới lịch trên tài khoản')
+      assert.deepEqual([row(B.phone).phoneToday, row(B.phoneYesterday).phoneToday, report.phoneLimit], [120, null, 600], 'số SĐT đã tra hôm nay, hạn mức ngày')
+      assert.deepEqual([row(B.running).appOnline, row(B.running).schedulerState, row(B.noPresence).lastSeenAt], [true, 'running', null])
+      const deletedStaff = (await db.query(`SELECT staff_id FROM public.auto_accounts WHERE id = $1`, [B.deleted])).rows[0].staff_id
+      assert.ok(report.deletedHeld.count >= 1 && report.deletedHeld.staffIds.map(Number).includes(Number(deletedStaff)), 'nhóm (C): tài khoản đã xoá còn token')
     }
-    pass('câu dò scripts/engine-v2-stuck-accounts.cjs: nhóm kẹt và đếm theo lý do trùng holder_v1; nhóm token thao tác giữ lâu')
+    pass('câu dò scripts/engine-v2-stuck-accounts.cjs: nhóm kẹt và đếm theo lý do trùng holder_v1; nhóm (B) xếp đúng chủ token (lượt bộ cũ / thao tác) và lý do; nhóm (C)')
 
     // ---- 6. Bản gỡ ---------------------------------------------------------------------------------------------------------
     await db.query(v681.rollback)
