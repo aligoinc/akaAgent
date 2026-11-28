@@ -1,0 +1,71 @@
+{
+  "migration": "migration_v682_delivery_cooldown_history_by_input",
+  "project_ref": "cgjbsmqtfhqvttudyjzq",
+  "requested": "\"Viết migration\", rồi \"Apply ngay\" (28/11/2026)",
+  "function": "public.aka_agent_apply_campaign_delivery_cooldown(bigint,bigint,bigint,bigint[])",
+  "file": "migrations/migration_v682_delivery_cooldown_history_by_input.sql",
+  "file_md5": "482d6d69cdb2fc34f4f63e7fc765e3b4",
+  "generator": "node scripts/build-v682-sql.cjs",
+  "rollback_file": "migrations/rollback_v682_delivery_cooldown_history_by_input.sql",
+  "rollback_md5": "198fcb04a9f83df37eee3b07f247ff65",
+  "checks_before": {
+    "local_smoke": "CHAT_REPO=<akaAgentChatApi> LC_ALL=C node scripts/delivery-cooldown-v682-smoke.cjs: PASS 84 nhóm (Postgres cục bộ không tái hiện kế hoạch chậm)",
+    "prod_read_only_compare": {
+      "at_vn": "2026-11-28 08:40",
+      "command": "SUPABASE_WORKDIR=<checkout đã link> node scripts/delivery-cooldown-v682-prod-compare.cjs 12",
+      "same_result": "12/12 chiến dịch",
+      "campaign_53573_custom_plan": "3.795 ms / 707.865 buffer -> 17,0 ms / 10.570 buffer",
+      "campaign_53573_generic_plan": "16,7 ms -> 16,7 ms",
+      "others": "2–8 ms cả hai bản, không chiến dịch nào chậm đi",
+      "rerun_53573_08_55_vn": "4.257 ms -> 18,1 ms"
+    }
+  },
+  "preflight_08_59_vn": {
+    "ledger_v682_v689": [],
+    "ledger_top": "migration_v681_engine_account_hold_rule",
+    "other_branches_with_v682": "không có (akaAgent, akaAgentWebApp, akaAgentChatApi, SqlServerDashboard sau git fetch --all; worktree chỉ có bản này)",
+    "def_md5": "018db8850de2f967b13240e6cd36158c",
+    "attrs": "{postgres=X/postgres,service_role=X/postgres,aka_agent_chat_api=X/postgres,aka_agent_desktop=X/postgres}|postgres|secdef true|v|search_path=pg_catalog, public",
+    "active_client_backends": 1,
+    "lock_waiters": 0,
+    "campaign_53573": "chờ xử lý, lịch 08:03 28/11, lần chạy cuối 13:11:26 VN 27/11, không ghi chú"
+  },
+  "apply": {
+    "at_vn": "2026-11-28 08:59:48 – 08:59:50",
+    "method": "node scripts/make-migration-ledger-apply.cjs (dòng sổ chèn trước COMMIT, cùng giao dịch) rồi supabase db query --linked --workdir <akaAgent> -f",
+    "ledger_version": "20261128015948",
+    "ledger_statements_md5": "482d6d69cdb2fc34f4f63e7fc765e3b4",
+    "ledger_created_by": null,
+    "exit_code": 0,
+    "do_not_reapply": true
+  },
+  "postflight_09_00_vn": {
+    "def_md5": "fb517d00c3446f82579223fe2ceb002e",
+    "attrs": "không đổi",
+    "plus0_occurrences": 2,
+    "overloads": 1
+  },
+  "postgrest_reload": {
+    "notify_received_utc": "01:59:49",
+    "schema_cache_queried_ms": 4763.6,
+    "edge_5xx_01_59_40_to_02_00_30_utc": 0,
+    "edge_503": 0,
+    "requests_over_1s_per_10s_utc": { "01:59:30": 0, "01:59:40": 11, "01:59:50": 7, "02:00:00": 132, "02:00:10": 54, "02:00:20": 2 },
+    "p50_ms": "45 -> 96 (02:00:10) -> 42–55",
+    "same_minute_08_00_vn": "1–2 request chậm hơn 1 giây mỗi 10 giây, p50 44–66 ms"
+  },
+  "after": {
+    "cooldown_timeouts": "lần cuối 01:59:20 UTC (trước apply 28 giây; trước đó đều khoảng 63 giây một lần); 0 lần trong 01:59:50–02:01:35 UTC",
+    "postgres_app_errors": "1, không liên quan: 02:00:16 UTC DELETE contacts vướng khoá ngoại message_gom (gateway chat cũ)",
+    "campaign_53573": {
+      "engine_run_id": 1032145,
+      "input_data_id": 14274941,
+      "started_vn": "09:00:20",
+      "completed_vn": "09:00:29",
+      "close_reason": "reported",
+      "details": "Tìm SĐT, nhắn tin người lạ, kết bạn, đổi tên đều thành công (09:00:22–09:00:29)",
+      "campaign_status_09_01_vn": "đang chạy"
+    }
+  },
+  "rollback": "migrations/rollback_v682_delivery_cooldown_history_by_input.sql (tự kiểm hàm đang là bản V682 trước khi trả về; làm PostgREST nạp lại schema)"
+}
