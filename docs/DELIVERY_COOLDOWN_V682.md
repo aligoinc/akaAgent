@@ -1,8 +1,8 @@
 # V682: chống gửi lặp đọc lịch sử theo data ở cả hai nhánh (28/11/2026)
 
 Trạng thái: **đã apply akachat 08:59:48 VN 28/11/2026** theo yêu cầu ("Apply ngay"; sổ `20261128015948`, md5 sổ = file `482d6d69…`,
-không apply lại; [biên nhận](../migrations/snapshots/delivery-cooldown-v682/apply-receipt.json)). Chưa commit
-(worktree `.claude/worktrees/delivery-cooldown-v682`, nhánh `claude/delivery-cooldown-v682`).
+không apply lại; [biên nhận](../migrations/snapshots/delivery-cooldown-v682/apply-receipt.json)). Đã merge `dev_3` qua
+[#838](https://github.com/aligoinc/akaAgent/pull/838) ngày 28/11/2026.
 File: [migration](../migrations/migration_v682_delivery_cooldown_history_by_input.sql),
 [bản gỡ](../migrations/rollback_v682_delivery_cooldown_history_by_input.sql), sinh bằng `node scripts/build-v682-sql.cjs`.
 
