@@ -8,7 +8,8 @@
 //      khác; chỉ tài khoản Zalo Server, đúng luật giữ, apply không chờ dòng bị khoá.
 //   5. Sau V681: release / close_stale trả tài khoản theo luật V527; luật giữ của legacy_hold_v1 trùng quyết định của bước nhận lượt trên
 //      128 tổ hợp dấu bộ cũ; lý do giữ của account_holder_v1; job close_stale không tự gỡ gì (kết quả đúng khoá cũ); câu dò
-//      scripts/engine-v2-stuck-accounts.cjs ra đúng như hàm của V681, nhóm (B) xếp đúng chủ token và lý do trên 15 ca.
+//      scripts/engine-v2-stuck-accounts.cjs ra đúng như hàm của V681, nhóm (B) xếp đúng chủ token và lý do trên 15 ca, nhóm (D) (chiến dịch
+//      tới giờ còn data mà đứng yên) xếp đúng loại hoặc bỏ đúng chiến dịch trên 33 ca.
 //   6. Chạy lại bị chặn; bản gỡ trả hai hàm về bản sau V670 và xoá hai hàm mới; apply lại được.
 // Chạy: LC_ALL=C CHAT_REPO=<akaAgentChatApi> node scripts/engine-account-hold-rule-v681-smoke.cjs (cần PostgreSQL 17 Homebrew và module pg
 // của akaAgentChatApi).
@@ -23,10 +24,11 @@ const { ROOT, startCluster } = require('./fixtures/campaign-outcome-engine/pg-fi
 const { bootstrap } = require('./engine-v2-scenarios/bootstrap.cjs')
 const v670 = require('./build-v670-sql.cjs')
 const v681 = require('./build-v681-sql.cjs')
-const { buildSql: stuckScanSql, HELD_STATE } = require('./engine-v2-stuck-accounts.cjs')
+const { buildSql: stuckScanSql, HELD_STATE, STALL_STATE } = require('./engine-v2-stuck-accounts.cjs')
 
 const PORT = Number(process.env.V681_TEST_PORT || 55681)
 let checks = 0
+let D_CASES = 0
 const pass = label => { checks++; console.log('PASS', label) }
 
 const STAFF = 6810, ORG = 681
@@ -359,6 +361,12 @@ async function main() {
         runtime_state jsonb, runtime_state_at timestamptz)`)
     await db.query(`CREATE TABLE IF NOT EXISTS public.auto_campaign_logs (id bigserial PRIMARY KEY, campaign_id bigint NOT NULL, log text NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now())`)
+    // Gói có cột Zalo Server (nhóm (D) đọc), ràng buộc nơi chạy nhận 'server' (V667 p1), như production.
+    await db.query(`ALTER TABLE public.org_organization_product ADD COLUMN IF NOT EXISTS is_zalo_server boolean NOT NULL DEFAULT false`)
+    for (const t of ['auto_engine_target_runs', 'auto_engine_leases']) {
+      await db.query(`ALTER TABLE public.${t} DROP CONSTRAINT ${t}_runtime_target_check,
+        ADD CONSTRAINT ${t}_runtime_target_check CHECK (runtime_target = ANY (ARRAY['desktop'::text, 'fly'::text, 'server'::text]))`)
+    }
     // Nhóm (B): mỗi ca một nhân viên riêng vì presence tính theo nhân viên. Lượt bộ cũ gắn token của tài khoản bằng claim token của
     // chiến dịch (aka_agent_claim_campaign_runtime_v2); thao tác tài khoản là token không chiến dịch nào mang.
     const B = {}
@@ -455,6 +463,170 @@ async function main() {
       assert.ok(report.deletedHeld.count >= 1 && report.deletedHeld.staffIds.map(Number).includes(Number(deletedStaff)), 'nhóm (C): tài khoản đã xoá còn token')
     }
     pass('câu dò scripts/engine-v2-stuck-accounts.cjs: nhóm kẹt và đếm theo lý do trùng holder_v1; nhóm (B) xếp đúng chủ token (lượt bộ cũ / thao tác) và lý do; nhóm (C)')
+
+    // ---- 5f. Câu dò nhóm (D): chiến dịch tới giờ còn data mà đứng yên -----------------------------------------------------------
+    // Nhân viên của (D) có dòng org_staff, nhân viên của các phần trên thì không, nên (D) chỉ thấy chiến dịch dựng ở đây.
+    {
+      const ORG_VPS = 6821, ORG_FLY = 6822, ORG_EXPIRED = 6823
+      await db.query(`INSERT INTO public.org_organization(id, name, use_new_zalo_runtime) VALUES ($1, 'VPS', false), ($2, 'Fly', true), ($3, 'Hết gói', false)`,
+        [ORG_VPS, ORG_FLY, ORG_EXPIRED])
+      await db.query(`INSERT INTO public.org_organization_product(organization_id, product_id, expiration_date, is_zalo_server)
+        VALUES ($1, 16, now() + interval '30 days', true), ($2, 16, now() + interval '30 days', true), ($3, 16, now() - interval '2 days', true)`,
+        [ORG_VPS, ORG_FLY, ORG_EXPIRED])
+      let staffSeq = 68200
+      /** Tài khoản đã đăng nhập của một nhân viên riêng (presence tính theo nhân viên). runtime: desktop (QR / Facebook), server (VPS), fly. */
+      const dAcc = async ({ runtime = 'desktop', facebook = false, org = null, login = 'đã đăng nhập', groupPace = null } = {}) => {
+        const staff = ++staffSeq
+        const organization = org ?? (runtime === 'server' ? ORG_VPS : runtime === 'fly' ? ORG_FLY : ORG)
+        await db.query(`INSERT INTO public.org_staff(id, organization_id, is_active) VALUES ($1, $2, true)`, [staff, organization])
+        let group = null
+        if (groupPace != null) {
+          group = ++nextId
+          await db.query(`INSERT INTO public.auto_account_groups(id, settings, staff_id, organization_id) VALUES ($1, $2::jsonb, $3, $4)`,
+            [group, JSON.stringify({ sleepBetweenActions: groupPace }), staff, organization])
+        }
+        const id = ++nextId
+        await db.query(`INSERT INTO public.auto_accounts(id, name, flatform_type, login_status, status, is_active, is_delete, staff_id, organization_id,
+            is_zalo_server, is_zalo_show_web, account_group_id) OVERRIDING SYSTEM VALUE
+          VALUES ($1, 'TK (D)', $2, $3, 'chờ xử lý', true, false, $4, $5, $6, false, $7)`,
+          [id, facebook ? 'facebook' : 'zalo', login, staff, organization, runtime !== 'desktop', group])
+        return { id, staff, organization }
+      }
+      // Chiến dịch "chờ xử lý" tới lịch scheduleAgo trước; kết quả / dòng tiến trình / lần ghi dòng / lúc tạo cách đây *Ago (null = chưa có).
+      const dCd = async (acc, { scheduleAgo = '3 hours', lastRunAgo = '2 hours', logAgo = null, updatedAgo = '2 hours', createdAgo = '30 days',
+          pace = 0, note = null, type = 'daily', tick = false, rows = 3, dataAhead = null } = {}) => {
+        const id = ++nextId
+        await db.query(`INSERT INTO public.auto_campaigns(id, name, action_id, account_id, status, schedule, schedule_type, is_delete, staff_id,
+            organization_id, extra_settings, note, last_run_at, updated_at, created_at, parallel_run_enabled) OVERRIDING SYSTEM VALUE
+          VALUES ($1, $2, 'zalo_message_phone', $3, 'chờ xử lý', now() - $4::interval, $5, false, $6, $7,
+            jsonb_build_object('actionLimits', jsonb_build_object('sleepBetweenActions', $8::int)), $9,
+            now() - $10::interval, now() - $11::interval, now() - $12::interval, $13)`,
+          [id, `(D) ${id}`, acc.id, scheduleAgo, type, acc.staff, acc.organization, pace, note, lastRunAgo, updatedAgo, createdAgo, tick])
+        for (let i = 0; i < rows; i++) {
+          await db.query(`INSERT INTO public.auto_campaign_input_data(campaign_id, name, phone, uid, status, is_delete, schedule)
+            VALUES ($1, $2, $3, $4, 'chờ xử lý', false, now() + $5::interval)`, [id, `Data ${i}`, `08${String(id).slice(-6)}${i}`, `d${id}${i}`, dataAhead])
+        }
+        if (logAgo) await db.query(`INSERT INTO public.auto_campaign_logs(campaign_id, log, created_at) VALUES ($1, 'log', now() - $2::interval)`, [id, logAgo])
+        return id
+      }
+      const dPresence = (acc, { state = 'running', sleep = false, accounts = [{ id: acc.id, ready: true }], seenAgo = '20 seconds' } = {}) =>
+        db.query(`INSERT INTO public.auto_staff_device_presence(staff_id, organization_id, app_version, started_at, last_seen_at, runtime_state)
+          VALUES ($1, $2, '10.9.0', now() - interval '5 hours', now() - $3::interval, $4::jsonb)`,
+        [acc.staff, acc.organization, seenAgo, JSON.stringify({ scheduler: { state, since: new Date(Date.now() - 3600e3).toISOString() },
+          ...(sleep ? { sleepHold: { since: new Date(Date.now() - 600e3).toISOString(), reason: 'suspend' } } : {}), accounts })])
+      const dLease = (acc, campaignId, runtime = 'desktop') => db.query(`INSERT INTO public.auto_engine_leases(account_id, lane, lease_token, runner_id,
+          runtime_target, campaign_id, acquired_at, heartbeat_at, expires_at)
+        VALUES ($1, 'main', gen_random_uuid(), 'v681-d', $2, $3, now() - interval '2 hours', now() - interval '20 seconds', now() + interval '3 minutes')`,
+      [acc.id, runtime, campaignId])
+      const recentRun = runtime => db.query(`INSERT INTO public.auto_engine_target_runs(input_data_id, campaign_id, account_id, lease_token, runner_id,
+          runtime_target, started_at, completed_at, close_reason) VALUES (1, 1, 1, gen_random_uuid(), 'v681-d', $1, now() - interval '2 minutes', now(), 'reported')`,
+      [runtime])
+
+      const C = {}
+      const expect = {}
+      const want = (name, kind) => { expect[name] = kind }
+      // Desktop: mỗi ca một nhân viên (presence riêng).
+      { const a = await dAcc(); C.ownRun = await dCd(a); await dPresence(a, { accounts: [{ id: a.id, ready: true, runningCampaignId: C.ownRun }] }) }
+      want('ownRun', 'own_run_no_result')
+      { const a = await dAcc(); C.nothing = await dCd(a); await dPresence(a) }
+      want('nothing', 'nothing_holds')
+      { const a = await dAcc(); C.pace = await dCd(a, { lastRunAgo: '70 minutes', updatedAgo: '70 minutes', pace: 3600 }); await dPresence(a) }
+      want('pace', null)
+      { const a = await dAcc({ groupPace: 3600 }); C.groupPace = await dCd(a, { lastRunAgo: '70 minutes', updatedAgo: '70 minutes' }); await dPresence(a) }
+      want('groupPace', null)
+      { const a = await dAcc({ groupPace: 0 }); C.groupNoPace = await dCd(a, { lastRunAgo: '70 minutes', updatedAgo: '70 minutes', pace: 3600 }); await dPresence(a) }
+      want('groupNoPace', 'nothing_holds') // nhóm tài khoản đặt 0 giây thì thắng thời gian nghỉ của chiến dịch, như bộ lập lịch
+      { const a = await dAcc(); C.waitNote = await dCd(a, { note: '⏳ Đạt giới hạn trong ngày, chạy tiếp lúc 00:00 29/11' }); await dPresence(a) }
+      want('waitNote', null)
+      { const a = await dAcc(); C.sleep = await dCd(a); await dPresence(a, { sleep: true }) }
+      want('sleep', 'sleep_hold')
+      { const a = await dAcc({ facebook: true }); C.notReady = await dCd(a); await dPresence(a, { accounts: [{ id: a.id, ready: false, reason: 'browser_tab_closed' }] }) }
+      want('notReady', 'account_not_ready')
+      { const a = await dAcc(); C.maintenance = await dCd(a); await dPresence(a, { state: 'blocked_daily_maintenance' }) }
+      want('maintenance', 'maintenance_blocked')
+      { const a = await dAcc(); C.stopped = await dCd(a); await dPresence(a, { state: 'stopped' }) }
+      want('stopped', 'scheduler_stopped')
+      { const a = await dAcc(); C.offline = await dCd(a); await dPresence(a, { seenAgo: '2 hours' }) }
+      want('offline', 'app_offline')
+      {
+        const a = await dAcc(); C.otherLease = await dCd(a)
+        const other = await dCd(a, { scheduleAgo: '5 minutes' }); await dLease(a, other)
+        await dPresence(a, { accounts: [{ id: a.id, ready: true, runningCampaignId: other }] })
+      }
+      want('otherLease', 'busy')
+      { const a = await dAcc({ login: 'chưa đăng nhập' }); C.loggedOut = await dCd(a); await dPresence(a) }
+      want('loggedOut', null)
+      {
+        // Một tài khoản, nhiều chiến dịch: chiến dịch không có kết quả nào trong 30 phút nên không cái nào làm cái khác "bận".
+        const a = await dAcc(); await dPresence(a)
+        C.oldDaily = await dCd(a, { lastRunAgo: '5 days', updatedAgo: '10 hours' }); want('oldDaily', null)
+        C.weekly = await dCd(a, { type: 'weekly', lastRunAgo: '5 days', updatedAgo: '5 days' }); want('weekly', 'nothing_holds')
+        C.weeklyOld = await dCd(a, { type: 'weekly', lastRunAgo: '10 days', updatedAgo: '10 hours' }); want('weeklyOld', null)
+        C.monthly = await dCd(a, { type: 'monthly', lastRunAgo: '20 days', updatedAgo: '20 days' }); want('monthly', 'nothing_holds')
+        C.futureData = await dCd(a, { dataAhead: '1 hour' }); want('futureData', null)
+        C.noData = await dCd(a, { rows: 0 }); want('noData', null)
+        C.justDue = await dCd(a, { scheduleAgo: '10 minutes', lastRunAgo: '1 day', updatedAgo: '10 hours' }); want('justDue', null)
+        C.dueLater = await dCd(a, { scheduleAgo: '40 minutes', lastRunAgo: '1 day', updatedAgo: '10 hours' }); want('dueLater', 'nothing_holds')
+        C.logActive = await dCd(a, { logAgo: '5 minutes' }); want('logActive', null) // FB45 / data tạm dừng: chỉ có dòng tiến trình
+        C.logStale = await dCd(a, { logAgo: '50 minutes' }); want('logStale', 'nothing_holds')
+        C.resumed = await dCd(a, { scheduleAgo: '8 hours', lastRunAgo: '16 hours', updatedAgo: '2 minutes' }); want('resumed', null) // như 63710
+        C.neverRun = await dCd(a, { scheduleAgo: '2 hours', lastRunAgo: null, updatedAgo: '2 hours', createdAgo: '2 hours' }); want('neverRun', 'nothing_holds')
+        C.neverRunOld = await dCd(a, { lastRunAgo: null, updatedAgo: '10 hours', createdAgo: '5 days' }); want('neverRunOld', null)
+      }
+      // Zalo Server: VPS (tổ chức tắt cờ) và Fly (bật cờ).
+      { const a = await dAcc({ runtime: 'server' }); C.vps = await dCd(a) }
+      want('vps', 'runner_down') // lần quét 1 chưa có lượt 'server' nào 10 phút; lần 2 có
+      { const a = await dAcc({ runtime: 'server' }); C.vpsBusy = await dCd(a); await dCd(a, { scheduleAgo: '1 day', lastRunAgo: '5 minutes', updatedAgo: '5 minutes' }) }
+      want('vpsBusy', 'busy') // chiến dịch khác của tài khoản vừa ra kết quả, chưa ai giữ lease
+      { const a = await dAcc({ runtime: 'server' }); C.vpsParallel = await dCd(a, { tick: true }); await dCd(a, { lastRunAgo: '5 minutes', updatedAgo: '5 minutes' }) }
+      want('vpsParallel', 'busy') // App Server chạy lần lượt cả chiến dịch tích "chạy cùng lúc"
+      { const a = await dAcc({ runtime: 'server', org: ORG_EXPIRED }); C.expired = await dCd(a) }
+      want('expired', null)
+      { const a = await dAcc({ runtime: 'fly' }); C.flyOwnLease = await dCd(a); await dLease(a, C.flyOwnLease, 'fly') }
+      want('flyOwnLease', 'own_run_no_result')
+      { const a = await dAcc({ runtime: 'fly' }); C.flyParallel = await dCd(a, { tick: true }); await dCd(a, { lastRunAgo: '5 minutes', updatedAgo: '5 minutes' }) }
+      want('flyParallel', 'runner_down') // làn riêng trên Fly: chiến dịch làn chính vừa chạy không làm nó bận
+      { const a = await dAcc({ runtime: 'fly' }); C.flyBusy = await dCd(a); await dCd(a, { lastRunAgo: '5 minutes', updatedAgo: '5 minutes' }) }
+      want('flyBusy', 'busy')
+
+      const recent = (await db.query(`SELECT count(*)::int AS n FROM public.auto_engine_target_runs
+        WHERE runtime_target IN ('server', 'fly') AND started_at > now() - interval '10 minutes'`)).rows[0].n
+      assert.equal(recent, 0, 'trước lần quét 1 chưa có lượt server / fly nào')
+      const scanD = async () => {
+        const report = await stuckScan()
+        const kinds = new Map()
+        for (const r of [...report.stalled, ...report.stalledCounted]) {
+          assert.ok(!kinds.has(Number(r.campaignId)), `chiến dịch ${r.campaignId} chỉ có một dòng`)
+          kinds.set(Number(r.campaignId), r.kind)
+        }
+        const byKind = {}
+        for (const k of kinds.values()) byKind[k] = (byKind[k] || 0) + 1
+        assert.deepEqual(Object.fromEntries(Object.entries(report.stalledByKind).map(([k, n]) => [k, Number(n)])), byKind, 'đếm theo loại = số dòng')
+        for (const r of report.stalled) assert.ok(['look', 'info'].includes(STALL_STATE[r.kind]), `dòng ${r.campaignId}: loại ${r.kind} được in`)
+        for (const r of report.stalledCounted) assert.equal(STALL_STATE[r.kind], 'count', `dòng ${r.campaignId}: loại ${r.kind} chỉ đếm`)
+        return { report, kinds }
+      }
+      {
+        const { report, kinds } = await scanD()
+        for (const [name, kind] of Object.entries(expect)) assert.equal(kinds.get(Number(C[name])) ?? null, kind, `lần quét 1, ca ${name}`)
+        const row = report.stalled.find(r => Number(r.campaignId) === Number(C.neverRun))
+        assert.deepEqual([row.lastActivityAt, Number(row.dueData), row.runtime], [null, 3, 'desktop'], 'chiến dịch chưa chạy lần nào: chưa có hoạt động, 3 data tới hạn')
+        const weeklyRow = report.stalled.find(r => Number(r.campaignId) === Number(C.weekly))
+        assert.ok(Math.abs(Number(weeklyRow.idleMinutes) - 180) <= 1, `lịch tuần đứng yên tính từ lúc tới lịch (${weeklyRow.idleMinutes} phút)`)
+        assert.equal(report.stalled.find(r => Number(r.campaignId) === Number(C.ownRun)).runningCampaignId, Number(C.ownRun))
+      }
+      await recentRun('server'); await recentRun('fly')
+      {
+        const { kinds } = await scanD()
+        for (const [name, kind] of Object.entries({ ...expect, vps: 'nothing_holds', flyParallel: 'nothing_holds' })) {
+          assert.equal(kinds.get(Number(C[name])) ?? null, kind, `lần quét 2, ca ${name}`)
+        }
+      }
+      const lookStall = (await stuckScan()).stalled.filter(r => STALL_STATE[r.kind] === 'look').length
+      assert.ok(lookStall > 0, 'có dòng "cần xem" thì main() đặt mã thoát 2 (khớp điều kiện trong main)')
+      D_CASES = Object.keys(expect).length
+    }
+    pass(`câu dò nhóm (D): ${D_CASES} ca chiến dịch đứng yên xếp đúng loại hoặc bị bỏ đúng (nghỉ giữa data, ghi chú chờ, lịch tuần / tháng, data chưa tới hạn, vừa tới lịch, chỉ có dòng tiến trình, vừa bấm Tiếp tục, chưa chạy lần nào, tài khoản bận / làn riêng, VPS / Fly không chạy lượt)`)
 
     // ---- 6. Bản gỡ ---------------------------------------------------------------------------------------------------------
     await db.query(v681.rollback)

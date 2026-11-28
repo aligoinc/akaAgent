@@ -77,8 +77,8 @@ Nhánh `feat/engine-account-self-heal`, worktree `../akaAgentChatApi-account-sel
 
 ## Câu dò cho lần kiểm sức khoẻ
 
-`node scripts/engine-v2-stuck-accounts.cjs [--all] [--json]` chỉ đọc, chạy được trước lẫn sau V681. Mã thoát 2 khi nhóm (A) hoặc
-nhóm "cần xem" của (B) có dòng.
+`node scripts/engine-v2-stuck-accounts.cjs [--all] [--json]` chỉ đọc, chạy được trước lẫn sau V681. Mã thoát 2 khi nhóm (A), nhóm
+"cần xem" của (B) hoặc nhóm "cần xem" của (D) có dòng.
 
 - **(A)** Tài khoản "đang chạy" mà không gì giữ, quá 3 phút. Luật giống `holder_v1`; bài kiểm V681 so hai bên. Có dòng là còn một đường
   làm lệch trạng thái cần tìm.
@@ -98,6 +98,21 @@ nhóm "cần xem" của (B) có dòng.
     - lượt bộ cũ / thao tác trên tài khoản Server không ai chạy;
     - Kiểm tra SĐT đã đủ hạn mức mà chưa nhả.
 - **(C)** Tài khoản đã xoá còn token: chỉ đếm. Không bước dọn nào gỡ, chỉ làm `private.app_access_held` luôn đúng cho nhân viên đó.
+- **(D)** Chiến dịch tới giờ còn data mà đứng yên (thêm 28/11 sau ca 53573: claim quá giờ ở bước chống gửi lặp, lõi thử lại mãi trong
+  lượt, không ghi chú; anh chốt giữ cách thử lại đó, chỉ thêm câu dò). Phạm vi: chiến dịch Zalo / Facebook "chờ xử lý" / "đang chạy",
+  lịch đã tới quá 30 phút (`--idle-minutes`), chưa qua giờ dừng / ngày kết thúc, còn data tới hạn, có hoạt động trong 3 ngày
+  (`--recent-days`; lịch tuần 8, lịch tháng 35; chiến dịch chưa chạy lần nào tính từ lúc tạo). Đứng yên nghĩa là không có kết quả hay
+  dòng tiến trình nào trong 30 phút cộng thời gian nghỉ giữa hai data (nhóm tài khoản trước, rồi chiến dịch, như bộ lập lịch), tính từ
+  hoạt động cuối, lúc tới lịch, hoặc lần ghi dòng chiến dịch cuối (bấm Tiếp tục, sửa, bảo trì đầu ngày) nếu muộn hơn. Bỏ chiến dịch có
+  ghi chú chờ, tài khoản đăng xuất / tạm dừng / giữ token thao tác (đã ở B), nhân viên bị khoá, tổ chức hết gói Zalo Server. App
+  Desktop chỉ tính là đang mở khi presence mới trong 2 phút (nhóm B vẫn 5 phút): máy Windows ngủ rồi thức vài phút vẫn gửi presence.
+  - **Cần xem**, mỗi dòng có cách xem tiếp (postgres_logs "statement timeout" có `claim_target_v1` trong `parsed.context`): máy hoặc
+    lease báo đang chạy chính chiến dịch mà không ra kết quả (kiểu 53573), không gì giữ, kẹt cổng bảo trì đầu ngày, bộ lập lịch dừng khi
+    app đang mở, VPS / Fly không chạy lượt nào 10 phút.
+  - **Không cần làm gì:** máy đang ngủ (bộ giữ máy ngủ đang giữ), tài khoản chưa sẵn sàng trên máy.
+  - **Chỉ đếm:** tài khoản bận chiến dịch khác (lease, lượt mở, máy báo đang chạy chiến dịch khác, hoặc chiến dịch khác của tài khoản
+    vừa ra kết quả; chiến dịch tích "chạy cùng lúc" trên Desktop / Fly không tính chiến dịch làn chính), app Desktop không online.
+  - **Không thấy:** chiến dịch nghỉ lâu hơn cửa sổ hoạt động rồi được cho chạy lại mà kẹt ngay.
 
 Production 16:49 VN 27/11, trước khi apply V681: 403 tài khoản "đang chạy", trong đó lease 325, token thao tác 77.
 - (A): 1 tài khoản Facebook bản app cũ, kẹt từ 07/10.
@@ -119,11 +134,22 @@ Production 09:40 VN 28/11 (bản câu dò mới), 421 tài khoản "đang chạy
 - (C): 30 tài khoản đã xoá, 9 nhân viên, giữ từ 18/09 tới 23/10.
 - Đối chiếu với một ảnh chụp lấy bằng câu truy vấn riêng: khớp 63/63 dòng.
 
+Nhóm (D) trên production 28/11 (2–4 giây một lần quét):
+- 10:38 VN, bản đầu báo 1 dòng cần xem: 63710 (VPS) "đứng yên từ 18:26 27/11". Là báo nhầm: chiến dịch tạm dừng vì Z223 (danh sách
+  lời mời kết bạn đầy) lúc 18:26 27/11, khách bấm Tiếp tục trên Web lúc 10:38–10:39, VPS chạy lại lúc 10:39:07. Sửa: tính cả lần ghi
+  dòng chiến dịch cuối (RPC đổi trạng thái đặt `updated_at`; không trigger nào tự đặt).
+- 10:53 VN, bản sửa: cần xem 0, máy ngủ 0, tài khoản chưa sẵn sàng 0; chỉ đếm: tài khoản bận 8, app Desktop không online 105. Mọi
+  dòng "bận" lúc đó đều có lease hoặc máy báo đang chạy chiến dịch khác.
+- 10:55 VN báo 1 dòng cần xem: 63678 (Zalo trình duyệt, máy Windows 10.9.0) "đang chạy mà không ra kết quả" từ 10:05. Là báo nhầm:
+  máy im từ 09:52 (`edge_logs` theo JWT của nhân viên không có request nào 09:55–10:50, presence cũng không), job close_stale đóng
+  lượt lúc 10:05, máy thức khoảng 10:50–10:52 rồi ngủ lại, nên presence 10:52 vẫn còn "đang chạy 63678" khi quét. Sửa: presence của
+  (D) phải mới trong 2 phút. Quét lại: cần xem 0; chỉ đếm: tài khoản bận 7, app Desktop không online 102.
+
 ## Kiểm thử (27/11/2026)
 
 | Bài | Kết quả |
 |---|---|
-| `LC_ALL=C CHAT_REPO=… node scripts/engine-account-hold-rule-v681-smoke.cjs` (PG17, thân production sau V670) | 13 nhóm: tái hiện sự cố, dọn một lần (kể cả dòng đang bị khoá lúc apply), luật V527 128 tổ hợp, lý do của `holder_v1`, job close_stale không tự gỡ, câu dò trùng `holder_v1` và xếp đúng nhóm (B) trên 15 ca (thêm 28/11), gỡ / apply lại |
+| `LC_ALL=C CHAT_REPO=… node scripts/engine-account-hold-rule-v681-smoke.cjs` (PG17, thân production sau V670) | 14 nhóm: tái hiện sự cố, dọn một lần (kể cả dòng đang bị khoá lúc apply), luật V527 128 tổ hợp, lý do của `holder_v1`, job close_stale không tự gỡ, câu dò trùng `holder_v1` và xếp đúng nhóm (B) trên 15 ca (thêm 28/11), nhóm (D) trên 33 ca (thêm 28/11; bỏ từng luật bỏ qua / bận / làn riêng / chưa chạy lần nào thì bài hỏng đúng ca của luật đó), gỡ / apply lại |
 | Bộ kịch bản engine v2 `SCENARIO_PARALLEL_RUN=1 SCENARIO_ORPHAN_RUNS=1 SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_TARGET_CHECK=1`, có / không `SCENARIO_ACCOUNT_HOLD=1` (`--rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`) | Giống nhau (chỉ khác giờ dừng tính theo đồng hồ của S14): 708 lượt, 5.250 lần gửi, 19/19 kịch bản sự cố, 0 vi phạm mới |
 | `node scripts/stale-running-account-smoke.cjs` | 9 đạt |
 | `CHAT_REPO=… LC_ALL=C node scripts/engine-v2-server-runtime-scheduler-smoke.cjs` (bộ lập lịch App Server thật) | 12/12; trên code cũ 4 ca mới hỏng |
