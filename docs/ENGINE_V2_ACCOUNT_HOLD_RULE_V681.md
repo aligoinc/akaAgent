@@ -77,21 +77,53 @@ Nhánh `feat/engine-account-self-heal`, worktree `../akaAgentChatApi-account-sel
 
 ## Câu dò cho lần kiểm sức khoẻ
 
-`node scripts/engine-v2-stuck-accounts.cjs` chỉ đọc, chạy được trước lẫn sau V681. Mã thoát 2 khi nhóm (A) có dòng.
+`node scripts/engine-v2-stuck-accounts.cjs [--all] [--json]` chỉ đọc, chạy được trước lẫn sau V681. Mã thoát 2 khi nhóm (A) hoặc
+nhóm "cần xem" của (B) có dòng.
 
 - **(A)** Tài khoản "đang chạy" mà không gì giữ, quá 3 phút. Luật giống `holder_v1`; bài kiểm V681 so hai bên. Có dòng là còn một đường
   làm lệch trạng thái cần tìm.
-- **(B)** Tài khoản bị token thao tác giữ quá 30 phút.
+- **(B)** Tài khoản giữ token thao tác (`auto_accounts.runtime_operation_claim_token`) quá 30 phút, xếp theo chủ token (sửa 28/11, anh
+  chốt "Chỉ sửa câu dò"; điều tra ở ghi chú `token-thao-tac-tai-khoan-20261127.md` của các phiên).
+  - Token có hai chủ: lượt chiến dịch bộ cũ (`aka_agent_claim_campaign_runtime_v2` gắn đúng `auto_campaigns.runtime_claim_token` của
+    lượt) và thao tác tài khoản (quét QR, quét data, Kiểm tra SĐT…). Không chủ nào ghi lại dòng tài khoản trong lúc chạy, nên số phút
+    là tuổi của lượt giữ, không phải độ im lặng.
+  - **Đang chạy:** lượt bộ cũ có log chiến dịch trong 60 phút (`--run-idle-minutes`; lướt newsfeed cộng thời gian lướt), tài khoản
+    Desktop thì app còn online (presence trong 5 phút); Kiểm tra SĐT chưa đủ hạn mức ngày. Lượt Kiểm tra SĐT chết theo API Web cũng
+    hiện ở đây: phân biệt bằng số đã tra hôm nay có tăng giữa hai lần quét.
+  - **App không online:** tài khoản Desktop, app không gửi presence trong 5 phút và chưa mở lại sau lúc giữ. Tự gỡ ở lần đăng nhập kế.
+  - **Cần xem**, mỗi dòng có lý do và cách gỡ:
+    - app đang mở mà lượt bộ cũ không ghi log;
+    - app mở lại mà token còn;
+    - thao tác Desktop giữ lâu khi app đang mở;
+    - lượt bộ cũ / thao tác trên tài khoản Server không ai chạy;
+    - Kiểm tra SĐT đã đủ hạn mức mà chưa nhả.
+- **(C)** Tài khoản đã xoá còn token: chỉ đếm. Không bước dọn nào gỡ, chỉ làm `private.app_access_held` luôn đúng cho nhân viên đó.
 
 Production 16:49 VN 27/11, trước khi apply V681: 403 tài khoản "đang chạy", trong đó lease 325, token thao tác 77.
 - (A): 1 tài khoản Facebook bản app cũ, kẹt từ 07/10.
-- (B): 74 tài khoản, nhiều cái từ tháng 9–10 (Facebook, Zalo QR của Desktop), cộng 4 tài khoản Fly mới tạo.
+- (B): 74 tài khoản. Câu dò lúc đó đọc `updated_at` là "lần ghi cuối" nên báo như tài khoản đứng. Điều tra 16:54 VN 27/11, 78 token
+  trên tài khoản chưa xoá:
+  - 71 lượt bộ cũ Desktop: 20 đang chạy, 51 app chưa mở lại;
+  - 4 Kiểm tra SĐT trên Web đang chạy;
+  - 2 thao tác Desktop chết theo app;
+  - 1 thao tác App Server 10 giây.
+
+  0 lượt bị chặn oan.
+
+Production 09:40 VN 28/11 (bản câu dò mới), 421 tài khoản "đang chạy":
+- (A): vẫn tài khoản Facebook 1197.
+- (B): 63 tài khoản, đều là tài khoản Desktop.
+  - Đang chạy 13: lượt bộ cũ Zalo trình duyệt / QR nhận từ 07:15 hôm nay, app online.
+  - App không online 50: 48 lượt bộ cũ (giữ từ 25/09 tới 08:49 hôm nay) và 2 thao tác Desktop (5097, 10213).
+  - Cần xem 0.
+- (C): 30 tài khoản đã xoá, 9 nhân viên, giữ từ 18/09 tới 23/10.
+- Đối chiếu với một ảnh chụp lấy bằng câu truy vấn riêng: khớp 63/63 dòng.
 
 ## Kiểm thử (27/11/2026)
 
 | Bài | Kết quả |
 |---|---|
-| `LC_ALL=C CHAT_REPO=… node scripts/engine-account-hold-rule-v681-smoke.cjs` (PG17, thân production sau V670) | 13 nhóm: tái hiện sự cố, dọn một lần (kể cả dòng đang bị khoá lúc apply), luật V527 128 tổ hợp, lý do của `holder_v1`, job close_stale không tự gỡ, câu dò trùng `holder_v1`, gỡ / apply lại |
+| `LC_ALL=C CHAT_REPO=… node scripts/engine-account-hold-rule-v681-smoke.cjs` (PG17, thân production sau V670) | 13 nhóm: tái hiện sự cố, dọn một lần (kể cả dòng đang bị khoá lúc apply), luật V527 128 tổ hợp, lý do của `holder_v1`, job close_stale không tự gỡ, câu dò trùng `holder_v1` và xếp đúng nhóm (B) trên 15 ca (thêm 28/11), gỡ / apply lại |
 | Bộ kịch bản engine v2 `SCENARIO_PARALLEL_RUN=1 SCENARIO_ORPHAN_RUNS=1 SCENARIO_FACEBOOK_MIGRATIONS=1 SCENARIO_TARGET_CHECK=1`, có / không `SCENARIO_ACCOUNT_HOLD=1` (`--rounds 4 --targets 30 --chaos 3 --inject 0.01 --dbchaos 0.01`) | Giống nhau (chỉ khác giờ dừng tính theo đồng hồ của S14): 708 lượt, 5.250 lần gửi, 19/19 kịch bản sự cố, 0 vi phạm mới |
 | `node scripts/stale-running-account-smoke.cjs` | 9 đạt |
 | `CHAT_REPO=… LC_ALL=C node scripts/engine-v2-server-runtime-scheduler-smoke.cjs` (bộ lập lịch App Server thật) | 12/12; trên code cũ 4 ca mới hỏng |
@@ -140,6 +172,8 @@ Ba phần độc lập, đưa theo thứ tự nào cũng được:
 
 ## Còn hở (không thuộc bản này)
 
-- Token thao tác tài khoản không có heartbeat: nhóm (B) của câu dò.
+- Token thao tác tài khoản không có heartbeat. Điều tra 27/11: chưa chặn oan lượt nào, vì token Desktop chết theo app tự gỡ ở lần đăng
+  nhập kế. Anh chốt 28/11: chỉ sửa câu dò (nhóm B), không thêm hạn / nhịp gia hạn cho Kiểm tra SĐT. Đường rò còn lại: API Web chết cứng
+  giữa lượt Kiểm tra SĐT; token chỉ được gỡ khi App Server / worker Fly khởi động lại runtime của nhân viên.
 - Chiến dịch "đang chạy" sót không token (claim bộ cũ Desktop) giữ tài khoản tới 6 giờ, theo luật `campaign_running`.
 - Cổng bảo trì đầu ngày: giữ như Q19 / Q24.
